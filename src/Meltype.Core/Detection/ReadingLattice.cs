@@ -114,6 +114,53 @@ internal sealed partial class CompositionDetector
         public bool IsEnglish => Side is Side.English or Side.Sentence;
     }
 
+    /// <summary>コストで比べずに、その区間を英語にする記号・数字の決まり (<see cref="CompositionDetector"/> の説明の一覧)。</summary>
+    private enum LexemeRule { None, Dotfile, UserName, HyphenatedWord, Numeronym, ProperNounWithDigits, VersionSuffix }
+
+    /// <summary>
+    /// 1 つの位置から始まる字句。Rule が None でなければ、End (単位の番号) までを英語にする。
+    /// DomainEnd はローマ字として読める語 + ドメイン・拡張子の終わり (重みで比べる)、Technical は技術用語の綴り + する の活用の頭。
+    /// </summary>
+    private readonly record struct Lexeme(LexemeRule Rule, int End, int DomainEnd, bool Technical);
+
+    /// <summary>辺をつなぐときに数える特徴。1 回ごとの重みは <see cref="LinkWeight"/> だけが決める。</summary>
+    private enum LinkFeature
+    {
+        Switch,
+        SentenceSwitch,
+        AdjacentEnglish,
+        Sandwich,
+        NameSplit,
+        SpelledSokuon,
+        VowelAfterEnglish,
+        DanglingSokuon,
+    }
+
+    private const int LinkFeatureCount = (int)LinkFeature.DanglingSokuon + 1;
+
+    private static double LinkWeight(LinkFeature feature) => feature switch
+    {
+        LinkFeature.Switch => SwitchCost,
+        LinkFeature.SentenceSwitch => SentenceSwitchCost,
+        LinkFeature.AdjacentEnglish => AdjacentEnglishCost,
+        LinkFeature.Sandwich => SandwichCost,
+        LinkFeature.NameSplit => NameSplitCost,
+        LinkFeature.SpelledSokuon => SpelledSokuonCost,
+        LinkFeature.VowelAfterEnglish => VowelAfterEnglishCost,
+        LinkFeature.DanglingSokuon => DanglingSokuonCost,
+        _ => throw new ArgumentOutOfRangeException(nameof(feature)),
+    };
+
+    private static double LinkCost(ReadOnlySpan<int> counts)
+    {
+        var cost = 0.0;
+        for (var i = 0; i < counts.Length; i++)
+        {
+            if (counts[i] != 0) cost += counts[i] * LinkWeight((LinkFeature)i);
+        }
+        return cost;
+    }
+
     /// <summary>調べる用 (--segments): 区間分けのたびに、最後の状態ごとの一番軽い道と、候補ごとの重み (+) を 1 行ずつ渡す。* が選んだ道。</summary>
     internal Action<string>? LatticeTrace { get; set; }
 
@@ -191,63 +238,103 @@ internal sealed partial class CompositionDetector
         // position の英字が、次の文字と同じ子音を重ねたもの (tt の t = っ)
         bool DoubledAt(int position) => position + 1 < length && char.IsAsciiLetter(text[position]) && char.ToLowerInvariant(text[position + 1]) == char.ToLowerInvariant(text[position]);
 
-        void OfferEdge(LatticeNode from, LatticeState state, LatticeEdge edge, double cost)
+        // 辺をつなぐときに当てはまる特徴を数える。重みは LinkWeight の表だけが持つ (ここでは値を足さない)
+        void CountLinks(LatticeNode from, LatticeState state, LatticeEdge edge, Span<int> counts)
         {
-            double step;
-            LatticeState next;
             var japanese = !edge.English && !edge.Neutral;
-            // 子音を重ねて打った っ は、前後をかなに挟まれているときだけ軽い (excelとっpt・cwっで にしない。ltu・xtu で打った っ と、Goって の って は除く)
-            var vowel = japanese && state.PreviousEnglish && edge.Start > 0 && char.IsAsciiLetterLower(text[edge.Start - 1]) && edge.Kana is [var head, ..] &&
-                ("ぁぃぅぇぉ".Contains(head) || "あいうえお".Contains(head) && !"aeiou".Contains(text[edge.Start - 1])) ? VowelAfterEnglishCost : 0;
-            // 大文字で始まる知らない語 (Tanaka) を小文字の途中で切って、付属語でない日本語を続ける (Ta|なか)
-            var nameSplit = japanese && !edge.Particle && from.Edge.Name && from.Edge.End == edge.Start && edge.Start < length && char.IsAsciiLetterLower(text[edge.Start]) ? NameSplitCost : 0;
-            // ltu・xtu で打った っ の後ろに入力が続く (まいっ|かう・れあ|っ|かう)。っ の後ろにかなが続くときは子音を重ねて打つ (maikka・moratte)
-            var spelledSokuon = japanese ? SpelledSokuonCost * SpelledSokuons(edge.Start, edge.End) : 0;
-            var sokuon = vowel + nameSplit + spelledSokuon + (state.Sokuon && !japanese ? DanglingSokuonCost : 0) +
-                (japanese && edge.Kana == "っ" && DoubledAt(edge.Start) && state.Side != Side.Japanese ? DanglingSokuonCost : 0);
+            if (japanese)
+            {
+                // 子音を重ねて打った っ は、前後をかなに挟まれているときだけ軽い (excelとっpt・cwっで にしない。ltu・xtu で打った っ と、Goって の って は除く)
+                if (state.PreviousEnglish && edge.Start > 0 && char.IsAsciiLetterLower(text[edge.Start - 1]) && edge.Kana is [var head, ..] &&
+                    ("ぁぃぅぇぉ".Contains(head) || "あいうえお".Contains(head) && !"aeiou".Contains(text[edge.Start - 1]))) counts[(int)LinkFeature.VowelAfterEnglish]++;
+                if (!edge.Particle && from.Edge.Name && from.Edge.End == edge.Start && edge.Start < length && char.IsAsciiLetterLower(text[edge.Start])) counts[(int)LinkFeature.NameSplit]++;
+                counts[(int)LinkFeature.SpelledSokuon] += SpelledSokuons(edge.Start, edge.End);
+                if (edge.Kana == "っ" && DoubledAt(edge.Start) && state.Side != Side.Japanese) counts[(int)LinkFeature.DanglingSokuon]++;
+            }
+            else if (state.Sokuon) counts[(int)LinkFeature.DanglingSokuon]++;
+
+            var betweenLetters = edge.Start > 0 && char.IsAsciiLetter(text[edge.Start - 1]) && char.IsAsciiLetter(text[edge.Start]);
             if (edge.English)
             {
-                step = cost + EnglishTieBreak + englishBias;
-                if (state.Side == Side.Japanese && edge.Start > 0 && char.IsAsciiLetter(text[edge.Start - 1]) && char.IsAsciiLetter(text[edge.Start]))
-                {
-                    // 英字 → 日本語 → 英字 と、英字のあいだで区切りなしに戻る (procras|ち|cle)。あいだが付属語を含むとき (excel|と|ppt) は除く
-                    var run = from;
-                    var particle = run.Edge.Particle;
-                    while (run.Previous is { } previous && !run.Edge.English && !run.Edge.Neutral) { if (previous.Edge.English || previous.Edge.Neutral) break; run = previous; particle |= run.Edge.Particle; }
-                    if (!particle && run.Previous is { Edge.English: true } before && before.Edge.End == run.Edge.Start && run.Edge.Start > 0 && char.IsAsciiLetter(text[run.Edge.Start - 1])) step += SandwichCost;
-                }
-                if (state.Side == Side.Japanese && !state.Particle) step += SwitchCost;
-                if (state.IsEnglish && edge.Start > 0 && char.IsAsciiLetter(text[edge.Start - 1]) && char.IsAsciiLetter(text[edge.Start])) step += AdjacentEnglishCost;
-                // 英文の続きの強さは、最初の英語の語までで使い終わる (英文の中の記号では使い終わらない)
-                var sentence = state.Side == Side.Sentence && !char.IsAsciiLetter(text[edge.Start]);
-                next = new LatticeState(sentence ? Side.Sentence : Side.English, false, state.AllEnglish, true, ContextSwitch: state.ContextSwitch);
+                if (state.Side == Side.Japanese && betweenLetters && IsSandwiched(from)) counts[(int)LinkFeature.Sandwich]++;
+                if (state.Side == Side.Japanese && !state.Particle) counts[(int)LinkFeature.Switch]++;
+                if (state.IsEnglish && betweenLetters) counts[(int)LinkFeature.AdjacentEnglish]++;
             }
-            else if (edge.Neutral)
+            else if (japanese)
             {
-                step = cost;
-                next = state with { PreviousEnglish = false };
-            }
-            else
-            {
-                // 活用する語の後ろにしか付かない 1 文字の付属語 (う・れ) は、英単語の後ろと、入力の頭で後ろに続きがあるときは、語にならないかなとして読む。
-                // 付属語の軽い重み (0.8) のままだと、ローマ字の途中で英単語を切り出した残り (get|う・hit|う・れ|pro) が、語にならないかな 2 音 (げ|つ) より軽くなる。
-                // 付属語だけを打った入力 (re) は、前に確定した語の続きなので付属語のまま
-                var detached = state.IsEnglish || state.Side == Side.None && edge.End < length;
-                step = detached && VerbAuxiliaries.Contains(edge.Kana) ? UnknownKanaCost : cost;
-                if (state.Side == Side.Sentence) step += SentenceSwitchCost;
+                if (state.Side == Side.Sentence) counts[(int)LinkFeature.SentenceSwitch]++;
                 // 3 文字以上の英単語の後ろの、助詞と同じかなで始まる語 (java|のこ・java|でかく) も、助詞からの切り替えと同じ重みにする
                 // (日本語の道だけが の|こ を のこ にまとめられて、英語が負ける。so|ですか・ma|のなか のような 2 文字の語は除く)
                 else if (state.IsEnglish && !edge.Particle &&
-                         !(edge.Kana.Length > 1 && NounParticles.Contains(edge.Kana[..1]) && from.Edge.English && from.Edge.End - from.Edge.Start >= 3)) step += SwitchCost;
+                         !(edge.Kana.Length > 1 && NounParticles.Contains(edge.Kana[..1]) && from.Edge.English && from.Edge.End - from.Edge.Start >= 3)) counts[(int)LinkFeature.Switch]++;
                 // 前の英語の文脈からの切り替えは、英語の語から始めた道も最初の日本語で数える (hello + sushi|が を すしが と同じ重さの差で比べる)
-                if (state.ContextSwitch && edge.Start > 0) step += englishSentence ? SentenceSwitchCost : SwitchCost;
-                next = new LatticeState(Side.Japanese, edge.Particle, state.AllEnglish && !edge.Letters, false);
+                if (state.ContextSwitch && edge.Start > 0) counts[(int)(englishSentence ? LinkFeature.SentenceSwitch : LinkFeature.Switch)]++;
             }
-            next = next with { Sokuon = japanese && edge.Kana.EndsWith('っ') && DoubledAt(edge.End - 1) };
-            Offer(edge.End, next, new LatticeNode(from.Cost + step + sokuon, from, edge));
+        }
+
+        // 英字 → 日本語 → 英字 と、英字のあいだで区切りなしに戻る (procras|ち|cle)。あいだが付属語を含むとき (excel|と|ppt) は除く
+        bool IsSandwiched(LatticeNode from)
+        {
+            var run = from;
+            var particle = run.Edge.Particle;
+            while (run.Previous is { } previous && !run.Edge.English && !run.Edge.Neutral)
+            {
+                if (previous.Edge.English || previous.Edge.Neutral) break;
+                run = previous;
+                particle |= run.Edge.Particle;
+            }
+            return !particle && run.Previous is { Edge.English: true } before && before.Edge.End == run.Edge.Start && run.Edge.Start > 0 && char.IsAsciiLetter(text[run.Edge.Start - 1]);
+        }
+
+        // 辺を通った後の状態 (重みにはかかわらない)。記号・数字の辺は直前の言語を変えない
+        LatticeState Next(LatticeState state, LatticeEdge edge)
+        {
+            var japanese = !edge.English && !edge.Neutral;
+            var next = edge.English
+                // 英文の続きの強さは、最初の英語の語までで使い終わる (英文の中の記号では使い終わらない)
+                ? new LatticeState(state.Side == Side.Sentence && !char.IsAsciiLetter(text[edge.Start]) ? Side.Sentence : Side.English, false, state.AllEnglish, true, ContextSwitch: state.ContextSwitch)
+                : edge.Neutral ? state with { PreviousEnglish = false }
+                : new LatticeState(Side.Japanese, edge.Particle, state.AllEnglish && !edge.Letters, false);
+            return next with { Sokuon = japanese && edge.Kana.EndsWith('っ') && DoubledAt(edge.End - 1) };
+        }
+
+        void OfferEdge(LatticeNode from, LatticeState state, LatticeEdge edge, double cost)
+        {
+            // 活用する語の後ろにしか付かない 1 文字の付属語 (う・れ) は、英単語の後ろと、入力の頭で後ろに続きがあるときは、語にならないかなとして読む。
+            // 付属語の軽い重み (0.8) のままだと、ローマ字の途中で英単語を切り出した残り (get|う・hit|う・れ|pro) が、語にならないかな 2 音 (げ|つ) より軽くなる。
+            // 付属語だけを打った入力 (re) は、前に確定した語の続きなので付属語のまま
+            if (!edge.English && !edge.Neutral && (state.IsEnglish || state.Side == Side.None && edge.End < length) && VerbAuxiliaries.Contains(edge.Kana)) cost = UnknownKanaCost;
+            if (edge.English) cost += EnglishTieBreak + englishBias;
+            Span<int> counts = stackalloc int[LinkFeatureCount];
+            CountLinks(from, state, edge, counts);
+            Offer(edge.End, Next(state, edge), new LatticeNode(from.Cost + cost + LinkCost(counts), from, edge));
         }
 
         var englishLevel = !manual;
+
+        // 字句の段階: 記号・数字の決まりのうち状態によらないもの (どの道から来ても同じ) を、Viterbi の前に位置ごとに 1 回だけ決める
+        Lexeme Lex(int p)
+        {
+            var unit = p < unitsEnd ? unitAt[p] : -1;
+            // 技術用語の綴り + する の活用 (share|して・make|します): 日本語の語 (しゃれ・まけ) には する を付けられないので、日本語の候補を出さない
+            var technical = !kanaInput && englishLevel && IsTechnicalWordBeforeSuru(text, p);
+            // ローマ字として読める語 + . + ドメイン・拡張子 (llama.cpp・hoge.io): 句点の後ろの日本語 (ryoukaidesu.|deha) と重みで比べる
+            var domain = unit >= 0 && !kanaInput && englishLevel ? ReadableStemDotSuffixEnd(prepared, learning, units, unit, pending) : -1;
+            if (unit < 0 || kanaInput) return new(LexemeRule.None, -1, domain, technical);
+            // 上から順に、先に当てはまった決まりを使う
+            if (LeadingDotfileEnd(prepared, learning, units, unit, pending, manual) is >= 0 and var dotfile) return new(LexemeRule.Dotfile, dotfile, domain, technical);
+            if (UserNameEnd(prepared, units, unit, pending) is >= 0 and var user) return new(LexemeRule.UserName, user, domain, technical);
+            if (!englishLevel) return new(LexemeRule.None, -1, domain, technical);
+            if (HyphenatedWordEnd(prepared, learning, units, unit, pending) is >= 0 and var hyphenated) return new(LexemeRule.HyphenatedWord, hyphenated, domain, technical);
+            if (NumeronymEnd(prepared, units, unit, pending) is >= 0 and var numeronym) return new(LexemeRule.Numeronym, numeronym, domain, technical);
+            if (ProperNounWithDigitsEnd(prepared, units, unit, pending) is >= 0 and var proper) return new(LexemeRule.ProperNounWithDigits, proper, domain, technical);
+            if (VersionSuffixEnd(units, unit, pending) is >= 0 and var version) return new(LexemeRule.VersionSuffix, version, domain, technical);
+            return new(LexemeRule.None, -1, domain, technical);
+        }
+        var lexemes = new Lexeme[length];
+        for (var p = 0; p < length; p++)
+            if (IsBoundary(p)) lexemes[p] = Lex(p);
+
         for (var p = 0; p < length; p++)
         {
             if (!IsBoundary(p)) continue;
@@ -258,22 +345,7 @@ internal sealed partial class CompositionDetector
             LatticeEdge? neutral = unit >= 0 && !IsKanaUnit(units[unit]) && !IsLetterUnit(units[unit])
                 ? new LatticeEdge(p, prepared.RawOffsets[unit + 1], false, units[unit].Kana, false, false, true)
                 : null;
-
-            // 記号・数字の決まり (状態によらないもの)
-            var forced = -1;
-            // 技術用語の綴り + する の活用 (share|して・make|します): 日本語の語 (しゃれ・まけ) には する を付けられないので、日本語の候補を出さない
-            var technical = !kanaInput && englishLevel && IsTechnicalWordBeforeSuru(text, p);
-            // ローマ字として読める語 + . + ドメイン・拡張子 (llama.cpp・hoge.io): 句点の後ろの日本語 (ryoukaidesu.|deha) と重みで比べる
-            var domain = unit >= 0 && !kanaInput && englishLevel ? ReadableStemDotSuffixEnd(prepared, learning, units, unit, pending) : -1;
-            if (unit >= 0 && !kanaInput)
-            {
-                forced = LeadingDotfileEnd(prepared, learning, units, unit, pending, manual);
-                if (forced < 0) forced = UserNameEnd(prepared, units, unit, pending);
-                if (forced < 0 && englishLevel) forced = HyphenatedWordEnd(prepared, learning, units, unit, pending);
-                if (forced < 0 && englishLevel) forced = NumeronymEnd(prepared, units, unit, pending);
-                if (forced < 0 && englishLevel) forced = ProperNounWithDigitsEnd(prepared, units, unit, pending);
-                if (forced < 0 && englishLevel) forced = VersionSuffixEnd(units, unit, pending);
-            }
+            var (_, forced, domain, technical) = lexemes[p];
 
             for (var slot = 0; slot < LatticeState.Count * keep; slot++)
             {
@@ -333,6 +405,8 @@ internal sealed partial class CompositionDetector
         if (LatticeTrace is { } trace)
         {
             trace($"lattice {text} (manual {manual}, preceding {precedingEnglish?.ToString() ?? "-"}, following {followingEnglish?.ToString() ?? "-"}, bias {englishBias})");
+            for (var p = 0; p < length; p++)
+                if (lexemes[p].Rule != LexemeRule.None) trace($"  字句 {p}: {lexemes[p].Rule} (単位 {lexemes[p].End} まで英語)");
             foreach (var (cost, state, node) in finals.OrderBy(f => f.Cost))
                 trace($"  {(node == chosen ? "*" : " ")} {cost:0.00} {state.Side}{(state.Particle ? " particle" : "")}{(state.Sokuon ? " sokuon" : "")}: {DescribePath(node, text, true)}");
         }
