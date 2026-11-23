@@ -11,27 +11,16 @@ using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Themes.Fluent;
-using Avalonia.Threading;
 
 namespace Meltype.SettingsApp;
 
 internal static class Program
 {
     [STAThread]
-    public static int Main(string[] args)
-    {
-        if (SingleInstance.SendToRunning(args)) return 0;
-        using var single = SingleInstance.Listen(received => Dispatcher.UIThread.Post(() =>
-        {
-            if ((Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow is not MainWindow window) return;
-            window.Open(received);
-            if (window.WindowState == WindowState.Minimized) window.WindowState = WindowState.Normal;
-            window.Activate();
-        }));
-        return AppBuilder.Configure<App>().UsePlatformDetect()
+    public static int Main(string[] args) =>
+        AppBuilder.Configure<App>().UsePlatformDetect()
             .With(new FontManagerOptions { DefaultFamilyName = JapaneseFont() })
             .StartWithClassicDesktopLifetime(args);
-    }
 
     /// <summary>
     /// 画面の既定のフォント。日本語のフォントにする: OS の既定のフォントに漢字が無いと、Avalonia は代わりに中国語の字形のフォントで漢字を描くことがある。

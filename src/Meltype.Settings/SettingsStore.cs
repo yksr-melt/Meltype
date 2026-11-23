@@ -37,21 +37,16 @@ internal sealed class SettingsStore
     /// <summary>保存できなかった (理由)。画面は保存した値 (変える前の値) で出し直す。</summary>
     public event Action<string>? Failed;
 
-    /// <summary>
-    /// 1 つの項目を変えて保存する。profile は、変える部品を作ったときのプロファイル。保存するまでにほかのプロセス (トレイ) がプロファイルを切り替えていたら、
-    /// 保存しない (前のプロファイルを出していた画面の値を、切り替えた先のプロファイルに入れない。画面はすぐ切り替えた先の値で作り直す)。
-    /// </summary>
-    public void Edit(Action<Settings> change, string? profile = null) => Replace(settings =>
+    /// <summary>1 つの項目を変えて保存する。</summary>
+    public void Edit(Action<Settings> change) => Replace(settings =>
     {
-        if (profile is not null && settings.ActiveProfile != profile) return null;
         var next = settings.Clone();
         change(next);
         return next;
     }, showAll: false);
 
-    /// <summary>プロファイルの切り替えなど、設定全体を作り直す操作をして保存する。operation が null を返したら何もせず false。profile は <see cref="Edit"/> と同じ。</summary>
-    public bool Replace(Func<Settings, Settings?> operation, string? profile = null) =>
-        Replace(settings => profile is not null && settings.ActiveProfile != profile ? null : operation(settings), showAll: true);
+    /// <summary>プロファイルの切り替えなど、設定全体を作り直す操作をして保存する。operation が null を返したら何もせず false。</summary>
+    public bool Replace(Func<Settings, Settings?> operation) => Replace(operation, showAll: true);
 
     // showAll: 保存したあとに画面を出し直す (1 項目の変更は、変えた部品がもう新しい値を出している)
     private bool Replace(Func<Settings, Settings?> operation, bool showAll)

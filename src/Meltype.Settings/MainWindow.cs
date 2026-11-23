@@ -53,26 +53,16 @@ internal sealed class MainWindow : Window
         root.Children.Add(_content);
         Content = root;
 
-        _navigation.SelectedIndex = 0;
-        Open(args);
+        // --add-word [語 [読み]]: ユーザー辞書のページを、登録欄に語と読みを入れて開く (Windows の単語の登録のホットキー)
+        if (args is ["--add-word", .. var word])
+        {
+            _addWord = new UserWord(word.ElementAtOrDefault(1) ?? "", word.ElementAtOrDefault(0) ?? "");
+            _navigation.SelectedIndex = _pages.ToList().FindIndex(p => p.Title == UserDictionaryPage.Title);
+        }
+        else _navigation.SelectedIndex = 0;
     }
 
-    /// <summary>
-    /// 起動の引数に合わせたページを出す。2 つ目に起動した設定アプリの引数も、ここで受け取る (<see cref="SingleInstance"/>)。
-    /// --add-word [語 [読み]]: ユーザー辞書のページを、登録欄に語と読みを入れて開く (Windows の単語の登録のホットキー)。
-    /// </summary>
-    public void Open(string[] args)
-    {
-        if (args is not ["--add-word", .. var word]) return;
-        _search.Text = "";
-        _addWord = new UserWord(word.ElementAtOrDefault(1) ?? "", word.ElementAtOrDefault(0) ?? "");
-        var index = _pages.ToList().FindIndex(p => p.Title == UserDictionaryPage.Title);
-        // もうユーザー辞書のページを出していたときは、選び直しにならないので作り直す
-        if (_navigation.SelectedIndex == index) ShowPage();
-        else _navigation.SelectedIndex = index;
-    }
-
-    /// <summary>起動の引数で登録欄に入れる語。ユーザー辞書のページを出し直しても入れる (検索を消すと遅れて出し直す)。ほかのページに移ったら捨てる。</summary>
+    /// <summary>起動の引数で登録欄に入れる語。ほかのページに移ったら捨てる。</summary>
     private UserWord? _addWord;
 
     private static Control Dock(Control control, Dock dock)
