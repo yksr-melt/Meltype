@@ -78,21 +78,23 @@ internal static partial class CompositionController
             // 手動の英字提案・訂正提案がある間は予測を出さないため、contextHint の両方の案内は同時に出ない。
             UpdatePredictions(state, env, blocked: misspelling is not null || suggestion is not null);
             // 書き間違いの修正・英字の提案・予測の候補があれば、Tab はそちらに使う (HandleKey の Tab の順)
-            var tabConverts = env.Settings.TabConversion && misspelling is null && suggestion is null && state.Predictions.Count == 0;
+            var predictions = state.Predictions?.Items ?? [];
+            var predictionIndex = state.Predictions?.Index ?? -1;
+            var tabConverts = env.Settings.TabConversion && misspelling is null && suggestion is null && predictions.Count == 0;
             var hint = CompositionText.IsAlphanumeric(state.Text, env) ? "Enter 確定　Space 確定+空白　Shift+Space 日本語で変換　半角/全角 日本語に" : (tabConverts ? "Space/Tab 変換" : "Space 変換") + "　←→ 文節　Enter 確定　F7 カタカナ　F10 英字";
             var contextHint = suggestion is null ? null : $"Tab → {suggestion} (英字に)";
             if (contextHint is not null) hint = contextHint + "　" + hint;
-            if (state.Predictions.Count > 0)
+            if (predictions.Count > 0)
             {
                 contextHint = "Tab 予測の候補を選ぶ";
                 hint = contextHint + "　" + hint;
             }
-            var selected = state.PredictionIndex >= 0 ? state.Predictions[state.PredictionIndex].Before + state.Predictions[state.PredictionIndex].Text : null;
+            var selected = predictionIndex >= 0 ? predictions[predictionIndex].Before + predictions[predictionIndex].Text : null;
             var display = selected ?? CurrentDisplay(state, env, final: false);
             // 設定「入力中も変換候補をいくつか表示」: Space の前から候補を出す (issue #666)
             var preview = selected is null && misspelling is null ? TypingCandidates(state, env) : null;
             CompositionOutput.Show(state.Out, env, new CompositionView(display, preview ?? [], preview?.IndexOf(display) ?? -1, false, hint, Suggestion: misspelling,
-                Predictions: state.Predictions.Count > 0 ? state.Predictions.Select(p => p.Text).ToList() : null, SelectedPrediction: state.PredictionIndex, Typed: TypedKeys(state, env),
+                Predictions: predictions.Count > 0 ? predictions.Select(p => p.Text).ToList() : null, SelectedPrediction: predictionIndex, Typed: TypedKeys(state, env),
                 Committed: selected ?? CurrentDisplay(state, env, final: true), ContextHint: contextHint));
         }
     }
@@ -117,17 +119,18 @@ internal static partial class CompositionController
     private static void UpdatePredictions(CompositionState state, CompositionEnv env, bool blocked)
     {
         var key = PredictionKey(state);
-        if (key == state.PredictionKey && !blocked) return;
+        if (state.Predictions?.Key == key && !blocked) return;
         // 出さないときは覚えない (同じ打ちかけのまま出せるようになったら、作り直す)
-        state.PredictionKey = blocked ? "" : key;
-        state.PredictionIndex = -1;
-        state.Predictions = [];
-        if (blocked || env.Services.Predictor is not { } predictor || !env.Settings.PredictiveCandidates || state.Text.Mode != DisplayMode.Auto) return;
+        state.Predictions = blocked ? null : new PredictionList(key, BuildPredictions(state, env));
+    }
+
+    private static List<Prediction> BuildPredictions(CompositionState state, CompositionEnv env)
+    {
+        if (env.Services.Predictor is not { } predictor || !env.Settings.PredictiveCandidates || state.Text.Mode != DisplayMode.Auto) return [];
         if (CompositionText.IsAlphanumeric(state.Text, env))
         {
             // 英単語 1 語の打ちかけ (decis → decisions)
-            if (CompositionText.Raw(state.Text).All(char.IsAsciiLetter)) state.Predictions = predictor.PredictEnglish(CompositionText.Raw(state.Text)).Select(w => new Prediction(w, "", CompositionText.Raw(state.Text))).ToList();
-            return;
+            return CompositionText.Raw(state.Text).All(char.IsAsciiLetter) ? predictor.PredictEnglish(CompositionText.Raw(state.Text)).Select(w => new Prediction(w, "", CompositionText.Raw(state.Text))).ToList() : [];
         }
         var kana = CompositionText.AllKana(state.Text, env, final: false);
         var predictions = new List<Prediction>();
@@ -152,7 +155,7 @@ internal static partial class CompositionController
         }
         // 長い英単語は、打ち終わるまでローマ字として見えていることがある (decis → でしs)。英字だけを 4 文字以上打っていれば英単語の続きも出す
         if (CompositionText.Raw(state.Text).Length >= 4 && CompositionText.Raw(state.Text).All(char.IsAsciiLetter)) Add(predictor.PredictEnglish(CompositionText.Raw(state.Text)), "", CompositionText.Raw(state.Text));
-        state.Predictions = predictions;
+        return predictions;
     }
 
     /// <summary>
@@ -183,10 +186,10 @@ internal static partial class CompositionController
     private static List<Prediction> CurrentPredictions(CompositionState state, CompositionEnv env)
     {
         UpdatePredictions(state, env, blocked: false);
-        return state.Predictions;
+        return state.Predictions?.Items ?? [];
     }
 
     /// <summary>Tab で選んでいる予測の候補 (打った内容が選んだときのままのときだけ)。</summary>
     private static Prediction? SelectedPrediction(CompositionState state) =>
-        state.PredictionIndex >= 0 && state.PredictionIndex < state.Predictions.Count && state.PredictionKey == PredictionKey(state) ? state.Predictions[state.PredictionIndex] : null;
+        state.Predictions is { Index: >= 0 } p && p.Index < p.Items.Count && p.Key == PredictionKey(state) ? p.Items[p.Index] : null;
 }
