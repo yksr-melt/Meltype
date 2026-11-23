@@ -14,17 +14,18 @@ internal static partial class CompositionText
     /// <summary>
     /// 英字を続けて打った部分 (ローマ字) の打ち間違いを直す (onegaishimsu → onegaishimasu)。直したら true。
     /// 確定・変換の直前 (Space・Enter・記号) に呼ぶ。打っている途中は続きを打つと読めることがあり、
-    /// 直し方も続きで変わる (futtemshi の時点では ふってんし、futtemshita まで打てば ふってました) ので直さない。
-    /// 大文字を含む部分・英単語は直さない。
+    /// 直し方も続きで変わる (futtemshi の時点では ふってんし、futtemshita まで打てば ふってました) ので、入力は直さない。
+    /// 打っている途中の表示は、直した形 (<see cref="AsCommitted"/>) から作る。大文字を含む部分・英単語は直さない。
     /// </summary>
-    public static bool FixTypos(CompositionTextState state, TextEnv env, bool correct = true)
+    /// <param name="typing">打っている途中の表示を作るときは true。入力途中の子音で終わる並びを直さない (下の if) のと、ログを残さないことだけが違う。</param>
+    public static bool FixTypos(CompositionTextState state, TextEnv env, bool typing = false)
     {
         // 確定・変換の前に、数字の後ろの単位を英字のままにする (5min を 5みん にしない)。打ち間違いを直す設定に関係なく
         CompositionText.SplitUnitAfterNumber(state, env, final: true);
         CompositionText.Normalize(state, env, final: false);
         // 英字の並びの最後の w の連続 (笑い) はそのまま残し、打ち間違いの直しの対象にもしない
         CompositionText.KeepLaughter(state, env);
-        if (!correct || env.RomajiTypos is not { } corrector || !env.Settings.CorrectTypos || state.Mode != DisplayMode.Auto || state.KanaInput) return false;
+        if (env.RomajiTypos is not { } corrector || !env.Settings.CorrectTypos || state.Mode != DisplayMode.Auto || state.KanaInput) return false;
         var changed = false;
         // 今の表示で英字に見えている文字 (きょうは|meeting|です の meeting)。ここは直さない
         // (表示では英単語なのに、確定したら g が が に直されて めえちんがです になっていた)。
@@ -42,6 +43,13 @@ internal static partial class CompositionText
             var end = start;
             while (end < state.Units.Count && IsLetters(state.Units[end]) && !IsLaughter(state.Units[end])) end++;
             var atEnd = end == state.Units.Count;
+            // 表示と確定で違うのはここだけ。入力途中の子音で終わる並び (kyouh・sumimasn) は、打っている途中は続きを打つと読めるので、表示では直さない
+            // (直すと、打った子音が表示から消える)。Enter で直す (kyouh → きょう) のは今までの挙動で、打ち間違いの直しの改修で見直す
+            if (typing && atEnd && state.Pending.Length > 0)
+            {
+                start = end;
+                continue;
+            }
             var letters = string.Concat(state.Units.Skip(start).Take(end - start).Select(u => u.Raw)) + (atEnd ? CompositionText.Pending(state) : "");
             var runOffset = offset;
             offset += letters.Length;
@@ -56,7 +64,7 @@ internal static partial class CompositionText
                 !CompositionText.ContainsEnglishWord(state, env, letters, first) &&
                 corrector.Fix(letters, final: true) is { } fix)
             {
-                Diagnostics.Log.Decision($"ローマ字の打ち間違いを直しました: {Diagnostics.Log.Text(fix.Wrong)}→{Diagnostics.Log.Text(fix.Right)}");
+                if (!typing) Diagnostics.Log.Decision($"ローマ字の打ち間違いを直しました: {Diagnostics.Log.Text(fix.Wrong)}→{Diagnostics.Log.Text(fix.Right)}");
                 var analysis = env.Detector.Romaji.AnalyzeFragment(fix.Right);
                 var units = analysis.Tokens.Select(t => new CompositionUnit(t.Kana, t.Romaji)).ToList();
                 state.Units.RemoveRange(start, end - start);
@@ -73,6 +81,28 @@ internal static partial class CompositionText
             start = end;
         }
         return changed;
+    }
+
+    /// <summary>
+    /// 確定するときと同じ前処理 (<see cref="FixTypos"/>: 打ち間違いの直し・笑いの w) をかけた入力で read を呼び、入力を元に戻す。
+    /// 表示 (確定される形) をこれで作り、見えているものと Enter で確定するものをそろえる。
+    /// FixTypos が書き換えるのは単位と入力途中の子音だけなので、その 2 つを戻す。
+    /// </summary>
+    public static T AsCommitted<T>(CompositionTextState state, TextEnv env, Func<CompositionTextState, T> read)
+    {
+        var units = state.Units.ToList();
+        var pending = state.Pending.ToString();
+        CompositionText.FixTypos(state, env, typing: true);
+        try
+        {
+            return read(state);
+        }
+        finally
+        {
+            state.Units.Clear();
+            state.Units.AddRange(units);
+            state.Pending.Clear().Append(pending);
+        }
     }
 
     /// <summary>
@@ -147,8 +177,11 @@ internal static partial class CompositionText
         for (var s = 0; s < segments.Count; s++)
         {
             var segment = segments[s];
-            // 英語の語.の後ろの英字 (ドメイン・拡張子: Meltype.amr、MeltypeTip.dll) も、表示のまま英字にする (amr を あめ に直していた: issue #260)
-            if (segment.IsEnglish && s >= 2 && segments[s - 1] is { IsEnglish: true, Raw: "." } && segments[s - 2].IsEnglish && segments[s - 2].Raw.Any(char.IsAsciiLetter))
+            // 英字の並びの頭から英語と判定した区間 (inclu・ob|sidi の ob・ドメインと拡張子の Meltype.amr の amr: issue #260) は、
+            // 見えている英字のまま確定する (直すと、見えていなかった かな で入る)。
+            // ローマ字の後ろの英語の区間 (onegaishi|m|su の m・sumi|mas|ne の mas・ariga|tpu の tpu) は、ローマ字の打ち間違いとして直す
+            var afterRomaji = s > 0 && segments[s - 1] is { IsEnglish: false } before && before.Raw.Any(char.IsAsciiLetter);
+            if (segment.IsEnglish && segment.Raw.Any(char.IsAsciiLetter) && !afterRomaji)
             {
                 for (var i = 0; i < segment.Raw.Length; i++)
                 {
@@ -160,15 +193,16 @@ internal static partial class CompositionText
             // 5 文字以上の知っている語 (meeting) か、同梱の英語の辞書の 2〜4 文字の語 (user・rta・av)
             // 4 文字の知っている語で、ローマ字として読めないもの (help・milk) も英語 (help|pe-ji → へおっぺーじ にしない)
             var lower = segment.Raw.ToLowerInvariant();
-            var word = segment.IsProtected || segment.IsEnglish && (segment.Raw.Length >= 5 && env.Detector.IsKnownEnglishWord(LearningContext(state, env), segment.Raw) || segment.Raw.Length is >= 2 and <= 4 && env.Detector.IsListedEnglishWord(LearningContext(state, env), lower) ||
+            var listed = segment.IsEnglish && segment.Raw.Length is >= 2 and <= 4 && env.Detector.IsListedEnglishWord(LearningContext(state, env), lower);
+            var word = segment.IsProtected || listed || segment.IsEnglish && (segment.Raw.Length >= 5 && env.Detector.IsKnownEnglishWord(LearningContext(state, env), segment.Raw) ||
                 segment.Raw.Length == 4 && env.Detector.IsKnownEnglishWord(LearningContext(state, env), lower) && !env.Detector.Romaji.Analyze(lower).IsValid ||
                 // 3 文字のよく使う英単語で、最後の子音がかなにならないもの (tab|de の b)。表示で英字にしたものを、確定で打ち間違いとして たべ に直さない (issue #220)
                 segment.Raw.Length == 3 && lower.All(char.IsAsciiLetterLower) && CompositionDetector.IsCommonEnglishWord(lower) && env.Detector.Romaji.AnalyzeFragment(lower).Partial.Length > 0);
             for (var i = 0; i < segment.Raw.Length; i++)
             {
                 mask.Add(word);
-                // 守った区間と 5 文字以上の語 (shopping) は、直すと長い語になっても英字のまま (FixesIntoLongWord を見ない)
-                firm.Add(segment.IsProtected || segment.Raw.Length >= 5);
+                // 守った区間・5 文字以上の語 (shopping)・同梱の辞書の語 (main|ni|push|su の push) は、直すと長い語になっても英字のまま (FixesIntoLongWord を見ない)
+                firm.Add(segment.IsProtected || segment.Raw.Length >= 5 || listed);
             }
         }
         return mask;

@@ -69,7 +69,7 @@ internal sealed class UserDictionaryForm : Form
 
         _reading.TextChanged += (_, _) =>
         {
-            _readingPreview.Text = _reading.Text.Any(char.IsAsciiLetter) ? "→ " + _service.ToReading(_reading.Text) : "";
+            _readingPreview.Text = _reading.Text.Any(char.IsAsciiLetter) ? "→ " + _service.Runtime.ToReading(_reading.Text) : "";
             _suggestTimer.Stop();
             _suggestTimer.Start();
         };
@@ -99,17 +99,17 @@ internal sealed class UserDictionaryForm : Form
 
     private void Suggest()
     {
-        var reading = _service.ToReading(_reading.Text);
+        var reading = _service.Runtime.ToReading(_reading.Text);
         var typed = _word.Text;
         _word.Items.Clear();
         if (reading.Length == 0) return;
-        foreach (var word in _service.SuggestWords(reading)) _word.Items.Add(word);
+        foreach (var word in _service.Runtime.SuggestWords(reading)) _word.Items.Add(word);
         if (typed.Length == 0 && _word.Items.Count > 0) _word.SelectedIndex = 0;
     }
 
     private void Register()
     {
-        var reading = _service.ToReading(_reading.Text);
+        var reading = _service.Runtime.ToReading(_reading.Text);
         var error = _service.UserDictionary.Add(reading, _word.Text);
         if (error is not null)
         {

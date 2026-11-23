@@ -11,7 +11,7 @@ namespace Meltype.Engine;
 /// 組み立ては Ime の MeltypeRuntime.CreateConverter。
 /// </summary>
 /// <param name="zenzaiFailed">変換で例外になった Zenzai を、持ち主 (zenzai を渡した側) に知らせる。止めて作り直すのは持ち主が行う。</param>
-public sealed class HybridConverter(MozcConverter mozc, Func<ZenzaiConverter?>? zenzai = null, Action<ZenzaiConverter>? zenzaiFailed = null)
+internal sealed class HybridConverter(MozcConverter mozc, Func<ZenzaiConverter?>? zenzai = null, Action<ZenzaiConverter>? zenzaiFailed = null)
     : IKanjiConverter
 {
     private ZenzaiConverter? _subscribedZenzai;

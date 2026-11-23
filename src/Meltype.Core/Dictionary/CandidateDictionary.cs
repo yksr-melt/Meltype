@@ -9,7 +9,7 @@ namespace Meltype.Dictionary;
 /// 組み込みの dictionaries/candidates.txt と %LOCALAPPDATA%\Meltype\dictionaries\candidates.txt を読む。
 /// </summary>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Naming", "CA1711:Identifiers should not have incorrect suffix", Justification = "日本語入力の辞書を表す既存の公開名。コレクション型を表すものではない。")]
-public sealed class CandidateDictionary
+internal sealed class CandidateDictionary
 {
     private readonly Dictionary<string, string[]> _entries = new(StringComparer.Ordinal);
 

@@ -164,8 +164,7 @@ internal static partial class CompositionController
                 return;
             case VirtualKeys.Return:
                 if (IsProtectedInput(state)) { CommitProtected(state, env, ""); return; }
-                // 設定「Enter は見えているとおりに確定」: 打ち間違いの直しは Space で変換するときだけ (issue #677)
-                CompositionText.FixTypos(state.Text, env, correct: !env.Settings.EnterCommitsAsShown);
+                CompositionText.FixTypos(state.Text, env);
                 Commit(state, env);
                 return;
             case VirtualKeys.Space when state.Shift:

@@ -26,7 +26,7 @@ internal sealed record RomajiAnalysis(
 /// ここで分かるのは「ローマ字として成立するか」と日本語らしい特徴だけで、
 /// 成立しても英語の可能性は残る (kana, sushi, radio)。最終判断は ScoreEngine が行う。
 /// </summary>
-public sealed class RomajiDetector
+internal sealed class RomajiDetector
 {
     // かな → 綴り (先頭が標準の綴り)。l / x / v 系は英語と区別できないので意図的に含めない。
     private static readonly (string Kana, string[] Spellings)[] Table =
