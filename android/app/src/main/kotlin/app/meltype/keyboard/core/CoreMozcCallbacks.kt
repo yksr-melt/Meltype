@@ -5,6 +5,7 @@ package app.meltype.keyboard.core
 import app.meltype.keyboard.PerfLog
 import app.meltype.keyboard.mozc.MozcBackend
 import app.meltype.keyboard.mozc.MozcClause
+import app.meltype.keyboard.mozc.MozcWord
 
 /**
  * Core の MozcConverter が送る変換ヘルパーの要求 (native/mozc/meltype_mozc_helper.cc の先頭) に、[mozc] で答える。
@@ -51,11 +52,11 @@ internal class CoreMozcCallbacks(
             }
             "R" -> converter.reading(fields[1]) ?: ""
             "D" -> {
-                // 1 行目の # で、Mozc の形式 (読み・語・品詞) として読ませる
-                val tsv = "# Meltype\n" + fields[1].split(RECORD).filter { it.isNotEmpty() }
-                    .joinToString("") { it.split(UNIT).joinToString("\t") + "\n" }
-                // Mozc のユーザー辞書の Meltype の辞書だけを入れ替える (ユーザーが Mozc に作った辞書には触らない)
-                if (converter.importUserDictionary("Meltype", tsv)) "OK" else "NG"
+                val words = fields[1].split(RECORD).filter { it.isNotEmpty() }.map { record ->
+                    val (reading, word) = record.split(UNIT)
+                    MozcWord(reading, word)
+                }
+                if (converter.setUserDictionary(words)) "OK" else "NG"
             }
             // 覚えさせるたびに保存している (MozcConverter.learn)
             "S" -> "OK"

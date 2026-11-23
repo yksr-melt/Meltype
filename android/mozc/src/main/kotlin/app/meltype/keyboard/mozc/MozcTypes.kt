@@ -5,6 +5,7 @@ package app.meltype.keyboard.mozc
 /** Text units returned by the Android Mozc engine to the C# Core callback. */
 data class MozcSegment(val reading: String, val candidates: List<String>)
 data class MozcClause(val reading: String, val text: String)
+data class MozcWord(val reading: String, val word: String)
 
 /**
  * The OS-specific Mozc adapter executes conversion requested by Meltype.Core.
@@ -17,6 +18,6 @@ interface MozcBackend {
     fun learn(clauses: List<MozcClause>, context: String?): Boolean
     /** 漢字かな混じりの [text] の読み (逆変換)。できなければ null。 */
     fun reading(text: String): String?
-    /** ユーザー辞書の [name] の辞書を [tsv] (1 行に「読み<Tab>語<Tab>品詞」) の語で入れ替える。頼めたら true (入れ替えは Mozc が裏で行う)。 */
-    fun importUserDictionary(name: String, tsv: String): Boolean
+    /** ユーザー辞書を [words] (名詞) で入れ替える。入れ替えて変換に使えるようになったら true。 */
+    fun setUserDictionary(words: List<MozcWord>): Boolean
 }
