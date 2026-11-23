@@ -268,8 +268,6 @@ internal static partial class CompositionText
     {
         state.Units.Clear();
         state.Pending.Clear();
-        state.ProtectedCache = null;
-        state.ProtectedCacheRaw = null;
         state.Mode = DisplayMode.Auto;
         state.Case = LetterCase.AsTyped;
         state.SuggestionAccepted = false;

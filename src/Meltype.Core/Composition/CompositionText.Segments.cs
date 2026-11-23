@@ -279,12 +279,7 @@ internal static partial class CompositionText
         if (state.KanaInput) return [];
         var raw = CompositionText.Raw(state);
         // 打ち始めの / を ・ にしたときは、続けて打った文字と合わせて / から始まるパス (/kyou) にしない。
-        var slash = state.Units is [{ Kana: "・", Raw: "/" }, ..];
-        var key = slash ? "・" + raw : raw;
-        if (state.ProtectedCache is not null && state.ProtectedCacheRaw == key) return state.ProtectedCache;
-        state.ProtectedCache = slash ? ProtectedSpanScanner.Scan(raw[1..]).Select(s => s with { Start = s.Start + 1 }).ToList() : ProtectedSpanScanner.Scan(raw);
-        state.ProtectedCacheRaw = key;
-        return state.ProtectedCache;
+        return state.Units is [{ Kana: "・", Raw: "/" }, ..] ? ProtectedSpanScanner.Scan(raw[1..]).Select(s => s with { Start = s.Start + 1 }).ToList() : ProtectedSpanScanner.Scan(raw);
     }
 
     /// <summary>原文全体が 1 つの保護区間か (自動変換・幅変換・誤字補正の対象外)。</summary>
