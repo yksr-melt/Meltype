@@ -443,8 +443,7 @@ internal static partial class CompositionController
     /// <summary>フォーカスが変わったときなど。前の入力欄の文脈を持ち越さない。</summary>
     public static void ResetContext(CompositionState state)
     {
-        state.LastCommitEnglish = null;
-        state.LastCommitText = null;
+        state.Last = null;
         state.Correctable.Clear();
     }
 }

@@ -102,6 +102,8 @@ internal sealed record CompositionEnv(CompositionDetector Detector, IKanjiConver
 
 internal enum ConversionTrigger { Other, Space, Tab }
 
+internal sealed record LastCommit(string Text, bool English);
+
 /// <summary>1 回の変換 (Space などで始めてから、確定するか取り消すまで) の状態。</summary>
 internal sealed class Conversion(List<Clause> clauses, ConversionTrigger startedBy, bool preferJapanese)
 {
@@ -183,10 +185,13 @@ internal sealed class CompositionState
         set => (Conversion ?? throw new InvalidOperationException("変換していないのに文節を選んだ")).Selected = value;
     }
 
-    public bool? LastCommitEnglish;
+    /// <summary>自分が最後に確定した文字 (末尾の 20 文字まで) と、それが英語だったか。キャレットの前が読めないときの文脈に使う。分からなければ null。</summary>
+    public LastCommit? Last;
 
-    public string? LastCommitText;
-
+    /// <summary>
+    /// 自分が最後に確定した時刻。この直後はアプリの文字がまだ更新されていないかもしれないので、アプリの文字より <see cref="Last"/> を信じる。
+    /// フォーカスが移って <see cref="Last"/> を消した直後も、アプリの文字は信じない (文脈が分からないものとして扱う)。
+    /// </summary>
     public long LastCommitTime = long.MinValue / 2;
 
     public ReconversionSelection? Reconversion;

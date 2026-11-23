@@ -179,8 +179,7 @@ internal static partial class CompositionController
         // キャレットが動いた・アプリが文字を入れた: キャレットの前は自分が確定した語ではないので、読めたらアプリの文字を使う。
         // 読めなければ前の文字も、それが英語だったかも分からないものとして扱う (消した後・行の先頭に、英単語の前後の空白を足さない)
         state.LastCommitTime = long.MinValue / 2;
-        state.LastCommitText = null;
-        state.LastCommitEnglish = null;
+        state.Last = null;
     }
 
     /// <summary>
@@ -247,7 +246,7 @@ internal static partial class CompositionController
         // 消して入れ直すのは、続けて確定する文字と一緒に送る (CommitText)。別々に送ると、その間に入れ直した文字と
         // 続けて確定した文字の順番が入れ替わるアプリがある (Are yoよ人間う？: issue #258)
         state.PendingReplace = (original.Length, replacement);
-        state.LastCommitText = replacement;
+        if (state.Last is { } last) state.Last = last with { Text = replacement };
         state.Correctable.Clear();
         return replacement;
     }
@@ -276,9 +275,8 @@ internal static partial class CompositionController
             if (state.Correctable.Count > MaxCorrectable) state.Correctable.RemoveAt(0);
         }
         else state.Correctable.Clear();
-        state.LastCommitEnglish = english;
-        var joined = (state.LastCommitText ?? "") + text;
-        state.LastCommitText = joined.Length > 20 ? joined[^20..] : joined;
+        var joined = (state.Last?.Text ?? "") + text;
+        state.Last = new LastCommit(joined.Length > 20 ? joined[^20..] : joined, english);
         state.LastCommitTime = env.NowMs;
         if (state.PendingReplace is var (count, replacement))
         {
