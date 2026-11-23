@@ -114,6 +114,15 @@ public sealed partial class CompositionDetector
         public bool IsEnglish => Side is Side.English or Side.Sentence;
     }
 
+    /// <summary>コストで比べずに、その区間を英語にする記号・数字の決まり (<see cref="CompositionDetector"/> の説明の一覧)。</summary>
+    private enum LexemeRule { None, Dotfile, UserName, HyphenatedWord, Numeronym, ProperNounWithDigits, VersionSuffix }
+
+    /// <summary>
+    /// 1 つの位置から始まる字句。Rule が None でなければ、End (単位の番号) までを英語にする。
+    /// DomainEnd はローマ字として読める語 + ドメイン・拡張子の終わり (重みで比べる)、Technical は技術用語の綴り + する の活用の頭。
+    /// </summary>
+    private readonly record struct Lexeme(LexemeRule Rule, int End, int DomainEnd, bool Technical);
+
     /// <summary>辺をつなぐときに数える特徴。1 回ごとの重みは <see cref="LinkWeight"/> だけが決める。</summary>
     private enum LinkFeature
     {
@@ -302,6 +311,30 @@ public sealed partial class CompositionDetector
         }
 
         var englishLevel = !manual;
+
+        // 字句の段階: 記号・数字の決まりのうち状態によらないもの (どの道から来ても同じ) を、Viterbi の前に位置ごとに 1 回だけ決める
+        Lexeme Lex(int p)
+        {
+            var unit = p < unitsEnd ? unitAt[p] : -1;
+            // 技術用語の綴り + する の活用 (share|して・make|します): 日本語の語 (しゃれ・まけ) には する を付けられないので、日本語の候補を出さない
+            var technical = !kanaInput && englishLevel && IsTechnicalWordBeforeSuru(text, p);
+            // ローマ字として読める語 + . + ドメイン・拡張子 (llama.cpp・hoge.io): 句点の後ろの日本語 (ryoukaidesu.|deha) と重みで比べる
+            var domain = unit >= 0 && !kanaInput && englishLevel ? ReadableStemDotSuffixEnd(prepared, learning, units, unit, pending) : -1;
+            if (unit < 0 || kanaInput) return new(LexemeRule.None, -1, domain, technical);
+            // 上から順に、先に当てはまった決まりを使う
+            if (LeadingDotfileEnd(prepared, learning, units, unit, pending, manual) is >= 0 and var dotfile) return new(LexemeRule.Dotfile, dotfile, domain, technical);
+            if (UserNameEnd(prepared, units, unit, pending) is >= 0 and var user) return new(LexemeRule.UserName, user, domain, technical);
+            if (!englishLevel) return new(LexemeRule.None, -1, domain, technical);
+            if (HyphenatedWordEnd(prepared, learning, units, unit, pending) is >= 0 and var hyphenated) return new(LexemeRule.HyphenatedWord, hyphenated, domain, technical);
+            if (NumeronymEnd(prepared, units, unit, pending) is >= 0 and var numeronym) return new(LexemeRule.Numeronym, numeronym, domain, technical);
+            if (ProperNounWithDigitsEnd(prepared, units, unit, pending) is >= 0 and var proper) return new(LexemeRule.ProperNounWithDigits, proper, domain, technical);
+            if (VersionSuffixEnd(units, unit, pending) is >= 0 and var version) return new(LexemeRule.VersionSuffix, version, domain, technical);
+            return new(LexemeRule.None, -1, domain, technical);
+        }
+        var lexemes = new Lexeme[length];
+        for (var p = 0; p < length; p++)
+            if (IsBoundary(p)) lexemes[p] = Lex(p);
+
         for (var p = 0; p < length; p++)
         {
             if (!IsBoundary(p)) continue;
@@ -312,22 +345,7 @@ public sealed partial class CompositionDetector
             LatticeEdge? neutral = unit >= 0 && !IsKanaUnit(units[unit]) && !IsLetterUnit(units[unit])
                 ? new LatticeEdge(p, prepared.RawOffsets[unit + 1], false, units[unit].Kana, false, false, true)
                 : null;
-
-            // 記号・数字の決まり (状態によらないもの)
-            var forced = -1;
-            // 技術用語の綴り + する の活用 (share|して・make|します): 日本語の語 (しゃれ・まけ) には する を付けられないので、日本語の候補を出さない
-            var technical = !kanaInput && englishLevel && IsTechnicalWordBeforeSuru(text, p);
-            // ローマ字として読める語 + . + ドメイン・拡張子 (llama.cpp・hoge.io): 句点の後ろの日本語 (ryoukaidesu.|deha) と重みで比べる
-            var domain = unit >= 0 && !kanaInput && englishLevel ? ReadableStemDotSuffixEnd(prepared, learning, units, unit, pending) : -1;
-            if (unit >= 0 && !kanaInput)
-            {
-                forced = LeadingDotfileEnd(prepared, learning, units, unit, pending, manual);
-                if (forced < 0) forced = UserNameEnd(prepared, units, unit, pending);
-                if (forced < 0 && englishLevel) forced = HyphenatedWordEnd(prepared, learning, units, unit, pending);
-                if (forced < 0 && englishLevel) forced = NumeronymEnd(prepared, units, unit, pending);
-                if (forced < 0 && englishLevel) forced = ProperNounWithDigitsEnd(prepared, units, unit, pending);
-                if (forced < 0 && englishLevel) forced = VersionSuffixEnd(units, unit, pending);
-            }
+            var (_, forced, domain, technical) = lexemes[p];
 
             for (var slot = 0; slot < LatticeState.Count * keep; slot++)
             {
@@ -387,6 +405,8 @@ public sealed partial class CompositionDetector
         if (LatticeTrace is { } trace)
         {
             trace($"lattice {text} (manual {manual}, preceding {precedingEnglish?.ToString() ?? "-"}, following {followingEnglish?.ToString() ?? "-"}, bias {englishBias})");
+            for (var p = 0; p < length; p++)
+                if (lexemes[p].Rule != LexemeRule.None) trace($"  字句 {p}: {lexemes[p].Rule} (単位 {lexemes[p].End} まで英語)");
             foreach (var (cost, state, node) in finals.OrderBy(f => f.Cost))
                 trace($"  {(node == chosen ? "*" : " ")} {cost:0.00} {state.Side}{(state.Particle ? " particle" : "")}{(state.Sokuon ? " sokuon" : "")}: {DescribePath(node, text, true)}");
         }
