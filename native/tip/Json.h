@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include <climits>
 #include <map>
 #include <memory>
 #include <string>
@@ -29,7 +30,8 @@ struct JsonValue {
         return it == object.end() ? empty : it->second;
     }
     bool Bool() const { return type == Type::Bool && boolean; }
-    int Int() const { return type == Type::Number ? static_cast<int>(number) : 0; }
+    // int に収まらない数 (NaN も) を int にすると未定義動作になるので 0 にする
+    int Int() const { return type == Type::Number && number >= INT_MIN && number <= INT_MAX ? static_cast<int>(number) : 0; }
     const std::wstring& Str() const { return string; }
 };
 

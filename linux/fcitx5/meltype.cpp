@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <climits>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -131,7 +132,8 @@ struct Json {
     }
     int integer(const std::string &name, int fallback = 0) const {
         auto *v = get(name);
-        return v && v->kind == Kind::Number ? static_cast<int>(v->number) : fallback;
+        // int に収まらない数 (NaN も) を int にすると未定義動作になるので、既定値にする
+        return v && v->kind == Kind::Number && v->number >= INT_MIN && v->number <= INT_MAX ? static_cast<int>(v->number) : fallback;
     }
     bool flag(const std::string &name, bool fallback = false) const {
         auto *v = get(name);
@@ -159,6 +161,7 @@ public:
 private:
     const std::string &s_;
     size_t i_ = 0;
+    int depth_ = 0;
 
     void space() {
         while (i_ < s_.size() && (s_[i_] == ' ' || s_[i_] == '\n' || s_[i_] == '\r' || s_[i_] == '\t')) i_++;
@@ -224,6 +227,13 @@ private:
         return true;
     }
     bool value(Json &out) {
+        // 入れ子が深すぎるものは読まない (スタックを使い切って fcitx5 ごと落ちないように。native/tip/Json.cpp と同じ上限)
+        if (++depth_ > 32) return false;
+        bool ok = valueInner(out);
+        depth_--;
+        return ok;
+    }
+    bool valueInner(Json &out) {
         space();
         if (i_ >= s_.size()) return false;
         char c = s_[i_];
