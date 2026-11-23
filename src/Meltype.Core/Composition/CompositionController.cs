@@ -408,7 +408,7 @@ internal static partial class CompositionController
             !CompositionText.IsEmpty(state.Text) && CompositionText.Raw(state.Text).All(char.IsAsciiLetter))
         {
             state.Correctable.Clear();
-            CommitText(state, env, CompositionText.Raw(state.Text), english: true, preserveText: true, rule: "英字にアクセント記号が続くので打ったまま");
+            CommitText(state, env, ComposedText.English(CompositionText.Raw(state.Text)), english: true, preserveText: true, rule: "英字にアクセント記号が続くので打ったまま");
         }
         else CommitIfAny(state, env, preserveText);
         UpdateView(state, env);

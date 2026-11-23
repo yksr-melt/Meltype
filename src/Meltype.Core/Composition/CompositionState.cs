@@ -212,7 +212,7 @@ internal sealed class CompositionState
     public readonly List<CommitRecord> Correctable = [];
 
     // 確定し直しで消す文字数と、入れ直す文字。今確定する文字と一緒に 1 回で送る。
-    public (int Count, string Text)? PendingReplace;
+    public (int Count, ComposedText Text)? PendingReplace;
 
     // 続けて打つ前に選んでいた候補 (読み → 文字)。確定するか、変換ボックスを空にするまで。
     public readonly Dictionary<string, string> KeptChoices = [];
