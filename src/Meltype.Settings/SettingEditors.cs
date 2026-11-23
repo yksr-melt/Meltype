@@ -15,7 +15,12 @@ internal sealed record EditorContext(SettingItem Item, SettingsStore Store, Wind
 {
     public object? Value => Item.Property.GetValue(Store.Current);
 
-    public void Set(object? value) => Store.Edit(settings => Item.Property.SetValue(settings, value));
+    /// <summary>部品を作ったときのプロファイル (<see cref="SettingsStore.Edit"/>)。</summary>
+    private string Profile { get; } = Store.Current.ActiveProfile;
+
+    public void Edit(Action<Settings> change, bool showAll = false) => Store.Edit(change, Profile, showAll);
+
+    public void Set(object? value) => Edit(settings => Item.Property.SetValue(settings, value));
 }
 
 /// <summary>

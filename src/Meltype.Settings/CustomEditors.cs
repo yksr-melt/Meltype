@@ -65,14 +65,12 @@ internal static class CustomEditors
         {
             if (customTheme)
             {
-                // 「変換ボックスの色」も変わるので、ページを出し直す (Replace)
-                context.Store.Replace(settings =>
+                // 「変換ボックスの色」も変わるので、ページを出し直す
+                context.Edit(settings =>
                 {
-                    var next = settings.Clone();
-                    context.Item.Property.SetValue(next, text.Trim());
-                    next.CompositionTheme = CompositionTheme.Custom;
-                    return next;
-                });
+                    context.Item.Property.SetValue(settings, text.Trim());
+                    settings.CompositionTheme = CompositionTheme.Custom;
+                }, showAll: true);
                 return;
             }
             context.Set(text.Trim());
