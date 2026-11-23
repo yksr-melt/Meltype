@@ -224,7 +224,9 @@ function drawBox(box, field, view) {
 function caretPosition(field) {
   const style = getComputedStyle(field);
   const mirror = document.createElement("div");
-  for (const name of ["font", "letterSpacing", "padding", "border", "boxSizing", "width", "lineHeight", "textIndent", "wordSpacing"]) {
+  // font (まとめた書き方) は、font-feature-settings などがあると空で返るので 1 つずつ写す
+  for (const name of ["fontFamily", "fontSize", "fontWeight", "fontStyle", "fontStretch", "fontFeatureSettings", "fontKerning", "letterSpacing", "wordSpacing",
+    "textTransform", "textIndent", "tabSize", "wordBreak", "lineBreak", "padding", "border", "boxSizing", "width", "lineHeight"]) {
     mirror.style[name] = style[name];
   }
   Object.assign(mirror.style, {

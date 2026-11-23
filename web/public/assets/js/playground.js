@@ -34,8 +34,8 @@ const VKEY_ROWS = [
  * キーを 1 つ押す。合成したキーではブラウザーが何もしないので、Meltype が受け取らなかったキーはここで反映する。
  * (Meltype は通したキーを、反映の後に CaretMoved で受け取る)
  */
-function pressKey(key) {
-  if (!field.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }))) return;
+function pressKey(key, repeat = false) {
+  if (!field.dispatchEvent(new KeyboardEvent("keydown", { key, repeat, bubbles: true, cancelable: true }))) return;
   const { selectionStart: start, selectionEnd: end, value } = field;
   if ([...key].length === 1) {
     field.setRangeText(key, start, end, "end");
@@ -100,18 +100,95 @@ if (touchOnly) {
     }
     keys.append(line);
   }
-  // 押しても入力欄からフォーカスを外さない (外すと変換中の文字が確定する)
-  keys.addEventListener("pointerdown", (e) => e.preventDefault());
-  keys.addEventListener("click", (e) => {
+  // 押したら (指を離すのを待たずに) 打つ。長押しで続けて打つキーは、普通のキーボードと同じく少し待ってから繰り返す
+  const REPEAT_KEYS = new Set(["Backspace", "ArrowLeft", "ArrowRight"]);
+  const REPEAT_DELAY_MS = 400;
+  const REPEAT_INTERVAL_MS = 60;
+  let repeatTimer = 0;
+  const stopRepeat = () => clearTimeout(repeatTimer);
+  const press = (key) => {
+    field.focus();
+    // 振動できる端末だけ、押したことを短い振動で知らせる (iPhone の Safari には無い)
+    navigator.vibrate?.(8);
+    pressKey(key);
+    drawCaret();
+  };
+  keys.addEventListener("pointerdown", (e) => {
+    // 押しても入力欄からフォーカスを外さない (外すと変換中の文字が確定する)
+    e.preventDefault();
     const button = e.target.closest("button[data-key]");
     if (!button) return;
-    field.focus();
-    pressKey(button.dataset.key);
+    const { key } = button.dataset;
+    button.classList.add("is-pressed");
+    press(key);
+    if (!REPEAT_KEYS.has(key)) return;
+    const repeat = () => {
+      pressKey(key, true);
+      drawCaret();
+      repeatTimer = setTimeout(repeat, REPEAT_INTERVAL_MS);
+    };
+    repeatTimer = setTimeout(repeat, REPEAT_DELAY_MS);
   });
+  for (const type of ["pointerup", "pointercancel", "pointerleave"]) {
+    keys.addEventListener(type, (e) => {
+      stopRepeat();
+      e.target.closest?.("button")?.classList.remove("is-pressed");
+    }, true);
+  }
+  // 指でもマウスでもなく押した (スクリーンリーダー・キーボードの Enter)。detail が 0 になる
+  keys.addEventListener("click", (e) => {
+    const button = e.target.closest("button[data-key]");
+    if (button && e.detail === 0) press(button.dataset.key);
+  });
+
+  // readonly の入力欄はカーソルを出さないブラウザーが多いので、キャレットの位置に描く
+  const caret = document.createElement("span");
+  caret.className = "vkeys-caret";
+  caret.hidden = true;
+  field.insertAdjacentElement("afterend", caret);
+  const drawCaret = () => {
+    caret.hidden = document.activeElement !== field || field.selectionStart !== field.selectionEnd;
+    if (caret.hidden) return;
+    const { left, top, height } = caretOffset(field);
+    caret.style.left = `${left}px`;
+    caret.style.top = `${top}px`;
+    caret.style.height = `${height}px`;
+    // 動かしたら点滅を最初からにする (動いている間は消えないように)
+    caret.getAnimations().forEach((animation) => { animation.currentTime = 0; });
+  };
+  for (const type of ["focus", "blur", "input", "scroll"]) field.addEventListener(type, drawCaret);
+  // Meltype が確定した文字を入れたとき・タップでキャレットを動かしたとき
+  document.addEventListener("selectionchange", drawCaret);
+  addEventListener("resize", drawCaret);
+
   keys.hidden = false;
   document.body.classList.add("has-vkeys");
   // 候補はキーボードのすぐ上に重ねて出すので、打っている入力欄を画面の上へ送る
   field.addEventListener("focus", () => field.scrollIntoView({ block: "start", behavior: "smooth" }));
+}
+
+/** 入力欄のキャレットの位置 (入力欄の親から見た座標) と行の高さ。入力欄と同じ見た目の写しを作って測る */
+function caretOffset(textarea) {
+  const style = getComputedStyle(textarea);
+  const mirror = document.createElement("div");
+  // 文字の幅に効くものはすべて写す。font (まとめた書き方) は、font-feature-settings などがあると空で返るので 1 つずつ写す
+  for (const name of ["fontFamily", "fontSize", "fontWeight", "fontStyle", "fontStretch", "fontFeatureSettings", "fontKerning", "fontVariantLigatures", "letterSpacing", "wordSpacing", "textTransform", "textIndent", "tabSize",
+    "wordBreak", "lineBreak", "padding", "border", "boxSizing", "width", "lineHeight"]) {
+    mirror.style[name] = style[name];
+  }
+  Object.assign(mirror.style, { position: "absolute", visibility: "hidden", top: "0", left: "0", whiteSpace: "pre-wrap", overflowWrap: "break-word" });
+  mirror.textContent = textarea.value.slice(0, textarea.selectionStart);
+  const marker = document.createElement("span");
+  marker.textContent = "\u200b";
+  mirror.append(marker);
+  document.body.append(mirror);
+  const result = {
+    left: textarea.offsetLeft + marker.offsetLeft - textarea.scrollLeft,
+    top: textarea.offsetTop + marker.offsetTop - textarea.scrollTop,
+    height: marker.offsetHeight,
+  };
+  mirror.remove();
+  return result;
 }
 
 try {

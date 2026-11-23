@@ -3930,9 +3930,35 @@ em {
   background: var(--surface-2);
 }
 
-.vkeys button:active {
+.vkeys button:active,
+.vkeys button.is-pressed {
   color: var(--on-accent);
   background: var(--sky-deep);
+}
+
+/* readonly の入力欄に描くカーソル (playground.js) */
+.vkeys-caret {
+  position: absolute;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--sky-deep);
+  border-radius: 1px;
+  pointer-events: none;
+  animation: vkeys-blink 1s steps(1) infinite;
+}
+
+.vkeys-caret[hidden] {
+  display: none;
+}
+
+@keyframes vkeys-blink {
+  50% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vkeys-caret {
+    animation: none;
+  }
 }
 
 /* キーボードの高さ (5 段) だけ、ページの下を空ける */
