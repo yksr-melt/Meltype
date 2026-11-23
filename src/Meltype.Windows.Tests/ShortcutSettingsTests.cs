@@ -33,12 +33,12 @@ internal static class ShortcutSettingsTests
             var settings = new Settings { ShowNotifications = true }.Normalize();
             Assert.True(TrayApplicationContext.ProfileSwitchMessage(settings) is not null, "通常の切替では Info 通知");
             var values = settings.ProfileValues();
-            values[nameof(Settings.ToggleShortcuts)] = new System.Text.Json.Nodes.JsonArray(new System.Text.Json.Nodes.JsonObject { ["Key"] = 28 });
+            values[nameof(Settings.ToggleShortcuts)] = new System.Text.Json.Nodes.JsonArray(new System.Text.Json.Nodes.JsonObject { ["Key"] = 0x70 });
             settings.Profiles.Add(new SettingsProfile { Name = "古い設定", Values = values });
             var next = settings.SwitchProfile("古い設定");
             Assert.True(TrayApplicationContext.ProfileSwitchMessage(next) is null, "除外した切替では Info を要求しない");
             var warning = TrayApplicationContext.TakeShortcutExclusionMessage(next.ShowNotifications);
-            Assert.True(warning is not null && warning.Contains("変換"), "Info の判定で除外警告を消費しない");
+            Assert.True(warning is not null && warning.Contains("F1"), "Info の判定で除外警告を消費しない");
             Assert.True(TrayApplicationContext.TakeShortcutExclusionMessage(true) is null, "Warning は一度だけ取り出す");
             next.ShowNotifications = false;
             Assert.True(TrayApplicationContext.ProfileSwitchMessage(next) is null, "通知 OFF では Info も省略");
@@ -84,7 +84,7 @@ internal static class ShortcutSettingsTests
             new() { Key = 0x19, Modifiers = ShortcutModifiers.Control },
             new() { Key = 0x55, Modifiers = ShortcutModifiers.Control },
             new() { Key = 0x76 },
-            new() { Key = 0x1C }, new() { Key = 0xA4 },
+            new() { Key = 0x41 }, new() { Key = 0xA4 },
         }) Assert.True(ToggleShortcutValidator.Validate(binding, settings, []) != ShortcutValidationError.None, "既存操作との衝突");
         Assert.True(ToggleShortcutValidator.Validate(new ToggleShortcut { Key = 0x09, Modifiers = ShortcutModifiers.Alt }, settings, []) == ShortcutValidationError.None, "Alt+Tab の登録を拒否しない");
         var valid = new ToggleShortcut { Key = 0x20, Modifiers = ShortcutModifiers.Control };
