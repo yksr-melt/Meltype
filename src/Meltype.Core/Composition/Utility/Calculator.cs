@@ -5,8 +5,8 @@ using System.Globalization;
 namespace Meltype.Composition.Utility;
 
 /// <summary>
-/// 数字と + - * / ( ) だけの式を計算する (変換の候補に結果を出す。issue #295)。
-/// 式として読めない・0 で割る・桁が大きすぎるときは null。外部の入力を実行しないよう、四則演算だけを自前で読む。
+/// 数字と + - * / ^ ( ) だけの式を計算する (変換の候補に結果を出す。issue #295)。
+/// 式として読めない・0 で割る・桁が大きすぎるときは null。外部の入力を実行しないよう、四則演算とべき乗だけを自前で読む。
 /// </summary>
 internal static class Calculator
 {
@@ -15,9 +15,9 @@ internal static class Calculator
     /// <summary>式 (末尾の = は除く) を計算した結果の文字列。演算子を 1 つも含まなければ null。</summary>
     public static string? Evaluate(string expression)
     {
-        var text = expression.Trim().TrimEnd('=').Replace("×", "*").Replace("÷", "/").Replace("＋", "+").Replace("－", "-").Replace(" ", "");
-        if (text.Length is 0 or > MaxLength || !text.Any(c => c is '+' or '-' or '*' or '/') || !text.Any(char.IsAsciiDigit)) return null;
-        if (!text.All(c => char.IsAsciiDigit(c) || c is '+' or '-' or '*' or '/' or '(' or ')' or '.')) return null;
+        var text = expression.Trim().TrimEnd('=').Replace("×", "*").Replace("÷", "/").Replace("＋", "+").Replace("－", "-").Replace("＾", "^").Replace(" ", "");
+        if (text.Length is 0 or > MaxLength || !text.Any(c => c is '+' or '-' or '*' or '/' or '^') || !text.Any(char.IsAsciiDigit)) return null;
+        if (!text.All(c => char.IsAsciiDigit(c) || c is '+' or '-' or '*' or '/' or '^' or '(' or ')' or '.')) return null;
         var position = 0;
         try
         {
@@ -64,17 +64,26 @@ internal static class Calculator
             i++;
             return -ParseUnary(s, ref i);
         }
+        double value;
         if (i < s.Length && s[i] == '(')
         {
             i++;
-            var inner = ParseSum(s, ref i);
+            value = ParseSum(s, ref i);
             if (i >= s.Length || s[i] != ')') throw new FormatException("閉じ括弧がありません");
             i++;
-            return inner;
         }
-        var start = i;
-        while (i < s.Length && (char.IsAsciiDigit(s[i]) || s[i] == '.')) i++;
-        if (start == i || !double.TryParse(s.AsSpan(start, i - start), NumberStyles.Float, CultureInfo.InvariantCulture, out var number)) throw new FormatException("数字ではありません");
-        return number;
+        else
+        {
+            var start = i;
+            while (i < s.Length && (char.IsAsciiDigit(s[i]) || s[i] == '.')) i++;
+            if (start == i || !double.TryParse(s.AsSpan(start, i - start), NumberStyles.Float, CultureInfo.InvariantCulture, out value)) throw new FormatException("数字ではありません");
+        }
+        if (i < s.Length && s[i] == '^')
+        {
+            i++;
+            var exp = ParseUnary(s, ref i);
+            value = Math.Pow(value, exp);
+        }
+        return value;
     }
 }
