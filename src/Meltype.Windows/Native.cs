@@ -53,6 +53,15 @@ internal static class Native
     public struct RECT { public int Left, Top, Right, Bottom; }
 
     [StructLayout(LayoutKind.Sequential)]
+    public struct COMBOBOXINFO
+    {
+        public int cbSize;
+        public RECT rcItem, rcButton;
+        public uint stateButton;
+        public IntPtr hwndCombo, hwndItem, hwndList;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
     public struct GUITHREADINFO
     {
         public int cbSize;
@@ -110,6 +119,9 @@ internal static class Native
     [DllImport("user32.dll")] public static extern bool PostMessageW(IntPtr hwnd, uint message, IntPtr wParam, IntPtr lParam);
     public static readonly IntPtr HWND_MESSAGE = new(-3);
     [DllImport("user32.dll", SetLastError = true)] public static extern bool GetGUIThreadInfo(uint threadId, ref GUITHREADINFO info);
+    [DllImport("user32.dll")] public static extern bool GetComboBoxInfo(IntPtr hwnd, ref COMBOBOXINFO info);
+    [DllImport("uxtheme.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    public static extern int SetWindowTheme(IntPtr hwnd, string? subAppName, string? subIdList);
     public const uint OBJID_CARET = 0xFFFFFFF8;
     [DllImport("oleacc.dll")] public static extern int AccessibleObjectFromWindow(IntPtr hwnd, uint objectId, ref Guid iid, [MarshalAs(UnmanagedType.Interface)] out object? accessible);
     [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hwnd, out RECT rect);
