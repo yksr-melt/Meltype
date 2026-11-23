@@ -140,28 +140,13 @@ internal sealed class MozcConverter : IKanjiConverter, IDisposable
     /// <summary>1 行送って 1 行受け取る (_gate の中で呼ぶ)。失敗したら・起動しているあいだは null。</summary>
     private string? Send(string request)
     {
-        try
-        {
-            var started = Stopwatch.GetTimestamp();
-            var line = _helper.Send(request);
-            _helperCalls++;
-            _helperTicks += Stopwatch.GetTimestamp() - started;
-
-            if (line is null)
-            {
-                Fail();
-                return null;
-            }
-
-            _failures = 0;
-            return line;
-        }
-        catch (Exception ex)
-        {
-            Diagnostics.Log.Warn($"Mozc を使えませんでした: {ex.Message}");
-            Fail();
-            return null;
-        }
+        var started = Stopwatch.GetTimestamp();
+        var line = _helper.Send(request);
+        _helperCalls++;
+        _helperTicks += Stopwatch.GetTimestamp() - started;
+        if (line is null) Fail();
+        else _failures = 0;
+        return line;
     }
 
     /// <summary>入力スレッドからの問い合わせ。キャッシュに無ければワーカーに頼み、deadline (Environment.TickCount64) まで待つ。</summary>
@@ -208,17 +193,9 @@ internal sealed class MozcConverter : IKanjiConverter, IDisposable
         lock (_gate)
         {
             if (_disposed || !IsAvailable) return false;
-            try
-            {
-                _helper.Start();
-                return true;
-            }
-            catch (Exception ex)
-            {
-                Diagnostics.Log.Warn($"Mozc を使えませんでした: {ex.Message}");
-                Fail();
-                return false;
-            }
+            if (_helper.Start()) return true;
+            Fail();
+            return false;
         }
     }
 
@@ -243,32 +220,23 @@ internal sealed class MozcConverter : IKanjiConverter, IDisposable
                     return known;
                 }
             }
-            try
+            var line = Send($"C\t{context}\t{reading}");
+            if (line is null) return null;
+            if (line.Length == 0) return Remember(key, null);
+            var segments = new List<(string, IReadOnlyList<string>)>();
+            foreach (var record in line.Split(RecordSeparator))
             {
-                var line = Send($"C\t{context}\t{reading}");
-                if (line is null) return null;
-                if (line.Length == 0) return Remember(key, null);
-                var segments = new List<(string, IReadOnlyList<string>)>();
-                foreach (var record in line.Split(RecordSeparator))
+                var fields = record.Split(UnitSeparator);
+                if (fields[0].Length == 0) continue;
+                var candidates = fields.Skip(1).Where(c => c.Length > 0).Distinct().ToList();
+                segments.Add((fields[0], candidates));
+                lock (_resultsGate)
                 {
-                    var fields = record.Split(UnitSeparator);
-                    if (fields[0].Length == 0) continue;
-                    var candidates = fields.Skip(1).Where(c => c.Length > 0).Distinct().ToList();
-                    segments.Add((fields[0], candidates));
-                    lock (_resultsGate)
-                    {
-                        if (_candidates.Count > 512) _candidates.Clear();
-                        _candidates[fields[0]] = candidates;
-                    }
+                    if (_candidates.Count > 512) _candidates.Clear();
+                    _candidates[fields[0]] = candidates;
                 }
-                return Remember(key, segments);
             }
-            catch (Exception ex)
-            {
-                Diagnostics.Log.Warn($"Mozc を使えませんでした: {ex.Message}");
-                Fail();
-                return null;
-            }
+            return Remember(key, segments);
         }
     }
 
@@ -287,14 +255,7 @@ internal sealed class MozcConverter : IKanjiConverter, IDisposable
     {
         lock (_gate)
         {
-            long workingSet = 0;
-            try
-            {
-                workingSet = _helper.WorkingSet;
-            }
-            catch
-            {
-            }
+            var workingSet = _helper.WorkingSet;
             lock (_resultsGate)
             {
                 return new MozcStatistics(_requests, _cacheHits, _candidateRequests, _candidateCacheHits, _helperCalls,
