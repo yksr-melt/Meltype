@@ -148,6 +148,8 @@ internal sealed class MozcConverter : IKanjiConverter, IDisposable
             _userWords = byReading;
             _dictionary = request;
             _dictionaryLaunch = -1;
+            // 前の語での結果を控えから使わない (送るのに失敗しても、次の変換で送り直す)
+            ClearCache();
             if (!IsAvailable) return false;
             if (_helper.Start()) return DeliverDictionary();
             Fail();
@@ -213,8 +215,8 @@ internal sealed class MozcConverter : IKanjiConverter, IDisposable
             Fail();
             return null;
         }
-        // 受け取っていないヘルパーには、先にユーザー辞書を送る (送れなくても要求は送る)
-        if (_dictionary is not null) DeliverDictionary();
+        // 受け取っていないヘルパーには、先にユーザー辞書を送る。答えなかったら要求は送らない (辞書の無い結果を控えない。次の要求で送り直す)
+        if (_dictionary is not null && !DeliverDictionary() && _dictionary is not null) return null;
         var started = Stopwatch.GetTimestamp();
         var line = _helper.Send(request);
         _helperCalls++;

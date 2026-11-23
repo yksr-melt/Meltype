@@ -104,6 +104,33 @@ internal static class UserDictionaryEngineTests
         Assert.Equal(4, helper.Requests.Count, "受け取ったらもう送らない");
     }
 
+    [Test]
+    public static void FailedResend_DoesNotCacheResultsWithoutTheDictionary()
+    {
+        var helper = new FakeHelper("OK") { Conversion = "しの\x1f紫乃" };
+        using var mozc = new MozcConverter(helper);
+        mozc.SetUserDictionary([("しの", "紫乃", "名詞")]);
+        // ヘルパーが落ちて起動し直し、送り直したユーザー辞書に答えなかった
+        helper.Launches++;
+        helper.Next.Enqueue(null);
+        Assert.True(mozc.ConvertClauses("しの", null) is null, "ユーザー辞書の無いヘルパーには変換を頼まない");
+        Assert.Equal("紫乃", mozc.ConvertText("しの", null) ?? "", "次の変換で送り直してから頼む");
+        Assert.Equal("D|D|D|C", string.Join("|", helper.Requests.Select(r => r[..1])));
+    }
+
+    [Test]
+    public static void FailedUpdate_DoesNotKeepResultsOfTheOldWords()
+    {
+        var helper = new FakeHelper("OK") { Conversion = "しの\x1f篠" };
+        using var mozc = new MozcConverter(helper);
+        Assert.Equal("篠", mozc.ConvertText("しの", null) ?? "");
+        helper.Next.Enqueue(null);
+        Assert.Equal(false, mozc.SetUserDictionary([("しの", "紫乃", "名詞")]), "答えなかった");
+        helper.Conversion = "しの\x1f紫乃";
+        Assert.Equal("紫乃", mozc.ConvertText("しの", null) ?? "", "前の語での結果を控えから使わず、送り直してから頼む");
+        Assert.Equal("C|D|D|C", string.Join("|", helper.Requests.Select(r => r[..1])));
+    }
+
     private sealed class Engine(Dictionary<string, ConversionClause[]> answers) : TestConverter
     {
         public override IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) => answers.GetValueOrDefault(hiragana);
@@ -174,12 +201,15 @@ internal static class UserDictionaryEngineTests
         /// <summary>次に返す答え (空なら answer)。</summary>
         public Queue<string?> Next { get; } = new();
 
+        /// <summary>変換 (C) の答え。null なら answer。</summary>
+        public string? Conversion { get; set; }
+
         public string? Send(string request)
         {
             lock (_gate)
             {
                 Requests.Add(request);
-                return Next.Count > 0 ? Next.Dequeue() : answer;
+                return Next.Count > 0 ? Next.Dequeue() : Conversion is not null && request.StartsWith("C\t", StringComparison.Ordinal) ? Conversion : answer;
             }
         }
 
