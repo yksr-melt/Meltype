@@ -58,6 +58,13 @@ internal sealed class MozcHelperProcess(string helperPath, string? profileDirect
     // STATUS_DLL_NOT_FOUND / STATUS_ENTRYPOINT_NOT_FOUND / STATUS_INVALID_IMAGE_FORMAT (起動のときに DLL を読み込めなかった)
     private static bool IsLoaderFailure(int exitCode) => exitCode is unchecked((int)0xC0000135) or unchecked((int)0xC0000139) or unchecked((int)0xC000007B);
 
+    /// <summary>
+    /// ヘルパーのプロセスとのやり取りで、ヘルパーのせいで起きる例外: 起動できない (Win32Exception)・
+    /// 終わったプロセスを触った (Process が InvalidOperationException を投げる)・パイプが切れた (IOException・ObjectDisposedException)。
+    /// この型で捕まえるのは、Process とその標準入出力を呼ぶ所だけにする (InvalidOperationException はコードの誤りでも出るので、広い範囲を囲まない)。
+    /// </summary>
+    private static bool IsHelperGone(Exception ex) => ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException or ObjectDisposedException;
+
     public bool IsInstalled => File.Exists(helperPath) && !_missingDependency;
 
     public bool Start() => Running() is not null;
@@ -70,7 +77,7 @@ internal sealed class MozcHelperProcess(string helperPath, string? profileDirect
             process.StandardInput.Write(request + "\n");
             process.StandardInput.Flush();
         }
-        catch (Exception ex) when (EngineFailure.IsExpected(ex))
+        catch (Exception ex) when (IsHelperGone(ex))
         {
             // ヘルパーが終わっていて、パイプが切れていた
             Diagnostics.Log.Warn($"Mozc に送れませんでした: {ex.Message}");
@@ -93,7 +100,7 @@ internal sealed class MozcHelperProcess(string helperPath, string? profileDirect
         {
             if (!process.HasExited) process.Kill();
         }
-        catch (Exception ex) when (EngineFailure.IsExpected(ex))
+        catch (Exception ex) when (IsHelperGone(ex))
         {
             // 止めるあいだに終わった
         }
@@ -110,7 +117,7 @@ internal sealed class MozcHelperProcess(string helperPath, string? profileDirect
                 process.Refresh();
                 return process.WorkingSet64;
             }
-            catch (Exception ex) when (EngineFailure.IsExpected(ex))
+            catch (Exception ex) when (IsHelperGone(ex))
             {
                 // 読むあいだに終わった
                 return 0;
@@ -154,7 +161,7 @@ internal sealed class MozcHelperProcess(string helperPath, string? profileDirect
             if (profileDirectory is not null) Directory.CreateDirectory(profileDirectory);
             process = Process.Start(info);
         }
-        catch (Exception ex) when (EngineFailure.IsExpected(ex) || Config.DataFile.IsFileError(ex))
+        catch (Exception ex) when (IsHelperGone(ex) || Config.DataFile.IsFileError(ex))
         {
             // 実行ファイルを動かせない (権限が無い・壊れている) か、学習データのフォルダを作れない
             Diagnostics.Log.Warn($"Mozc の変換ヘルパーを起動できませんでした: {ex.Message}");
@@ -192,7 +199,7 @@ internal sealed class MozcHelperProcess(string helperPath, string? profileDirect
         {
             return task.Wait(timeoutMs) ? task.Result : null;
         }
-        catch (AggregateException ex) when (ex.InnerException is { } inner && EngineFailure.IsExpected(inner))
+        catch (AggregateException ex) when (ex.InnerException is { } inner && IsHelperGone(inner))
         {
             return null;
         }
@@ -211,7 +218,7 @@ internal sealed class MozcHelperProcess(string helperPath, string? profileDirect
                 process.WaitForExit(1000);
             }
         }
-        catch (Exception ex) when (EngineFailure.IsExpected(ex))
+        catch (Exception ex) when (IsHelperGone(ex))
         {
             // もう終わっていた・パイプが切れていた
         }

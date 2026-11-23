@@ -151,9 +151,19 @@ internal sealed class ZenzaiConverter : IKanjiConverter, IDisposable
 
     private void ProcessBackground(LiveRequest request)
     {
-        // 変換しなかった・失敗した答えは知らせない (表示が変わらない。失敗では再描画がまた同じ要求を出す)。
-        // 壊れた答えは知らせる (使うかは HybridConverter が Mozc の候補と比べて決めるので、ここでは分からない。使わなければ表示は変わらない)
-        if (ConvertNow(request.Hiragana, request.Context, request.Key) is not null) ResultReady?.Invoke();
+        try
+        {
+            // 変換しなかった・失敗した答えは知らせない (表示が変わらない。失敗では再描画がまた同じ要求を出す)。
+            // 壊れた答えは知らせる (使うかは HybridConverter が Mozc の候補と比べて決めるので、ここでは分からない。使わなければ表示は変わらない)
+            if (ConvertNow(request.Hiragana, request.Context, request.Key) is not null) ResultReady?.Invoke();
+        }
+        catch
+        {
+            // 失敗は ConvertNow の中で null にするので、ここに来るのはコードの誤り。使い続けると要求のたびに同じ例外になるので諦め
+            // (ZenzaiHolder が止めて作り直す)、例外は背景の処理の一番外 (LatestRequestWorker) に投げてログに 1 回書く
+            Fail();
+            throw;
+        }
     }
 
     private IReadOnlyList<ConversionClause>? ConvertNow(string hiragana, string context, string key)

@@ -64,9 +64,11 @@ internal sealed class ZenzaiHolder(Func<string, string, string, ZenzaiConverter>
             {
                 _zenzai = _create(server, model, device);
             }
-            catch (Exception ex) when (EngineFailure.IsExpected(ex) || ex is TypeLoadException)
+            catch (Exception ex)
             {
-                // 作れないとき (#973: 同梱の .NET に System.Net.Http が無いと FileNotFoundException か TypeLoadException になる) は、変換は Mozc で続ける
+                // 作れないとき (#973: 同梱の .NET に System.Net.Http が無い) は、変換は Mozc で続ける。
+                // アセンブリが欠けている・合わないときの例外は、FileNotFoundException・TypeLoadException・MissingMethodException・BadImageFormatException など
+                // 型で列挙しきれないので、作る所は型で絞らない (絞ると入力のスレッドまで届き、打つたびに作り直して同じ例外になる)
                 // (HybridConverter は Zenzai が無ければ今までどおり変換する)。例外の中身を書くのは、この場所で 1 回目だけ
                 var wait = WaitBeforeRetry();
                 var detail = _loggedCreateError ? ex.Message : ex.ToString();

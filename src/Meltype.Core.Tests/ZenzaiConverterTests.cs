@@ -572,6 +572,22 @@ internal static class ZenzaiConverterTests
     }
 
     [Test]
+    public static void Holder_ZenzaiThatCannotBeCreatedForAnyReason_FallsBackAndWaits()
+    {
+        // 同梱の .NET のアセンブリが欠けている・合わないときの例外は型で列挙しきれない (MissingMethodException・BadImageFormatException など)
+        foreach (var failure in new Exception[] { new MissingMethodException("System.Net.Http"), new BadImageFormatException("System.Net.Http") })
+        {
+            var created = 0;
+            using var holder = new ZenzaiHolder((s, m, _) => { created++; throw failure; });
+            using var mozc = MozcConverterTests.Fake();
+            var hybrid = new HybridConverter(mozc, () => holder.Get("server", "model"));
+            Assert.True(hybrid.ConvertClauses("たんいをとる", null) is [{ Text: "単位を" }, { Text: "取る" }], $"{failure.GetType().Name}: ほかの変換エンジンで変換する");
+            hybrid.ConvertClauses("たんいをとる", null);
+            Assert.Equal(1, created, $"{failure.GetType().Name}: 打つたびに作り直さない (しばらく待つ)");
+        }
+    }
+
+    [Test]
     public static void Hybrid_ZenzaiWithMalformedAnswers_FallsBackAndGivesUp()
     {
         // 答えの content が文字列でない: 答えなかったのと同じに数え、続いたら Zenzai を諦める。そのあいだもほかの変換エンジンで変換する
