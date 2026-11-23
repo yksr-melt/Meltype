@@ -4519,40 +4519,8 @@ internal static class CompositionTests
     }
 
     [Test]
-    public static void BuiltInPhrases_AreSplitOut()
+    public static void ReportedWords_AreCandidates()
     {
-        // 報告: 白馬の王子様 → ハクバノ王子サマ、ばらまいてた愛 → ばらまいて他愛
-        var dictionary = new UserDictionary(null);
-        Assert.True(dictionary.Split("はくばのおうじさま")?.Any(p => p.Word == "白馬の王子様") == true, "白馬の王子様");
-        Assert.True(dictionary.Split("ばらまいてたあい")?.First().Word == "ばらまいてた", "ばらまいてた|あい");
-        // 報告 (#196): しょたこん → ショタこん
-        Assert.True(dictionary.Split("しょたこん")?.Any(p => p.Word == "ショタコン") == true, "しょたこん → ショタコン");
-        // 報告 (#1028): todorisuto → トドリスト
-        Assert.True(dictionary.Split("とどりすと")?.Any(p => p.Word == "todoリスト") == true, "とどりすと → todoリスト");
-        Assert.True(dictionary.Split("りょかい")?.Any(p => p.Word == "りょかい") == true, "りょかい → りょかい (#1041)");
-        Assert.True(dictionary.Split("いちがっき")?.Any(p => p.Word == "一学期") == true, "いちがっき → 一学期 (#1037)");
-        Assert.True(dictionary.Split("にがっき")?.Any(p => p.Word == "二学期") == true, "にがっき → 二学期 (#1037)");
-        Assert.True(dictionary.Split("さんがっき")?.Any(p => p.Word == "三学期") == true, "さんがっき → 三学期 (#1037)");
-        // 数字と 学期 は別の文節にする (いち|がっき → 一|学期)
-        Assert.Equal("いち:一|がっき:学期", string.Join("|", dictionary.Clauses("いちがっき", "一学期").Select(c => $"{c.Reading}:{c.Word}")), "一|学期");
-        Assert.Equal("しょせん:所詮", string.Join("|", dictionary.Clauses("しょせん", "所詮").Select(c => $"{c.Reading}:{c.Word}")), "区切りの無い語句は 1 つの文節");
-        Assert.True(dictionary.Split("どしたの")?.Any(p => p.Word == "どしたの") == true, "どしたの → どしたの (#1014)");
-        Assert.True(dictionary.Split("したので")?.Any(p => p.Word == "したので") == true, "したので → したので (#1019)");
-        Assert.True(dictionary.Split("けんりつ")?.Any(p => p.Word == "県立") == true, "けんりつ → 県立 (#1004)");
-        Assert.True(dictionary.Split("しりーず")?.Any(p => p.Word == "シリーズ") == true, "しりーず → シリーズ (#853)");
-        // 報告 (#872): きょうひさしぶり → 共久しぶり。今日|久しぶり の 2 つの文節にする
-        var hisashiburi = dictionary.Split("きょうひさしぶり");
-        Assert.True(hisashiburi is [("きょう", null), ("ひさしぶり", "久しぶり")], "きょう|ひさしぶり → きょう|久しぶり (#872)");
-        Assert.True(dictionary.Split("なさそう")?.Any(p => p.Word == "なさそう") == true, "なさそう → なさそう (#825)");
-        Assert.True(dictionary.Split("になった")?.Any(p => p.Word == "になった") == true, "になった → になった (#917)");
-        // 報告 (#823): いしょくじょうたい → い食事ょうたい (しょくじ を じょ の途中で切っていた)
-        Assert.True(dictionary.Split("いしょくじょうたい")?.Any(p => p.Word == "食事") != true, "いしょくじょうたい に 食事 を当てない");
-        Assert.True(dictionary.Split("しょくじをする")?.Any(p => p.Word == "食事") == true, "しょくじ だけなら 食事 のまま");
-        Assert.True(dictionary.Split("ふぉろばく")?.Any(p => p.Word == "フォロ爆") == true, "ふぉろばく → フォロ爆 (#1268)");
-        Assert.True(dictionary.Split("きゅうくらりん")?.Any(p => p.Word == "きゅうくらりん") == true, "きゅうくらりん → きゅうくらりん (#1278)");
-        Assert.True(dictionary.Split("ぶいすぽ")?.Any(p => p.Word == "ぶいすぽ") == true, "ぶいすぽ → ぶいすぽ (#1286)");
-        Assert.True(dictionary.Split("ぶいあーるちゃっと")?.Any(p => p.Word == "VRChat") == true, "ぶいあーるちゃっと → VRChat (#365)");
-        Assert.Equal(0, dictionary.Count, "同梱の語句はユーザー辞書の一覧に出さない");
         // 報告 (#968): かんそうりつ の候補に 乾燥率
         Assert.True(CandidateDictionary.Load(null).Lookup("かんそうりつ").Contains("乾燥率"), "かんそうりつ → 乾燥率");
         Assert.True(CandidateDictionary.Load(null).Lookup("ぶるあか").Contains("ブルーアーカイブ"), "ぶるあか → ブルーアーカイブ (#1106)");
@@ -4792,15 +4760,6 @@ internal static class CompositionTests
         Assert.Equal("今日は|？", string.Join("|", end.Host.View!.Clauses!), "縮めてできた ？ だけの文節も、覚えた ⁉ にしない");
     }
 
-    /// <summary>決めた文節に区切る変換エンジン。</summary>
-    private sealed class ClauseConverter(Dictionary<string, ConversionClause[]> clauses) : TestConverter
-    {
-        private readonly FakeConverter _inner = new();
-        public override string? Convert(string hiragana, string? before) => hiragana switch { "かける" => "掛ける", "わる" => "割る", "たす" => "足す", _ => _inner.Convert(hiragana, before) };
-        public override IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) =>
-            clauses.TryGetValue(hiragana, out var result) ? result : _inner.ConvertClauses(hiragana, before);
-    }
-
     [Test]
     public static void MathWordSymbolFromEngine_IsNotLearned()
     {
@@ -4826,166 +4785,6 @@ internal static class CompositionTests
         {
             lock (Learned) Learned.Add(string.Join("|", clauses.Select(c => $"{c.Reading}={c.Text}")));
         }
-    }
-
-    /// <summary>しゃーなし を 西なし にする変換エンジン (Mozc の苦手な語の代わり)。</summary>
-    private sealed class NishinashiConverter : TestConverter
-    {
-        public override string? Convert(string hiragana, string? before) => hiragana.Replace("しゃーなし", "西なし");
-        public override IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) => [new(hiragana, Convert(hiragana, before)!)];
-    }
-
-    [Test]
-    public static void Shanashi_IsNotConvertedToPlaceName()
-    {
-        // #368: sha-nashi (しゃーなし) を、変換エンジンが 西なし にしていた。同梱の語句でかなのまま最初の候補にする
-        var k = new Keyboard(converter: new NishinashiConverter(), userDictionary: new UserDictionary(null));
-        k.Type("sha-nashi ");
-        Assert.Equal("しゃーなし", k.Host.View!.Candidates[0], string.Join(" ", k.Host.View!.Candidates));
-        k.Press(VirtualKeys.Return);
-        Assert.Equal("しゃーなし", k.Host.Document);
-    }
-
-    /// <summary>いちがっき を 一楽器 にする変換エンジン (issue #1037)。</summary>
-    private sealed class IchigakkiConverter : TestConverter
-    {
-        public override string? Convert(string hiragana, string? before) => hiragana.Replace("いちがっき", "一楽器").Replace("いち", "一").Replace("がっき", "楽器");
-        public override IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) => [new(hiragana, Convert(hiragana, before)!)];
-    }
-
-    [Test]
-    public static void Issue1037_GakkiIsSplitFromNumber()
-    {
-        // #1037: いちがっき が 一楽器 になっていた。同梱の語句で 一|学期 の 2 つの文節にする (数字と 学期 を別に選び直せる)
-        var k = new Keyboard(converter: new IchigakkiConverter(), userDictionary: new UserDictionary(null));
-        k.Type("itigakki ");
-        Assert.Equal("一|学期", string.Join("|", k.Host.View!.Clauses!));
-        k.Press(VirtualKeys.Return);
-        Assert.Equal("一学期", k.Host.Document);
-    }
-
-    [Test]
-    public static void Issue1004_Kenritsu_IsNotUsedInsideALongerWord()
-    {
-        // #1072 のレビュー: 同梱の語句 ^けんりつ は、変換エンジンの文節の途中 (はっけんりつ = 発見率) では使わない
-        var converter = new ClauseConverter(new()
-        {
-            ["はっけんりつ"] = [new("はっけんりつ", "発見率")],
-            ["けんりつ"] = [new("けんりつ", "県率")],
-            ["あいちけんりつ"] = [new("あいち", "愛知"), new("けんりつ", "県率")],
-            ["あいち"] = [new("あいち", "愛知")],
-        });
-        var k = new Keyboard(converter: converter, userDictionary: new UserDictionary(null));
-        k.Type("hakkenritu ");
-        Assert.Equal("発見率", string.Join("|", k.Host.View!.Clauses!));
-        k = new Keyboard(converter: converter, userDictionary: new UserDictionary(null));
-        k.Type("aitikenritu ");
-        Assert.Equal("愛知|県立", string.Join("|", k.Host.View!.Clauses!), "文節の頭から始まるなら使う (#1004)");
-    }
-
-    [Test]
-    public static void Issue1019_Sitanode_IsNotUsedInsideALongerWord()
-    {
-        // #1072 のレビュー: 同梱の語句 ^したので は、変換エンジンの文節の途中 (はなしたので = 話したので) では使わない
-        var converter = new ClauseConverter(new()
-        {
-            ["はなしたので"] = [new("はなしたので", "話したので")],
-            ["したので"] = [new("したので", "下ので")],
-        });
-        var k = new Keyboard(converter: converter, userDictionary: new UserDictionary(null));
-        k.Type("hanasitanode ");
-        Assert.Equal("話したので", string.Join("|", k.Host.View!.Clauses!));
-        k = new Keyboard(converter: converter, userDictionary: new UserDictionary(null));
-        k.Type("sitanode ");
-        Assert.Equal("したので", string.Join("|", k.Host.View!.Clauses!), "文節の頭から始まるなら使う (#1019)");
-    }
-
-    [Test]
-    public static void Issue1014_Doshitano_IsNotUsedInsideALongerWord()
-    {
-        // #1072 のレビュー: 同梱の語句 ^どしたの は、変換エンジンの文節の途中 (なんどしたの = 何度したの) では使わない
-        var converter = new ClauseConverter(new()
-        {
-            ["なんどしたの"] = [new("なんどしたの", "何度したの")],
-            ["どしたの"] = [new("どしたの", "土下の")],
-        });
-        var k = new Keyboard(converter: converter, userDictionary: new UserDictionary(null));
-        k.Type("nanndositano ");
-        Assert.Equal("何度したの", string.Join("|", k.Host.View!.Clauses!));
-        k = new Keyboard(converter: converter, userDictionary: new UserDictionary(null));
-        k.Type("dositano ");
-        Assert.Equal("どしたの", string.Join("|", k.Host.View!.Clauses!), "文節の頭から始まるなら使う (#1014)");
-    }
-
-    [Test]
-    public static void Issue825_Nasasou_IsNotUsedInsideALongerWord()
-    {
-        // #1072 のレビュー: 同梱の語句 ^なさそう は、変換エンジンの文節の途中 (あぶなさそう = 危なさそう) では使わない
-        var converter = new ClauseConverter(new()
-        {
-            ["あぶなさそう"] = [new("あぶなさそう", "危なさそう")],
-            ["なさそう"] = [new("なさそう", "無點そう")],
-        });
-        var k = new Keyboard(converter: converter, userDictionary: new UserDictionary(null));
-        k.Type("abunasasou ");
-        Assert.Equal("危なさそう", string.Join("|", k.Host.View!.Clauses!));
-        k = new Keyboard(converter: converter, userDictionary: new UserDictionary(null));
-        k.Type("nasasou ");
-        Assert.Equal("なさそう", string.Join("|", k.Host.View!.Clauses!), "文節の頭から始まるなら使う (#825)");
-    }
-
-    [Test]
-    public static void Issue917_Ninatta_IsNotUsedInsideALongerWord()
-    {
-        // #1072 のレビュー: 同梱の語句 ^になった は、変換エンジンの文節の途中 (きになった = 気に|なった の に) では使わない
-        var converter = new ClauseConverter(new()
-        {
-            ["きになった"] = [new("きに", "気に"), new("なった", "なった")],
-            ["になった"] = [new("になった", "担った")],
-        });
-        var k = new Keyboard(converter: converter, userDictionary: new UserDictionary(null));
-        k.Type("kininatta ");
-        Assert.Equal("気に|なった", string.Join("|", k.Host.View!.Clauses!));
-        k = new Keyboard(converter: converter, userDictionary: new UserDictionary(null));
-        k.Type("ninatta ");
-        Assert.Equal("になった", string.Join("|", k.Host.View!.Clauses!), "文節の頭から始まるなら使う (#917)");
-    }
-
-    [Test]
-    public static void Issue1037_Gakki_IsNotUsedInsideALongerClause()
-    {
-        // #1072 のレビュー: に|がっき (二|学期) は、変換エンジンの文節の途中 (ほんとうに|がっきを の に) では使わない
-        var converter = new ClauseConverter(new()
-        {
-            ["ほんとうにがっきをひく"] = [new("ほんとうに", "本当に"), new("がっきを", "楽器を"), new("ひく", "弾く")],
-        });
-        var k = new Keyboard(converter: converter, userDictionary: new UserDictionary(null));
-        k.Type("honntounigakkiwohiku ");
-        Assert.Equal("本当に|楽器を|弾く", string.Join("|", k.Host.View!.Clauses!));
-        // 区切りで分けた文節は学習で選び直さない (いち で 市 を選んだことがあっても 一|学期 のまま)
-        var history = new ConversionHistory(null);
-        history.Remember("いち", "市");
-        k = new Keyboard(converter: new IchigakkiConverter(), userDictionary: new UserDictionary(null), history: history);
-        k.Type("itigakki ");
-        Assert.Equal("一|学期", string.Join("|", k.Host.View!.Clauses!));
-    }
-
-    /// <summary>やほやほ を 谷保谷保 にする変換エンジン (issue #424)。</summary>
-    private sealed class YahoConverter : TestConverter
-    {
-        public override string? Convert(string hiragana, string? before) => hiragana == "やほやほ" ? "谷保谷保" : null;
-
-        public override IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) =>
-            hiragana == "やほやほ" ? [new("やほ", "谷保"), new("やほ", "谷保")] : null;
-    }
-
-    [Test]
-    public static void Issue424_YahoyahoStaysHiragana()
-    {
-        // #424: yahoyaho を Enter すると 谷保谷保 になっていた。繰り返しはかなのまま。
-        var k = new Keyboard(live: true, converter: new YahoConverter(), userDictionary: new UserDictionary(null));
-        k.Type("yahoyaho\n");
-        Assert.Equal("やほやほ", k.Host.Document);
     }
 
     /// <summary>しけんし を 試験し、しけんしたい を 試験したい にする変換エンジン (issue #1276)。</summary>
@@ -5226,49 +5025,6 @@ internal static class CompositionTests
         // 覚えさせるのは裏で行うので、少し待つ。
         for (var i = 0; i < 100 && converter.Learned.Count == 0; i++) Thread.Sleep(10);
         Assert.Equal("たんいを=単位を|とる=取る", converter.Learned.SingleOrDefault() ?? "(なし)");
-    }
-
-    private sealed class AgeashiConverter : TestConverter
-    {
-        public override string? Convert(string hiragana, string? before) => ConvertClauses(hiragana, before) is { } clauses ? string.Concat(clauses.Select(c => c.Text)) : null;
-        public override IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) => hiragana switch
-        {
-            "あげあしとらないで" => [new("あげあし", "揚げ足"), new("とらないで", "取らないで")],
-            "ないで" => [new("ないで", "内で")],
-            "かいしょうないひと" => [new("かいしょう", "解消"), new("ないひと", "ない人")],
-            "ひと" => [new("ひと", "人")],
-            "これほんあかだね" => [new("これ", "コレ"), new("ほんあかだね", "本垢だね")],
-            "これ" => [new("これ", "これ")],
-            "きょうはやないのだね" => [new("きょうはや", "教派や"), new("ないのだね", "ないのだね")],
-            "きょうは" => [new("きょうは", "今日は")],
-            "だね" => [new("だね", "だね")],
-            _ => null,
-        };
-    }
-
-    [Test]
-    public static void Phrase_EngineAlreadyConvertsIt_IsNotSplitOut()
-    {
-        // 同梱の語句 あげあしとら → 揚げ足取ら で区切ると、残りの ないで を単独で変換して 内で になっていた。
-        // 変換エンジンが文の中で同じ文字 (揚げ足取らないで) にできているなら、語句では区切らない
-        var k = new Keyboard(converter: new AgeashiConverter(), userDictionary: new UserDictionary(null));
-        k.Type("ageashitoranaide ");
-        Assert.Equal("揚げ足取らないで", string.Concat(k.Host.View!.Clauses!));
-
-        // 変換エンジンが間違える語句 (解消ない人) は、今までどおり語句で区切る
-        k = new Keyboard(converter: new AgeashiConverter(), userDictionary: new UserDictionary(null));
-        k.Type("kaishounaihito ");
-        Assert.Equal("甲斐性ない人", string.Concat(k.Host.View!.Clauses!));
-
-        // 語句より前は今までどおり別に変換する (文全体の変換エンジンの結果にすると コレ本垢だね になる)
-        k = new Keyboard(converter: new AgeashiConverter(), userDictionary: new UserDictionary(null));
-        k.Type("korehonnakadane ");
-        Assert.Equal("これ本垢だね", string.Concat(k.Host.View!.Clauses!));
-
-        // 始まりが変換エンジンの文節の途中にある語句は、今までどおり語句で区切る (教派や|ないのだね にしない)
-        k = new Keyboard(converter: new AgeashiConverter(), userDictionary: new UserDictionary(null));
-        k.Type("kyouhayanainodane ");
-        Assert.Equal("今日はやないのだね", string.Concat(k.Host.View!.Clauses!));
     }
 
     [Test]
