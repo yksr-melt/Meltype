@@ -2,6 +2,7 @@
 // Copyright (C) 2026 aster-void
 
 using System.Net.Sockets;
+using System.Security.Cryptography;
 using System.Text;
 using Meltype.Config;
 
@@ -9,11 +10,16 @@ namespace Meltype.SettingsApp;
 
 /// <summary>
 /// 設定アプリを 1 つだけ動かす。2 つ目に起動したら、起動の引数を 1 つ目に渡して終わる (1 つ目が窓を前に出し、引数のページを出す)。
-/// 受け渡しは、データフォルダーの Unix ドメインソケット (Windows 10 1803 以降も使える)。データフォルダーごとに 1 つ (ポータブル版は別々に動く)。
+/// 受け渡しは Unix ドメインソケット (Windows 10 1803 以降も使える)。データフォルダーごとに 1 つ (ポータブル版は別々に動く)。
+/// 1 つにできなくても (ソケットを作れない)、設定アプリは動かす。
 /// </summary>
 internal sealed class SingleInstance : IDisposable
 {
-    private static readonly string SocketPath = Path.Combine(AppPaths.DataDirectory, "settings.sock");
+    // ソケットのパスは 104 バイト (macOS) までしか使えないので、深いデータフォルダー (ポータブル版) の中には置かない。
+    // ユーザーごとの一時フォルダー (Linux は XDG_RUNTIME_DIR) に、データフォルダーのパスから作った短い名前で置く
+    private static readonly string SocketPath = Path.Combine(
+        Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR") is { Length: > 0 } runtime ? runtime : Path.GetTempPath(),
+        $"meltype-settings-{Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(AppPaths.DataDirectory)))[..16]}.sock");
     private readonly Socket _listener;
 
     private SingleInstance(Socket listener) => _listener = listener;
@@ -26,9 +32,10 @@ internal sealed class SingleInstance : IDisposable
         {
             socket.Connect(new UnixDomainSocketEndPoint(SocketPath));
         }
-        catch (SocketException)
+        // SocketException: 動いていない (前に落ちた設定アプリのソケットのファイルが残っていても、つながらない)。
+        // ArgumentOutOfRangeException: 一時フォルダーのパスが長すぎて、ソケットを作れない
+        catch (Exception ex) when (ex is SocketException or ArgumentOutOfRangeException)
         {
-            // 動いていない (前に落ちた設定アプリのソケットのファイルが残っていても、つながらない)
             return false;
         }
         // 引数は改行を含まない (語は Windows のトレイが 1 行のものだけを渡す) ので、改行で区切る
@@ -42,13 +49,12 @@ internal sealed class SingleInstance : IDisposable
         var listener = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
         try
         {
-            Directory.CreateDirectory(AppPaths.DataDirectory);
             // つながらなかったので、残っているファイルは前に落ちた設定アプリのもの
             File.Delete(SocketPath);
             listener.Bind(new UnixDomainSocketEndPoint(SocketPath));
             listener.Listen();
         }
-        catch (Exception ex) when (ex is SocketException or IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is SocketException or IOException or UnauthorizedAccessException or ArgumentOutOfRangeException)
         {
             Diagnostics.Log.Warn($"設定アプリの多重起動を防げません ({SocketPath}): {ex.Message}");
             listener.Dispose();

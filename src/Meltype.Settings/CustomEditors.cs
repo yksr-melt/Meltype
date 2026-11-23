@@ -66,7 +66,7 @@ internal static class CustomEditors
             if (customTheme)
             {
                 // 「変換ボックスの色」も変わるので、ページを出し直す (Replace)
-                context.Store.Replace(settings =>
+                context.Replace(settings =>
                 {
                     var next = settings.Clone();
                     context.Item.Property.SetValue(next, text.Trim());

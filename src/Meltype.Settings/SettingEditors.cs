@@ -15,7 +15,13 @@ internal sealed record EditorContext(SettingItem Item, SettingsStore Store, Wind
 {
     public object? Value => Item.Property.GetValue(Store.Current);
 
-    public void Set(object? value) => Store.Edit(settings => Item.Property.SetValue(settings, value));
+    /// <summary>部品を作ったときのプロファイル。保存するまでにほかのプロセスが切り替えていたら、保存しない (<see cref="SettingsStore.Edit"/>)。</summary>
+    private string Profile { get; } = Store.Current.ActiveProfile;
+
+    public void Set(object? value) => Store.Edit(settings => Item.Property.SetValue(settings, value), Profile);
+
+    /// <summary>この項目といっしょにほかの項目も変えて保存し、ページを出し直す。</summary>
+    public void Replace(Func<Settings, Settings> operation) => Store.Replace(operation, Profile);
 }
 
 /// <summary>
