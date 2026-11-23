@@ -94,7 +94,7 @@ internal static class FrontProtocolTests
         Assert.Equal("u,x", string.Join(",", ReadNames(tokens, new(["get"], Index: true)).Order()));
     }
 
-    private static HashSet<string> ReadNames(IReadOnlyList<SourceToken> tokens, Reader reader)
+    private static HashSet<string> ReadNames(List<SourceToken> tokens, Reader reader)
     {
         var names = new HashSet<string>();
         for (var i = 0; i + 2 < tokens.Count; i++)
