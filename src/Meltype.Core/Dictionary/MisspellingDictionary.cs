@@ -18,7 +18,7 @@ internal readonly record struct Misspelling(int Start, int Length, string Wrong,
 /// 綴り (ブレスレッド、ブレースレット) を見つけるのにも使う。偶然の一致を避けるため 5 文字以上の語だけ。
 /// </summary>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Naming", "CA1711:Identifiers should not have incorrect suffix", Justification = "日本語入力の辞書を表す既存の公開名。コレクション型を表すものではない。")]
-public sealed class MisspellingDictionary
+internal sealed class MisspellingDictionary
 {
     private const int FuzzyMinimumLength = 5;
     private readonly Dictionary<string, string> _wrong = new(StringComparer.Ordinal);

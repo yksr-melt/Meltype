@@ -22,9 +22,11 @@ internal static class ModelNumberTests
     [Test]
     public static void Issue1417_DecidedOnCommitLikeUnits()
     {
-        // 単位 (5min) と同じく、打っている間は かな のまま見せ、確定するときに決める (続けて 4oku と打つかもしれない)
+        // 単位 (5min) と同じく、打った文字で決める。打っている間も、Enter で確定する形で見せる
         var k = new Keyboard();
         k.Type("4o");
-        Assert.Equal("4お", k.Showing, "打っている間");
+        Assert.Equal("4o", k.Showing, "打っている間");
+        k.Type("ku");
+        Assert.Equal("4おく", k.Showing, "続けて 4oku と打てばかな");
     }
 }

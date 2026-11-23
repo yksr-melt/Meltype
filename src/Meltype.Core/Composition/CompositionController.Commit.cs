@@ -12,9 +12,9 @@ namespace Meltype.Composition;
 /// <summary>確定: 確定する文字の組み立て、英単語の前後の空白、確定した後に前の語を確定し直す自動修正、予測変換の候補の確定。</summary>
 internal static partial class CompositionController
 {
-    /// <summary>今の表示 (ライブ変換が有効なら日本語区間は漢字に変換済み)。</summary>
+    /// <summary>今の表示 (確定するときと同じく打ち間違いを直した形。ライブ変換が有効なら日本語区間は漢字に変換済み)。</summary>
     private static string CurrentDisplay(CompositionState state, CompositionEnv env, bool final) =>
-        CompositionText.Display(state.Text, env, final, env.Settings.LiveConversion ? (kana, afterEnglish, shown) => LiveConvert(state, env, kana, afterEnglish, SegmentBefore(env, shown)) : null);
+        CompositionText.AsCommitted(state.Text, env, text => CompositionText.Display(text, env, final, env.Settings.LiveConversion ? (kana, afterEnglish, shown) => LiveConvert(state, env, kana, afterEnglish, SegmentBefore(env, shown)) : null));
 
     private static void CommitIfAny(CompositionState state, CompositionEnv env, bool preserveText = false)
     {
@@ -41,10 +41,10 @@ internal static partial class CompositionController
         if (converting) SplitWholeSentence(state);
         // 区間分けの重みで決まらなかった確定の決まり。誤変換の報告をログから読み解けるよう、通った決まりを確定のログに書く (issue #1644)
         var rules = new List<string>();
-        // 設定「Enter は見えているとおりに確定」が OFF なら、背景の結果が間に合っていなくても env.Deadline までは答えを待つ
+        // 背景の結果が間に合っていなくても、env.Deadline までは答えを待つ
         var text = converting ? string.Concat(state.Clauses.Select(c => c.Text))
-            : env.LateResults && !env.Settings.EnterCommitsAsShown
-                ? CompositionText.Display(state.Text, env, final: true, env.Settings.LiveConversion ? (kana, afterEnglish, shown) => CountsAsLive(kana) ? string.Concat(ConvertJapaneseSegment(state, env, kana, afterEnglish, SegmentBefore(env, shown), zenzai: true).Select(c => c.Text)) : kana : null)
+            : env.LateResults
+                ? CompositionText.AsCommitted(state.Text, env, committed => CompositionText.Display(committed, env, final: true, env.Settings.LiveConversion ? (kana, afterEnglish, shown) => CountsAsLive(kana) ? string.Concat(ConvertJapaneseSegment(state, env, kana, afterEnglish, SegmentBefore(env, shown), zenzai: true).Select(c => c.Text)) : kana : null))
                 : CurrentDisplay(state, env, final: true);
         // 英語の文脈で英字だけに見えていた入力 (hello mata) は、確定するときに判定し直してかなにしない: 見えているとおりに確定する (issue #127)。
         // 文脈がない単独の語 (mine → みね) は、今までどおり確定時の判定に任せる
@@ -129,7 +129,7 @@ internal static partial class CompositionController
     {
         // 表示の再計算に依存せず、打った原文そのものを使う (確定条件で区間分けが変わっても記号を変えない)。
         var text = (CompositionText.IsProtectedRaw(state.Text) ? CompositionText.Raw(state.Text) : CurrentDisplay(state, env, final: true)) + suffix;
-        state.Clauses = [];
+        state.Conversion = null;
         state.Correctable.Clear();
         // raw を空にして渡し、保護原文を確定後補正・学習の対象にしない (INV-06)。
         CommitText(state, env, text, english: false, preserveText: true, rule: "保護区間 (メンション・URL・メール・パス) で終わるので、打ったまま");

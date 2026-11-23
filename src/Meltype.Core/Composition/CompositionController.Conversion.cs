@@ -37,8 +37,7 @@ internal static partial class CompositionController
         state.Reconversion = selection;
         foreach (var c in converted) CompositionText.AppendKana(state.Text, c, c);
         state.Text.Mode = DisplayMode.Hiragana;
-        state.Clauses = [new Clause(converted, false, [converted, selection.Text])];
-        state.SelectedClause = 0;
+        state.Conversion = new Conversion([new Clause(converted, false, [converted, selection.Text])], ConversionTrigger.Other, preferJapanese: false);
     }
 
     /// <summary>
@@ -245,13 +244,13 @@ internal static partial class CompositionController
         if (state.Clauses is not [{ Alternatives: { } alternatives } whole]) return;
         if (alternatives.TryGetValue(whole.Text, out var clauses))
         {
-            state.Clauses = clauses;
+            state.Conversion!.Clauses = clauses;
         }
         else if (alternatives.Values.FirstOrDefault(c => c is [var only] && only.Candidates.Contains(whole.Text)) is [var single])
         {
             single.Index = single.Candidates.IndexOf(whole.Text);
             single.Changed = whole.Changed;
-            state.Clauses = [single];
+            state.Conversion!.Clauses = [single];
         }
         else
         {

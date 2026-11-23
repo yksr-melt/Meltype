@@ -1267,7 +1267,8 @@ internal static class LanguageLearningTests
             Assert.Equal(false, memory.Get("google"), "F6 でかなにして確定したので覚える");
             var next = new CompositionTests.Keyboard(languages: memory);
             next.Type("google");
-            Assert.Equal("ごおgぇ", next.Showing);
+            // 見せるのは Enter で確定する形 (打ち間違いとして直した形)
+            Assert.Equal("ごごぇ", next.Showing);
         }
         finally
         {

@@ -19,7 +19,7 @@ namespace Meltype.Detection;
 /// - 技術用語の綴りのすぐ後ろが する の活用 (share|して・make|します) なら、その綴りを日本語の語 (しゃれ・まけ) として読まない (しゃれする・まけします は日本語でない)。ただし一段動詞の使役形 (make|させた) は日本語のまま。
 /// - ローマ字入力では 1 文字ずつを区切りの位置にする (単位の途中で区切れる: get|Element、medal|s|ha)。かな入力では打った単位の境目だけ。
 /// </summary>
-public sealed partial class CompositionDetector
+internal sealed partial class CompositionDetector
 {
     // ---- 日本語のノードの生起コスト ----
     // 1 文字の語 1.5・付属語 0.8 は RomajiTypoCorrector.WordCost
