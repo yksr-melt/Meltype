@@ -206,6 +206,14 @@ public sealed partial class KeyCounter
     /// </summary>
     public ImportResult Import(string text)
     {
+        // 足すと long を超える数は取り込まない (合計が負になり、傾向の集計が OverflowException で止まる)。
+        // 合計はキーごと・日ごとの和以上なので、合計が超えなければ、集計の和も超えない
+        try { return ImportChecked(text); }
+        catch (OverflowException) { return new ImportResult(0, 0, 0); }
+    }
+
+    private ImportResult ImportChecked(string text)
+    {
         var keys = new Dictionary<string, long>(StringComparer.Ordinal);
         var days = new Dictionary<string, long>(StringComparer.Ordinal);
         long? total = null;
@@ -224,12 +232,12 @@ public sealed partial class KeyCounter
             }
             if (TryParseDay(label, out var day))
             {
-                days[day] = days.GetValueOrDefault(day) + count;
+                days[day] = checked(days.GetValueOrDefault(day) + count);
                 continue;
             }
             var key = NormalizeKeyName(label);
             if (key is null) continue;
-            keys[key] = keys.GetValueOrDefault(key) + count;
+            keys[key] = checked(keys.GetValueOrDefault(key) + count);
         }
         var sum = Math.Max(keys.Values.Sum(), days.Values.Sum());
         var added = Math.Max(total ?? 0, sum);
@@ -237,7 +245,7 @@ public sealed partial class KeyCounter
         lock (_lock)
         {
             if (added > 0 && _data.ImportedHashes.Contains(hash)) return new ImportResult(0, 0, 0, Duplicate: true);
-            _data.Total += added;
+            _data.Total = checked(_data.Total + added);
             foreach (var (k, v) in keys) _data.Keys[k] = _data.Keys.GetValueOrDefault(k) + v;
             foreach (var (d, v) in days) _data.Days[d] = _data.Days.GetValueOrDefault(d) + v;
             if (added > 0)

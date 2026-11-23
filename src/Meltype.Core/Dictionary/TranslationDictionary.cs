@@ -139,7 +139,10 @@ internal sealed class TranslationHistory
         Config.DataFile.Load(path, "英訳の学習データ", content =>
         {
             var loaded = JsonSerializer.Deserialize(content, Config.LearningJsonContext.Default.Translations);
-            if (loaded is not null) foreach (var (key, value) in loaded) counts[key] = value;
+            // 値が null の読みは捨てる (手で書き換えたファイル・細工したバックアップ。System.Text.Json は辞書の値の null を拒まない)
+            if (loaded is not null)
+                foreach (var (key, value) in loaded)
+                    if (value is not null) counts[key] = value;
         });
         return counts;
     }
