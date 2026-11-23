@@ -7,7 +7,7 @@ plugins {
 }
 
 android {
-    namespace = "io.github.ninjin0802.keyboard.mozc"
+    namespace = "app.meltype.keyboard.mozc"
     compileSdk = 36
     defaultConfig {
         minSdk = 26

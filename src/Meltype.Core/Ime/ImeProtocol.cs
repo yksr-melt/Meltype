@@ -14,7 +14,7 @@ namespace Meltype.Ime;
 // フロントは state を毎回まるごと置き換え、result をそのまま適用する。表示・時間・番号の出し分けもフロントは決めない。
 // 判断がフロントに残っているのは、ImeTrait.Game・NonText の推測と、TSF の DLL のパスワード欄の判定 (打鍵を Meltype.exe に送らない) だけ。
 // JSON の項目名を変えたら、JSON を読む 6 つのフロント (native/tip/TextService.cpp・linux/fcitx5/meltype.cpp・linux/ibus-engine-meltype・
-// mac/Sources/MeltypeIME/NativeCore.swift・android/app/src/main/kotlin/io/github/ninjin0802/keyboard/app/core/ImeJson.kt・tui/meltype-tty) を直す (FrontProtocolTests が突き合わせる)。
+// mac/Sources/MeltypeIME/NativeCore.swift・android/app/src/main/kotlin/app/meltype/keyboard/core/ImeJson.kt・tui/meltype-tty) を直す (FrontProtocolTests が突き合わせる)。
 
 /// <summary>フロントが送る出来事。JSON の名前はメンバー名のまま。知らない名前の出来事は、警告をログに出して受け持たない。</summary>
 public enum ImeEventType
