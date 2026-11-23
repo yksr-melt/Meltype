@@ -415,7 +415,7 @@ Dictionary<string, (int Pass, int Total)> ByCategory, List<string> Failures, Lis
     }
 
     /// <summary>打鍵の例 (Typing) を打って Enter で確定した結果。日英の区切りの重みを探す道具 (--tune-weights) も使う。</summary>
-    internal static IEnumerable<(string Category, bool Ok, string Detail)> TypingResults(CompositionDetector detector)
+    internal static IEnumerable<(string Category, Case Case)> TypingResults(CompositionDetector detector)
     {
         foreach (var c in Typing)
         {
@@ -423,7 +423,8 @@ Dictionary<string, (int Pass, int Total)> ByCategory, List<string> Failures, Lis
             k.Host.PrecedingText = c.Before;
             k.Type(c.Typed + "\n");
             var actual = k.Host.Document;
-            yield return (c.Category, actual == c.Expected, $"{(c.Before is null ? "" : $"「{c.Before}」+ ")}{c.Typed} → {actual} (期待: {c.Expected})");
+            var input = $"{(c.Before is null ? "" : $"「{c.Before}」+ ")}{c.Typed}";
+            yield return (c.Category, new Case($"[{c.Category}] {input}", actual == c.Expected, $"{input} → {actual} (期待: {c.Expected})"));
         }
     }
 
@@ -432,16 +433,20 @@ Dictionary<string, (int Pass, int Total)> ByCategory, List<string> Failures, Lis
         var categories = new Dictionary<string, (int Pass, int Total)>();
         var failures = new List<string>();
         var cases = new List<Case>();
+        void Add(string category, Case c)
+        {
+            cases.Add(c);
+            var (pass, total) = categories.GetValueOrDefault(category);
+            categories[category] = (pass + (c.Ok ? 1 : 0), total + 1);
+            if (!c.Ok) failures.Add($"[{category}] {c.Detail}");
+        }
         void Score(string category, bool ok, string detail)
         {
             var arrow = detail.IndexOf(" → ", StringComparison.Ordinal);
-            cases.Add(new Case($"[{category}] {(arrow >= 0 ? detail[..arrow] : detail)}", ok, detail));
-            var (pass, total) = categories.GetValueOrDefault(category);
-            categories[category] = (pass + (ok ? 1 : 0), total + 1);
-            if (!ok) failures.Add($"[{category}] {detail}");
+            Add(category, new Case($"[{category}] {(arrow >= 0 ? detail[..arrow] : detail)}", ok, detail));
         }
 
-        foreach (var (category, ok, detail) in TypingResults(CompositionTests.Detector)) Score(category, ok, detail);
+        foreach (var (category, c) in TypingResults(CompositionTests.Detector)) Add(category, c);
 
         // かな入力 (JIS)
         foreach (var (keys, expected) in new[] { ("byiaf", "こんにちは"), ("google", "google"), ("t@u", "がな"), ("github", "github") })

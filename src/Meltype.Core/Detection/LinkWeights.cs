@@ -36,7 +36,7 @@ internal enum LinkFeature
 
 /// <summary>
 /// <see cref="LinkFeature"/> の 1 回ごとの重み。作った後は変わらない。
-/// 値を変えるときは、品質テストの打鍵の例が全部通る範囲を --tune-weights で確かめる。
+/// 値を変えるときは、--tune-weights で品質テストの打鍵の例が崩れない範囲を見てから、単体テストと --expect (issue-cases.tsv) でも確かめる。
 /// </summary>
 internal sealed class LinkWeights
 {

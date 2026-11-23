@@ -9,6 +9,8 @@ namespace Meltype.Tests;
 /// --tune-weights: 日英の区切りの辺をつなぐ重み (<see cref="LinkWeights"/>) を 1 つずつ動かして、品質テストの打鍵の例を流す。
 /// 重みは書き換えない。出た結果を見て、人が重みを変えるか決める。
 /// 誤判定を直すときは、報告の例を品質テスト (QualityTests の Typing) に足してから流し、重みで直せるかを先に確かめる。
+/// 流すのは Typing だけで、単体テストは流さない。Typing は探索に使うので、Typing が全部通っても過適合していないとは言えない。
+/// 重みを変えたら、単体テストと --expect (issue-cases.tsv) でも確かめる。
 /// </summary>
 internal static class WeightTuning
 {
@@ -27,7 +29,7 @@ internal static class WeightTuning
 
         // 重みごとに、全部の例 (今外れている例を除く) が今と同じ結果になる範囲 (今の値の余裕)
         Console.WriteLine();
-        Console.WriteLine("## 重みごとの余裕 (今通っている例が崩れない範囲。直る例があれば + で示す)");
+        Console.WriteLine("## 重みごとの余裕 (今通っている Typing の例が崩れない範囲。単体テストは含まない。直る例があれば + で示す)");
         var trials = new Dictionary<(LinkFeature, double), HashSet<string>>();
         foreach (var feature in Enum.GetValues<LinkFeature>())
         {
@@ -78,9 +80,9 @@ internal static class WeightTuning
         for (var value = 0.0; value <= Max; value += Step) yield return value;
     }
 
-    // 外れた例 (打ったもの)。結果の文字列は重みで変わるので、比べるのは打ったものだけにする
+    // 外れた例の Key (「[分類] 打ったもの」)。結果の文字列は重みで変わるので、比べるのは打ったものだけにする
     private static HashSet<string> Failures(LinkWeights weights) =>
-        [.. Quality.TypingResults(CompositionDetector.CreateDefault(null, weights)).Where(r => !r.Ok).Select(r => $"[{r.Category}] {r.Detail[..r.Detail.IndexOf(" → ", StringComparison.Ordinal)]}")];
+        [.. Quality.TypingResults(CompositionDetector.CreateDefault(null, weights)).Where(r => !r.Case.Ok).Select(r => r.Case.Key)];
 
     /// <summary>0.5、1、1.5、2 → 0.5〜2 のように、続いた値をまとめて書く。</summary>
     private static string Ranges(List<double> values)
