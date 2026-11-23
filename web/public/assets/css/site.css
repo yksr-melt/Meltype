@@ -3818,52 +3818,6 @@ em {
   gap: 6px;
 }
 
-/* meltype-web.js が入力欄の前に置く、日本語 / 英数の切り替え。今のモードを塗る */
-.playground-field .meltype-mode {
-  display: inline-flex;
-  margin-bottom: 10px;
-  padding: 4px;
-  gap: 4px;
-  background: var(--surface-2);
-  border: 1px solid var(--line-strong);
-  border-radius: 999px;
-}
-
-.playground-field .meltype-mode button {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-family: var(--font-head);
-  font-weight: 700;
-  font-size: 0.95rem;
-  padding: 6px 18px;
-  color: var(--muted);
-  background: transparent;
-  border: 0;
-  border-radius: 999px;
-  cursor: pointer;
-  transition: background-color 0.15s, color 0.15s;
-}
-
-.playground-field .meltype-mode button b {
-  font-size: 1.15rem;
-  line-height: 1;
-}
-
-.playground-field .meltype-mode button:hover {
-  color: var(--sky-deep);
-}
-
-.playground-field .meltype-mode button[aria-pressed="true"] {
-  color: var(--on-accent);
-  background: var(--sky-deep);
-}
-
-.playground-field .meltype-mode button:focus-visible {
-  outline: 3px solid var(--sky);
-  outline-offset: 2px;
-}
-
 /* meltype-web.js が出す、変換中の文字と候補の一覧 */
 .meltype-box {
   position: absolute;

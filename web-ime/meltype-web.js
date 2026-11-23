@@ -13,12 +13,16 @@ const IME_VERSION = 1;
 const base = new URL(".", import.meta.url);
 
 // 文字の無いキーの Windows の仮想キーコード (ImeKey.Vk)
+// 入力モードを切り替えるキー (半角/全角・英数・かな)。ブラウザー版は日本語のモードだけで使うので、Core に送らない
+// (Meltype は日本語のモードのままで英語も打てる。英数のモードは要らない)
+const MODE_KEYS = new Set(["Hankaku", "Zenkaku", "ZenkakuHankaku", "Eisu", "KanaMode", "Alphanumeric", "Hiragana", "Katakana", "HiraganaKatakana", "Romaji", "Lang1", "Lang2"]);
+
 const VK = {
   Backspace: 0x08, Tab: 0x09, Enter: 0x0d, Escape: 0x1b, " ": 0x20,
   PageUp: 0x21, PageDown: 0x22, End: 0x23, Home: 0x24,
   ArrowLeft: 0x25, ArrowUp: 0x26, ArrowRight: 0x27, ArrowDown: 0x28, Delete: 0x2e,
   F6: 0x75, F7: 0x76, F8: 0x77, F9: 0x78, F10: 0x79,
-  Convert: 0x1c, NonConvert: 0x1d, Hankaku: 0x19, Zenkaku: 0x19, ZenkakuHankaku: 0x19, Eisu: 0xf0, KanaMode: 0x15,
+  Convert: 0x1c, NonConvert: 0x1d,
 };
 
 let corePromise;
@@ -61,7 +65,7 @@ async function loadMozc() {
 }
 
 /**
- * 入力欄に Meltype を付ける。返す物の detach() で外し、toggle() で日本語 / 英数を切り替える。
+ * 入力欄に Meltype を付ける。返す物の detach() で外す。
  * @param {HTMLTextAreaElement | HTMLInputElement} field
  */
 export async function attach(field) {
@@ -69,7 +73,6 @@ export async function attach(field) {
   const host = core.exports.Create();
   const box = createBox();
   let view = null;
-  let state = null;
 
   const send = (type, extra = {}) => {
     const event = {
@@ -86,8 +89,10 @@ export async function attach(field) {
       ...extra,
     };
     const output = JSON.parse(core.exports.Handle(host, JSON.stringify(event)));
-    state = output.state;
     apply(output.result);
+    // 日本語のモードだけで使う (MODE_KEYS)。Core の設定のショートカットなどで英数を選んだら、日本語に戻す。
+    // コードの行は日本語を選んだままでも英数になる (languageMode) ので、選んでいるモード (imeOpen) で見る
+    if (!output.state.imeOpen && type !== "JapaneseModeSelected") send("JapaneseModeSelected");
     return output.result.consumed;
   };
 
@@ -102,13 +107,16 @@ export async function attach(field) {
     if (result.commits.length) field.dispatchEvent(new Event("input", { bubbles: true }));
     view = result.view;
     drawBox(box, field, view);
-    for (const button of modes.children) button.setAttribute("aria-pressed", String(button.dataset.mode === state?.languageMode));
   };
 
   const onKeyDown = (e) => {
     // OS の IME で変換している間は、その IME に任せる
     if (e.isComposing || e.keyCode === 229) return;
     if (["Shift", "Control", "Alt", "Meta", "CapsLock"].includes(e.key)) return;
+    if (MODE_KEYS.has(e.key)) {
+      e.preventDefault();
+      return;
+    }
     const printable = [...e.key].length === 1;
     const key = {
       vk: VK[e.key] ?? (printable ? 0 : -1),
@@ -137,37 +145,16 @@ export async function attach(field) {
     field.focus();
   };
 
-  // 日本語 / 英数の切り替え (キーボードに 半角/全角 が無い環境のため)。今のモードを押した状態で見せる
-  const modes = document.createElement("div");
-  modes.className = "meltype-mode";
-  modes.setAttribute("role", "group");
-  modes.setAttribute("aria-label", "入力モード");
-  for (const [mode, mark, label, type] of [["Japanese", "あ", "日本語", "JapaneseModeSelected"], ["Alphanumeric", "A", "英数", "AlphanumericModeSelected"]]) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.dataset.mode = mode;
-    button.innerHTML = `<b></b>`;
-    button.firstChild.textContent = mark;
-    button.append(label);
-    // マウスで押しても入力欄からフォーカスを外さない (変換中の文字を確定させない)
-    button.addEventListener("mousedown", (e) => e.preventDefault());
-    button.addEventListener("click", () => { send(type); field.focus(); });
-    modes.append(button);
-  }
-  field.insertAdjacentElement("beforebegin", modes);
-
   field.addEventListener("keydown", onKeyDown);
   field.addEventListener("mouseup", onMoved);
   field.addEventListener("focus", onFocus);
   field.addEventListener("blur", onBlur);
   box.addEventListener("mousedown", onClickCandidate);
   core.listeners.add(onReady);
-  // 日本語で始める (Meltype は日本語のままでも英語を打てるので)
-  send("JapaneseModeSelected");
+  send("StateRequested");
 
   return {
     mozc: core.mozc,
-    toggle: () => send("ModeToggleRequested"),
     detach() {
       if (view) send("CommitRequested", { caret: { moved: true, passedKey: 0 } });
       field.removeEventListener("keydown", onKeyDown);
@@ -176,7 +163,6 @@ export async function attach(field) {
       field.removeEventListener("blur", onBlur);
       core.listeners.delete(onReady);
       box.remove();
-      modes.remove();
     },
   };
 }
