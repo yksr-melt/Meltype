@@ -50,7 +50,7 @@ public static class AppPaths
             if (File.Exists(oldLog)) File.Move(oldLog, LogFile, overwrite: true);
             Diagnostics.Log.Info($"旧名 (AutoIME) の設定と学習データを {DataDirectory} に移しました。");
         }
-        catch (Exception ex)
+        catch (Exception ex) when (DataFile.IsFileError(ex))
         {
             Diagnostics.Log.Warn($"旧名 (AutoIME) の設定と学習データを移せませんでした: {ex.Message}");
         }

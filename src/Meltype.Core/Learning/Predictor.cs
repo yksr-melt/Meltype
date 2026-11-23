@@ -50,7 +50,8 @@ internal sealed class PhraseHistory
         }
         catch (Exception ex)
         {
-            Diagnostics.Log.Warn($"予測変換の学習データを読めませんでした: {ex.Message}");
+            // 読むときは型で絞らない (Config.DataFile)
+            Config.DataFile.ReportUnreadable("予測変換の学習データ", ex);
         }
         return entries;
     }
@@ -216,7 +217,7 @@ internal sealed class PhraseHistory
             }
             return true;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (Config.DataFile.IsFileError(ex))
         {
             Diagnostics.Log.Warn($"予測変換の学習データを保存できませんでした: {ex.Message}");
             return false;

@@ -61,7 +61,7 @@ public sealed class AppState
         {
             DataFile.Write(path, temp => File.WriteAllText(temp, JsonSerializer.Serialize(this, AppStateJsonContext.Default.AppState)));
         }
-        catch (Exception ex)
+        catch (Exception ex) when (DataFile.IsFileError(ex))
         {
             Diagnostics.Log.Warn($"state.json を保存できませんでした: {ex.Message}");
         }

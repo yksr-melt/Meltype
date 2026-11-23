@@ -138,17 +138,9 @@ internal sealed class RomajiDetector
     /// </summary>
     public static Dictionary<string, string>? LoadCustomTable(string? userDictionaryDirectory)
     {
-        if (userDictionaryDirectory is null) return null;
-        var path = Path.Combine(userDictionaryDirectory, "romaji.txt");
-        try
-        {
-            return File.Exists(path) ? ParseCustomTable(File.ReadAllText(path)) : null;
-        }
-        catch (Exception ex)
-        {
-            Diagnostics.Log.Warn($"ローマ字の表 (romaji.txt) を読めませんでした: {ex.Message}");
-            return null;
-        }
+        Dictionary<string, string>? table = null;
+        Config.DataFile.LoadUserText(userDictionaryDirectory, "romaji.txt", "ローマ字の表 (romaji.txt) ", text => table = ParseCustomTable(text));
+        return table;
     }
 
     public static Dictionary<string, string> ParseCustomTable(string text)

@@ -119,7 +119,7 @@ public sealed class SnippetStore
             Config.DataFile.Write(_path, temp => File.WriteAllText(temp, json, Encoding.UTF8));
             _stamp.Synced();
         }
-        catch (Exception ex)
+        catch (Exception ex) when (Config.DataFile.IsFileError(ex))
         {
             Diagnostics.Log.Warn($"定型文を保存できませんでした: {ex.Message}");
         }
