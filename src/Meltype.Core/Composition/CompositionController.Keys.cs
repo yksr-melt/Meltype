@@ -821,9 +821,16 @@ internal static partial class CompositionController
 
     private static void SetMode(CompositionState state, DisplayMode mode)
     {
-        state.Conversion = null;
+        LeaveConversion(state);
         state.Text.Mode = mode;
         state.Text.Case = LetterCase.AsTyped;
+    }
+
+    // 変換を抜けて表示の形を選ぶ。抜けた変換は確定の記録のために残す
+    private static void LeaveConversion(CompositionState state)
+    {
+        if (state.Conversion is { } conversion) state.LeftConversion = (conversion, CompositionText.Raw(state.Text));
+        state.Conversion = null;
     }
 
     /// <summary>
@@ -834,7 +841,7 @@ internal static partial class CompositionController
     {
         var before = IsConverting(state) ? null : CurrentDisplay(state, env, final: false);
         var sameMode = !IsConverting(state) && state.Text.Mode == mode;
-        state.Conversion = null;
+        LeaveConversion(state);
         if (!sameMode)
         {
             state.Text.Mode = mode;

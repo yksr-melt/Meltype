@@ -166,6 +166,12 @@ internal sealed class CompositionState
     /// <summary>変換中なら、その文節と選んでいる文節など。変換していなければ null (変換を終えると、変換にかかわる値はまとめて消える)。</summary>
     public Conversion? Conversion;
 
+    /// <summary>
+    /// F6〜F10 (と同じ表示の形を選ぶキー) で抜けた変換と、そのときの打った文字。確定の記録 (<see cref="CompositionController.CommittedClauses"/>) に使う。
+    /// 打った文字が変わっていたら使わない (BackSpace などで入力が変わっても消さない)。
+    /// </summary>
+    public (Conversion Conversion, string Raw)? LeftConversion;
+
     /// <summary>変換中の文節 (変換していなければ空)。変換を始める・終えるのは <see cref="Conversion"/> への代入だけにする。</summary>
     public List<Clause> Clauses => Conversion?.Clauses ?? [];
 

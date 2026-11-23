@@ -102,10 +102,63 @@ internal static partial class CompositionController
         // 区切りは、表示に使ったのと同じ計算 (Segments) から取る
         if (state.Text.Mode == DisplayMode.Auto) parts.Add(CompositionText.ExplainSegments(state.Text, env));
         else parts.Add($"F6〜F10 で選んだ表示 ({state.Text.Mode})");
+        if (Diagnostics.Log.RecordText && !IsConverting(state) && IsKanaMode(state.Text.Mode))
+            parts.Add("形を当てる前の文節 " + string.Join(" | ", CommittedClauses(state, env).Select(c => $"{c.Reading}→{c.Engine ?? "(英語)"}")));
         if (state.Clauses.Count > 0)
             parts.Add("文節 " + string.Join(" | ", state.Clauses.Select(c => (Diagnostics.Log.RecordText ? $"{c.Reading}→{c.Text}" : $"({c.Reading.Length} 文字)") + (c.Changed ? " (選び直した)" : ""))));
         if (rule.Length > 0) parts.Add(rule);
         Diagnostics.Log.Decision($"確定: {Diagnostics.Log.Text(CompositionText.Raw(state.Text))}→{Diagnostics.Log.Text(text)}; {string.Join("; ", parts.Where(p => p.Length > 0))}");
+    }
+
+    /// <summary>
+    /// 確定する入力の文節ごとの記録 (確定する前に呼ぶ)。変換中なら変換の文節。F6〜F8 で形を当てた入力は、形を当てる前の文節
+    /// (F6〜F8 を押す前の変換。変換していなければ自動の表示のライブ変換) に、その形を当てた文字を付ける。
+    /// </summary>
+    internal static IReadOnlyList<CommittedClause> CommittedClauses(CompositionState state, CompositionEnv env)
+    {
+        if (IsConverting(state)) return [.. state.Clauses.Select(c => new CommittedClause(c.Reading, c.Engine, c.Text))];
+        var mode = state.Text.Mode;
+        var left = state.LeftConversion is { } kept && kept.Raw == CompositionText.Raw(state.Text)
+            ? kept.Conversion.Clauses.Select(c => (c.Reading, c.Engine, c.Text)).ToList()
+            : AutoClauses(state, env);
+        if (!IsKanaMode(mode)) return [.. left.Select(c => new CommittedClause(c.Reading, c.Engine, mode == DisplayMode.Auto ? c.Text : null))];
+        var matches = string.Concat(left.Select(c => c.Reading)) == CompositionText.AllKana(state.Text, env, final: true);
+        return [.. left.Select(c => new CommittedClause(c.Reading, c.Engine, matches ? KanaForm(mode, c.Reading) : null))];
+    }
+
+    private static bool IsKanaMode(DisplayMode mode) => mode is DisplayMode.Hiragana or DisplayMode.Katakana or DisplayMode.HalfWidthKatakana;
+
+    private static string KanaForm(DisplayMode mode, string hiragana) => mode switch
+    {
+        DisplayMode.Katakana => CompositionText.ToKatakana(hiragana),
+        DisplayMode.HalfWidthKatakana => CompositionText.ToHalfWidthKatakana(CompositionText.ToKatakana(hiragana)),
+        _ => hiragana,
+    };
+
+    // 自動の表示の文節: 英語の区間は 1 つの文節 (変換エンジンの答えは無し)、日本語の区間はライブ変換の文節 (ライブ変換を使わなければかなのまま)
+    private static List<(string Reading, string? Engine, string Text)> AutoClauses(CompositionState state, CompositionEnv env)
+    {
+        var mode = state.Text.Mode;
+        state.Text.Mode = DisplayMode.Auto;
+        try
+        {
+            var clauses = new List<(string Reading, string? Engine, string Text)>();
+            var segments = CompositionText.Segments(state.Text, env);
+            for (var i = 0; i < segments.Count; i++)
+            {
+                var segment = segments[i];
+                if (segment.IsEnglish) clauses.Add((segment.Kana, null, segment.Raw));
+                else if (env.Settings.LiveConversion && CountsAsLive(segment.Kana))
+                    clauses.AddRange(LiveClauses(state, env, segment.Kana, i > 0 && segments[i - 1].IsEnglish, SegmentBefore(env, string.Concat(clauses.Select(c => c.Text))))
+                        .Select(c => (c.Reading, (string?)c.Text, c.Text)));
+                else clauses.Add((segment.Kana, null, segment.Kana));
+            }
+            return clauses;
+        }
+        finally
+        {
+            state.Text.Mode = mode;
+        }
     }
 
     private static void RecordCorrection(CompositionState state, CompositionEnv env, bool converting, string text, string suffix)
@@ -278,6 +331,7 @@ internal static partial class CompositionController
         var afterEnglish = env.Context().PrecedingEnglish == true;
         CompositionText.Clear(state.Text);
         state.Conversion = null;
+        state.LeftConversion = null;
         if (text.Length == 0) return;
         var corrected = CorrectPreviousCommit(state, env, raw, english);
         if (!preserveText && (env.Settings.SpaceAroundEnglish || env.Settings.SpaceAroundNumbers))

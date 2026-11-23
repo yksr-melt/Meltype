@@ -708,11 +708,11 @@ internal static partial class CompositionController
     /// </summary>
     private static void AddCandidates(CompositionState state, CompositionEnv env, Clause clause)
     {
-        if (clause.Engine is not { } engine) return;
+        if (clause.Engine is not { } engine || clause.EngineCandidatesAdded) return;
         var (chosen, text) = (clause.Candidates, clause.Text);
         clause.Candidates = [.. chosen, .. JapaneseCandidates(state, env, clause.Reading, engine, null, zenzai: false).Where(c => !chosen.Contains(c))];
         clause.Index = clause.Candidates.IndexOf(text);
-        clause.Engine = null;
+        clause.EngineCandidatesAdded = true;
     }
 
     /// <summary>
