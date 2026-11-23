@@ -10,8 +10,7 @@ namespace Meltype.Engine;
 /// Zenzai が使えればその答えを Mozc の文節に当てはめ、使えなければ Mozc で変換する。Mozc が使えなければ変換しない (かなのまま)。
 /// 組み立ては Ime の MeltypeRuntime.CreateConverter。
 /// </summary>
-/// <param name="zenzaiFailed">変換で例外になった Zenzai を、持ち主 (zenzai を渡した側) に知らせる。止めて作り直すのは持ち主が行う。</param>
-internal sealed class HybridConverter(MozcConverter mozc, Func<ZenzaiConverter?>? zenzai = null, Action<ZenzaiConverter>? zenzaiFailed = null)
+internal sealed class HybridConverter(MozcConverter mozc, Func<ZenzaiConverter?>? zenzai = null)
     : IKanjiConverter
 {
     private ZenzaiConverter? _subscribedZenzai;
@@ -52,36 +51,15 @@ internal sealed class HybridConverter(MozcConverter mozc, Func<ZenzaiConverter?>
     private void OnZenzaiReady() => _zenzaiReady?.Invoke();
 
     /// <summary>
-    /// 設定で Zenzai が使えるとき、その変換結果 (読み全体で 1 つの文節)。使えない・変換できなければ null。
-    /// Zenzai を作れない・変換で例外になったときも null (Mozc で変換する)。Zenzai の失敗で入力全体を止めないように
-    /// (#973: 同梱の .NET に System.Net.Http が無く、Zenzai を作るたびに例外になって、日本語を打てなくなった)。
-    /// 変換で例外になった Zenzai は、それからは使わず (打つたびに例外にしない)、持ち主に知らせる (zenzaiFailed)。
-    /// 止める (Dispose) のは持ち主で、ここでは止めない。持ち主が新しく作ったら、それは使う。
+    /// 設定で Zenzai が使えるとき、その変換結果 (読み全体で 1 つの文節)。使えない・変換できなければ null (Mozc で変換する)。
+    /// Zenzai の失敗 (作れない・答えない・壊れた答え) は例外にならない。続けて失敗した Zenzai は自分で諦め (GaveUp)、持ち主 (ZenzaiHolder) が止めて作り直す。
     /// </summary>
     private List<ConversionClause>? Zenzai(ConversionRequest request)
     {
-        ZenzaiConverter? z = null;
-        try
-        {
-            z = zenzai?.Invoke();
-            if (z is null || ReferenceEquals(z, _failedZenzai) || !z.IsAvailable) return null;
-            Subscribe(z);
-            return z.Convert(request)?.Select(c => c with { Zenzai = true }).ToList();
-        }
-        catch (Exception ex) when (EngineFailure.IsExpected(ex))
-        {
-            var failed = (object?)z ?? CouldNotCreate;
-            if (!ReferenceEquals(failed, _failedZenzai)) Diagnostics.Log.Error($"Zenzai で変換できないので、Mozc で変換します: {ex}");
-            _failedZenzai = failed;
-            if (z is not null) zenzaiFailed?.Invoke(z);
-            return null;
-        }
+        if (zenzai?.Invoke() is not { IsAvailable: true } z) return null;
+        Subscribe(z);
+        return z.Convert(request)?.Select(c => c with { Zenzai = true }).ToList();
     }
-
-    // 例外になった Zenzai (持ち主が同じものをまた渡しても使わない)。作るところで例外になったときは CouldNotCreate
-    // (このときはログを 1 回にするだけ。Windows 版では ZenzaiHolder が作れなかったことを覚えて待つので、ここまで例外は来ない)
-    private object? _failedZenzai;
-    private static readonly object CouldNotCreate = new();
 
     /// <summary>
     /// Zenzai の答え (answer) を、Mozc の文節ごとの候補を 1 つずつ選んでつなげて作れるか (前の文脈なし)。Mozc が答えなかったら null。
