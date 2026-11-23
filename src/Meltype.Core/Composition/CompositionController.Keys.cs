@@ -208,14 +208,14 @@ internal static partial class CompositionController
                 else if (SpaceCommitsMarkdownMarker(state))
                 {
                     // Markdown の記号だけは、変換せず打った半角 + 空白で確定する
-                    CommitText(state, env, CompositionText.Raw(state.Text) + " ", english: false, preserveText: true, rule: "Space: Markdown の記号なので打ったまま");
+                    CommitText(state, env, ComposedText.English(CompositionText.Raw(state.Text) + " "), english: false, preserveText: true, rule: "Space: Markdown の記号なので打ったまま");
                 }
                 else if (SpaceCommitsAlphanumeric(state, env))
                 {
                     Commit(state, env, suffix: " ");
                 }
-                else if (EndsWithEnglish(state, env)) CommitText(state, env, CompositionText.RenderSegments(state.Text, env, final: true, env.Settings.LiveConversion ? (kana, afterEnglish, shown) => string.Concat(ConvertJapaneseSegment(state, env, kana, afterEnglish, SegmentBefore(env, shown), zenzai: true).Select(c => c.Text)) : null) + " ", english: true, CompositionText.Raw(state.Text), rule: "Space: 英語で終わるので変換せずに確定");
-                else if (SpaceCommitsAutoEnglish(state, env)) CommitText(state, env, CompositionText.Raw(state.Text) + " ", english: true, CompositionText.Raw(state.Text), rule: "Space: かなにならない子音で終わる英単語");
+                else if (EndsWithEnglish(state, env)) CommitText(state, env, CommittedDisplay(state, env) + ComposedText.English(" "), english: true, CompositionText.Raw(state.Text), rule: "Space: 英語で終わるので変換せずに確定");
+                else if (SpaceCommitsAutoEnglish(state, env)) CommitText(state, env, ComposedText.English(CompositionText.Raw(state.Text) + " "), english: true, CompositionText.Raw(state.Text), rule: "Space: かなにならない子音で終わる英単語");
                 else
                 {
                     StartConversion(state, env, ConversionTrigger.Space);
@@ -336,7 +336,7 @@ internal static partial class CompositionController
                 Config.SpaceWidth.Standard => false,
                 _ => throw new InvalidOperationException($"不明な SpaceWidth: {spaceWidth}"),
             };
-            CommitText(state, env, halfWidth ? " " : "　", english: false);
+            CommitText(state, env, ComposedText.Of(halfWidth ? SpanKind.English : SpanKind.Japanese, halfWidth ? " " : "　"), english: false);
             return;
         }
         // かな入力: かなのキーならすべて入力を始める (英数状態でなければ)。
@@ -786,8 +786,7 @@ internal static partial class CompositionController
         var rest = all.Skip(state.SelectedClause + 1).ToList();
         state.Conversion!.Clauses = done;
         LearnClauses(state, env);
-        var text = string.Concat(done.Select(c => c.Text));
-        CommitText(state, env, text, done.All(c => c.IsEnglish), "", chosen: true);
+        CommitText(state, env, Composed(done), done.All(c => c.IsEnglish), "", chosen: true);
         BeginComposition(state, env, state.PrivateComposition);
         foreach (var clause in rest)
         {
