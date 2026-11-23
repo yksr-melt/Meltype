@@ -129,7 +129,7 @@ internal static partial class CompositionController
     {
         // 表示の再計算に依存せず、打った原文そのものを使う (確定条件で区間分けが変わっても記号を変えない)。
         var text = (CompositionText.IsProtectedRaw(state.Text) ? CompositionText.Raw(state.Text) : CurrentDisplay(state, env, final: true)) + suffix;
-        state.Clauses = [];
+        state.Conversion = null;
         state.Correctable.Clear();
         // raw を空にして渡し、保護原文を確定後補正・学習の対象にしない (INV-06)。
         CommitText(state, env, text, english: false, preserveText: true, rule: "保護区間 (メンション・URL・メール・パス) で終わるので、打ったまま");
@@ -150,7 +150,7 @@ internal static partial class CompositionController
     /// <summary>予測変換の候補を確定する。日本語なら覚え直して、次からより前に出す。</summary>
     private static void CommitPrediction(CompositionState state, CompositionEnv env, Prediction prediction)
     {
-        state.PredictionIndex = -1;
+        if (state.Predictions is { } list) list.Index = -1;
         if (!prediction.Text.All(c => c < 0x80) && Learning(state, env))
             env.Services.Predictor?.Phrases?.Remember(PredictionReading(state, env, prediction.Text, prediction.Reading), prediction.Text);
         // 最後の文節の続きの候補なら、前の文節 (見えているとおり) とつなげて確定する
@@ -179,8 +179,7 @@ internal static partial class CompositionController
         // キャレットが動いた・アプリが文字を入れた: キャレットの前は自分が確定した語ではないので、読めたらアプリの文字を使う。
         // 読めなければ前の文字も、それが英語だったかも分からないものとして扱う (消した後・行の先頭に、英単語の前後の空白を足さない)
         state.LastCommitTime = long.MinValue / 2;
-        state.LastCommitText = null;
-        state.LastCommitEnglish = null;
+        state.Last = null;
     }
 
     /// <summary>
@@ -247,7 +246,7 @@ internal static partial class CompositionController
         // 消して入れ直すのは、続けて確定する文字と一緒に送る (CommitText)。別々に送ると、その間に入れ直した文字と
         // 続けて確定した文字の順番が入れ替わるアプリがある (Are yoよ人間う？: issue #258)
         state.PendingReplace = (original.Length, replacement);
-        state.LastCommitText = replacement;
+        if (state.Last is { } last) state.Last = last with { Text = replacement };
         state.Correctable.Clear();
         return replacement;
     }
@@ -259,12 +258,10 @@ internal static partial class CompositionController
     private static void CommitText(CompositionState state, CompositionEnv env, string text, bool english, string raw = "", bool chosen = false, bool preserveText = false, string rule = "")
     {
         LogCommit(state, env, text, rule);
-        var spaceIntended = state.SpaceStartedConversion;
+        var spaceIntended = state.Conversion?.StartedBy == ConversionTrigger.Space;
         var afterEnglish = env.Context().PrecedingEnglish == true;
-        state.SpaceStartedConversion = false;
-        state.TabStartedConversion = false;
         CompositionText.Clear(state.Text);
-        state.Clauses = [];
+        state.Conversion = null;
         if (text.Length == 0) return;
         var corrected = CorrectPreviousCommit(state, env, raw, english);
         if (!preserveText && (env.Settings.SpaceAroundEnglish || env.Settings.SpaceAroundNumbers))
@@ -278,9 +275,8 @@ internal static partial class CompositionController
             if (state.Correctable.Count > MaxCorrectable) state.Correctable.RemoveAt(0);
         }
         else state.Correctable.Clear();
-        state.LastCommitEnglish = english;
-        var joined = (state.LastCommitText ?? "") + text;
-        state.LastCommitText = joined.Length > 20 ? joined[^20..] : joined;
+        var joined = (state.Last?.Text ?? "") + text;
+        state.Last = new LastCommit(joined.Length > 20 ? joined[^20..] : joined, english);
         state.LastCommitTime = env.NowMs;
         if (state.PendingReplace is var (count, replacement))
         {

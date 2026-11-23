@@ -37,8 +37,7 @@ internal static partial class CompositionController
         state.Reconversion = selection;
         foreach (var c in converted) CompositionText.AppendKana(state.Text, c, c);
         state.Text.Mode = DisplayMode.Hiragana;
-        state.Clauses = [new Clause(converted, false, [converted, selection.Text])];
-        state.SelectedClause = 0;
+        state.Conversion = new Conversion([new Clause(converted, false, [converted, selection.Text])], ConversionTrigger.Other, preferJapanese: false);
     }
 
     /// <summary>
@@ -83,11 +82,11 @@ internal static partial class CompositionController
     /// 区切りを文節にして変換する (<see cref="BuildClauses"/>)。英日の区切りの別案があれば、文全体を 1 つの文節にして、案ごとの文を候補にする。
     /// F6〜F8 でかなにして見せているときは、打った英字をすべてローマ字として読んで変換する。
     /// </summary>
-    private static void StartConversion(CompositionState state, CompositionEnv env, bool preferJapanese = false)
+    private static void StartConversion(CompositionState state, CompositionEnv env, ConversionTrigger trigger = ConversionTrigger.Other, bool preferJapanese = false)
     {
-        state.ConversionPrefersJapanese = preferJapanese;
-        state.ClausesEdited = false;
-        state.TabStartedConversion = false;
+        state.Conversion = null;
+        void Open(List<Clause> clauses, int selected) =>
+            state.Conversion = clauses.Count == 0 ? null : new Conversion(clauses, trigger, preferJapanese) { Selected = selected };
         var asKana = state.Text.Mode is DisplayMode.Hiragana or DisplayMode.Katakana or DisplayMode.HalfWidthKatakana;
         var segments = asKana ? CompositionText.AllJapaneseSegments(state.Text, env) : CompositionText.ConversionSegments(state.Text, env);
         var utility = Utilities(state, env, segments);
@@ -104,8 +103,7 @@ internal static partial class CompositionController
             // 続けて入力する前の選択だけを復元し、候補の順 (注記と同じ順) は変えない。
             if (state.KeptChoices.TryGetValue(fixedClause.Reading, out var kept) && fixedClause.Candidates.IndexOf(kept) is >= 0 and var index)
                 fixedClause.Index = index;
-            state.Clauses = [fixedClause];
-            state.SelectedClause = 0;
+            Open([fixedClause], 0);
             return;
         }
         // 打った英字全体がユーザー辞書の読み (helloworld → 登録した語) か子音の略入力の読み (ast → 明日。issue #62) なら、
@@ -118,10 +116,9 @@ internal static partial class CompositionController
             var reading = RomajiReading(state, env, typedRaw);
             List<string> romaji = reading is null ? [] : JapaneseCandidates(state, env, reading, null, SegmentBefore(env, ""), zenzai: true);
             List<string> english = [typedRaw, .. EnglishCandidates(state, env, typedRaw)];
-            state.Clauses = [new Clause(typedRaw, true, preferJapanese
+            Open([new Clause(typedRaw, true, preferJapanese
                 ? Distinct([.. registered, .. romaji, .. english])
-                : Distinct([.. registered, .. english, .. romaji])) { Raw = typedRaw, Kana = reading }];
-            state.SelectedClause = 0;
+                : Distinct([.. registered, .. english, .. romaji])) { Raw = typedRaw, Kana = reading }], 0);
             return;
         }
         // 区切りの別案があれば、別案ごとに変換した文を 1 つの文節の候補にする (issue #1737)
@@ -136,8 +133,7 @@ internal static partial class CompositionController
             if (state.KeptChoices.TryGetValue(clause.Reading, out var kept) && clause.Candidates.Contains(kept)) Prefer(clause, kept);
         // 打ち始めの ・ は、Space で / にする。
         if (CompositionText.IsSlashAtStart(state.Text) && clauses is [var slash]) Prefer(slash, "/");
-        state.Clauses = clauses;
-        state.SelectedClause = InitialClause(env, clauses.Count);
+        Open(clauses, InitialClause(env, clauses.Count));
     }
 
     /// <summary>変換を始めたときに選ぶ文節。</summary>
@@ -248,13 +244,13 @@ internal static partial class CompositionController
         if (state.Clauses is not [{ Alternatives: { } alternatives } whole]) return;
         if (alternatives.TryGetValue(whole.Text, out var clauses))
         {
-            state.Clauses = clauses;
+            state.Conversion!.Clauses = clauses;
         }
         else if (alternatives.Values.FirstOrDefault(c => c is [var only] && only.Candidates.Contains(whole.Text)) is [var single])
         {
             single.Index = single.Candidates.IndexOf(whole.Text);
             single.Changed = whole.Changed;
-            state.Clauses = [single];
+            state.Conversion!.Clauses = [single];
         }
         else
         {
@@ -262,7 +258,7 @@ internal static partial class CompositionController
             return;
         }
         state.SelectedClause = 0;
-        state.ClausesEdited = true;
+        state.Conversion!.Edited = true;
     }
 
     /// <summary>入力の全体に一致したユーティリティ変換の候補。一致しなければ null。</summary>
@@ -868,7 +864,7 @@ internal static partial class CompositionController
     /// </summary>
     private static void Resize(CompositionState state, CompositionEnv env, int delta)
     {
-        state.ClausesEdited = true;
+        state.Conversion!.Edited = true;
         SplitWholeSentence(state);
         var current = state.Clauses[state.SelectedClause];
         // ユーティリティ変換の Replace の文節 (空の括弧のペアなど) は、1 つの単位として選んで確定する。
