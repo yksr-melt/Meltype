@@ -141,8 +141,6 @@ private:
     static constexpr UINT kConversionWaitDone = WM_APP + 1;
     // Meltype.exe (TipServer.AltKeyMessage) が送る、左右の Alt の押下・解放。wParam は仮想キーコード、lParam は次の印 (TipServer.AltFlags と同じ)
     static constexpr UINT kAltKey = WM_APP + 2;
-    // TipServer.TaskbarMenuFocusMessage。wParam は 0、lParam はメニューのフォーカス HWND (閉じたら 0)。
-    static constexpr UINT kTaskbarMenuFocus = WM_APP + 3;
     static constexpr UINT kAltShift = 1, kAltCtrl = 2, kAltCommand = 8, kAltReleased = 0x100, kAltInterrupted = 0x200;
     void CreateMessageWindow();
     void DestroyMessageWindow();
@@ -216,7 +214,6 @@ private:
     bool disabled_ = false;        // サインインや UAC の画面では何もしない
     bool deactivated_ = false;     // 終わった後は Meltype.exe とやり取りしない
     HWND window_ = nullptr;        // 変換の結果を待ち終わったことを IME のスレッドで受ける、表示しないウィンドウ
-    HWND taskbarMenuFocus_ = nullptr;  // UIA が知らせたタスクバーのメニューの入力先。ルート HWND はここから求める
     std::shared_ptr<PipeClient> conversionPipe_;  // wait 専用。入力用の pipe_ を塞がない
     std::future<int> conversionWait_;  // 待っている wait は 1 つだけ。世代を返す (失敗は -1)
     int conversionGeneration_ = -1;    // 知っている世代 (Meltype.exe の ConversionSignal)。-1 は未取得

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 cet-t
 
-// 実際の TSF コンパートメントと入力欄で、自動開閉・明示的な切り替え・メニューへのキーの受け渡しを確かめる。
-// メニューの通知はテストから送るため、UIA の検出や通知が実際の打鍵に間に合うかは実機で別に確かめる。パイプだけを記録用に置き換え、
+// 実際の TSF コンパートメントと入力欄で、自動開閉・明示的な切り替え・タスクバーのメニューへのキーの受け渡しを確かめる。
+// タスクバーはテストのプロセスに同じクラス名のウィンドウを作って再現する。パイプだけを記録用に置き換え、
 // 通常のユーザーの Meltype・辞書・設定には接続しない。
 #include "TextService.h"
 #include <cstdio>
@@ -109,35 +109,40 @@ int main() {
         TfEditCookie edit = TF_INVALID_EDIT_COOKIE;
         if (FAILED(manager->CreateDocumentMgr(&document)) ||
             FAILED(document->CreateContext(client, 0, nullptr, &context, &edit)) || FAILED(document->Push(context.Get()))) return 1;
-        const HWND messages = FindWindowExW(HWND_MESSAGE, nullptr, L"Meltype.Tip.Messages", nullptr);
-        if (!messages) return 1;
         auto takesKey = [&](UINT vk) {
             BOOL eaten = FALSE;
             check(SUCCEEDED(service->OnTestKeyDown(context.Get(), vk, 1, &eaten)), "TSF key test succeeds");
             return eaten != FALSE;
         };
-        check(takesKey('U'), "ordinary input receives U before the taskbar menu notification");
+        check(takesKey('U'), "ordinary input receives U");
         check(takesKey(VK_SPACE), "ordinary input captures Space as an input-mode shortcut");
-        const UINT taskbarMenuFocusMessage = WM_APP + 3;  // TipServer が送るフォーカスの通知を再現する。
-        SendMessageW(messages, taskbarMenuFocusMessage, 0, reinterpret_cast<LPARAM>(normal));
-        check(!takesKey('U'), "a letter goes to the taskbar menu while the reported focus matches");
-        check(!takesKey('U'), "the next submenu access key passes without another notification at the same HWND");
+        // Win+X のメニューと Windows 10 のアドレス ツールバーの代わり。クラス名はテストのプロセスの中だけで使われる
+        WNDCLASSW taskbarClass = {};
+        taskbarClass.lpfnWndProc = DefWindowProcW;
+        taskbarClass.hInstance = g_module;
+        taskbarClass.lpszClassName = L"Shell_TrayWnd";
+        if (!RegisterClassW(&taskbarClass)) return 1;
+        HWND taskbar = CreateWindowExW(WS_EX_TOPMOST, L"Shell_TrayWnd", L"", WS_POPUP | WS_VISIBLE, 100, 300, 420, 48, nullptr, nullptr, g_module, nullptr);
+        HWND menu = CreateWindowExW(0, L"STATIC", L"", WS_CHILD | WS_VISIBLE, 0, 0, 200, 48, taskbar, nullptr, g_module, nullptr);
+        HWND address = CreateWindowExW(0, L"EDIT", L"", WS_CHILD | WS_VISIBLE, 200, 0, 220, 48, taskbar, nullptr, g_module, nullptr);
+        if (!taskbar || !menu || !address) return 1;
+        SetForegroundWindow(taskbar);
+        SetFocus(menu);
+        // 通知を待たないので、フォーカスが移った直後の 1 打目からメニューへ渡る
+        check(!takesKey('U'), "the first letter after the taskbar menu takes focus goes to the menu");
+        check(!takesKey('U'), "the next submenu access key also goes to the menu");
         check(!takesKey('1'), "a digit goes to the taskbar menu");
         check(!takesKey(VK_SPACE), "Space goes to the taskbar menu even when configured as a shortcut");
         BOOL eaten = TRUE;
         service->OnKeyDown(context.Get(), VK_SPACE, 1, &eaten);
         check(!eaten && toggleRequests == 0, "the actual Space key does not toggle the input mode in a menu");
-        HWND second = CreateWindowExW(0, L"EDIT", L"", WS_CHILD | WS_VISIBLE, 20, 110, 360, 24, window, nullptr, g_module, nullptr);
-        if (!second) return 1;
-        SetFocus(second);
-        check(takesKey('U'), "a change of focus invalidates the taskbar menu notification");
-        check(takesKey(VK_SPACE), "Space is captured in another input field");
-        SendMessageW(messages, taskbarMenuFocusMessage, 0, reinterpret_cast<LPARAM>(second));
-        check(!takesKey('U'), "the next notification follows a menu that uses a different focus HWND");
+        SetFocus(address);
+        check(takesKey('U'), "the address toolbar of the taskbar receives U as an input field");
+        SetForegroundWindow(window);
         SetFocus(normal);
-        SendMessageW(messages, taskbarMenuFocusMessage, 0, 0);
-        check(takesKey('U'), "ordinary input receives U again after closing the menu");
-        check(takesKey(VK_SPACE), "ordinary input captures Space again after closing the menu");
+        check(takesKey('U'), "ordinary input receives U again after leaving the taskbar");
+        check(takesKey(VK_SPACE), "ordinary input captures Space again after leaving the taskbar");
+        DestroyWindow(taskbar);
         document->Pop(TF_POPF_ALL);
 
         for (int i = 1; i <= 5; ++i) {
