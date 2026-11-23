@@ -13,7 +13,7 @@ namespace Meltype.Dictionary;
 /// 変換した文節 (複雑な) の英訳 (complex, complicated …) を、変換の候補の後ろに出すのに使う。
 /// </summary>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Naming", "CA1711:Identifiers should not have incorrect suffix", Justification = "日本語入力の辞書を表す既存の公開名。コレクション型を表すものではない。")]
-public sealed class TranslationDictionary
+internal sealed class TranslationDictionary
 {
     // 書き方 [TAB] 品詞 [TAB] 英訳,英訳…
     private readonly Libraries.Lexicon.PackedLines _lines;
@@ -115,7 +115,7 @@ public sealed class TranslationDictionary
 /// 選んだ英訳の記録 (%LOCALAPPDATA%\Meltype\translations.json)。普通の変換の学習より弱く効かせる:
 /// 1 回選んだら英訳の中で先頭に、2 回以上なら変換エンジンの 1 番目の候補のすぐ後ろ (2 番目) に出す。1 番目にはしない。
 /// </summary>
-public sealed class TranslationHistory
+internal sealed class TranslationHistory
 {
     private readonly string? _path;
     private readonly Dictionary<string, Dictionary<string, int>> _counts = new(StringComparer.Ordinal);

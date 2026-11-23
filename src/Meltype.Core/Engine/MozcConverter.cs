@@ -9,7 +9,7 @@ namespace Meltype.Engine;
 /// Mozc (Google 日本語入力のオープンソース版、BSD-3-Clause) の変換エンジン。変換ヘルパー (<see cref="IMozcHelper"/>) に 1 行ずつ変換を頼む。
 /// ヘルパーが無い・起動できない・応答しないときは null を返す (呼び出し側はかなのまま見せる)。
 /// </summary>
-public sealed class MozcConverter : IKanjiConverter, IDisposable
+internal sealed class MozcConverter : IKanjiConverter, IDisposable
 {
     private const char UnitSeparator = '\x1f';
     private const char RecordSeparator = '\x1e';
