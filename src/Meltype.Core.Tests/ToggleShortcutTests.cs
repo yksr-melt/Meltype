@@ -444,8 +444,10 @@ internal static class ToggleShortcutTests
                 Assert.Equal(ShortcutValidationError.UnmodifiedKey, ToggleShortcutValidator.Validate(binding, new Settings(), []));
                 Assert.Equal(0, new Settings { ToggleShortcuts = [binding] }.Normalize().EffectiveToggleShortcuts.Count, "読み込み時も通常入力を奪わない");
             }
-        foreach (var key in new[] { 0x19, 0xF3, 0xF4 })
-            Assert.Equal(ShortcutValidationError.None, ToggleShortcutValidator.Validate(new() { Key = key }, new Settings(), []));
+        // 半角/全角・CapsLock・カタカナ/ひらがな (US キーボードで CapsLock を割り当て直したもの)
+        foreach (var key in new[] { 0x19, 0xF3, 0xF4, 0x14, 0xF2 })
+            foreach (var mods in new[] { ShortcutModifiers.None, ShortcutModifiers.Shift })
+                Assert.Equal(ShortcutValidationError.None, ToggleShortcutValidator.Validate(new() { Key = key, Modifiers = mods }, new Settings(), []));
         // 無変換・変換だけは英数・日本語にするキー
         foreach (var key in new[] { 0x1C, 0x1D })
             Assert.Equal(ShortcutValidationError.ConvertKeys, ToggleShortcutValidator.Validate(new() { Key = key }, new Settings(), []));

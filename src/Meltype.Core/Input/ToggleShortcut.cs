@@ -18,6 +18,7 @@ public sealed record ToggleShortcut
     public const int Hankaku = 0x19;
     // バッククォートキー(`)
     public const int Grave = 0xC0;
+    public const int CapsLock = 0x14;
 
     // JIS の半角/全角キーは、単独押しと Alt との組み合わせで通知されるキーコードが異なる場合がある。
     // 確認した入力は、単独押しで 0xF3 の解放と 0xF4 の押下、Alt との組み合わせで 0x19 の押下。
@@ -74,6 +75,8 @@ public sealed record ToggleShortcut
     {
         Hankaku => "半角/全角",
         Grave => "` (バッククォート)",
+        CapsLock => "CapsLock",
+        VirtualKeys.OemCopy => "カタカナ/ひらがな",
         0x1C => "変換",
         0x1D => "無変換",
         0x20 => "Space",
@@ -84,7 +87,7 @@ public sealed record ToggleShortcut
 
     /// <summary>設定画面で選べるキー (上の名前を付けたもの)。</summary>
     public static IReadOnlyList<int> SelectableKeys { get; } =
-        [Hankaku, Grave, 0x1C, 0x1D, 0x20, .. Enumerable.Range(0x41, 26), .. Enumerable.Range(0x30, 10), .. Enumerable.Range(0x70, 24)];
+        [Hankaku, Grave, CapsLock, VirtualKeys.OemCopy, 0x1C, 0x1D, 0x20, .. Enumerable.Range(0x41, 26), .. Enumerable.Range(0x30, 10), .. Enumerable.Range(0x70, 24)];
 
     // デフォルトの切り替えキー
     public static List<ToggleShortcut> Defaults() =>
