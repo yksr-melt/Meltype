@@ -483,11 +483,8 @@ internal static partial class CompositionController
     }
 
     /// <summary>
-    /// ユーザーが登録した語の読みが、変換エンジンの文節の途中から始まるなら、その語では区切らない (issue #374)。
-    /// しの → 紫乃 を登録すると、わたしのことがすき の途中の しの で区切って ワタ紫乃ことが好き になっていた
-    /// (変換エンジンは わたしの|ことが|すき と区切るので、しの は文節の途中から始まる)。文節の頭から始まる語 (しのがきた の しの) は今までどおり。
-    /// 同梱の語句 (phrases.txt) は、変換エンジンが区切りを間違える語句を補うものなので、文節の途中から始まっても使う
-    /// (読みの頭に ^ を付けた語句は、ほかの語の一部になりやすいので、文節の頭から始まるときだけ使う)。
+    /// 同梱の語句 (phrases.txt) は、変換エンジンが区切りを間違える語句を補うものなので、変換エンジンの文節の途中から始まっても使う。
+    /// 読みの頭に ^ を付けた語句は、ほかの語の一部になりやすいので、文節の頭から始まるときだけ使う。
     ///
     /// 語の始まりが変換エンジンの文節の境目に合い、そこからの文節の文字が語で始まる (変換エンジンが文の中でその語にできている) なら、
     /// その語では区切らず、語から後ろは文全体を変換したときの変換エンジンの文節をそのまま使う (Engine)。
@@ -508,8 +505,8 @@ internal static partial class CompositionController
         for (var p = 0; p < pieces.Count; p++)
         {
             var (reading, word) = pieces[p];
-            var midStart = word is not null && (dictionary.IsUserReading(reading) || dictionary.IsHeadOnly(reading)) && !starts.Contains(position);
-            if (midStart) Diagnostics.Log.Info($"ユーザー辞書の語は、変換エンジンの文節の途中から始まるので使いません: {Diagnostics.Log.Text(reading)}");
+            var midStart = word is not null && dictionary.IsHeadOnly(reading) && !starts.Contains(position);
+            if (midStart) Diagnostics.Log.Info($"同梱の語句は、変換エンジンの文節の途中から始まるので使いません: {Diagnostics.Log.Text(reading)}");
             if (word is not null && !midStart && starts.Contains(position) && EngineStartsWith(position, word))
             {
                 // 次に文節の境目から始まる語の手前までを、変換エンジンの文節にする
@@ -575,8 +572,9 @@ internal static partial class CompositionController
             var others = string.Concat(clauses.Where((_, k) => k != i).Select(c => c.Text));
             var surrounding = (env.Context().PrecedingText ?? "") + EnglishInComposition(state, env) + others + (env.Context().FollowingText ?? "");
             var preferred = env.Services.ContextRules?.Choose(clauses[i].Reading, surrounding, clauses[i].Text, text => Standalone(env, text)) ?? env.Learning.LearnedConversion(clauses[i].Reading);
-            // 変換エンジンは、文節が「から」だけだと記号 (～) にしてしまう。記号だけの変換結果は、ひらがなの後ろに回す。
-            preferred ??= IsSymbolOnly(clauses[i].Text) && clauses[i].Reading.All(KanaChars.IsHiragana) ? clauses[i].Reading : null;
+            // 変換エンジンは、文節が「から」だけだと記号 (～) にしてしまう。記号だけの変換結果は、ひらがなの後ろに回す (ユーザー辞書の語 なかてん → ・ は除く)。
+            preferred ??= IsSymbolOnly(clauses[i].Text) && clauses[i].Reading.All(KanaChars.IsHiragana) &&
+                env.Services.UserDictionary?.Lookup(clauses[i].Reading).Contains(clauses[i].Text) != true ? clauses[i].Reading : null;
             // 英単語に挟まれて助詞だけの文節になると、変換エンジンは漢字にしてしまう (github + に + push → 二)。助詞はかなのまま。
             preferred ??= JapaneseParticles.IsParticle(clauses[i].Reading) && clauses[i].Text != clauses[i].Reading ? clauses[i].Reading : null;
             // カタカナの語の後ろの「っ」で始まる文節 (スパイダーマ + っ！) は、カタカナの「ッ」にする (スパイダーマッ！)。

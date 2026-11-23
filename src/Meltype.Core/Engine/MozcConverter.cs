@@ -23,6 +23,11 @@ internal sealed class MozcConverter : IKanjiConverter, IDisposable
     private readonly Dictionary<string, List<(string Reading, IReadOnlyList<string> Candidates)>?> _conversions = new(StringComparer.Ordinal);
     private readonly LatestRequestWorker<(string, string)> _worker;
     private volatile int _failures;
+    // 送りたいユーザー辞書の要求 (D) と、それを受け取ったヘルパーの起動の回数 (受け取っていなければ -1)。_gate の中で読み書きする
+    private string? _dictionary;
+    private int _dictionaryLaunch = -1;
+    // 送ったユーザー辞書の語 (読み → 語)。入れ替えるだけなので、入力スレッドから読んでよい
+    private volatile Dictionary<string, List<string>> _userWords = new(StringComparer.Ordinal);
 
     // 性能の計測用の回数と時間 (--perf)。ロックの中で数えるだけなので、ふだんの入力は遅くならない
     private long _requests;
@@ -124,6 +129,71 @@ internal sealed class MozcConverter : IKanjiConverter, IDisposable
     }
 
     /// <summary>
+    /// Mozc のユーザー辞書を、words の語 (読み・語・Mozc の品詞名) で入れ替える。入れ替えて変換に使えるようになったら true。
+    /// 受け取っていないヘルパー (送るのに失敗した・起動し直した) には、次の要求の前に送る。
+    /// ヘルパーの応答を待つので、入力スレッドでは呼ばない。
+    /// </summary>
+    public bool SetUserDictionary(IReadOnlyList<(string Reading, string Word, string Pos)> words)
+    {
+        var request = "D\t" + string.Join(RecordSeparator, words.Select(w => string.Join(UnitSeparator, Field(w.Reading), Field(w.Word), Field(w.Pos))));
+        var byReading = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        foreach (var (reading, word, _) in words)
+        {
+            if (!byReading.TryGetValue(reading, out var list)) byReading[reading] = list = [];
+            list.Add(word);
+        }
+        lock (_gate)
+        {
+            if (_disposed) return false;
+            _userWords = byReading;
+            _dictionary = request;
+            _dictionaryLaunch = -1;
+            // 前の語での結果を控えから使わない (送るのに失敗しても、次の変換で送り直す)
+            ClearCache();
+            if (!IsAvailable) return false;
+            if (_helper.Start()) return DeliverDictionary();
+            Fail();
+            return false;
+        }
+
+        static string Field(string text) => Clean(text).Replace(UnitSeparator, ' ').Replace(RecordSeparator, ' ');
+    }
+
+    /// <summary>clause (Mozc の文節) が、ユーザー辞書の語で始まるか (しのが → 紫乃が)。</summary>
+    public bool StartsWithUserWord(ConversionClause clause)
+    {
+        var words = _userWords;
+        for (var length = 1; length <= clause.Reading.Length; length++)
+            if (words.TryGetValue(clause.Reading[..length], out var list) && list.Any(w => clause.Text.StartsWith(w, StringComparison.Ordinal))) return true;
+        return false;
+    }
+
+    // _dictionary を、まだ受け取っていない動いているヘルパーに送る (_gate の中で呼ぶ)。受け取ったら true
+    private bool DeliverDictionary()
+    {
+        if (_dictionary is not { } dictionary) return false;
+        if (_dictionaryLaunch == _helper.Launches) return true;
+        switch (_helper.Send(dictionary))
+        {
+            case "OK":
+                _dictionaryLaunch = _helper.Launches;
+                _failures = 0;
+                // 登録した語で候補が変わるので、控えを捨てる
+                ClearCache();
+                return true;
+            case null:
+                // 答えなかった。次の要求の前に送り直す
+                Fail();
+                return false;
+            case var answer:
+                // 要求を知らない前の版のヘルパー (空行)・受け取れない語 (NG)。送り直しても同じなので送らない
+                Diagnostics.Log.Warn($"Mozc にユーザー辞書を渡せませんでした ({(answer.Length == 0 ? "要求を知らない前の版のヘルパー" : answer)})。登録した語が変換に出ません。");
+                _dictionary = null;
+                return false;
+        }
+    }
+
+    /// <summary>
     /// 文字列 (漢字かな混じり) の読み (ひらがな)。逆変換できなければ null。
     /// 再変換とユーザー辞書の登録で呼ぶ。キャッシュせず、ヘルパーの応答を待つ。
     /// </summary>
@@ -140,6 +210,13 @@ internal sealed class MozcConverter : IKanjiConverter, IDisposable
     /// <summary>1 行送って 1 行受け取る (_gate の中で呼ぶ)。失敗したら・起動しているあいだは null。</summary>
     private string? Send(string request)
     {
+        if (!_helper.Start())
+        {
+            Fail();
+            return null;
+        }
+        // 受け取っていないヘルパーには、先にユーザー辞書を送る。答えなかったら要求は送らない (辞書の無い結果を控えない。次の要求で送り直す)
+        if (_dictionary is not null && !DeliverDictionary() && _dictionary is not null) return null;
         var started = Stopwatch.GetTimestamp();
         var line = _helper.Send(request);
         _helperCalls++;
