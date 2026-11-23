@@ -64,6 +64,17 @@ internal static class UserDictionaryEngineTests
     }
 
     [Test]
+    public static void UserSymbolWord_IsNotTurnedBackIntoKana()
+    {
+        // 記号だけの変換結果 (から → ～) はかなに戻すが、ユーザー辞書の語 (なかてん → ・) は戻さない
+        var dictionary = new UserDictionary(null, builtIn: false);
+        dictionary.Add("なかてん", "・");
+        var k = new CompositionTests.Keyboard(converter: new Engine(new() { ["なかてん"] = [new("なかてん", "・")] }), userDictionary: dictionary);
+        k.Type("nakaten ");
+        Assert.Equal("・", string.Concat(k.Host.View!.Clauses!));
+    }
+
+    [Test]
     public static void Zenzai_DoesNotReplaceUserWords()
     {
         var helper = new FakeHelper("OK");
