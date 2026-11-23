@@ -102,6 +102,16 @@ internal sealed record CompositionEnv(CompositionDetector Detector, IKanjiConver
 
 internal enum ConversionTrigger { Other, Space, Tab }
 
+/// <summary>打ちかけの読み・英字の続きの予測の候補。Key は作ったときの打ちかけ。Index は Tab で選んでいるもの (-1 なら選んでいない)。</summary>
+internal sealed class PredictionList(string key, List<Prediction> items)
+{
+    public string Key { get; } = key;
+
+    public List<Prediction> Items { get; } = items;
+
+    public int Index { get; set; } = -1;
+}
+
 /// <summary>入力欄 1 つ分の変換ボックスの状態 (データだけ)。処理は <see cref="CompositionController"/> の関数が受け取って書き換える。</summary>
 internal sealed class CompositionState
 {
@@ -149,12 +159,8 @@ internal sealed class CompositionState
 
     public ReconversionSelection? Reconversion;
 
-    // 予測変換: 打ちかけの読み・英字の続きの候補と、Tab で選んでいるもの (-1 なら選んでいない)。
-    public List<Prediction> Predictions = [];
-
-    public string PredictionKey = "";
-
-    public int PredictionIndex = -1;
+    // 予測変換の候補。null なら、次に表示するときに今の打ちかけから作る。
+    public PredictionList? Predictions;
 
     // 英数状態で判定中の語。打鍵はすぐアプリに送り (待たせない)、ローマ字と分かったら消して変換ボックスに入れ直す。
     public readonly StringBuilder HeldLetters = new();

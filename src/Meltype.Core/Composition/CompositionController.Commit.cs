@@ -150,7 +150,7 @@ internal static partial class CompositionController
     /// <summary>予測変換の候補を確定する。日本語なら覚え直して、次からより前に出す。</summary>
     private static void CommitPrediction(CompositionState state, CompositionEnv env, Prediction prediction)
     {
-        state.PredictionIndex = -1;
+        if (state.Predictions is { } list) list.Index = -1;
         if (!prediction.Text.All(c => c < 0x80) && Learning(state, env))
             env.Services.Predictor?.Phrases?.Remember(PredictionReading(state, env, prediction.Text, prediction.Reading), prediction.Text);
         // 最後の文節の続きの候補なら、前の文節 (見えているとおり) とつなげて確定する

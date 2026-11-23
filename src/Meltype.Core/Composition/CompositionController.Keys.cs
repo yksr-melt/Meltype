@@ -228,12 +228,11 @@ internal static partial class CompositionController
             case 0x2E /* Delete */ when SelectedPrediction(state) is { } prediction && env.Services.Predictor?.Phrases is { } phrases:
                 // 予測の候補を選んでいる間の Delete: その語句を学習から消す (issue #349)
                 phrases.Forget(prediction.Text);
-                state.PredictionKey = "\u0000"; // 候補を作り直す
-                state.PredictionIndex = -1;
+                state.Predictions = null;
                 return;
-            case VirtualKeys.Escape when state.PredictionIndex >= 0:
+            case VirtualKeys.Escape when state.Predictions is { Index: >= 0 } selecting:
                 // 予測の候補を選んでいたら、選ぶのをやめるだけ (打った内容は残す)。
-                state.PredictionIndex = -1;
+                selecting.Index = -1;
                 return;
             case VirtualKeys.Escape when env.Settings.EscStepsBack && StepBack(state, env):
                 return;
@@ -251,7 +250,8 @@ internal static partial class CompositionController
             case VirtualKeys.Tab when CurrentPredictions(state, env).Count > 0:
                 // 予測変換の候補を選ぶ (Tab で次、Shift+Tab で前。最後の次は選ばない状態に戻る)。
                 var step = state.Shift ? -1 : 1;
-                state.PredictionIndex = (state.PredictionIndex + 1 + step + state.Predictions.Count + 1) % (state.Predictions.Count + 1) - 1;
+                var list = state.Predictions!;
+                list.Index = (list.Index + 1 + step + list.Items.Count + 1) % (list.Items.Count + 1) - 1;
                 return;
             case VirtualKeys.Tab when !IsConverting(state) && !state.Shift && env.Settings.TabConversion && TabStartsConversion(state, env):
                 // Space なら変換を始める場面の Tab は、Space と同じく変換を始める (Microsoft IME と同じ。空白を打とうとした意味ではない: issue #219)。

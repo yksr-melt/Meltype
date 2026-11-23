@@ -281,7 +281,7 @@ internal static partial class CompositionController
         state.LiveCache.Clear();
         if (CompositionText.IsEmpty(state.Text) || IsConverting(state) && !RefreshOpenConversion(state, env)) return false;
         // 文節が分かると最後の文節の予測が出せる。予測を選んでいる間は、選んでいる候補を置き換えない
-        if (state.PredictionIndex < 0) state.PredictionKey = "\u0000";
+        if (state.Predictions is not { Index: >= 0 }) state.Predictions = null;
         UpdateView(state, env);
         return true;
     }
@@ -435,9 +435,7 @@ internal static partial class CompositionController
         state.PrivateComposition = false;
         state.KeptChoices.Clear();
         state.LiveCache.Clear();
-        state.Predictions = [];
-        state.PredictionKey = "";
-        state.PredictionIndex = -1;
+        state.Predictions = null;
         state.Pressed.Clear();
         state.KanaLayout.Reset();
         CompositionOutput.Begin(state.Out);
