@@ -9,7 +9,7 @@ namespace Meltype.Detection;
 /// 英語の固有名詞 (dictionaries/propernouns.txt)。小文字で引き、正しい大文字小文字の形 (GitHub, iPhone) を返す。
 /// ローマ字としても読めてしまう固有名詞 (amazon, adobe) を英語として扱うのに使う。
 /// </summary>
-public sealed class ProperNouns
+internal sealed class ProperNouns
 {
     private readonly Dictionary<string, string> _canonical = new(StringComparer.Ordinal);
     private readonly WordList _words = new();

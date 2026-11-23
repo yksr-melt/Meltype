@@ -21,7 +21,7 @@ namespace Meltype.Engine;
 /// 起動はバックグラウンドで行い、準備できるまでの変換は待たずに null を返す。
 /// 結果は文節に区切らず、読み全体 1 つの文節で返す。
 /// </summary>
-public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
+internal sealed class ZenzaiConverter : IKanjiConverter, IDisposable
 {
     private const char InputMark = '';
     private const char OutputMark = '';

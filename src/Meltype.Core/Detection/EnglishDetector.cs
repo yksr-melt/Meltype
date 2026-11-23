@@ -8,7 +8,7 @@ namespace Meltype.Detection;
 /// 辞書には「ローマ字としても読める英単語」と日本語由来の外来語 (sushi, kana …) を重点的に入れてある。
 /// ローマ字として成立しない綴り (th, l, v, 子音連続 …) は RomajiDetector 側で英語扱いになる。
 /// </summary>
-public sealed class EnglishDetector
+internal sealed class EnglishDetector
 {
     internal WordList Words { get; }
 
