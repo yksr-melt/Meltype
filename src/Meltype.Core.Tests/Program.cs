@@ -25,6 +25,10 @@ internal static class Program
             case "--eval":
                 Quality.Print(Quality.Run());
                 return 0;
+            case "--tune-weights":
+                // 日英の区切りの辺をつなぐ重みを 1 つずつ動かして、品質テストの打鍵の例が崩れない範囲と、外れが減る重みの組を出す (WeightTuning)
+                WeightTuning.Run();
+                return 0;
             case "--repro":
                 // 打ったキーをそのまま打ってみて、結果を JSON で返す (GitHub の bot が報告を再現するのに使う)。
                 //   --repro nihongowohanasu [enter|space|none] [--learn "打ったキー → 確定した語"]…

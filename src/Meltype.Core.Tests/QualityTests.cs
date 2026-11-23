@@ -414,6 +414,19 @@ Dictionary<string, (int Pass, int Total)> ByCategory, List<string> Failures, Lis
         public double Rate => Total == 0 ? 1 : (double)Pass / Total;
     }
 
+    /// <summary>打鍵の例 (Typing) を打って Enter で確定した結果。日英の区切りの重みを探す道具 (--tune-weights) も使う。</summary>
+    internal static IEnumerable<(string Category, bool Ok, string Detail)> TypingResults(CompositionDetector detector)
+    {
+        foreach (var c in Typing)
+        {
+            var k = new CompositionTests.Keyboard(detector: detector);
+            k.Host.PrecedingText = c.Before;
+            k.Type(c.Typed + "\n");
+            var actual = k.Host.Document;
+            yield return (c.Category, actual == c.Expected, $"{(c.Before is null ? "" : $"「{c.Before}」+ ")}{c.Typed} → {actual} (期待: {c.Expected})");
+        }
+    }
+
     public static Result Run()
     {
         var categories = new Dictionary<string, (int Pass, int Total)>();
@@ -428,14 +441,7 @@ Dictionary<string, (int Pass, int Total)> ByCategory, List<string> Failures, Lis
             if (!ok) failures.Add($"[{category}] {detail}");
         }
 
-        foreach (var c in Typing)
-        {
-            var k = new CompositionTests.Keyboard();
-            k.Host.PrecedingText = c.Before;
-            k.Type(c.Typed + "\n");
-            var actual = k.Host.Document;
-            Score(c.Category, actual == c.Expected, $"{(c.Before is null ? "" : $"「{c.Before}」+ ")}{c.Typed} → {actual} (期待: {c.Expected})");
-        }
+        foreach (var (category, ok, detail) in TypingResults(CompositionTests.Detector)) Score(category, ok, detail);
 
         // かな入力 (JIS)
         foreach (var (keys, expected) in new[] { ("byiaf", "こんにちは"), ("google", "google"), ("t@u", "がな"), ("github", "github") })

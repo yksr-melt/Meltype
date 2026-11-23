@@ -33,11 +33,9 @@ public sealed partial class CompositionDetector
     // 1.5 では きょうはい|まげ が きょうは|image より軽くなり、3 では 関連づけ が 関連|duke と同じ重みになる
     private const double RareWordCost = 2.5;
     // 語にならないかな 1 音、日本語の中に残る読めない英字 1 文字
-    private const double UnknownKanaCost = 3;
+    internal const double UnknownKanaCost = 3;
     // 語にならない っ・ー、x で打った小書きの母音が語の 1 音目 (だめ|ぇ)
-    private const double LightKanaCost = 0.5;
-    // 子音を重ねて打った っ で、前後の片方がかなでない (excel|と|ppt の tt)。語にならないかなと同じ 3 にする
-    private const double DanglingSokuonCost = UnknownKanaCost - LightKanaCost;
+    internal const double LightKanaCost = 0.5;
 
     // ---- 英語のノードの生起コスト ----
     // 知っている英単語 (english.txt・固有名詞・english-words.txt)
@@ -67,21 +65,7 @@ public sealed partial class CompositionDetector
     // 変換の候補に出す英語寄りの区切りを作るとき英語のノードごとに足す: 英単語 + 切り替え + 付属語 (midi + か = 2.8) が日本語の語 1 つ (みぢか = 1) より軽くなる
     private const double LeaningEnglishBias = -2;
 
-    // ---- 連接コスト ----
-    // 日本語と英語の切り替え。日本語の側が名詞に付く付属語 (が・を・に・で・する: github|で) なら 0
-    private const double SwitchCost = 1;
-    // 英文の続き ("I want ") から日本語への切り替え。付属語でも足す
-    private const double SentenceSwitchCost = 2;
-    // 英単語どうしがスペースなしで続く
-    private const double AdjacentEnglishCost = 1;
-    // 英字 → 日本語 → 英字 と区切りなしに戻る (procras|ち|cle)。あいだが付属語を含むとき (excel|と|ppt) は除く
-    private const double SandwichCost = 1;
-    // 大文字で始まる知らない語を小文字の途中で切って、付属語でない日本語を続ける (Ta|なか)
-    private const double NameSplitCost = 3;
-    // ltu・xtu で打った っ の後ろに入力が続く (mai|ltu|kau)。かなの前の っ は子音を重ねて打つ
-    private const double SpelledSokuonCost = 2;
-    // 小文字で終わる英語のすぐ後ろの日本語が あ行のかな (thing|う・rate|ぃす) で始まる: 英単語の最後の子音と次の母音の切り間違い。USBいれた と、母音字で終わる英語の後ろの大きい あ行 (issue|ある) は除く
-    private const double VowelAfterEnglishCost = 1;
+    // ---- 連接コスト (重みは LinkWeights) ----
     // 日本語の中の c 行の綴り (ca・ci・cu・ce・co。ch は除く) 1 つ: 日本語を打つときは k を使う
     private const double CRowCost = 0.5;
     // 同じコストなら日本語にする
@@ -123,40 +107,14 @@ public sealed partial class CompositionDetector
     /// </summary>
     private readonly record struct Lexeme(LexemeRule Rule, int End, int DomainEnd, bool Technical);
 
-    /// <summary>辺をつなぐときに数える特徴。1 回ごとの重みは <see cref="LinkWeight"/> だけが決める。</summary>
-    private enum LinkFeature
-    {
-        Switch,
-        SentenceSwitch,
-        AdjacentEnglish,
-        Sandwich,
-        NameSplit,
-        SpelledSokuon,
-        VowelAfterEnglish,
-        DanglingSokuon,
-    }
-
-    private const int LinkFeatureCount = (int)LinkFeature.DanglingSokuon + 1;
-
-    private static double LinkWeight(LinkFeature feature) => feature switch
-    {
-        LinkFeature.Switch => SwitchCost,
-        LinkFeature.SentenceSwitch => SentenceSwitchCost,
-        LinkFeature.AdjacentEnglish => AdjacentEnglishCost,
-        LinkFeature.Sandwich => SandwichCost,
-        LinkFeature.NameSplit => NameSplitCost,
-        LinkFeature.SpelledSokuon => SpelledSokuonCost,
-        LinkFeature.VowelAfterEnglish => VowelAfterEnglishCost,
-        LinkFeature.DanglingSokuon => DanglingSokuonCost,
-        _ => throw new ArgumentOutOfRangeException(nameof(feature)),
-    };
-
-    private static double LinkCost(ReadOnlySpan<int> counts)
+    /// <summary>辺をつなぐときに数える特徴の、1 回ごとの重み。</summary>
+    internal LinkWeights Weights { get; private init; } = LinkWeights.Default;
+    private double LinkCost(ReadOnlySpan<int> counts)
     {
         var cost = 0.0;
         for (var i = 0; i < counts.Length; i++)
         {
-            if (counts[i] != 0) cost += counts[i] * LinkWeight((LinkFeature)i);
+            if (counts[i] != 0) cost += counts[i] * Weights[(LinkFeature)i];
         }
         return cost;
     }
@@ -305,7 +263,7 @@ public sealed partial class CompositionDetector
             // 付属語だけを打った入力 (re) は、前に確定した語の続きなので付属語のまま
             if (!edge.English && !edge.Neutral && (state.IsEnglish || state.Side == Side.None && edge.End < length) && VerbAuxiliaries.Contains(edge.Kana)) cost = UnknownKanaCost;
             if (edge.English) cost += EnglishTieBreak + englishBias;
-            Span<int> counts = stackalloc int[LinkFeatureCount];
+            Span<int> counts = stackalloc int[LinkWeights.Count];
             CountLinks(from, state, edge, counts);
             Offer(edge.End, Next(state, edge), new LatticeNode(from.Cost + cost + LinkCost(counts), from, edge));
         }
@@ -392,9 +350,9 @@ public sealed partial class CompositionDetector
             if (best[length, key, slot % keep] is not { } node) continue;
             var state = LatticeState.FromKey(key);
             var cost = node.Cost;
-            if (state.Sokuon) cost += DanglingSokuonCost;
-            if (followingEnglish == true && state.Side == Side.Japanese && !state.Particle) cost += SwitchCost;
-            if (followingEnglish == false && state.IsEnglish && node.Edge.English) cost += SwitchCost;
+            if (state.Sokuon) cost += Weights[LinkFeature.DanglingSokuon];
+            if (followingEnglish == true && state.Side == Side.Japanese && !state.Particle) cost += Weights[LinkFeature.Switch];
+            if (followingEnglish == false && state.IsEnglish && node.Edge.English) cost += Weights[LinkFeature.Switch];
             finals.Add((cost, state, node));
             if (cost < chosenCost)
             {
@@ -708,7 +666,7 @@ public sealed partial class CompositionDetector
             {
                 var name = span.Length >= 3 && char.IsAsciiLetterUpper(span[0]) && char.IsAsciiLetterLower(span[1]);
                 // 日本人名 (Takahashi) は長さによらず知っている英単語と同じ重みにする。小文字 1 文字ごとの重みでは、長い名前ほど頭で切って日本語を続けた道 (T|赤橋・Toyo|だ) が軽くなる (#1744)。
-                // 名前の頭で切る道 (Ai|かわ) には、知らない語と同じく NameSplitCost を足すので、Name の印は残す
+                // 名前の頭で切る道 (Ai|かわ) には、知らない語と同じく NameSplit の重みを足すので、Name の印は残す
                 cost = name && IsJapaneseName(span) ? KnownEnglishCost
                     : span.Sum(ch => char.IsAsciiLetterUpper(ch) ? UnknownUpperCost : name ? NameLetterCost : UnknownLetterCost);
                 edges.Add((new LatticeEdge(start, end, true, "", false, false, Name: name), cost));

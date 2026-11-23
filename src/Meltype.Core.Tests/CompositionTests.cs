@@ -305,8 +305,10 @@ internal static class CompositionTests
         public Keyboard(bool live = false, bool direct = false, ConversionHistory? history = null, IKanjiConverter? converter = null,
             Func<string, IReadOnlyList<string>>? moreCandidates = null, UserDictionary? userDictionary = null, LanguageMemory? languages = null,
             TranslationDictionary? translations = null, TranslationHistory? translationHistory = null, Predictor? predictor = null,
-            Func<DateTime>? now = null, bool showTypedKeys = false, bool tabConversion = false, bool englishNamePredictions = false)
+            Func<DateTime>? now = null, bool showTypedKeys = false, bool tabConversion = false, bool englishNamePredictions = false,
+            CompositionDetector? detector = null)
         {
+            detector ??= Detector;
             Settings = new Meltype.Config.Settings
             {
                 Mode = Meltype.Config.InputMode.Keyboard,
@@ -335,8 +337,8 @@ internal static class CompositionTests
                 Predictor = predictor,
                 Now = now ?? (() => DateTime.Now),
             };
-            MeltypeRuntime.Connect(Detector, services);
-            _ime = new ImeHost(this, new SessionParts(Detector, converter ?? Converter, services)
+            MeltypeRuntime.Connect(detector, services);
+            _ime = new ImeHost(this, new SessionParts(detector, converter ?? Converter, services)
             {
                 ClassifyDirect = (letters, final, settings) => MeltypeRuntime.ClassifyDirect(DirectEngine, letters, final, settings),
                 ReadingOf = text => Host.Selection is { } selection && selection.Text == text ? selection.Reading : null,
