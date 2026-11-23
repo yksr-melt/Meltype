@@ -19,7 +19,11 @@ public static class AppPaths
         IsPortable,
         Environment.GetEnvironmentVariable("MELTYPE_DATA_DIR"),
         AppContext.BaseDirectory,
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData));
+        LocalAppData);
+
+    // DoNotVerify が無いと、Unix ではフォルダー (~/.local/share) が無いときに空文字列を返し、保存先が相対パスになる (#2202)
+    private static string LocalAppData =>
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData, Environment.SpecialFolderOption.DoNotVerify);
 
     internal static string ResolveDataDirectory(bool isPortable, string? overrideDirectory, string appBaseDirectory, string localAppDataDirectory)
     {
@@ -32,7 +36,7 @@ public static class AppPaths
 
     /// <summary>旧名 (AutoIME) のときの保存場所。</summary>
     private static string OldDataDirectory =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AutoIME");
+        Path.Combine(LocalAppData, "AutoIME");
 
     /// <summary>旧名 (AutoIME) の設定・学習データ・ユーザー辞書があれば、新しい保存場所に移す。</summary>
     public static void MigrateFromOldName()
