@@ -11,7 +11,7 @@ namespace Meltype.Learning;
 /// 形式は 1 行に「読み 候補 : 手がかり 手がかり …」。前後の文字列に手がかりが含まれていれば、その候補を最初にする
 /// (気温 が近くにあれば あつい → 暑い、財布 なら かわ → 革)。変換エンジンだけでは文脈を読み切れない語を補う。
 /// </summary>
-public sealed class ContextRules
+internal sealed class ContextRules
 {
     private readonly Dictionary<string, List<(string Candidate, string[] Cues)>> _rules = new(StringComparer.Ordinal);
 
@@ -25,18 +25,7 @@ public sealed class ContextRules
     {
         var rules = new ContextRules();
         rules.AddText(Libraries.Lexicon.DictionarySource.ReadEmbedded("contexts.txt"));
-        if (userDirectory is not null)
-        {
-            var path = Path.Combine(userDirectory, "contexts.txt");
-            try
-            {
-                if (File.Exists(path)) rules.AddText(File.ReadAllText(path));
-            }
-            catch (Exception ex)
-            {
-                Diagnostics.Log.Warn($"ユーザーの文脈辞書を読めませんでした: {ex.Message}");
-            }
-        }
+        Config.DataFile.LoadUserText(userDirectory, "contexts.txt", "ユーザーの文脈辞書", rules.AddText);
         return rules;
     }
 
@@ -107,15 +96,16 @@ public sealed class ContextRules
 /// ユーザーが選び直した変換の記録 (Microsoft IME の学習と同じ)。次に同じ読みを変換したとき最初の候補にする。
 /// %LOCALAPPDATA%\Meltype\conversions.json に「文節の読み → 選んだ文字列」だけを保存する。
 /// </summary>
-public sealed class ConversionHistory
+internal sealed class ConversionHistory
 {
     private const int MaxEntries = 5000;
     private readonly string? _path;
-    private readonly Dictionary<string, Entry> _entries = new(StringComparer.Ordinal);
+    private Dictionary<string, Entry> _entries;
     // 裏のスレッドからも消す (MeltypeRuntime.ForgetZenzaiHallucinations) ので、読むときも取る
     private readonly object _gate = new();
     private readonly object _fileGate = new();
     private readonly DeferredSaver _saver;
+    private readonly FileStamp _stamp;
     private (int Version, (string Reading, string Text, DateTime Used, int Order)[] Items)? _index;
 
     internal sealed class Entry
@@ -128,6 +118,13 @@ public sealed class ConversionHistory
     {
         _saver = new DeferredSaver(Write);
         _path = path;
+        _stamp = new FileStamp(path);
+        _entries = Load(path);
+    }
+
+    private static Dictionary<string, Entry> Load(string? path)
+    {
+        var entries = new Dictionary<string, Entry>(StringComparer.Ordinal);
         Config.DataFile.Load(path, "変換の学習データ", content =>
         {
             var loaded = JsonSerializer.Deserialize(content, Config.ConversionJsonContext.Default.Conversions);
@@ -135,8 +132,30 @@ public sealed class ConversionHistory
             // 日時・版から作る語なども、以前の版で覚えてしまったものを使わない (StaleWords.IsStale)。
             if (loaded is not null)
                 foreach (var (reading, entry) in loaded)
-                    if (reading.Length >= 2 && !StaleWords.IsStale(reading, entry.Text)) _entries[reading] = entry;
+                    if (reading.Length >= 2 && !StaleWords.IsStale(reading, entry.Text)) entries[reading] = entry;
         });
+        return entries;
+    }
+
+    /// <summary>ほかのプロセス (設定アプリ) が conversions.json を書き換えていたら読み直す (<see cref="FileStamp"/>)。</summary>
+    internal void Refresh()
+    {
+        lock (_fileGate)
+        {
+            if (_stamp.Changed) Reload();
+        }
+    }
+
+    // _fileGate の中で呼ぶ。読む前に更新時刻を覚える (読んでいる間に書かれても、次にまた読み直す)
+    private void Reload()
+    {
+        _stamp.Synced();
+        var entries = Load(_path);
+        lock (_gate)
+        {
+            _entries = entries;
+            Version++;
+        }
     }
 
     /// <summary>学習した内容が変わるたびに増える (変換結果のキャッシュを捨てるため)。</summary>
@@ -253,13 +272,19 @@ public sealed class ConversionHistory
         {
             lock (_fileGate)
             {
+                if (_stamp.Changed)
+                {
+                    Reload();
+                    return true;
+                }
                 string json;
                 lock (_gate) json = JsonSerializer.Serialize(_entries, Config.ConversionJsonContext.Default.Conversions);
                 Config.DataFile.Write(_path, temp => File.WriteAllText(temp, json));
+                _stamp.Synced();
             }
             return true;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (Config.DataFile.IsFileError(ex))
         {
             Diagnostics.Log.Warn($"変換の学習データを保存できませんでした: {ex.Message}");
             return false;

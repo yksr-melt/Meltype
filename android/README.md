@@ -24,10 +24,6 @@ Android版は、[ninjin0802さんのAndroid試作PR #621](https://github.com/yks
 | ユーザー辞書編集、音声入力、カスタムテーマ | 未対応 |
 | 全端末・全アプリでの互換性、TalkBack対応 | 未検証／保証なし |
 
-**再現可能なQA手順（入力・期待値・テストコード・実機チェックリスト）：[docs/QA-TESTING.md](docs/QA-TESTING.md)**。CI定義は [android-qa.yml](../.github/workflows/android-qa.yml)。
-
-詳しくは [08 日英自動判別](docs/spec/08-auto-detection.html)、[03 構成](docs/spec/03-architecture.html)、[11 テスト](docs/spec/11-testing.html)。これらのHTML仕様書を規範とし、`docs/markdown/spec/` に対応するレビュー用Markdownを置きます。
-
 ## プライバシーと制約
 
 - ネットワーク権限なし。端末の入力内容を送信する機能なし。
@@ -35,13 +31,9 @@ Android版は、[ninjin0802さんのAndroid試作PR #621](https://github.com/yks
 - 学習データはアプリ専用の領域で扱い、通常のログに入力内容を含めない。
 - 触覚フィードバック用に `VIBRATE` 権限を要求する（「権限が一つもない」わけではない）。
 
-## 対応環境と検証
+## 対応環境
 
 - 最低Android 8.0（API 26）、Android用ABIは `arm64-v8a`・`x86_64`。
-- **本家向け統合コミット `965dbf3`** で Android 15（API 35）のInstrumentation **18/18件合格**、JVM単体 **444/444件合格**。[CI結果・各テストのJUnit XMLとログ](https://github.com/KoheiTakada/Meltypetest/actions/runs/40182600362)。Mozcを固定ソースから再ビルドする[独立したAndroid CI](https://github.com/KoheiTakada/Meltype/actions/runs/40182575249)も成功。テスト定義と再現手順は [QA-TESTING.md](docs/QA-TESTING.md) に固定。
-- **Pixel 10 Pro Fold／Android 17** で2026-10-25に**統合版APK（ソース `965dbf3`）の実機確認完了との本人報告**。手動QA M01〜M08の個別ログ・実測値やスクリーンショットは未収集。再現する場合は[手動テスト手順](docs/QA-TESTING.md)を使用。
-- 旧開発ソース `7a44ba5` の[過去のQA](https://github.com/KoheiTakada/Meltypetest/actions/runs/40163689812)は参考履歴。最新統合版の合否は上記 `965dbf3` のCIと実機確認に基づく。
-- [2026-10-25の検証記録](docs/verification/2026-10-25-bilingual.html) が現行の日英自動判別と実機確認の証跡です。`docs/verification/2026-10-13-stage1.html` は**当時の第1段階のみの履歴記録**であり、最新QAの結果ではありません。
 
 ## ビルド
 
@@ -54,9 +46,9 @@ ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.2.13676358" bash tools/build-meltype-nati
 ./gradlew :app:testDebugUnitTest :app:assembleDebug
 ```
 
-Android APK: `android/app/build/outputs/apk/debug/app-debug.apk`。端末テストには別途Androidのテスト用APKとエミュレーター／実機が必要です。
+Android APK: `android/app/build/outputs/apk/debug/app-debug.apk`。
 
-MozcのJNI／辞書成果物やC# NativeAOTの生成物、配布署名鍵はソース管理しません。配布用APKは、下の「APK配布と署名」にあるActionsで生成します。デバッグ／QA署名済みAPKは一時検証用です。
+MozcのJNI／辞書成果物やC# NativeAOTの生成物、配布署名鍵はソース管理しません。配布用APKは、下の「APK配布と署名」にあるActionsで生成します。
 
 ## リポジトリ構成
 

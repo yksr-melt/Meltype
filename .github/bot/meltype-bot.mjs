@@ -99,7 +99,7 @@ const Help = [
   '| `/pack <SHA>` | Pull Request のコードでテスト版のインストーラー (setup.exe) を作る | メンテナー |',
   '| `/test-jht <SHA> <文> [/ 読み]` | PR のコードで `/jht` | メンテナー |',
   '| `/test-explain <SHA> <キー>` | PR のコードで `/explain` | メンテナー |',
-  '| `/release <版>` | 版 (例: `1.2.3`) のタグとリリースの下書きを作り、Windows・Mac・Linux の配布物のビルドを始める。csproj・Info.plist の版が <版> でないか、docs/release-notes/<版>.md が無ければ止める | 管理者 |',
+  '| `/release <版>` | 版 (例: `1.2.3`) のタグとリリースの下書きを作り、Windows・Mac・Linux の配布物のビルドを始める。src/Directory.Build.props・Info.plist の版が <版> でないか、docs/release-notes/<版>.md が無ければ止める | 管理者 |',
   '| `/pre-release <版>` | `/release` のプレリリース版 (版は `1.2.3-pre.1`・`1.2.3-rc.1` の形) | 管理者 |',
   '| `/self-assign` | 自分を Issue の Assignees に入れる (担当になる)。`要トリアージ` の間はメンテナーだけ | だれでも |',
   '| `/help` | この一覧 | だれでも |',
@@ -109,7 +109,7 @@ const Help = [
 
 // /release <版>・/pre-release <版> (issue #665)。管理者 (admin / maintain) だけ。
 //   1. 版の形を確かめる (release: 1.2.3 / pre-release: 1.2.3-pre.1・1.2.3-rc.1)
-//   2. main の csproj (2 つ)・Info.plist の版が <版> と合うか確かめる (版を上げ忘れた配布を防ぐ: issue #601)
+//   2. main の src/Directory.Build.props・Info.plist の版が <版> と合うか確かめる (版を上げ忘れた配布を防ぐ: issue #601)
 //   3. タグ v<版> を main の先頭に作る (もうあれば止める)
 //   4. リリースの下書きを作る。本文は main の docs/release-notes/<版>.md (配布物にも同じものを同梱する: issue #1207)。無ければ止める。pre-release は prerelease
 //   5. 配布物のビルド (release.yml) を、そのタグで始める。ビルドが終わると、下書きに配布物を付けて公開する
@@ -125,10 +125,8 @@ async function releaseCommand(issue, command, version) {
   await react('eyes');
   const read = async file => Buffer.from((await gh('GET', `/contents/${file}?ref=main`)).content, 'base64').toString('utf8');
   const mismatches = [];
-  for (const file of ['src/Meltype.Windows/Meltype.Windows.csproj', 'src/Meltype.Core/Meltype.Core.csproj']) {
-    const found = (await read(file)).match(/<Version>([^<]+)<\/Version>/)?.[1];
-    if (found !== version) mismatches.push(`${file}: ${found ?? '(版なし)'}`);
-  }
+  const props = (await read('src/Directory.Build.props')).match(/<Version>([^<]+)<\/Version>/)?.[1];
+  if (props !== version) mismatches.push(`src/Directory.Build.props: ${props ?? '(版なし)'}`);
   const plain = version.replace(/-.*$/, '');
   const plist = await read('mac/Resources/Info.plist');
   const plistVersion = plist.match(/<key>CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/)?.[1];

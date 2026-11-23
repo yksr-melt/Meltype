@@ -9,7 +9,7 @@ using Meltype.Libraries.Lexicon;
 namespace Meltype.Dictionary;
 
 /// <summary>読みの中に見つけた書き間違い。Start と Length は読み (カタカナ) の中の位置。</summary>
-public readonly record struct Misspelling(int Start, int Length, string Wrong, string Right);
+internal readonly record struct Misspelling(int Start, int Length, string Wrong, string Right);
 
 /// <summary>
 /// よくある書き間違い (ブレスレッド → ブレスレット、シュミレーション → シミュレーション) の辞書。「もしかして」に使う。
@@ -18,7 +18,7 @@ public readonly record struct Misspelling(int Start, int Length, string Wrong, s
 /// 綴り (ブレスレッド、ブレースレット) を見つけるのにも使う。偶然の一致を避けるため 5 文字以上の語だけ。
 /// </summary>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Naming", "CA1711:Identifiers should not have incorrect suffix", Justification = "日本語入力の辞書を表す既存の公開名。コレクション型を表すものではない。")]
-public sealed class MisspellingDictionary
+internal sealed class MisspellingDictionary
 {
     private const int FuzzyMinimumLength = 5;
     private readonly Dictionary<string, string> _wrong = new(StringComparer.Ordinal);
@@ -31,18 +31,7 @@ public sealed class MisspellingDictionary
     {
         var dictionary = new MisspellingDictionary();
         dictionary.AddText(Libraries.Lexicon.DictionarySource.ReadEmbedded("misspellings.txt"));
-        if (userDirectory is not null)
-        {
-            var path = Path.Combine(userDirectory, "misspellings.txt");
-            try
-            {
-                if (File.Exists(path)) dictionary.AddText(File.ReadAllText(path));
-            }
-            catch (Exception ex)
-            {
-                Diagnostics.Log.Warn($"ユーザーの書き間違い辞書を読めませんでした: {ex.Message}");
-            }
-        }
+        Config.DataFile.LoadUserText(userDirectory, "misspellings.txt", "ユーザーの書き間違い辞書", dictionary.AddText);
         return dictionary;
     }
 
@@ -72,7 +61,7 @@ public sealed class MisspellingDictionary
     }
 
     /// <summary>読み (ひらがな・カタカナ) の中から書き間違いを 1 つ探す。無ければ null。</summary>
-    public Misspelling? Find(string reading)
+    internal Misspelling? Find(string reading)
     {
         var text = KanaChars.ToKatakana(reading);
         // 1. 辞書に書いてある誤り (長いものを優先)

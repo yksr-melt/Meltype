@@ -130,7 +130,7 @@ void* as_handle(jlong handle) { return reinterpret_cast<void*>(static_cast<uintp
 // One process-wide data directory, set before first access to Meltype.Config.AppPaths.
 // Never switch the directory after the Core has initialized its static config.
 extern "C" JNIEXPORT jboolean JNICALL
-Java_io_github_ninjin0802_keyboard_app_core_NativeApi_init(
+Java_app_meltype_keyboard_core_NativeApi_init(
         JNIEnv* env, jobject, jbyteArray directory, jobject callbacks) {
     if (!directory || !callbacks) return JNI_FALSE;
     const auto path = read_utf8(env, directory);
@@ -177,7 +177,7 @@ Java_io_github_ninjin0802_keyboard_app_core_NativeApi_init(
 }
 
 extern "C" JNIEXPORT jlong JNICALL
-Java_io_github_ninjin0802_keyboard_app_core_NativeApi_create(
+Java_app_meltype_keyboard_core_NativeApi_create(
         JNIEnv*, jobject) {
     std::lock_guard<std::mutex> guard(init_mutex);
     if (data_dir.empty()) return 0;
@@ -185,14 +185,14 @@ Java_io_github_ninjin0802_keyboard_app_core_NativeApi_create(
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_io_github_ninjin0802_keyboard_app_core_NativeApi_destroy(
+Java_app_meltype_keyboard_core_NativeApi_destroy(
         JNIEnv*, jobject, jlong host) {
     if (host) meltype_ime_destroy(as_handle(host));
 }
 
 // One event (ImeEvent JSON) in, one response (ImeOutput JSON) out, both UTF-8.
 extern "C" JNIEXPORT jbyteArray JNICALL
-Java_io_github_ninjin0802_keyboard_app_core_NativeApi_handle(
+Java_app_meltype_keyboard_core_NativeApi_handle(
         JNIEnv* env, jobject, jlong host, jbyteArray event) {
     if (!host || !event) return nullptr;
     auto json = read_utf8(env, event);

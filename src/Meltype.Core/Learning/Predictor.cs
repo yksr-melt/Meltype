@@ -11,15 +11,16 @@ namespace Meltype.Learning;
 /// (きょうは まで打つと、前に確定した「今日は天気がいい」を出す)。
 /// 1 行に「読み<Tab>語句<Tab>回数<Tab>最後に使った日時 (UTC の Ticks)」のテキストで保存する。
 /// </summary>
-public sealed class PhraseHistory
+internal sealed class PhraseHistory
 {
     private const int MaxEntries = 3000;
     private readonly string? _path;
-    private readonly Dictionary<(string Reading, string Text), (int Count, long Used)> _entries = new();
+    private Dictionary<(string Reading, string Text), (int Count, long Used)> _entries;
     // 裏のスレッドからも消す (MeltypeRuntime.ForgetZenzaiHallucinations) ので、読むときも取る
     private readonly object _gate = new();
     private readonly object _fileGate = new();
     private readonly DeferredSaver _saver;
+    private readonly FileStamp _stamp;
     private int _version;
     private (int Version, (string Reading, string Text, int Count, long Used, int Order)[] Items)? _index;
 
@@ -27,7 +28,14 @@ public sealed class PhraseHistory
     {
         _saver = new DeferredSaver(Write);
         _path = path;
-        if (path is null || !File.Exists(path)) return;
+        _stamp = new FileStamp(path);
+        _entries = Load(path);
+    }
+
+    private static Dictionary<(string Reading, string Text), (int Count, long Used)> Load(string? path)
+    {
+        var entries = new Dictionary<(string Reading, string Text), (int Count, long Used)>();
+        if (path is null || !File.Exists(path)) return entries;
         try
         {
             foreach (var line in File.ReadAllLines(path, Encoding.UTF8))
@@ -37,12 +45,35 @@ public sealed class PhraseHistory
                 if (!int.TryParse(parts[2], out var count) || !long.TryParse(parts[3], out var used)) continue;
                 // 日時・版から作る語は、以前の版で覚えてしまったものを使わない
                 if (StaleWords.IsStale(parts[0], parts[1])) continue;
-                _entries[(parts[0], parts[1])] = (Math.Max(1, count), used);
+                entries[(parts[0], parts[1])] = (Math.Max(1, count), used);
             }
         }
         catch (Exception ex)
         {
-            Diagnostics.Log.Warn($"予測変換の学習データを読めませんでした: {ex.Message}");
+            // 読むときは型で絞らない (Config.DataFile)
+            Config.DataFile.ReportUnreadable("予測変換の学習データ", ex);
+        }
+        return entries;
+    }
+
+    /// <summary>ほかのプロセス (設定アプリ) が phrases.txt を書き換えていたら読み直す (<see cref="FileStamp"/>)。</summary>
+    internal void Refresh()
+    {
+        lock (_fileGate)
+        {
+            if (_stamp.Changed) Reload();
+        }
+    }
+
+    // _fileGate の中で呼ぶ。読む前に更新時刻を覚える (読んでいる間に書かれても、次にまた読み直す)
+    private void Reload()
+    {
+        _stamp.Synced();
+        var entries = Load(_path);
+        lock (_gate)
+        {
+            _entries = entries;
+            _version++;
         }
     }
 
@@ -174,13 +205,19 @@ public sealed class PhraseHistory
         {
             lock (_fileGate)
             {
+                if (_stamp.Changed)
+                {
+                    Reload();
+                    return true;
+                }
                 List<string> lines;
                 lock (_gate) lines = _entries.Select(e => $"{e.Key.Reading}\t{e.Key.Text}\t{e.Value.Count}\t{e.Value.Used}").ToList();
                 Config.DataFile.Write(_path, temp => File.WriteAllLines(temp, lines, Encoding.UTF8));
+                _stamp.Synced();
             }
             return true;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (Config.DataFile.IsFileError(ex))
         {
             Diagnostics.Log.Warn($"予測変換の学習データを保存できませんでした: {ex.Message}");
             return false;
@@ -194,7 +231,7 @@ public sealed class PhraseHistory
 ///   英語: よく使う英単語 (english.txt) → 同梱の英単語の一覧 (english-words.txt) の、前方一致する語 (短い順)
 ///   英字の名前 (設定が ON のとき、issue #890): 社名・サービス名 (brands.txt) → 英字で書く語 (loanwords.txt) の、読みが前方一致する語 (しゃお → Xiaomi)
 /// </summary>
-public sealed class Predictor
+internal sealed class Predictor
 {
     /// <summary>出す候補の数。</summary>
     public const int MaxPredictions = 5;
@@ -216,7 +253,7 @@ public sealed class Predictor
     private readonly record struct EnglishName(string Reading, string Word, bool Brand, int Order);
 
     /// <param name="userWords">ユーザー辞書の語 (読み, 語)。呼ぶたびに今の語を返す。</param>
-    public Predictor(PhraseHistory? phrases, Func<IEnumerable<(string Reading, string Word)>>? userWords, ConversionHistory? history)
+    internal Predictor(PhraseHistory? phrases, Func<IEnumerable<(string Reading, string Word)>>? userWords, ConversionHistory? history)
     {
         _phrases = phrases;
         _userWords = userWords;
@@ -231,7 +268,7 @@ public sealed class Predictor
         });
     }
 
-    public PhraseHistory? Phrases => _phrases;
+    internal PhraseHistory? Phrases => _phrases;
 
     /// <summary>
     /// 版番号 (Meltype-1.4.0・Mozc-3.34.6239.102+24.11.oss) を含むか。

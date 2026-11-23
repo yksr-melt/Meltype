@@ -14,7 +14,7 @@ namespace Meltype.Detection;
 /// 日本語入力中に google と打って「ごおｇぇ」になるのを防ぐのが目的。英語かどうかは区間ごとに判定するので、
 /// 「きょうは google」なら google の部分だけが英字になる。区切り方は ReadingLattice.cs。
 /// </summary>
-public sealed partial class CompositionDetector
+internal sealed partial class CompositionDetector
 {
     private readonly RomajiDetector _romaji;
     private readonly EnglishDetector _english;
@@ -53,14 +53,18 @@ public sealed partial class CompositionDetector
         _proper = proper ?? new ProperNouns();
     }
 
-    public static CompositionDetector CreateDefault(string? userDictionaryDirectory = null)
+    public static CompositionDetector CreateDefault(string? userDictionaryDirectory = null) => CreateDefault(userDictionaryDirectory, LinkWeights.Default);
+
+    /// <summary>辺をつなぐ重みを変えて作る (重みを探す道具 --tune-weights が使う)。</summary>
+    internal static CompositionDetector CreateDefault(string? userDictionaryDirectory, LinkWeights weights)
     {
         var romaji = RomajiDetector.CreateDefault(userDictionaryDirectory);
         var japaneseWords = DictionarySource.Load("japanese.txt", userDictionaryDirectory).ToList();
         var proper = ProperNouns.Load(userDictionaryDirectory);
         var english = new EnglishDetector(DictionarySource.Load("english.txt", userDictionaryDirectory).Concat(proper.LowercaseWords));
         return new CompositionDetector(romaji, english, proper, new KanaDetector(japaneseWords, romaji),
-            DictionarySource.LoadUser("japanese.txt", userDictionaryDirectory));
+            DictionarySource.LoadUser("japanese.txt", userDictionaryDirectory))
+        { Weights = weights };
     }
 
     private static readonly Lazy<WordList> ReadableEnglish = new(() => new WordList(DictionarySource.Load("english-readable.txt", null)));
