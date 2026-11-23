@@ -73,9 +73,17 @@ document.querySelector("[data-clear]").addEventListener("click", () => {
   field.focus();
 });
 
-// 指で操作する端末: 端末のキーボード (の IME) が打鍵を変換してしまうので出さず、画面のキーボードで打つ
-if (matchMedia("(pointer: coarse)").matches && !matchMedia("(any-pointer: fine)").matches) {
+// 指で操作する端末: 端末のキーボード (の IME) が打鍵を変換してしまうので出さず、画面のキーボードで打つ。
+// ワークアラウンド: Android の Firefox はタッチだけの端末でも (any-pointer: fine) に当たることがあるので、ブラウザーの名前でも見る。
+// iPadOS の Safari は Mac と名乗るので、タッチの点の数で見る
+const touchOnly = (matchMedia("(pointer: coarse)").matches && !matchMedia("(any-pointer: fine)").matches)
+  || /Android|iPhone|iPad|iPod/.test(navigator.userAgent)
+  || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+if (touchOnly) {
+  // ワークアラウンド: Android の Firefox は inputmode="none" でも端末のキーボードを出すことがあるので、readonly でも止める
+  // (readonly でも、画面のキーボードと Meltype はスクリプトで書き込める)
   field.inputMode = "none";
+  field.readOnly = true;
   document.querySelector("[data-touch-note]").hidden = false;
   document.querySelector("[data-desktop-hint]").hidden = true;
   const keys = document.querySelector("[data-vkeys]");
