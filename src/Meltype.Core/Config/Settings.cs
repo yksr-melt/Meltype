@@ -1205,11 +1205,11 @@ public sealed class Settings
         {
             return LoadOrThrow(path);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (DataFile.IsFileError(ex) || DataFile.IsBrokenContent(ex))
         {
             // 壊れた設定で起動不能にしない。元ファイルは退避して既定値で動く。
             try { File.Copy(path, path + ".broken", overwrite: true); }
-            catch (Exception copyEx) { Diagnostics.Log.Warn($"{Path.GetFileName(path)} を .broken に残せませんでした: {copyEx.Message}"); }
+            catch (Exception copyEx) when (DataFile.IsFileError(copyEx)) { Diagnostics.Log.Warn($"{Path.GetFileName(path)} を .broken に残せませんでした: {copyEx.Message}"); }
             Diagnostics.Log.Warn($"config.json を読み込めなかったため既定値を使います: {ex.Message}");
             return new Settings();
         }
@@ -1258,7 +1258,7 @@ public sealed class Settings
         {
             // 保存できなくても、読み込んだ設定は使う (既定値に戻すと、次の保存でユーザーの設定が消える)。
             try { settings.Save(path); }
-            catch (Exception ex) { Diagnostics.Log.Warn($"移行した config.json を保存できませんでした: {ex.Message}"); }
+            catch (Exception ex) when (DataFile.IsFileError(ex)) { Diagnostics.Log.Warn($"移行した config.json を保存できませんでした: {ex.Message}"); }
         }
         return settings;
     }

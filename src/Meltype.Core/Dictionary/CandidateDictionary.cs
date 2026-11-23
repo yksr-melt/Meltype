@@ -43,27 +43,8 @@ internal sealed class CandidateDictionary
         }
         foreach (var name in Libraries.Lexicon.DictionarySource.EmbeddedNames("domain-"))
             dictionary.AddDomainText(Libraries.Lexicon.DictionarySource.ReadEmbedded(name));
-        if (userDirectory is not null)
-        {
-            var emoji = Path.Combine(userDirectory, "emoji.txt");
-            try
-            {
-                if (File.Exists(emoji)) dictionary.AddTabText(File.ReadAllText(emoji));
-            }
-            catch (Exception ex)
-            {
-                Diagnostics.Log.Warn($"ユーザーの絵文字辞書を読めませんでした: {ex.Message}");
-            }
-            var path = Path.Combine(userDirectory, "candidates.txt");
-            try
-            {
-                if (File.Exists(path)) dictionary.AddText(File.ReadAllText(path));
-            }
-            catch (Exception ex)
-            {
-                Diagnostics.Log.Warn($"ユーザーの候補辞書を読めませんでした: {ex.Message}");
-            }
-        }
+        if (Config.DataFile.ReadUserText(userDirectory, "emoji.txt", "ユーザーの絵文字辞書") is { } emoji) dictionary.AddTabText(emoji);
+        if (Config.DataFile.ReadUserText(userDirectory, "candidates.txt", "ユーザーの候補辞書") is { } candidates) dictionary.AddText(candidates);
         return dictionary;
     }
 

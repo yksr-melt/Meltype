@@ -52,7 +52,7 @@ public sealed class DiscordPresence : IDisposable
         {
             try { await TickAsync(_stop.Token); }
             catch (OperationCanceledException) when (_stop.IsCancellationRequested) { break; }
-            catch (Exception ex)
+            catch (Exception ex) when (IsConnectionFailure(ex))
             {
                 // Discord が起動していない・閉じた・応答しないときは、次の回につなぎ直す
                 if (_stream is not null) Diagnostics.Log.Info($"Discord との接続が切れました: {ex.Message}");
@@ -91,12 +91,17 @@ public sealed class DiscordPresence : IDisposable
         _sent = activity;
     }
 
+    /// <summary>Discord とのやり取りで、Discord のせいで起きる例外 (起動していない・閉じた・応答しない・答えが壊れている)。</summary>
+    private static bool IsConnectionFailure(Exception ex) =>
+        ex is IOException or System.ComponentModel.Win32Exception or TimeoutException or ObjectDisposedException or OperationCanceledException
+            or UnauthorizedAccessException or System.Text.Json.JsonException;
+
     /// <summary>OFF にした・終わるときに、出していた表示を消す (失敗してもかまわない)。</summary>
     private async Task ClearAsync()
     {
         if (_stream is null || _sent is null) return;
         try { await SendAsync(1, SetActivityJson(null), CancellationToken.None); }
-        catch (Exception) { }
+        catch (Exception ex) when (IsConnectionFailure(ex)) { }
         _sent = null;
     }
 

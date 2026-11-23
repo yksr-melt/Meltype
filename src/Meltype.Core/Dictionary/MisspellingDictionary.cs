@@ -31,18 +31,7 @@ internal sealed class MisspellingDictionary
     {
         var dictionary = new MisspellingDictionary();
         dictionary.AddText(Libraries.Lexicon.DictionarySource.ReadEmbedded("misspellings.txt"));
-        if (userDirectory is not null)
-        {
-            var path = Path.Combine(userDirectory, "misspellings.txt");
-            try
-            {
-                if (File.Exists(path)) dictionary.AddText(File.ReadAllText(path));
-            }
-            catch (Exception ex)
-            {
-                Diagnostics.Log.Warn($"ユーザーの書き間違い辞書を読めませんでした: {ex.Message}");
-            }
-        }
+        if (Config.DataFile.ReadUserText(userDirectory, "misspellings.txt", "ユーザーの書き間違い辞書") is { } text) dictionary.AddText(text);
         return dictionary;
     }
 

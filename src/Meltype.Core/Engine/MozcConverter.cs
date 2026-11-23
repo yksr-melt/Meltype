@@ -156,7 +156,7 @@ internal sealed class MozcConverter : IKanjiConverter, IDisposable
             _failures = 0;
             return line;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (EngineFailure.IsExpected(ex))
         {
             Diagnostics.Log.Warn($"Mozc を使えませんでした: {ex.Message}");
             Fail();
@@ -213,7 +213,7 @@ internal sealed class MozcConverter : IKanjiConverter, IDisposable
                 _helper.Start();
                 return true;
             }
-            catch (Exception ex)
+            catch (Exception ex) when (EngineFailure.IsExpected(ex))
             {
                 Diagnostics.Log.Warn($"Mozc を使えませんでした: {ex.Message}");
                 Fail();
@@ -263,7 +263,7 @@ internal sealed class MozcConverter : IKanjiConverter, IDisposable
                 }
                 return Remember(key, segments);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (EngineFailure.IsExpected(ex))
             {
                 Diagnostics.Log.Warn($"Mozc を使えませんでした: {ex.Message}");
                 Fail();
@@ -292,8 +292,9 @@ internal sealed class MozcConverter : IKanjiConverter, IDisposable
             {
                 workingSet = _helper.WorkingSet;
             }
-            catch
+            catch (Exception ex) when (EngineFailure.IsExpected(ex))
             {
+                // ヘルパーが終わっていたら 0 のまま
             }
             lock (_resultsGate)
             {

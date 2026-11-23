@@ -17,6 +17,7 @@ namespace Meltype.CApi;
 ///
 /// 文字列はすべて UTF-8 の NUL 終端。こちらが返す文字列は meltype_free で解放する。
 /// Input Method Kit はメインスレッドから呼ぶので、排他はしない。
+/// 例外は C の側に投げられない (投げるとアプリごと落ちる) ので、どの関数も一番外ですべて捕まえ、中身 (場所) を Log.Error に書いて失敗の値を返す。
 /// </summary>
 public static unsafe class Exports
 {
