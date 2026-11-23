@@ -5,7 +5,7 @@ using Meltype.Config;
 
 namespace Meltype.Input;
 
-public enum ShortcutValidationError { None, Invalid, Duplicate, Conversion, FunctionKey, ConvertKeys, UnmodifiedKey, ControlKeyBinding, ShiftSpaceHalfWidth }
+public enum ShortcutValidationError { None, Invalid, Duplicate, Conversion, FunctionKey, UnmodifiedKey, ControlKeyBinding, ShiftSpaceHalfWidth }
 
 /// <summary>設定画面と設定の読み込みで共通に使う割り当て判定。</summary>
 public static class ToggleShortcutValidator
@@ -44,14 +44,9 @@ public static class ToggleShortcutValidator
             return ShortcutValidationError.UnmodifiedKey;
 
         // 設定「スペースの幅」が「半角」のときは、Shift+Space を切り替えに使うと競合する。
-        // 無変換 / 変換 のときと同じく、先に設定を変えてもらう。
+        // 先に設定を変えてもらう。
         if (shiftSpace && settings.SpaceWidth == SpaceWidth.HalfWidth)
             return ShortcutValidationError.ShiftSpaceHalfWidth;
-
-        // 無変換 (0x1D) / 変換 (0x1C) キー単独
-        // 無変換・変換だけは英数・日本語にするキー
-        if (b.Modifiers == ShortcutModifiers.None && b.Key is 0x1C or 0x1D)
-            return ShortcutValidationError.ConvertKeys;
 
         return ShortcutValidationError.None;
     }

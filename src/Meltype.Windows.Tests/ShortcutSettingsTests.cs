@@ -53,9 +53,9 @@ internal static class ShortcutSettingsTests
         Meltype.Diagnostics.ShortcutExclusions.Drain();
         try
         {
-            new Settings { ToggleShortcuts = [new() { Key = 28 }, new() { Key = 29 }] }.Normalize();
+            new Settings { ToggleShortcuts = [new() { Key = 0x70 }, new() { Key = 0x71 }] }.Normalize();
             var message = TrayApplicationContext.TakeShortcutExclusionMessage(true);
-            Assert.True(message is not null && message.Contains("変換") && message.Contains("無変換"), "トレイ生成前の複数の除外をまとめる");
+            Assert.True(message is not null && message.Contains("F1") && message.Contains("F2"), "トレイ生成前の複数の除外をまとめる");
             Assert.True(TrayApplicationContext.TakeShortcutExclusionMessage(true) is null, "消費後は再通知しない");
             new Settings { ToggleShortcuts = [new() { Key = -1 }] }.Normalize();
             Assert.True(TrayApplicationContext.TakeShortcutExclusionMessage(false) is null, "通知 OFF では表示しない");
@@ -68,7 +68,7 @@ internal static class ShortcutSettingsTests
     [Test]
     public static void Shortcut_ExclusionNotificationShowsKeysAndRemainingCount()
     {
-        var item = new Meltype.Diagnostics.ShortcutExclusion(new() { Key = 28 }, ShortcutValidationError.ConvertKeys, "仕事");
+        var item = new Meltype.Diagnostics.ShortcutExclusion(new() { Key = 28 }, ShortcutValidationError.UnmodifiedKey, "仕事");
         var message = TrayApplicationContext.ShortcutExclusionMessage([item, item with { Shortcut = new() { Key = 29 } }, item with { Shortcut = null }, item]);
         Assert.True(message.Contains("変換") && message.Contains("無変換") && message.Contains("null"), "除外キーの名前を表示");
         Assert.True(message.Contains("ほか 1 件") && message.Contains("ログ / 判定理由"), "残り件数とログへの案内");

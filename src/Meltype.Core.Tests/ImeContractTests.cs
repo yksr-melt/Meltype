@@ -522,6 +522,13 @@ internal static class ImeContractTests
         front.Settings.KanaLayout = KanaLayout.Nicola;
         front.Key(VirtualKeys.NonConvert);
         Assert.True(front.Open, "NICOLA の無変換は切り替えない\n" + front.Trace);
+        // 変換・無変換が 1 つのキーのキーボードでは、そのキーを切り替えキーに登録して日本語 / 英数を行き来する
+        var toggle = new Front();
+        toggle.Settings.ToggleShortcuts = [new() { Key = VirtualKeys.Convert }];
+        toggle.Key(VirtualKeys.Convert);
+        Assert.True(!toggle.Open, "切り替えキーの変換で英数\n" + toggle.Trace);
+        toggle.Key(VirtualKeys.Convert);
+        Assert.True(toggle.Open, "もう一度押して日本語\n" + toggle.Trace);
     }
 
     [Test]
