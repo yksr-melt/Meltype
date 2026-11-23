@@ -639,7 +639,7 @@ internal static partial class CompositionController
                 FixMisspelling(state, typo);
                 StartConversion(state, env);
                 return true;
-            case VirtualKeys.Tab when state.StartedBy == ConversionTrigger.Tab:
+            case VirtualKeys.Tab when state.Conversion?.StartedBy == ConversionTrigger.Tab:
                 // Tab で始めた変換の中では、Tab が次の候補、Shift+Tab が前の候補 (issue #219)。
                 NextCandidate(state, env, shift || state.Shift ? -1 : +1);
                 return true;
@@ -660,8 +660,7 @@ internal static partial class CompositionController
             case VirtualKeys.Back:
             case VirtualKeys.Escape:
                 // 変換を取り消して、かなの入力に戻る。
-                state.Clauses = [];
-                state.StartedBy = ConversionTrigger.Other;
+                state.Conversion = null;
                 return true;
             case >= 0x31 and <= 0x39 when !shift && !state.Text.KanaInput && env.Settings.NumberKeysSelectCandidates:
             case >= 0x61 and <= 0x69 when !shift && env.Settings.NumberKeysSelectCandidates:

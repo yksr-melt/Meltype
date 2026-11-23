@@ -295,15 +295,14 @@ internal static partial class CompositionController
     /// </summary>
     private static bool RefreshOpenConversion(CompositionState state, CompositionEnv env)
     {
-        if (state.ClausesEdited || state.Reconversion is not null || state.Clauses.Count == 0 || state.Clauses is [{ Alternatives: not null, Changed: true }]) return false;
-        var (old, selected) = (state.Clauses, state.SelectedClause);
-        StartConversion(state, WithoutWaiting(env), state.StartedBy, state.ConversionPrefersJapanese);
+        if (state.Conversion is not { Edited: false } open || state.Reconversion is not null || state.Clauses is [{ Alternatives: not null, Changed: true }]) return false;
+        var (old, selected) = (open.Clauses, open.Selected);
+        StartConversion(state, WithoutWaiting(env), open.StartedBy, open.PreferJapanese);
         var sameClauses = state.Clauses.Count == old.Count && state.Clauses.Zip(old).All(p => p.First.Reading == p.Second.Reading);
         var nothingNew = sameClauses && state.Clauses.Zip(old).All(p => p.First.Text == p.Second.Text && p.First.Candidates.All(p.Second.Candidates.Contains));
         if (nothingNew || !sameClauses && (selected != InitialClause(env, old.Count) || old.Any(c => c.Changed)))
         {
-            state.Clauses = old;
-            state.SelectedClause = selected;
+            state.Conversion = open;
             return false;
         }
         if (sameClauses)
@@ -318,7 +317,7 @@ internal static partial class CompositionController
                 fresh.NotLearned.UnionWith(previous.NotLearned);
             }
         }
-        state.SelectedClause = sameClauses ? selected : InitialClause(env, state.Clauses.Count);
+        if (state.Conversion is { } refreshed) refreshed.Selected = sameClauses ? selected : InitialClause(env, refreshed.Clauses.Count);
         return true;
     }
 
@@ -421,8 +420,7 @@ internal static partial class CompositionController
     {
         state.Reconversion = null;
         CompositionText.Clear(state.Text);
-        state.Clauses = [];
-        state.StartedBy = ConversionTrigger.Other;
+        state.Conversion = null;
     }
 
     /// <summary>パスワード欄に移ったとき、未確定入力と前の欄の文脈を確定せずに捨てる。</summary>

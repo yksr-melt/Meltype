@@ -259,11 +259,10 @@ internal static partial class CompositionController
     private static void CommitText(CompositionState state, CompositionEnv env, string text, bool english, string raw = "", bool chosen = false, bool preserveText = false, string rule = "")
     {
         LogCommit(state, env, text, rule);
-        var spaceIntended = state.StartedBy == ConversionTrigger.Space;
+        var spaceIntended = state.Conversion?.StartedBy == ConversionTrigger.Space;
         var afterEnglish = env.Context().PrecedingEnglish == true;
-        state.StartedBy = ConversionTrigger.Other;
         CompositionText.Clear(state.Text);
-        state.Clauses = [];
+        state.Conversion = null;
         if (text.Length == 0) return;
         var corrected = CorrectPreviousCommit(state, env, raw, english);
         if (!preserveText && (env.Settings.SpaceAroundEnglish || env.Settings.SpaceAroundNumbers))
