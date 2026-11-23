@@ -124,8 +124,20 @@ internal static class BackupTests
         }
     }
 
+    [Test]
+    public static void Inspect_WrongValueTypes_IsBrokenBackup()
+    {
+        // 設定画面は「壊れたバックアップ」の例外だけを捕まえて知らせる。ほかの型の例外は設定画面ごと落ちる
+        foreach (var json in new[] { "{\"format\":\"meltype-backup\",\"app\":\"x\",\"created\":\"x\",\"files\":{\"config.json\":1}}", "{\"format\":\"meltype-backup\",\"app\":1,\"created\":\"x\",\"files\":{}}", "{\"format\":\"meltype-backup\",\"app\":\"x\",\"created\":\"x\",\"files\":[]}", "{\"format\":1}" })
+        {
+            var content = Encoding.UTF8.GetBytes(json);
+            Assert.True(Throws(() => { Backup.Inspect(content); Backup.Restore(content, Path.GetTempPath()); }), json);
+        }
+    }
+
+    // 設定画面 (BackupPage) が捕まえる、壊れたバックアップの例外か
     private static bool Throws(Action action)
     {
-        try { action(); return false; } catch { return true; }
+        try { action(); return false; } catch (Exception ex) when (ex is InvalidDataException or FormatException) { return true; }
     }
 }

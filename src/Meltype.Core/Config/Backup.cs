@@ -77,9 +77,16 @@ public static class Backup
     {
         using var document = Parse(content);
         var root = document.RootElement;
-        return (root.GetProperty("created").GetString() ?? "", root.GetProperty("app").GetString() ?? "",
-            root.GetProperty("files").EnumerateObject().Select(p => p.Name).ToList());
+        return (Text(root.GetProperty("created")), Text(root.GetProperty("app")), Files(root).Select(p => p.Name).ToList());
     }
+
+    // 人から受け取ったファイルでも、値の型が違えば InvalidDataException にする
+    // (JsonElement の GetString・EnumerateObject は、型が違うと InvalidOperationException を投げる)
+    private static string Text(JsonElement value) =>
+        value.ValueKind == JsonValueKind.String ? value.GetString()! : throw new InvalidDataException("バックアップの中身が壊れています。");
+
+    private static JsonElement.ObjectEnumerator Files(JsonElement root) =>
+        root.GetProperty("files") is { ValueKind: JsonValueKind.Object } files ? files.EnumerateObject() : throw new InvalidDataException("バックアップの中身が壊れています。");
 
     /// <summary>
     /// バックアップを戻す (同じ名前のファイルは上書き。今のファイルは .before-restore として残す)。戻したファイルの数を返す。
@@ -90,14 +97,14 @@ public static class Backup
         using var document = Parse(content);
         // 先にすべて読む (読めないファイルがあれば、どれも書かずに例外にする。途中まで戻した状態にしない)
         var files = new List<(string Path, byte[] Bytes)>();
-        foreach (var file in document.RootElement.GetProperty("files").EnumerateObject())
+        foreach (var file in Files(document.RootElement))
         {
             // バックアップに入れるファイルと同じ名前だけを戻す (それ以外の名前は無視)
             var name = file.Name;
             if (!IsRestorableName(name)) continue;
             var path = Path.GetFullPath(Path.Combine(dataDirectory, name));
             if (!path.StartsWith(Path.GetFullPath(dataDirectory).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) continue;
-            files.Add((path, Convert.FromBase64String(file.Value.GetString() ?? "")));
+            files.Add((path, Convert.FromBase64String(Text(file.Value))));
         }
         foreach (var (path, bytes) in files)
         {
@@ -112,7 +119,7 @@ public static class Backup
     {
         var document = JsonDocument.Parse(content);
         if (document.RootElement.ValueKind != JsonValueKind.Object ||
-            !document.RootElement.TryGetProperty("format", out var format) || format.GetString() != Format)
+            !document.RootElement.TryGetProperty("format", out var format) || format.ValueKind != JsonValueKind.String || format.GetString() != Format)
         {
             document.Dispose();
             throw new InvalidDataException("Meltype のバックアップのファイルではありません。");
