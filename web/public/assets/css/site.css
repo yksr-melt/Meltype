@@ -3880,3 +3880,88 @@ em {
   color: var(--on-accent);
   background: var(--sky-deep);
 }
+
+/* /playground/ の画面のキーボード (指で操作する端末だけ出す)。画面の下に固定する */
+.vkeys {
+  --vkeys-key: 44px;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 90;
+  display: grid;
+  gap: 6px;
+  padding: 8px max(6px, env(safe-area-inset-right, 0px)) calc(8px + env(safe-area-inset-bottom, 0px)) max(6px, env(safe-area-inset-left, 0px));
+  background: var(--surface-2);
+  border-top: 1px solid var(--line-strong);
+  box-shadow: 0 -6px 18px rgb(31 42 68 / 0.1);
+}
+
+.vkeys[hidden] {
+  display: none;
+}
+
+.vkeys-row {
+  display: flex;
+  gap: 5px;
+}
+
+.vkeys button {
+  flex: 1 1 0;
+  min-width: 0;
+  height: var(--vkeys-key);
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--ink-strong);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-bottom-width: 3px;
+  border-radius: 8px;
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.vkeys button.is-func {
+  font-size: 0.95rem;
+  color: var(--muted);
+  background: var(--surface-2);
+}
+
+.vkeys button:active {
+  color: var(--on-accent);
+  background: var(--sky-deep);
+}
+
+/* キーボードの高さ (5 段) だけ、ページの下を空ける */
+body.has-vkeys {
+  padding-bottom: calc(5 * 44px + 4 * 6px + 16px + env(safe-area-inset-bottom, 0px));
+}
+
+/* 変換の候補はキャレットの下ではなく、キーボードのすぐ上に出す (キーを隠さないように)。
+   meltype-web.js が left・top を書くので !important で上書きする */
+body.has-vkeys .meltype-box {
+  position: fixed !important;
+  left: 8px !important;
+  right: 8px;
+  top: auto !important;
+  bottom: calc(5 * 44px + 4 * 6px + 24px + env(safe-area-inset-bottom, 0px));
+  width: auto;
+  max-width: none;
+}
+
+/* 入力欄を画面の上へ送ったとき、ヘッダーの下に出す */
+body.has-vkeys .playground-field .textarea {
+  scroll-margin-top: calc(var(--header-h) + 12px);
+  min-height: 8em;
+}
+
+body.has-vkeys .meltype-candidates {
+  max-height: calc(4 * (1.5em + 4px));
+}
+
+body.has-vkeys .meltype-hint {
+  display: none;
+}

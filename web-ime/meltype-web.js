@@ -128,7 +128,12 @@ export async function attach(field) {
       if (view) send("CommitRequested", { caret: { moved: true, passedKey: 0 } });
       return;
     }
-    if (send("KeyPressed", { key })) e.preventDefault();
+    if (send("KeyPressed", { key })) {
+      e.preventDefault();
+    } else if (key.vk) {
+      // Core が通したキー (Backspace・矢印など) で入力欄が変わったことを知らせる。ブラウザーが反映した後に送る
+      setTimeout(() => send("CaretMoved", { caret: { moved: true, passedKey: key.vk, ctrl: key.ctrl } }));
+    }
   };
   const onMoved = () => send("CaretMoved", { caret: { moved: true, passedKey: 0 } });
   const onFocus = () => send("CaretMoved", { caret: { moved: true, passedKey: 0, focusEntered: true } });

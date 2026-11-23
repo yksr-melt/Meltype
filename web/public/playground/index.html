@@ -59,17 +59,17 @@
         <ul class="points">
           <li><svg class="ic"><use href="/assets/img/icons.svg#i-lock"/></svg>打った文字はどこにも送りません</li>
           <li><svg class="ic"><use href="/assets/img/icons.svg#i-download"/></svg>最初に 20 MB ほど読み込みます</li>
-          <li><svg class="ic"><use href="/assets/img/icons.svg#i-keyboard"/></svg>パソコンのキーボードで打てます</li>
+          <li><svg class="ic"><use href="/assets/img/icons.svg#i-keyboard"/></svg>スマートフォンは画面のキーボードで打てます</li>
         </ul>
       </div>
     </section>
 
     <div class="playground wrap">
-      <p class="callout is-warn" hidden data-mobile-note><svg class="ic"><use href="/assets/img/icons.svg#i-alert"/></svg><span>スマートフォン・タブレットの画面のキーボードでは打てません。パソコンのキーボードで開いてください。</span></p>
+      <p class="callout is-info" hidden data-touch-note><svg class="ic"><use href="/assets/img/icons.svg#i-info"/></svg><span>スマートフォン・タブレットでは、画面の下のキーボードで打ちます (端末のキーボードの変換と混ざらないように、端末のキーボードは出しません)。</span></p>
 
       <section class="card" aria-labelledby="try-title">
         <h2 class="step-title" id="try-title"><span class="step-no">1</span>打ってみる</h2>
-        <p class="hint">IME をオフ (半角英数) にしてから打ってください。</p>
+        <p class="hint" data-desktop-hint>IME をオフ (半角英数) にしてから打ってください。</p>
         <div class="playground-field">
           <textarea class="textarea" id="playground-text" placeholder="kyouhagooglede kensakusita" spellcheck="false" autocomplete="off" disabled data-field></textarea>
         </div>
@@ -96,6 +96,8 @@
       </section>
     </div>
   </main>
+
+  <div class="vkeys" hidden data-vkeys aria-label="キーボード"></div>
 
   <footer class="site-footer">
     <div class="wrap footer-inner">
