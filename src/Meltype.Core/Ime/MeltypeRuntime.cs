@@ -175,8 +175,7 @@ public sealed class MeltypeRuntime : IDisposable
     private int _engineDictionarySent = -1;
 
     /// <summary>
-    /// ユーザー辞書の語を Mozc に渡す (変換エンジンを作ったとき・語が変わったとき)。Mozc が受け取った版の語は、Core の
-    /// <see cref="UserDictionary.Split"/> では当てはめず、ほかの語との取り合いを Mozc のコストで決める。ヘルパーの応答を待つので裏のスレッドで送る。
+    /// ユーザー辞書の語を Mozc に渡す (変換エンジンを作ったとき・語が変わったとき)。ヘルパーの応答を待つので裏のスレッドで送る。
     /// </summary>
     private void ConnectUserDictionary(HybridConverter converter)
     {
@@ -191,7 +190,7 @@ public sealed class MeltypeRuntime : IDisposable
                     if (version < _engineDictionarySent) return;
                     _engineDictionarySent = version;
                     // userdict.txt は品詞を持たないので名詞にする
-                    if (converter.SetUserDictionary([.. words.Select(w => (w.Reading, w.Word, "名詞"))])) UserDictionary.InEngine(version);
+                    if (!converter.SetUserDictionary([.. words.Select(w => (w.Reading, w.Word, "名詞"))])) Diagnostics.Log.Warn("Mozc にユーザー辞書を渡せませんでした。登録した語が変換に出ません。");
                 }
             });
         }
