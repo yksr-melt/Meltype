@@ -10,7 +10,7 @@
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 out="$(realpath -m "${1:-$here/dist}")"
-rm -rf "$out"
+rm -rf "$out" "$here/obj/publish"
 dotnet publish "$here/../src/Meltype.Web" -c Release -o "$here/obj/publish"
 mkdir -p "$out"
 cp -r "$here/obj/publish/wwwroot/_framework" "$out/"
