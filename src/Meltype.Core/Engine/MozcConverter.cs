@@ -23,6 +23,9 @@ internal sealed class MozcConverter : IKanjiConverter, IDisposable
     private readonly Dictionary<string, List<(string Reading, IReadOnlyList<string> Candidates)>?> _conversions = new(StringComparer.Ordinal);
     private readonly LatestRequestWorker<(string, string)> _worker;
     private volatile int _failures;
+    // ヘルパーが受け取ったユーザー辞書の要求 (D) と、受け取ったヘルパーの起動の回数 (_gate の中で読み書きする)
+    private string? _dictionary;
+    private int _dictionaryLaunch;
 
     // 性能の計測用の回数と時間 (--perf)。ロックの中で数えるだけなので、ふだんの入力は遅くならない
     private long _requests;
@@ -124,17 +127,21 @@ internal sealed class MozcConverter : IKanjiConverter, IDisposable
     }
 
     /// <summary>
-    /// Mozc のユーザー辞書の name の辞書を、words の語 (読み・語・Mozc の品詞名) で入れ替える。入れ替えて変換に使えるようになったら true。
-    /// 前の版のヘルパーは要求を知らず空行を返すので false。ヘルパーの応答を待つので、入力スレッドでは呼ばない。
+    /// Mozc のユーザー辞書を、words の語 (読み・語・Mozc の品詞名) で入れ替える。入れ替えて変換に使えるようになったら true。
+    /// ヘルパーを起動し直したら、送り直してから次の要求を送る。前の版のヘルパーは要求を知らず空行を返すので false。
+    /// ヘルパーの応答を待つので、入力スレッドでは呼ばない。
     /// </summary>
-    public bool SetUserDictionary(string name, IReadOnlyList<(string Reading, string Word, string Pos)> words)
+    public bool SetUserDictionary(IReadOnlyList<(string Reading, string Word, string Pos)> words)
     {
         if (!IsAvailable) return false;
-        var records = string.Join(RecordSeparator, words.Select(w => string.Join(UnitSeparator, Field(w.Reading), Field(w.Word), Field(w.Pos))));
+        var request = "D\t" + string.Join(RecordSeparator, words.Select(w => string.Join(UnitSeparator, Field(w.Reading), Field(w.Word), Field(w.Pos))));
         lock (_gate)
         {
             if (_disposed) return false;
-            if (Send($"D\t{Clean(name)}\t{records}") != "OK") return false;
+            _dictionary = null;
+            if (Send(request) != "OK") return false;
+            _dictionary = request;
+            _dictionaryLaunch = _helper.Launches;
             // 登録した語で候補が変わるので、控えを捨てる
             ClearCache();
             return true;
@@ -160,6 +167,16 @@ internal sealed class MozcConverter : IKanjiConverter, IDisposable
     /// <summary>1 行送って 1 行受け取る (_gate の中で呼ぶ)。失敗したら・起動しているあいだは null。</summary>
     private string? Send(string request)
     {
+        if (!_helper.Start())
+        {
+            Fail();
+            return null;
+        }
+        if (_dictionary is { } dictionary && _dictionaryLaunch != _helper.Launches)
+        {
+            _dictionaryLaunch = _helper.Launches;
+            if (_helper.Send(dictionary) != "OK") Diagnostics.Log.Warn("起動し直した Mozc にユーザー辞書を渡せませんでした。登録した語が変換に出ません。");
+        }
         var started = Stopwatch.GetTimestamp();
         var line = _helper.Send(request);
         _helperCalls++;

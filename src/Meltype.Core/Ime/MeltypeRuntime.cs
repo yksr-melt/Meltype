@@ -171,8 +171,6 @@ public sealed class MeltypeRuntime : IDisposable
         return converter;
     }
 
-    // Mozc のユーザー辞書に入れる Meltype の語の辞書の名前 (ユーザーが Mozc に作った辞書とは分ける)
-    private const string EngineDictionaryName = "Meltype";
     private readonly object _engineDictionaryGate = new();
     private int _engineDictionarySent = -1;
 
@@ -193,7 +191,7 @@ public sealed class MeltypeRuntime : IDisposable
                     if (version < _engineDictionarySent) return;
                     _engineDictionarySent = version;
                     // userdict.txt は品詞を持たないので名詞にする
-                    if (converter.SetUserDictionary(EngineDictionaryName, [.. words.Select(w => (w.Reading, w.Word, "名詞"))])) UserDictionary.InEngine(version);
+                    if (converter.SetUserDictionary([.. words.Select(w => (w.Reading, w.Word, "名詞"))])) UserDictionary.InEngine(version);
                 }
             });
         }

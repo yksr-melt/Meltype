@@ -35,10 +35,24 @@ internal static class UserDictionaryEngineTests
     {
         var helper = new FakeHelper("OK");
         using var mozc = new MozcConverter(helper);
-        Assert.True(mozc.SetUserDictionary("Meltype", [("しの", "紫乃", "名詞"), ("き\tごう", "記号", "名詞")]), "OK なら受け取った");
-        Assert.Equal("D\tMeltype\tしの\x1f紫乃\x1f名詞\x1eき ごう\x1f記号\x1f名詞", helper.Requests.Single());
+        Assert.True(mozc.SetUserDictionary([("しの", "紫乃", "名詞"), ("き\tごう", "記号", "名詞")]), "OK なら受け取った");
+        Assert.Equal("D\tしの\x1f紫乃\x1f名詞\x1eき ごう\x1f記号\x1f名詞", helper.Requests.Single());
         using var old = new MozcConverter(new FakeHelper(""));
-        Assert.Equal(false, old.SetUserDictionary("Meltype", [("しの", "紫乃", "名詞")]), "要求を知らない前の版のヘルパー (空行) は受け取っていない");
+        Assert.Equal(false, old.SetUserDictionary([("しの", "紫乃", "名詞")]), "要求を知らない前の版のヘルパー (空行) は受け取っていない");
+    }
+
+    [Test]
+    public static void SetUserDictionary_ResentAfterHelperRestarts()
+    {
+        var helper = new FakeHelper("OK");
+        using var mozc = new MozcConverter(helper);
+        mozc.SetUserDictionary([("しの", "紫乃", "名詞")]);
+        mozc.Reading("紫乃");
+        Assert.Equal(2, helper.Requests.Count, "起動し直していなければ送り直さない: " + string.Join(" / ", helper.Requests));
+        // ヘルパーが落ちて起動し直した (ユーザー辞書はメモリにだけ置いている)
+        helper.Launches++;
+        mozc.Reading("紫乃");
+        Assert.Equal("D\tしの\x1f紫乃\x1f名詞|R\t紫乃", string.Join("|", helper.Requests.Skip(2)));
     }
 
     [Test]
@@ -72,6 +86,8 @@ internal static class UserDictionaryEngineTests
         }
 
         public bool IsInstalled => true;
+
+        public int Launches { get; set; } = 1;
 
         public long WorkingSet => 0;
 

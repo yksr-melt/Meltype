@@ -51,11 +51,11 @@ internal class CoreMozcCallbacks(
             }
             "R" -> converter.reading(fields[1]) ?: ""
             "D" -> {
-                val (name, records) = fields.drop(1)
                 // 1 行目の # で、Mozc の形式 (読み・語・品詞) として読ませる
-                val tsv = "# Meltype\n" + records.split(RECORD).filter { it.isNotEmpty() }
+                val tsv = "# Meltype\n" + fields[1].split(RECORD).filter { it.isNotEmpty() }
                     .joinToString("") { it.split(UNIT).joinToString("\t") + "\n" }
-                if (converter.importUserDictionary(name, tsv)) "OK" else "NG"
+                // Mozc のユーザー辞書の Meltype の辞書だけを入れ替える (ユーザーが Mozc に作った辞書には触らない)
+                if (converter.importUserDictionary("Meltype", tsv)) "OK" else "NG"
             }
             // 覚えさせるたびに保存している (MozcConverter.learn)
             "S" -> "OK"
