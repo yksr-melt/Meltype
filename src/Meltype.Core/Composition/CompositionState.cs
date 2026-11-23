@@ -100,6 +100,40 @@ internal sealed record CompositionEnv(CompositionDetector Detector, IKanjiConver
     public Action<Correction>? Corrected { get; init; }
 }
 
+internal enum ConversionTrigger { Other, Space, Tab }
+
+internal sealed record LastCommit(string Text, bool English);
+
+/// <summary>1 回の変換 (Space などで始めてから、確定するか取り消すまで) の状態。</summary>
+internal sealed class Conversion(List<Clause> clauses, ConversionTrigger startedBy, bool preferJapanese)
+{
+    public List<Clause> Clauses { get; set; } = clauses;
+
+    public int Selected { get; set; }
+
+    /// <summary>
+    /// 変換を始めたキー。Space なら語の後に空白を打とうとした、とも取れる (確定し直して英語にするときに空白を足す)。
+    /// Tab なら変換中の Tab で候補を送る (issue #219)。
+    /// </summary>
+    public ConversionTrigger StartedBy { get; } = startedBy;
+
+    /// <summary>Shift+Space で、英語と判定した語もローマ字として読んで変換した。届いた答えで作り直すときも同じにする。</summary>
+    public bool PreferJapanese { get; } = preferJapanese;
+
+    /// <summary>文節の区切りを動かした。届いた答えで作り直すと、ユーザーの操作が消える。</summary>
+    public bool Edited { get; set; }
+}
+
+/// <summary>打ちかけの読み・英字の続きの予測の候補。Key は作ったときの打ちかけ。Index は Tab で選んでいるもの (-1 なら選んでいない)。</summary>
+internal sealed class PredictionList(string key, List<Prediction> items)
+{
+    public string Key { get; } = key;
+
+    public List<Prediction> Items { get; } = items;
+
+    public int Index { get; set; } = -1;
+}
+
 /// <summary>入力欄 1 つ分の変換ボックスの状態 (データだけ)。処理は <see cref="CompositionController"/> の関数が受け取って書き換える。</summary>
 internal sealed class CompositionState
 {
@@ -129,30 +163,32 @@ internal sealed class CompositionState
     // 押したキー (離したことを受け取るまで。親指シフトの親指キーを、文字に使わずに離したかを見る)
     public readonly HashSet<int> Pressed = [];
 
-    // 変換中の文節 (変換していなければ空)
-    public List<Clause> Clauses = [];
+    /// <summary>変換中なら、その文節と選んでいる文節など。変換していなければ null (変換を終えると、変換にかかわる値はまとめて消える)。</summary>
+    public Conversion? Conversion;
 
-    public bool ConversionPrefersJapanese;
+    /// <summary>変換中の文節 (変換していなければ空)。変換を始める・終えるのは <see cref="Conversion"/> への代入だけにする。</summary>
+    public List<Clause> Clauses => Conversion?.Clauses ?? [];
 
-    // 文節の区切りを動かした。届いた答えで作り直すと、ユーザーの操作が消える
-    public bool ClausesEdited;
+    /// <summary>選んでいる文節 (変換していなければ 0)。変換していないときには変えられない。</summary>
+    public int SelectedClause
+    {
+        get => Conversion?.Selected ?? 0;
+        set => (Conversion ?? throw new InvalidOperationException("変換していないのに文節を選んだ")).Selected = value;
+    }
 
-    public int SelectedClause;
+    /// <summary>自分が最後に確定した文字 (末尾の 20 文字まで) と、それが英語だったか。キャレットの前が読めないときの文脈に使う。分からなければ null。</summary>
+    public LastCommit? Last;
 
-    public bool? LastCommitEnglish;
-
-    public string? LastCommitText;
-
+    /// <summary>
+    /// 自分が最後に確定した時刻。この直後はアプリの文字がまだ更新されていないかもしれないので、アプリの文字より <see cref="Last"/> を信じる。
+    /// フォーカスが移って <see cref="Last"/> を消した直後も、アプリの文字は信じない (文脈が分からないものとして扱う)。
+    /// </summary>
     public long LastCommitTime = long.MinValue / 2;
 
     public ReconversionSelection? Reconversion;
 
-    // 予測変換: 打ちかけの読み・英字の続きの候補と、Tab で選んでいるもの (-1 なら選んでいない)。
-    public List<Prediction> Predictions = [];
-
-    public string PredictionKey = "";
-
-    public int PredictionIndex = -1;
+    // 予測変換の候補。null なら、次に表示するときに今の打ちかけから作る。
+    public PredictionList? Predictions;
 
     // 英数状態で判定中の語。打鍵はすぐアプリに送り (待たせない)、ローマ字と分かったら消して変換ボックスに入れ直す。
     public readonly StringBuilder HeldLetters = new();
@@ -175,13 +211,8 @@ internal sealed class CompositionState
     /// <summary>続けて確定した、英語とも日本語とも読める語 (古い順)。make sure you → have で全部英語に直す。</summary>
     public readonly List<CommitRecord> Correctable = [];
 
-    public bool SpaceStartedConversion;
-
     // 確定し直しで消す文字数と、入れ直す文字。今確定する文字と一緒に 1 回で送る。
     public (int Count, string Text)? PendingReplace;
-
-    /// <summary>今の変換を Tab で始めたか (変換中の Tab で候補を送るため。issue #219)。</summary>
-    public bool TabStartedConversion;
 
     // 続けて打つ前に選んでいた候補 (読み → 文字)。確定するか、変換ボックスを空にするまで。
     public readonly Dictionary<string, string> KeptChoices = [];
