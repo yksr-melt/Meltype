@@ -167,9 +167,36 @@ public sealed class MeltypeRuntime : IDisposable
             ? zenzai.Get(ZenzaiBundle.ServerPath(settings.ZenzaiServerPath, appDirectory), ZenzaiBundle.ModelPath(settings.ZenzaiModelPath, appDirectory), settings.ZenzaiDevice)
             : zenzai.Get("", ""));
         ForgetZenzaiHallucinations(converter);
+        ConnectUserDictionary(converter);
         return converter;
     }
 
+    private readonly object _engineDictionaryGate = new();
+    private int _engineDictionarySent = -1;
+
+    /// <summary>
+    /// ユーザー辞書の語を Mozc に渡す (変換エンジンを作ったとき・語が変わったとき)。ヘルパーの応答を待つので裏のスレッドで送る。
+    /// </summary>
+    private void ConnectUserDictionary(HybridConverter converter)
+    {
+        void Send()
+        {
+            var (version, words) = UserDictionary.EngineWords();
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                lock (_engineDictionaryGate)
+                {
+                    // 後から変わった語をもう送った
+                    if (version < _engineDictionarySent) return;
+                    _engineDictionarySent = version;
+                    // userdict.txt は品詞を持たないので名詞にする
+                    converter.SetUserDictionary([.. words.Select(w => (w.Reading, w.Word, "名詞"))]);
+                }
+            });
+        }
+        UserDictionary.WordsChanged += Send;
+        Send();
+    }
 
     /// <summary>Zenzai の今の状態 (トレイのメニューに出す。issue #1152)。OFF・変換エンジンを作っていなければ null。</summary>
     public Func<string?> ZenzaiStatus { get; private set; } = () => null;

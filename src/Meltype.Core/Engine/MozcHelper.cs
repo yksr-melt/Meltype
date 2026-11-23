@@ -27,6 +27,9 @@ public interface IMozcHelper : IDisposable
     /// <summary>やり取りに失敗した。動いているヘルパーを止め、次の <see cref="Start"/> で動かし直す。</summary>
     void Reset();
 
+    /// <summary>ヘルパーを起動した回数。起動し直したヘルパーは、前に送ったユーザー辞書を持っていない。</summary>
+    int Launches { get; }
+
     /// <summary>ヘルパーが使っているメモリ (計測用。分からなければ 0)。</summary>
     long WorkingSet { get; }
 }
@@ -66,6 +69,8 @@ internal sealed class MozcHelperProcess(string helperPath, string? profileDirect
     private static bool IsHelperGone(Exception ex) => ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException or ObjectDisposedException;
 
     public bool IsInstalled => File.Exists(helperPath) && !_missingDependency;
+
+    public int Launches { get; private set; }
 
     public bool Start() => Running() is not null;
 
@@ -188,6 +193,7 @@ internal sealed class MozcHelperProcess(string helperPath, string? profileDirect
             return null;
         }
         Diagnostics.Log.Info("Mozc の変換エンジンを起動しました。");
+        Launches++;
         return process;
     }
 

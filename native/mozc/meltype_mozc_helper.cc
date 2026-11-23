@@ -8,6 +8,9 @@
 //       学習。ユーザーが確定した文節の区切りと文字列を Mozc に覚えさせる。覚えたら "OK"、できなければ "NG"。
 //   R<TAB>文字列
 //       逆変換。文字列の読み (ひらがな) を返す。逆変換できなければ空行。
+//   D<TAB>読み1<US>語1<US>品詞1<RS>読み2<US>語2<US>品詞2…
+//       ユーザー辞書。語をすべて入れ替え、変換に使えるようにしてから "OK" (できなければ "NG") を返す。
+//       品詞は Mozc の品詞名 (名詞・人名・動詞ワ行五段…)。語はメモリにだけ置き、起動し直したら Meltype が送り直す。
 //   S   学習データを保存する ("OK")。
 //   Q   保存して終了する。
 // 起動が終わったら "READY" を 1 行出す。引数 1 つ目は学習データの保存先 (省略可)。
@@ -19,6 +22,8 @@
 #include <utility>
 #include <vector>
 
+#include "absl/status/status.h"
+#include "absl/strings/str_cat.h"
 #include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
 #include "base/init_mozc.h"
@@ -29,10 +34,14 @@
 #include "converter/candidate.h"
 #include "converter/converter_interface.h"
 #include "converter/segments.h"
+#include "dictionary/dictionary_interface.h"
+#include "dictionary/user_dictionary_util.h"
+#include "dictionary/user_pos.h"
 #include "engine/engine.h"
 #include "engine/engine_factory.h"
 #include "protocol/commands.pb.h"
 #include "protocol/config.pb.h"
+#include "protocol/user_dictionary_storage.pb.h"
 #include "request/conversion_request.h"
 
 #ifdef _WIN32
@@ -162,6 +171,31 @@ class Helper {
 
   bool Save() { return engine_->Sync(); }
 
+  // ユーザー辞書を words の語で入れ替える。Mozc のユーザー辞書のファイル (user_dictionary.db) は使わない。
+  // Mozc の辞書の取り込み (user_dictionary_importer) は、このパッケージから使えない (Bazel の visibility) ので、語は自分で組み立てる。
+  bool SetDictionary(absl::string_view words) {
+    mozc::user_dictionary::UserDictionaryStorage storage;
+    mozc::user_dictionary::UserDictionary* dictionary = storage.add_dictionaries();
+    for (absl::string_view record : absl::StrSplit(words, kRecordSeparator, absl::SkipEmpty())) {
+      const std::vector<absl::string_view> fields = absl::StrSplit(record, kUnitSeparator);
+      if (fields.size() < 3) return false;
+      mozc::user_dictionary::UserDictionary::Entry entry;
+      entry.set_key(std::string(fields[0]));
+      entry.set_value(std::string(fields[1]));
+      // 知らない品詞名は名詞にする (語を落とさない)
+      const auto pos = mozc::dictionary::UserPos::ToPosType(fields[2]);
+      entry.set_pos(mozc::user_dictionary::UserDictionary::PosType_IsValid(pos) ? pos : mozc::user_dictionary::UserDictionary::NOUN);
+      mozc::user_dictionary::SanitizeEntry(&entry);
+      // Mozc が登録できない語 (読みが長すぎる・使えない文字) は飛ばし、ほかの語は登録する
+      if (!mozc::user_dictionary::ValidateEntry(entry).ok()) continue;
+      *dictionary->add_entries() = std::move(entry);
+    }
+    mozc::dictionary::UserDictionaryInterface& user_dictionary = engine_->GetModulesForTesting().GetUserDictionary();
+    // 起動したときに Mozc がファイルから読む (裏のスレッド) のを待ってから入れ替える (後から上書きされないように)
+    user_dictionary.WaitForReloader();
+    return user_dictionary.Load(storage);
+  }
+
  private:
   static bool SameKeys(const mozc::Segments& segments,
                        const std::vector<std::pair<std::string, std::string>>& chosen) {
@@ -223,6 +257,8 @@ int main(int argc, char** argv) {
       std::cout << (helper.Learn(fields[1], fields[2]) ? "OK" : "NG") << "\n";
     } else if (fields[0] == "R" && fields.size() >= 2) {
       std::cout << helper.Reverse(fields[1]) << "\n";
+    } else if (fields[0] == "D" && fields.size() >= 2) {
+      std::cout << (helper.SetDictionary(fields[1]) ? "OK" : "NG") << "\n";
     } else if (fields[0] == "S") {
       std::cout << (helper.Save() ? "OK" : "NG") << "\n";
     } else {
