@@ -168,18 +168,17 @@ public sealed class DiscordPresence : IDisposable
         return null;
     }
 
-    /// <summary>macOS・Linux で Discord がソケットを置くところ (Flatpak・Snap 版も)。</summary>
+    /// <summary>
+    /// macOS・Linux で Discord がソケットを置くところ (Flatpak・Snap 版も)。Discord と同じく、最初に設定されている環境変数の
+    /// フォルダーだけを使い、どれも無いときだけ /tmp を使う。XDG_RUNTIME_DIR などはそのユーザーだけのフォルダーで、
+    /// 誰でも書ける /tmp も探すと、ほかのユーザーが先に置いたソケットにつないで打鍵数を送ってしまう。
+    /// </summary>
+    private static readonly string[] SocketVariables = ["XDG_RUNTIME_DIR", "TMPDIR", "TMP", "TEMP"];
+
     private static IEnumerable<string> SocketDirectories()
     {
-        foreach (var variable in new[] { "XDG_RUNTIME_DIR", "TMPDIR", "TMP", "TEMP" })
-        {
-            var dir = Environment.GetEnvironmentVariable(variable);
-            if (string.IsNullOrEmpty(dir)) continue;
-            yield return dir;
-            yield return Path.Combine(dir, "app", "com.discordapp.Discord");
-            yield return Path.Combine(dir, "snap.discord");
-        }
-        yield return "/tmp";
+        var dir = SocketVariables.Select(Environment.GetEnvironmentVariable).FirstOrDefault(d => !string.IsNullOrEmpty(d)) ?? "/tmp";
+        return [dir, Path.Combine(dir, "app", "com.discordapp.Discord"), Path.Combine(dir, "snap.discord")];
     }
 
     /// <summary>1 通送って、返事を 1 通読む (読まずにおくと Discord 側が詰まる)。</summary>
