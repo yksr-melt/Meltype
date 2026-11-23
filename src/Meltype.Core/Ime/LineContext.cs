@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
 
-using System.Text;
-
 namespace Meltype.Ime;
 
 /// <summary>コードの行の、キャレットの位置がどこか。</summary>
@@ -93,7 +91,7 @@ internal static class LineContext
                 continue;
             }
             // 1 行のコメント: 行の終わりまで飛ばす
-            if (StartsWith(text, i, "//") || (c == '#' && (i + 1 == text.Length || char.IsWhiteSpace(text[i + 1]) || text[i + 1] == '#')) ||
+            if (StartsWith(text, i, "//") || IsHashComment(text, i) ||
                 (atStart && StartsWithIgnoreCase(text, i, "rem ")))
             {
                 while (i + 1 < text.Length && text[i + 1] is not ('\r' or '\n')) i++;
@@ -152,8 +150,7 @@ internal static class LineContext
                 i = close + 2;
                 continue;
             }
-            // # コメント (Python・シェル・PowerShell・YAML)。#include や #region のように # の直後が文字なら指令なので除く。
-            if (c == '#' && (i + 1 == line.Length || char.IsWhiteSpace(line[i + 1]) || line[i + 1] == '#')) return LineKind.Comment;
+            if (IsHashComment(line, i)) return LineKind.Comment;
             // -- コメント (SQL・Lua・Haskell)。x-- のような減算は直後が空白でないことが多い。
             if (StartsWith(line, i, "--") && (i + 2 == line.Length || line[i + 2] == ' ') && (atStart || i > 0 && line[i - 1] == ' ')) return LineKind.Comment;
             // 複数行コメントの途中の行 ( * …)
@@ -163,6 +160,25 @@ internal static class LineContext
         }
         return quote is null ? LineKind.Code : LineKind.String;
     }
+
+    // #1623: # の直後に日本語 (「」※ や全角の文字も) を確定してもコメントのままにする。
+    // # の直後が ASCII の文字なら、#include・#region・r#type のような指令や名前なのでコードのまま。
+    private static bool IsHashComment(string text, int index) =>
+        text[index] == '#' && (index + 1 == text.Length || text[index + 1] is '#' or > '~' || char.IsWhiteSpace(text[index + 1]));
+
+    /// <summary>
+    /// 行コメントの // にすぐ続けて打った記号 c か (C# の ///、Rust の //!、区切りの //----)。
+    /// コメントの記号の一部なので、日本語の記号にしない。英数字・日本語・空白を打ったら本文。
+    /// </summary>
+    public static bool ContinuesSlashCommentMarker(string before, char c)
+    {
+        if (!IsAsciiSymbol(c)) return false;
+        var start = before.Length;
+        while (start > 0 && IsAsciiSymbol(before[start - 1])) start--;
+        return StartsWith(before, start, "//");
+    }
+
+    private static bool IsAsciiSymbol(char c) => c is > ' ' and <= '~' && !char.IsAsciiLetterOrDigit(c);
 
     /// <summary>
     /// ターミナルで動く AI・チャットの入力行か (Claude Code・Gemini CLI の「&gt; 」、Codex の「› 」。枠線の │ は飛ばす)。

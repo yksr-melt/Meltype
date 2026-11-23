@@ -853,6 +853,161 @@ internal static class SessionFacadeTests
     }
 
     [Test]
+    public static void CodeInput_LineCommentsContinueAfterCommit()
+    {
+        // #1623: 本文前の空白や F7 の有無によらず、確定に使った Enter のあとも同じ行のコメントを書ける。
+        foreach (var prefix in new[] { "", " ", "\t", "kome", "kome " })
+            foreach (var marker in new[] { "//", "// ", "#", "# " })
+                foreach (var sigils in new[] { false, true })
+                    foreach (var katakana in new[] { false, true })
+                    {
+                        var session = new TestSession(() => new Settings { LiveConversion = false, SigilWordsDirect = sigils }) { CodeInput = true };
+                        // 字下げはアプリの文字として渡す。Tab キーの補完操作とは区別する。
+                        var field = new Field(prefix is " " or "\t" ? prefix : "");
+                        if (prefix is not (" " or "\t")) Type(session, prefix, field);
+                        Assert.True(Type(session, marker, field).All(r => !r.Consumed), prefix + marker);
+                        Assert.Equal("こめんと", Type(session, "komento", field)[^1].View?.Text, prefix + marker);
+                        if (katakana)
+                            Assert.Equal("コメント", session.HandleKey(VirtualKeys.F7, null, false, false, false, false, field.Text).View?.Text);
+                        var commit = Type(session, "\n", field).Single();
+                        Assert.True(commit.Consumed && commit.View is null, "確定の Enter は改行しない: " + prefix + marker);
+                        Assert.Equal(prefix + marker + (katakana ? "コメント" : "こめんと"), field.Text);
+                        var next = Type(session, "a", field).Single();
+                        Assert.True(next.Consumed, "コメント本文の続きは直接入力しない: " + field.Text);
+                        Assert.Equal("あ", next.View?.Text, field.Text);
+                    }
+    }
+
+    [Test]
+    public static void CodeInput_SlashCommentBodyWithoutSpace()
+    {
+        foreach (var prefix in new[] { "", " ", "\t", "kome", "kome " })
+        {
+            var session = Create();
+            session.CodeInput = true;
+            var field = new Field(prefix);
+            Assert.True(Type(session, "//", field).All(r => !r.Consumed), "スラッシュは ASCII のまま");
+            Assert.Equal("こめんた", Type(session, "komenta", field)[^1].View?.Text, prefix);
+            Assert.Equal(prefix + "//", field.Text, "本文は未確定のまま");
+        }
+    }
+
+    [Test]
+    public static void CodeInput_ExistingHashCommentsSurviveCaretAndFocusChanges()
+    {
+        foreach (var comment in new[] { "#こめんと", "#コメント", "#説明", "#ｺﾒﾝﾄ", "#「説明」", "#※注意", "#１つめ", "kome#コメント" })
+        {
+            var session = Create();
+            session.CodeInput = true;
+            session.HandleKey(VirtualKeys.Shift, null, true, false, false, false, comment);
+            session.Send(Ime.ImeEventType.CaretMoved, before: comment,
+                caret: new Ime.ImeCaret { Moved = true, PassedKey = VirtualKeys.Left });
+            session.Send(Ime.ImeEventType.CaretMoved, before: comment,
+                caret: new Ime.ImeCaret { FocusEntered = true });
+            Assert.True(!session.CodeEnglishAt(comment), comment);
+            Assert.Equal("いま", Type(session, "ima", new Field(comment))[^1].View?.Text, comment);
+            Type(session, "\n", new Field(comment));
+            Assert.True(Type(session, "abc", new Field(comment + "\n")).All(r => !r.Consumed), "次の行はコード");
+        }
+    }
+
+    [Test]
+    public static void CodeInput_DocCommentMarkersRemainAscii()
+    {
+        // ドキュメントコメント (///・//!) と区切り (//----) の記号はコメントの記号。本文は日英判定する。
+        foreach (var sigils in new[] { true, false })
+            foreach (var marker in new[] { "///", "//!", "//----", "kome///" })
+            {
+                var session = new TestSession(() => new Settings { LiveConversion = false, SigilWordsDirect = sigils }) { CodeInput = true };
+                var field = new Field();
+                Assert.True(Type(session, marker, field).All(r => !r.Consumed), marker);
+                Assert.Equal(marker, field.Text);
+                Assert.Equal("こめんと", Type(session, "komento", field)[^1].View?.Text, marker);
+            }
+    }
+
+    [Test]
+    public static void CodeInput_ExistingDirectivesRemainCode()
+    {
+        foreach (var before in new[] { "#include <stdio.h>", "#region Foo", "r#type", "#include日本語" })
+        {
+            var session = Create();
+            session.CodeInput = true;
+            Assert.True(Type(session, "ima", new Field(before)).All(r => !r.Consumed && r.View is null), before);
+            Assert.True(session.CodeEnglishAt(before), before);
+        }
+    }
+
+    [Test]
+    public static void CodeInput_OtherLineCommentBoundariesRemainTheSame()
+    {
+        foreach (var input in new[] { "kome--a", "kome-- a", "REMa", "komeREMa", "kome REMa", "kome REM a" })
+        {
+            var session = Create();
+            session.CodeInput = true;
+            var field = new Field();
+            Assert.True(Type(session, input, field).All(r => !r.Consumed && r.View is null), input);
+            Assert.Equal(input, field.Text);
+        }
+        foreach (var prefix in new[] { "kome --", "kome -- ", "REM ", "--", "-- " })
+        {
+            var session = Create();
+            session.CodeInput = true;
+            Assert.Equal("いま", Type(session, prefix + "ima", new Field())[^1].View?.Text, prefix);
+        }
+    }
+
+    [Test]
+    public static void CodeInput_CompletionNamesRemainDirect()
+    {
+        foreach (var prefix in new[] { "", "> ", "// メモ ", "#コメント " })
+            foreach (var name in new[] { "/review", "/kensaku", "$skill-name", "@src/app.ts" })
+            {
+                // コメント内の / は既定では ・。Space で / を選んで確定した後の補完名も維持する。
+                var slashInComment = name[0] == '/' && (prefix.StartsWith('#') || prefix.StartsWith("//", StringComparison.Ordinal));
+                var session = Create();
+                session.CodeInput = true;
+                var field = new Field(prefix + (slashInComment ? "/" : ""));
+                Assert.True(Type(session, slashInComment ? name[1..] : name, field).All(r => !r.Consumed && r.View is null), prefix + name);
+                Assert.Equal(prefix + name, field.Text);
+            }
+    }
+
+    [Test]
+    public static void CodeInput_HashCommentsDoNotLeakIntoTheNextLine()
+    {
+        foreach (var newline in new[] { "\n", "\r\n" })
+        {
+            foreach (var line in new[] { "#こめんと /*", "#コメント \"\"\"", "#説明 '''", "#ｺﾒﾝﾄ <!--" })
+            {
+                var session = Create();
+                session.CodeInput = true;
+                Assert.True(Type(session, "ima", new Field(line + newline)).All(r => !r.Consumed), line);
+            }
+        }
+    }
+
+    [Test]
+    public static void CodeInput_TerminalWithoutSurroundingTextContinuesLineComments()
+    {
+        foreach (var marker in new[] { "//", "#" })
+        {
+            var session = Create();
+            session.CodeInput = true;
+            session.CodeTerminal = true;
+            Assert.Equal("こめんと", Type(session, marker + "komento")[^1].View?.Text, marker);
+            session.HandleKey(VirtualKeys.F7, null, false, false, false, false);
+            var commit = Type(session, "\n").Single();
+            Assert.True(commit.Consumed, "最初の Enter は確定");
+            Assert.Equal("コメント", commit.Commits.Single().Text);
+            Assert.Equal("あ", Type(session, "a").Single().View?.Text, marker);
+            Type(session, "\n");
+            Assert.True(!Type(session, "\n").Single().Consumed, "次の Enter は改行");
+            Assert.True(Type(session, "ima").All(r => !r.Consumed), "改行後はコード");
+        }
+    }
+
+    [Test]
     public static void EnglishSentence_RemainsEnglish()
     {
         var session = Create();

@@ -708,16 +708,25 @@ internal static class ImeSession
         }
         // 先頭か空白の直後の /command・$skill・@ファイル名 は、変換せずにそのままアプリへ渡す (#193)。
         // 文章の入力欄の / は、変換ボックスに ・ として入れる。Space で / にすると、続く名前はそのまま渡す。
-        if (!modifier && !CompositionController.IsComposing(state.Composition) && ch is '/' && !PassesSlash(state, before) && !SigilWord.InNameAfter(before) && settings.SigilWordsDirect &&
-            SigilWord.PassesAfter(before, '/'))
-        {
-            CompositionController.MarkSlashAtStart(state.Composition);
-        }
-        else if (!modifier && !CompositionController.IsComposing(state.Composition) && ch is { } c && settings.SigilWordsDirect && SigilWord.PassesAfter(before, c))
+        var lineKind = CodeInput(state) && !CompositionController.IsComposing(state.Composition) ? CodeLineKind(before) : (LineKind?)null;
+        var slashComment = lineKind == LineKind.Comment;
+        // ドキュメントコメントの /// や //! の記号は本文ではないので、日本語の記号 (・ ！) にしない。
+        if (slashComment && !modifier && before is { } commentLine && ch is { } mark && LineContext.ContinuesSlashCommentMarker(commentLine, mark))
         {
             return CompositionController.Pass(state.Composition, Env(state, env), now);
         }
-        if (CodeInput(state) && !state.CodeJapanese && !CompositionController.IsComposing(state.Composition) && CodeLineKind(before) == LineKind.Code)
+        // コードの中とターミナルの AI の入力行では /command を使うので、打ち始めの / を ・ にしない。
+        var passesSlash = !state.CodeJapanese && lineKind is LineKind.Code or LineKind.Prompt;
+        if (!modifier && !CompositionController.IsComposing(state.Composition) && ch is '/' && !passesSlash && !SigilWord.InNameAfter(before, slashComment) && settings.SigilWordsDirect &&
+            SigilWord.PassesAfter(before, '/', slashComment))
+        {
+            CompositionController.MarkSlashAtStart(state.Composition);
+        }
+        else if (!modifier && !CompositionController.IsComposing(state.Composition) && ch is { } c && settings.SigilWordsDirect && SigilWord.PassesAfter(before, c, slashComment))
+        {
+            return CompositionController.Pass(state.Composition, Env(state, env), now);
+        }
+        if (!state.CodeJapanese && lineKind == LineKind.Code)
         {
             return CompositionController.Pass(state.Composition, Env(state, env), now);
         }
@@ -753,14 +762,6 @@ internal static class ImeSession
         if (!CompositionController.IsComposing(state.Composition) || Direct(state)) return null;
         return ComposeKey(state, env, vk, null, false, false, false, false);
     }
-
-    /// <summary>
-    /// 打ち始めの / を、・ にせずそのままアプリへ渡すか。コードの入力欄で、キャレットがコードの中か、
-    /// ターミナルの AI の入力行 (Claude Code・Codex の /command を打つ所) にあるとき。
-    /// コメント・文字列の中は ・ にする (Meltype キーボードと同じ)。
-    /// </summary>
-    private static bool PassesSlash(ImeSessionState state, string? before) =>
-        CodeInput(state) && !state.CodeJapanese && CodeLineKind(before) is LineKind.Code or LineKind.Prompt;
 
     /// <summary>
     /// このセッションの外でキャレットが動いた (OS の IME がアプリに通したキー・クリック・別の入力欄に移った) とき。
