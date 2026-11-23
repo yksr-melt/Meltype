@@ -83,11 +83,11 @@ internal static partial class CompositionController
     /// 区切りを文節にして変換する (<see cref="BuildClauses"/>)。英日の区切りの別案があれば、文全体を 1 つの文節にして、案ごとの文を候補にする。
     /// F6〜F8 でかなにして見せているときは、打った英字をすべてローマ字として読んで変換する。
     /// </summary>
-    private static void StartConversion(CompositionState state, CompositionEnv env, bool preferJapanese = false)
+    private static void StartConversion(CompositionState state, CompositionEnv env, ConversionTrigger trigger = ConversionTrigger.Other, bool preferJapanese = false)
     {
         state.ConversionPrefersJapanese = preferJapanese;
         state.ClausesEdited = false;
-        state.TabStartedConversion = false;
+        state.StartedBy = trigger;
         var asKana = state.Text.Mode is DisplayMode.Hiragana or DisplayMode.Katakana or DisplayMode.HalfWidthKatakana;
         var segments = asKana ? CompositionText.AllJapaneseSegments(state.Text, env) : CompositionText.ConversionSegments(state.Text, env);
         var utility = Utilities(state, env, segments);

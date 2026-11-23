@@ -259,10 +259,9 @@ internal static partial class CompositionController
     private static void CommitText(CompositionState state, CompositionEnv env, string text, bool english, string raw = "", bool chosen = false, bool preserveText = false, string rule = "")
     {
         LogCommit(state, env, text, rule);
-        var spaceIntended = state.SpaceStartedConversion;
+        var spaceIntended = state.StartedBy == ConversionTrigger.Space;
         var afterEnglish = env.Context().PrecedingEnglish == true;
-        state.SpaceStartedConversion = false;
-        state.TabStartedConversion = false;
+        state.StartedBy = ConversionTrigger.Other;
         CompositionText.Clear(state.Text);
         state.Clauses = [];
         if (text.Length == 0) return;

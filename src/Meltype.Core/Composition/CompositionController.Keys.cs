@@ -171,15 +171,13 @@ internal static partial class CompositionController
             case VirtualKeys.Space when state.Shift:
                 // Shift+Space: 英語と判定した語でも、ローマ字として読んで変換する (go → 語、camera → かめら)。
                 CompositionText.FixTypos(state.Text, env);
-                state.SpaceStartedConversion = true;
-                StartConversion(state, env, preferJapanese: true);
+                StartConversion(state, env, ConversionTrigger.Space, preferJapanese: true);
                 return;
             case VirtualKeys.Space when env.Settings.SeparateKeyRoles && !IsProtectedInput(state):
                 // 設定「入力中のキーの役割を分ける」: Space は英語・日本語の判定にかかわらず候補を開く (英字のまま確定して空白を入れない)。
                 // 英字で見えている語も、英字を最初の候補に残し、ローマ字として読めれば日本語の候補も選べる (issue #199)
                 CompositionText.FixTypos(state.Text, env);
-                state.SpaceStartedConversion = true;
-                StartConversion(state, env);
+                StartConversion(state, env, ConversionTrigger.Space);
                 return;
             case VirtualKeys.NonConvert when env.Settings.NonConvertCyclesKana && !IsProtectedInput(state):
                 // ひらがな → 全角カタカナ → 半角カタカナ → ひらがな の順に循環する。自動判定中は、表示中の文字列にひらがな (長音を含む) があれば全角カタカナにし、なければひらがなにする。
@@ -206,8 +204,7 @@ internal static partial class CompositionController
                 // 打った英字全体を読みとして登録した語 (ユーザー辞書の zh → ←、略入力の ast → 明日) があれば、英語と判定しても変換する
                 if (HasRegisteredReading(state, env))
                 {
-                    state.SpaceStartedConversion = true;
-                    StartConversion(state, env);
+                    StartConversion(state, env, ConversionTrigger.Space);
                 }
                 else if (SpaceCommitsMarkdownMarker(state))
                 {
@@ -222,9 +219,7 @@ internal static partial class CompositionController
                 else if (SpaceCommitsAutoEnglish(state, env)) CommitText(state, env, CompositionText.Raw(state.Text) + " ", english: true, CompositionText.Raw(state.Text), rule: "Space: かなにならない子音で終わる英単語");
                 else
                 {
-                    // Space で変換した = 語の後に空白を打とうとした、とも取れる (確定し直して英語にするときに空白を足す)。
-                    state.SpaceStartedConversion = true;
-                    StartConversion(state, env);
+                    StartConversion(state, env, ConversionTrigger.Space);
                 }
                 return;
             case VirtualKeys.Back:
@@ -260,8 +255,7 @@ internal static partial class CompositionController
                 return;
             case VirtualKeys.Tab when !IsConverting(state) && !state.Shift && env.Settings.TabConversion && TabStartsConversion(state, env):
                 // Space なら変換を始める場面の Tab は、Space と同じく変換を始める (Microsoft IME と同じ。空白を打とうとした意味ではない: issue #219)。
-                StartConversion(state, env);
-                state.TabStartedConversion = IsConverting(state);
+                StartConversion(state, env, ConversionTrigger.Tab);
                 return;
             case VirtualKeys.F6: SetMode(state, DisplayMode.Hiragana); state.ModeByKey = true; return;
             case VirtualKeys.F7: SetMode(state, DisplayMode.Katakana); state.ModeByKey = true; return;
@@ -645,7 +639,7 @@ internal static partial class CompositionController
                 FixMisspelling(state, typo);
                 StartConversion(state, env);
                 return true;
-            case VirtualKeys.Tab when state.TabStartedConversion:
+            case VirtualKeys.Tab when state.StartedBy == ConversionTrigger.Tab:
                 // Tab で始めた変換の中では、Tab が次の候補、Shift+Tab が前の候補 (issue #219)。
                 NextCandidate(state, env, shift || state.Shift ? -1 : +1);
                 return true;
@@ -667,7 +661,7 @@ internal static partial class CompositionController
             case VirtualKeys.Escape:
                 // 変換を取り消して、かなの入力に戻る。
                 state.Clauses = [];
-                state.TabStartedConversion = false;
+                state.StartedBy = ConversionTrigger.Other;
                 return true;
             case >= 0x31 and <= 0x39 when !shift && !state.Text.KanaInput && env.Settings.NumberKeysSelectCandidates:
             case >= 0x61 and <= 0x69 when !shift && env.Settings.NumberKeysSelectCandidates:

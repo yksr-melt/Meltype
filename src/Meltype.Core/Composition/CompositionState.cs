@@ -100,6 +100,8 @@ internal sealed record CompositionEnv(CompositionDetector Detector, IKanjiConver
     public Action<Correction>? Corrected { get; init; }
 }
 
+internal enum ConversionTrigger { Other, Space, Tab }
+
 /// <summary>入力欄 1 つ分の変換ボックスの状態 (データだけ)。処理は <see cref="CompositionController"/> の関数が受け取って書き換える。</summary>
 internal sealed class CompositionState
 {
@@ -175,13 +177,14 @@ internal sealed class CompositionState
     /// <summary>続けて確定した、英語とも日本語とも読める語 (古い順)。make sure you → have で全部英語に直す。</summary>
     public readonly List<CommitRecord> Correctable = [];
 
-    public bool SpaceStartedConversion;
-
     // 確定し直しで消す文字数と、入れ直す文字。今確定する文字と一緒に 1 回で送る。
     public (int Count, string Text)? PendingReplace;
 
-    /// <summary>今の変換を Tab で始めたか (変換中の Tab で候補を送るため。issue #219)。</summary>
-    public bool TabStartedConversion;
+    /// <summary>
+    /// 今の変換を始めたキー。Space なら語の後に空白を打とうとした、とも取れる (確定し直して英語にするときに空白を足す)。
+    /// Tab なら変換中の Tab で候補を送る (issue #219)。変換を終えたら <see cref="ConversionTrigger.Other"/> に戻す。
+    /// </summary>
+    public ConversionTrigger StartedBy;
 
     // 続けて打つ前に選んでいた候補 (読み → 文字)。確定するか、変換ボックスを空にするまで。
     public readonly Dictionary<string, string> KeptChoices = [];

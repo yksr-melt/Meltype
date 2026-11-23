@@ -296,9 +296,8 @@ internal static partial class CompositionController
     private static bool RefreshOpenConversion(CompositionState state, CompositionEnv env)
     {
         if (state.ClausesEdited || state.Reconversion is not null || state.Clauses.Count == 0 || state.Clauses is [{ Alternatives: not null, Changed: true }]) return false;
-        var (old, selected, tabStarted) = (state.Clauses, state.SelectedClause, state.TabStartedConversion);
-        StartConversion(state, WithoutWaiting(env), state.ConversionPrefersJapanese);
-        state.TabStartedConversion = tabStarted;
+        var (old, selected) = (state.Clauses, state.SelectedClause);
+        StartConversion(state, WithoutWaiting(env), state.StartedBy, state.ConversionPrefersJapanese);
         var sameClauses = state.Clauses.Count == old.Count && state.Clauses.Zip(old).All(p => p.First.Reading == p.Second.Reading);
         var nothingNew = sameClauses && state.Clauses.Zip(old).All(p => p.First.Text == p.Second.Text && p.First.Candidates.All(p.Second.Candidates.Contains));
         if (nothingNew || !sameClauses && (selected != InitialClause(env, old.Count) || old.Any(c => c.Changed)))
@@ -423,8 +422,7 @@ internal static partial class CompositionController
         state.Reconversion = null;
         CompositionText.Clear(state.Text);
         state.Clauses = [];
-        state.SpaceStartedConversion = false;
-        state.TabStartedConversion = false;
+        state.StartedBy = ConversionTrigger.Other;
     }
 
     /// <summary>パスワード欄に移ったとき、未確定入力と前の欄の文脈を確定せずに捨てる。</summary>
