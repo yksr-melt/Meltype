@@ -14,7 +14,7 @@ public sealed record UserWord(string Reading, string Word);
 /// ユーザー辞書 (%LOCALAPPDATA%\Meltype\userdict.txt、1 行に「読み[Tab]単語」)。
 /// 登録した語は変換エンジン (Mozc) のユーザー辞書に渡し (<see cref="EngineWords"/>)、ほかの語との取り合いを Mozc のコストで決める。
 /// 同梱の語句 (phrases.txt) は、変換する読みの中に語句の読みが含まれていれば、その部分は変換エンジンの区切りに関係なく
-/// 語句にする (<see cref="Split"/>)。
+/// 語句にする (<see cref="Split"/>)。ユーザーが同じ読みを登録した語句は使わない。
 /// トレイの「ユーザー辞書...」から登録・削除する。
 /// importDirectory (Mac / Linux は データフォルダ/dictionaries) に置いた .plist (macOS の「ユーザ辞書」を書き出したもの) の語も使う (#40)。
 /// .plist の語は userdict.txt には書かず、置いたファイルをそのまま読む。
@@ -43,7 +43,7 @@ public sealed class UserDictionary
     private readonly Dictionary<string, (string Reading, string Word)[]> _clauses = new(StringComparer.Ordinal);
     // すべての語 (Lookup)
     private Dictionary<string, List<string>> _byReading = new(StringComparer.Ordinal);
-    // 同梱の語句 (Split) と、その最長の読み
+    // 同梱の語句 (Split。ユーザーが同じ読みを登録した語句は除き、Mozc に任せる) と、その最長の読み
     private Dictionary<string, List<string>> _phrasesByReading = new(StringComparer.Ordinal);
     private int _maxPhraseReadingLength;
     private readonly string? _importDirectory;
@@ -361,7 +361,8 @@ public sealed class UserDictionary
     {
         // 後から登録したものを先にする。.plist の語はユーザーの登録の後、同梱の語句はさらに後。
         _byReading = ByReading(Enumerable.Reverse(_words).Concat(_imported).Concat(_builtIn));
-        _phrasesByReading = ByReading(_builtIn);
+        var userReadings = _words.Concat(_imported).Select(w => w.Reading).ToHashSet(StringComparer.Ordinal);
+        _phrasesByReading = ByReading(_builtIn.Where(w => !userReadings.Contains(w.Reading)));
         _maxPhraseReadingLength = _phrasesByReading.Count == 0 ? 0 : _phrasesByReading.Keys.Max(k => k.Length);
     }
 

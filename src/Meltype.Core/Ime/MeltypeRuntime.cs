@@ -190,7 +190,7 @@ public sealed class MeltypeRuntime : IDisposable
                     if (version < _engineDictionarySent) return;
                     _engineDictionarySent = version;
                     // userdict.txt は品詞を持たないので名詞にする
-                    if (!converter.SetUserDictionary([.. words.Select(w => (w.Reading, w.Word, "名詞"))])) Diagnostics.Log.Warn("Mozc にユーザー辞書を渡せませんでした。登録した語が変換に出ません。");
+                    converter.SetUserDictionary([.. words.Select(w => (w.Reading, w.Word, "名詞"))]);
                 }
             });
         }

@@ -27,6 +27,78 @@ internal static class UserDictionaryEngineTests
     }
 
     [Test]
+    public static void UserReading_HidesTheSamePhrase()
+    {
+        // いちがっき → 壱学期 を登録すると、同梱の語句 いち|がっき → 一|学期 で上書きしていた
+        var dictionary = new UserDictionary(null);
+        dictionary.Add("いちがっき", "壱学期");
+        Assert.True(dictionary.Split("いちがっき") is null, "同じ読みの語句は当てはめない");
+        var k = new CompositionTests.Keyboard(converter: new Engine(new() { ["いちがっき"] = [new("いちがっき", "壱学期")] }), userDictionary: dictionary);
+        k.Type("ichigakki ");
+        Assert.Equal("壱学期", string.Concat(k.Host.View!.Clauses!));
+    }
+
+    [Test]
+    public static void UserWordInsideAnEngineClause_KeepsTheEngineResult()
+    {
+        // #2019: にこ → (*>ω<*) を登録すると、にこみはんばーぐ が (*>ω<*)みハンバーグ になっていた。
+        // #1011: へん を登録すると、へんかんこうりつがよくない の頭に当てはめて、残りを 観光率が良くない にしていた
+        var dictionary = new UserDictionary(null, builtIn: false);
+        dictionary.Add("にこ", "(*>ω<*)");
+        dictionary.Add("へん", "返信が遅くなり、誠に申し訳ありません。");
+        var engine = new Engine(new()
+        {
+            ["にこみはんばーぐ"] = [new("にこみ", "煮込み"), new("はんばーぐ", "ハンバーグ")],
+            ["へんかんこうりつがよくない"] = [new("へんかんこうりつが", "変換効率が"), new("よくない", "良くない")],
+            ["にこ"] = [new("にこ", "(*>ω<*)")],
+        });
+        var k = new CompositionTests.Keyboard(converter: engine, userDictionary: dictionary);
+        k.Type("nikomihannba-gu ");
+        Assert.Equal("煮込みハンバーグ", string.Concat(k.Host.View!.Clauses!));
+        k = new CompositionTests.Keyboard(converter: engine, userDictionary: dictionary);
+        k.Type("hennkannkouritugayokunai ");
+        Assert.Equal("変換効率が良くない", string.Concat(k.Host.View!.Clauses!));
+        k = new CompositionTests.Keyboard(converter: engine, userDictionary: dictionary);
+        k.Type("niko ");
+        Assert.Equal("(*>ω<*)", string.Concat(k.Host.View!.Clauses!), "登録した読みだけなら、変換エンジンが選んだ登録語");
+    }
+
+    [Test]
+    public static void Zenzai_DoesNotReplaceUserWords()
+    {
+        var helper = new FakeHelper("OK");
+        using var mozc = new MozcConverter(helper);
+        mozc.SetUserDictionary([("しの", "紫乃", "名詞")]);
+        IReadOnlyList<(ConversionClause, IReadOnlyList<string>)> shino = [(new("しの", "紫乃"), ["紫乃", "篠"])];
+        Assert.Equal("紫乃", Text(HybridConverter.Choose("しの", shino, [new("しの", "篠")], mozc.StartsWithUserWord)), "Mozc が選んだ登録語は、Zenzai の答えで置き換えない");
+        Assert.Equal("篠", Text(HybridConverter.Choose("しの", shino, [new("しの", "篠")], _ => false)), "登録語でなければ Zenzai の答え");
+
+        IReadOnlyList<(ConversionClause, IReadOnlyList<string>)> sentence = [(new("しのが", "紫乃が"), ["紫乃が", "篠が"]), (new("きた", "来た"), ["来た", "北"])];
+        Assert.Equal("紫乃が|北", Text(HybridConverter.Choose("しのがきた", sentence, [new("しのがきた", "紫乃が北")], mozc.StartsWithUserWord)), "ほかの文節は Zenzai の答え");
+        Assert.Equal("紫乃が|来た", Text(HybridConverter.Choose("しのがきた", sentence, [new("しのがきた", "篠が北")], mozc.StartsWithUserWord)), "登録語を残して作れなければ Mozc の結果");
+
+        static string Text(IReadOnlyList<ConversionClause>? clauses) => string.Join("|", clauses?.Select(c => c.Text) ?? []);
+    }
+
+    [Test]
+    public static void SetUserDictionary_ResentAfterAFailedSend()
+    {
+        var helper = new FakeHelper("OK");
+        helper.Next.Enqueue(null);
+        using var mozc = new MozcConverter(helper);
+        Assert.Equal(false, mozc.SetUserDictionary([("しの", "紫乃", "名詞")]), "答えなかった");
+        mozc.Reading("紫乃");
+        Assert.Equal("D\tしの\x1f紫乃\x1f名詞|D\tしの\x1f紫乃\x1f名詞|R\t紫乃", string.Join("|", helper.Requests), "次の要求の前に送り直す");
+        mozc.Reading("紫乃");
+        Assert.Equal(4, helper.Requests.Count, "受け取ったらもう送らない");
+    }
+
+    private sealed class Engine(Dictionary<string, ConversionClause[]> answers) : TestConverter
+    {
+        public override IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) => answers.GetValueOrDefault(hiragana);
+    }
+
+    [Test]
     public static void SetUserDictionary_SendsWordsAndAcceptsOnlyOk()
     {
         var helper = new FakeHelper("OK");
@@ -88,10 +160,16 @@ internal static class UserDictionaryEngineTests
 
         public bool Start() => true;
 
+        /// <summary>次に返す答え (空なら answer)。</summary>
+        public Queue<string?> Next { get; } = new();
+
         public string? Send(string request)
         {
-            lock (_gate) Requests.Add(request);
-            return answer;
+            lock (_gate)
+            {
+                Requests.Add(request);
+                return Next.Count > 0 ? Next.Dequeue() : answer;
+            }
         }
 
         public void Reset()
