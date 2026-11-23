@@ -205,9 +205,7 @@ public static unsafe class Exports
 
         public long WorkingSet => 0;
 
-        public void Start()
-        {
-        }
+        public bool Start() => true;
 
         public string? Send(string line)
         {
