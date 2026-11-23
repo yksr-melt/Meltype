@@ -958,6 +958,76 @@ internal static class SessionFacadeTests
     }
 
     [Test]
+    public static void CodeInput_DashCommentsContinueAfterCommit()
+    {
+        // #1623: -- の直後に本文を確定しても、続くキーをコードの英数入力に戻さない。
+        foreach (var prefix in new[] { "", " ", "\t", "kome ", "kome\t" })
+            foreach (var marker in new[] { "--", "-- ", "--\t" })
+                foreach (var katakana in new[] { false, true })
+                {
+                    var session = Create();
+                    session.CodeInput = true;
+                    var field = new Field(prefix);
+                    Assert.True(Type(session, marker, field).All(r => !r.Consumed), prefix + marker);
+                    Assert.Equal("こめんと", Type(session, "komento", field)[^1].View?.Text, prefix + marker);
+                    if (katakana) session.HandleKey(VirtualKeys.F7, null, false, false, false, false, field.Text);
+                    Assert.True(Type(session, "\n", field).Single().Consumed, "最初の Enter は確定だけ");
+                    Assert.Equal(prefix + marker + (katakana ? "コメント" : "こめんと"), field.Text);
+                    var next = Type(session, "a", field).Single();
+                    Assert.True(next.Consumed, "確定直後もコメントの本文を入力する: " + field.Text);
+                    Assert.Equal("あ", next.View?.Text, field.Text);
+                }
+    }
+
+    [Test]
+    public static void CodeInput_ExistingDashCommentsSurviveCaretAndFocusChanges()
+    {
+        foreach (var prefix in new[] { "--", "--\t", "kome --", "kome\t--", "kome\u00A0--\u00A0" })
+            foreach (var body in new[] { "こめんと", "コメント", "「説明」", "※注意", "１つめ", "ｺﾒﾝﾄ" })
+            {
+                var session = Create();
+                session.CodeInput = true;
+                var comment = prefix + body;
+                session.Send(Ime.ImeEventType.CaretMoved, before: comment,
+                    caret: new Ime.ImeCaret { Moved = true, PassedKey = VirtualKeys.Left });
+                session.Send(Ime.ImeEventType.CaretMoved, before: comment,
+                    caret: new Ime.ImeCaret { FocusEntered = true });
+                Assert.True(!session.CodeEnglishAt(comment), comment);
+                Assert.Equal("いま", Type(session, "ima", new Field(comment))[^1].View?.Text, comment);
+            }
+    }
+
+    [Test]
+    public static void CodeInput_DashCommentsDoNotLeakIntoTheNextLine()
+    {
+        // 行コメントの本文にある /* などを、次の行に続くコメント・文字列の開始とみなさない。
+        foreach (var newline in new[] { "\n", "\r\n" })
+            foreach (var prefix in new[] { "--", "kome --", "kome\t--" })
+                foreach (var body in new[] { "コメント ", " コメント ", "\tコメント " })
+                    foreach (var marker in new[] { "/*", "\"\"\"", "'''", "<!--" })
+                    {
+                        var session = Create();
+                        session.CodeInput = true;
+                        var line = prefix + body + marker + newline;
+                        Assert.True(Type(session, "ima", new Field(line)).All(r => !r.Consumed), line);
+                    }
+    }
+
+    [Test]
+    public static void CodeInput_DashOptionsAndDecrementsRemainCode()
+    {
+        foreach (var before in new[] { "kome--kome", "kome-- kome", "kome--コメント", "kome-- コメント", "kome--\tコメント", "kome --count", "kome\t--count", "--count", "x--;", "x-- 日本語" })
+        {
+            var session = Create();
+            session.CodeInput = true;
+            var field = new Field(before);
+            var next = Type(session, "a", field).Single();
+            Assert.True(!next.Consumed && next.View is null, before);
+            Assert.Equal(before + "a", field.Text);
+        }
+    }
+
+    [Test]
     public static void CodeInput_CompletionNamesRemainDirect()
     {
         foreach (var prefix in new[] { "", "> ", "// メモ ", "#コメント " })

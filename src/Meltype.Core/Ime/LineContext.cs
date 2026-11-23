@@ -91,7 +91,7 @@ internal static class LineContext
                 continue;
             }
             // 1 行のコメント: 行の終わりまで飛ばす
-            if (StartsWith(text, i, "//") || IsHashComment(text, i) ||
+            if (StartsWith(text, i, "//") || IsHashComment(text, i) || IsDashComment(text, i, atStart) ||
                 (atStart && StartsWithIgnoreCase(text, i, "rem ")))
             {
                 while (i + 1 < text.Length && text[i + 1] is not ('\r' or '\n')) i++;
@@ -151,8 +151,7 @@ internal static class LineContext
                 continue;
             }
             if (IsHashComment(line, i)) return LineKind.Comment;
-            // -- コメント (SQL・Lua・Haskell)。x-- のような減算は直後が空白でないことが多い。
-            if (StartsWith(line, i, "--") && (i + 2 == line.Length || line[i + 2] == ' ') && (atStart || i > 0 && line[i - 1] == ' ')) return LineKind.Comment;
+            if (IsDashComment(line, i, atStart)) return LineKind.Comment;
             // 複数行コメントの途中の行 ( * …)
             if (atStart && c == '*' && (i + 1 == line.Length || line[i + 1] == ' ')) return LineKind.Comment;
             // REM コメント (バッチファイル)
@@ -165,6 +164,12 @@ internal static class LineContext
     // # の直後が ASCII の文字なら、#include・#region・r#type のような指令や名前なのでコードのまま。
     private static bool IsHashComment(string text, int index) =>
         text[index] == '#' && (index + 1 == text.Length || text[index + 1] is '#' or > '~' || char.IsWhiteSpace(text[index + 1]));
+
+    // #1623: -- コメント (SQL・Lua・Haskell) は、直後に日本語・全角の本文を確定してもコメントのままにする。
+    // 直前の境界は x-- の減算、直後の ASCII は --count のようなオプションと区別するために残す。
+    private static bool IsDashComment(string text, int index, bool atStart) =>
+        StartsWith(text, index, "--") && (atStart || index > 0 && char.IsWhiteSpace(text[index - 1])) &&
+        (index + 2 == text.Length || text[index + 2] is > '~' || char.IsWhiteSpace(text[index + 2]));
 
     /// <summary>
     /// 行コメントの // にすぐ続けて打った記号 c か (C# の ///、Rust の //!、区切りの //----)。
