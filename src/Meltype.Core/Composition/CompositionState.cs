@@ -6,7 +6,6 @@ using Meltype.Detection;
 using Meltype.Diagnostics;
 using Meltype.Engine;
 using Meltype.Input;
-using static Meltype.Composition.CompositionController;
 
 namespace Meltype.Composition;
 
@@ -16,7 +15,7 @@ internal record TextEnv(CompositionDetector Detector, Config.Settings Settings, 
     /// <summary>打った英字を読み直す断片なら、読み直す元の入力 (<see cref="CompositionText.FragmentEnv"/>)。断片でなければ null。</summary>
     public FragmentOrigin? Fragment { get; init; }
 
-    /// <summary>入力欄の文脈。使うたびに、そのときの入力欄の文字と自分の確定の記録から決める (<see cref="CompositionController.ContextOf"/>)。</summary>
+    /// <summary>入力欄の文脈。使うたびに、そのときの入力欄の文字と自分の確定の記録から決める (<see cref="CompositionContext.ContextOf"/>)。</summary>
     public required Func<TextContext> Context { get; init; }
 }
 
@@ -43,13 +42,21 @@ internal sealed record CompositionEnv(CompositionDetector Detector, IKanjiConver
     public CompositionLearning Learning { get; } = new(Services, Converter);
 
     /// <summary>
-    /// 変換エンジンの答えを後から受け取れるフロント (<see cref="IKanjiConverter.ResultReady"/> を受けて RefreshConversion を呼ぶ) か。
+    /// 変換エンジンの答えを後から受け取れるフロント (<see cref="IKanjiConverter.ResultReady"/> を受けて <see cref="CompositionController.RefreshConversion"/> を呼ぶ) か。
     /// false なら答えるまで待つ (--repro・--self-test)。
     /// </summary>
     public bool LateResults { get; init; }
 
     /// <summary>変換エンジンの答えを待ってよい時刻 (<see cref="ConversionRequest.Deadline"/>)。</summary>
     public long Deadline { get; init; } = long.MaxValue;
+
+    /// <summary>Space・確定の応答を待つ時間。TSF の DLL の応答期限 (800ms) より短くする。</summary>
+    private const int InputBudgetMs = 400;
+
+    internal CompositionEnv WaitingForInput() => LateResults ? this with { Deadline = Environment.TickCount64 + InputBudgetMs } : this;
+
+    /// <summary>ライブ変換では待たない。後から結果を受け取れないフロントは、今までどおり待つ。</summary>
+    internal CompositionEnv WithoutWaiting() => LateResults ? this with { Deadline = 0 } : this;
 
     /// <summary>
     /// 英数状態で打ち始めた文字がローマ字 (日本語) かを判定する。null なら英数状態では判定しない。
@@ -134,7 +141,10 @@ internal sealed class PredictionList(string key, List<Prediction> items)
     public int Index { get; set; } = -1;
 }
 
-/// <summary>入力欄 1 つ分の変換ボックスの状態 (データだけ)。処理は <see cref="CompositionController"/> の関数が受け取って書き換える。</summary>
+/// <summary>
+/// 入力欄 1 つ分の変換ボックスの状態 (データだけ)。出来事の入口は <see cref="CompositionController"/>、
+/// 開始・終了・文脈の破棄は <see cref="CompositionLifecycle"/>。寿命の異なる値を一括で初期化しない。
+/// </summary>
 internal sealed class CompositionState
 {
     public readonly CompositionOutputState Out = new();
@@ -210,9 +220,6 @@ internal sealed class CompositionState
 
     /// <summary>続けて確定した、英語とも日本語とも読める語 (古い順)。make sure you → have で全部英語に直す。</summary>
     public readonly List<CommitRecord> Correctable = [];
-
-    // 確定し直しで消す文字数と、入れ直す文字。今確定する文字と一緒に 1 回で送る。
-    public (int Count, ComposedText Text)? PendingReplace;
 
     // 続けて打つ前に選んでいた候補 (読み → 文字)。確定するか、変換ボックスを空にするまで。
     public readonly Dictionary<string, string> KeptChoices = [];

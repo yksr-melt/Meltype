@@ -5,13 +5,13 @@ using System.Text.RegularExpressions;
 using Meltype.Detection;
 using Meltype.Engine;
 using Meltype.Learning;
-using Clause = Meltype.Composition.CompositionController.Clause;
+using Meltype.Libraries.Chars;
 
 namespace Meltype.Composition;
 
 /// <summary>
 /// 確定した入力を学習する (変換履歴・言語の学習・英訳の記録・予測変換の語句・変換エンジン)。
-/// 設定「ユーザー学習を使う」と入力欄が学習を求めないかは、呼ぶ側 (<see cref="CompositionController"/>) が見る。
+/// 設定「ユーザー学習を使う」と入力欄が学習を求めないかは、呼ぶ側 (<see cref="CompositionCommit"/>) が見る。
 /// 学習しない候補は <see cref="Learnable"/> の 1 か所で決める。
 /// </summary>
 internal sealed partial class CompositionLearning(CompositionServices services, IKanjiConverter converter)
@@ -40,7 +40,7 @@ internal sealed partial class CompositionLearning(CompositionServices services, 
             services.Languages?.Remember(clause.Raw!, english: true, context: context);
         }
         // 英語と判定した語で日本語の候補 (go → 語) を選んだら、その語は次から日本語にする (F6 と同じ)。
-        foreach (var clause in clauses.Where(c => c.IsEnglish && CompositionController.IsJapaneseText(c.Text) && c.Reading.All(char.IsAsciiLetter) && Learnable(c)))
+        foreach (var clause in clauses.Where(c => c.IsEnglish && TextChars.IsJapaneseText(c.Text) && c.Reading.All(char.IsAsciiLetter) && Learnable(c)))
         {
             services.Languages?.Remember(clause.Reading, english: false, context: context);
         }

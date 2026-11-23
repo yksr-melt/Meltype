@@ -1,18 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 aster-void
+// Copyright (C) 2026 yksr-melt
 
-using System.Globalization;
-using System.Text;
-using Meltype.Config;
 using Meltype.Dictionary;
 using Meltype.Learning;
 using Meltype.Libraries.Chars;
 
 namespace Meltype.Composition;
 
-/// <summary>変換ボックスの表示: 案内・候補の一覧・注記・予測変換の候補。</summary>
-internal static partial class CompositionController
+/// <summary>変換ボックスの表示、案内、候補の注記と予測。確定やキーの処理は呼ばない。</summary>
+internal static class CompositionPresentation
 {
+
     /// <summary>選んでいる候補の意味: 日本語の意味 (ウィクショナリー)、無ければ英訳 (JMdict)。</summary>
     private static string? CandidateMeaning(CompositionState state, CompositionEnv env, Clause clause) =>
         env.Services.Meanings?.Lookup(clause.Text, clause.IsEnglish ? null : clause.Reading) ?? env.Services.Translations?.Meaning(clause.Text);
@@ -42,7 +41,7 @@ internal static partial class CompositionController
     private static string ToHalfWidth(string text) =>
         new(text.Select(c => c is >= '！' and <= '～' ? (char)(c - 0xFEE0) : c == '　' ? ' ' : c).ToArray());
 
-    private static void UpdateView(CompositionState state, CompositionEnv env)
+    internal static void UpdateView(CompositionState state, CompositionEnv env)
     {
         if (CompositionText.IsEmpty(state.Text))
         {
@@ -50,11 +49,11 @@ internal static partial class CompositionController
             CompositionOutput.Hide(state.Out);
             return;
         }
-        if (IsConverting(state) && state.Clauses.Count > 0)
+        if (CompositionLifecycle.IsConverting(state) && state.Clauses.Count > 0)
         {
             var selected = state.Clauses[state.SelectedClause];
             // 選んでいる文節は、最初から候補の一覧をすべて出す (Space を 1 回押しただけでは一部しか出ず、選び間違えやすかった)。
-            if (!selected.Expanded) Expand(state, env, selected);
+            if (!selected.Expanded) CompositionConversion.Expand(state, env, selected);
             // 出している文節に Zenzai の答えがあれば、説明の頭に「Zenzai」と出す (学習・選び直しで変わった文節は数えない。issue #1152)
             var zenzai = state.Clauses.Any(c => c.ZenzaiText is { } z && c.Text == z);
             var clauses = state.Clauses.Select(c => Composed([c])).ToList();
@@ -68,14 +67,14 @@ internal static partial class CompositionController
                 state.SelectedClause,
                 CandidateNotes(selected),
                 env.Settings.ShowCandidateMeanings ? CandidateMeaning(state, env, selected) : null,
-                Suggestion(MisspellingSuggestion(state, env)),
+                Suggestion(CompositionSpelling.MisspellingSuggestion(state, env)),
                 Typed: TypedKeys(state, env),
                 Committed: ComposedText.Concat(clauses), ContextHint: zenzai ? "Zenzai" : null));
         }
         else
         {
             var suggestion = CompositionText.Suggestion(state.Text, env);
-            var misspelling = MisspellingSuggestion(state, env);
+            var misspelling = CompositionSpelling.MisspellingSuggestion(state, env);
             // 手動の英字提案・訂正提案がある間は予測を出さないため、contextHint の両方の案内は同時に出ない。
             UpdatePredictions(state, env, blocked: misspelling is not null || suggestion is not null);
             // 書き間違いの修正・英字の提案・予測の候補があれば、Tab はそちらに使う (HandleKey の Tab の順)
@@ -102,19 +101,19 @@ internal static partial class CompositionController
     }
 
     /// <summary>文節 clause の候補 candidate の文字。</summary>
-    private static ComposedText Candidate(Clause clause, string candidate) =>
+    internal static ComposedText Candidate(Clause clause, string candidate) =>
         clause.IsEnglish ? ComposedText.English(candidate) : ComposedText.Converted(clause.Reading, candidate);
 
     /// <summary>書き間違いの修正の案内 (もしかして)。</summary>
     private static ComposedText? Suggestion(string? suggestion) => suggestion is null ? null : ComposedText.Of(SpanKind.Japanese, suggestion);
 
     /// <summary>設定「入力中も変換候補をいくつか表示」: 今打っているひらがなの変換候補 (5 件まで)。出さないときは null。</summary>
-    private static List<string>? TypingCandidates(CompositionState state, CompositionEnv env)
+    internal static List<string>? TypingCandidates(CompositionState state, CompositionEnv env)
     {
         if (!env.Settings.ShowCandidatesWhileTyping || state.Text.Mode != DisplayMode.Auto || state.Text.KanaInput || CompositionText.IsAlphanumeric(state.Text, env) || CompositionText.IsEmpty(state.Text)) return null;
         var kana = CompositionText.AllKana(state.Text, env, final: false);
         if (kana.Length < 2 || !kana.All(c => c is >= 'ぁ' and <= 'ゖ' or 'ー')) return null;
-        var candidates = JapaneseCandidates(state, WithoutWaiting(env), kana, null, SegmentBefore(env, ""), zenzai: true).Take(5).ToList();
+        var candidates = CompositionConversion.JapaneseCandidates(state, env.WithoutWaiting(), kana, null, CompositionConversion.SegmentBefore(env, ""), zenzai: true).Take(5).ToList();
         return candidates.Count > 1 ? candidates : null;
     }
 
@@ -177,8 +176,8 @@ internal static partial class CompositionController
     {
         var starts = new List<(string Before, string Reading, string[] Heads)> { ("", kana, []) };
         // 文節の区切りはライブ変換の結果を使う (打鍵ごとに変換を増やさない)。ライブ変換が OFF のときと、読みが短いうちは読み全体だけ
-        if (!env.Settings.LiveConversion || !CountsAsLive(kana)) return starts;
-        var clauses = LiveClauses(state, env, kana, afterEnglish: false, SegmentBefore(env, ""));
+        if (!env.Settings.LiveConversion || !CompositionConversion.CountsAsLive(kana)) return starts;
+        var clauses = CompositionConversion.LiveClauses(state, env, kana, afterEnglish: false, CompositionConversion.SegmentBefore(env, ""));
         if (clauses.Count < 2) return starts;
         var last = clauses[^1];
         // 見えている文字の終わりが最後の文節 (変換した文字か、変換していない読み) のときだけ。
@@ -192,13 +191,37 @@ internal static partial class CompositionController
     private static string PredictionKey(CompositionState state) => CompositionText.Raw(state.Text) + "\u0001" + state.Text.Mode;
 
     /// <summary>今の打ちかけの予測の候補 (キーをまとめて処理しているときにも、打った内容に合わせて作り直す)。</summary>
-    private static List<Prediction> CurrentPredictions(CompositionState state, CompositionEnv env)
+    internal static List<Prediction> CurrentPredictions(CompositionState state, CompositionEnv env)
     {
         UpdatePredictions(state, env, blocked: false);
         return state.Predictions?.Items ?? [];
     }
 
     /// <summary>Tab で選んでいる予測の候補 (打った内容が選んだときのままのときだけ)。</summary>
-    private static Prediction? SelectedPrediction(CompositionState state) =>
+    internal static Prediction? SelectedPrediction(CompositionState state) =>
         state.Predictions is { Index: >= 0 } p && p.Index < p.Items.Count && p.Key == PredictionKey(state) ? p.Items[p.Index] : null;
+
+    /// <summary>今の表示 (確定するときと同じく打ち間違いを直した形。ライブ変換が有効なら日本語区間は漢字に変換済み)。</summary>
+    internal static ComposedText CurrentComposed(CompositionState state, CompositionEnv env, bool final) =>
+        CompositionText.AsCommitted(state.Text, env, text => CompositionText.Compose(text, env, final, env.Settings.LiveConversion ? (kana, afterEnglish, shown) => CompositionConversion.LiveConvert(state, env, kana, afterEnglish, CompositionConversion.SegmentBefore(env, shown)) : null));
+
+    /// <summary><see cref="CurrentComposed"/> の文字。</summary>
+    internal static string CurrentDisplay(CompositionState state, CompositionEnv env, bool final) => CurrentComposed(state, env, final).Text;
+
+    /// <summary>
+    /// 変換していないときに確定する文字。答えを後から受け取れるフロントでは、ライブ変換の答えが間に合っていなくても env.Deadline までは答えを待つ
+    /// (受け取れないフロントは、表示のときから待っている)。
+    /// </summary>
+    internal static ComposedText CommittedDisplay(CompositionState state, CompositionEnv env) => env.LateResults
+        ? CompositionText.AsCommitted(state.Text, env, committed => CompositionText.Compose(committed, env, final: true, env.Settings.LiveConversion
+            ? (kana, afterEnglish, shown) => CompositionConversion.CountsAsLive(kana) ? Composed(CompositionConversion.ConvertJapaneseSegment(state, env, kana, afterEnglish, CompositionConversion.SegmentBefore(env, shown), zenzai: true)) : ComposedText.Kana(kana)
+            : null))
+        : CurrentComposed(state, env, final: true);
+
+    /// <summary>文節の文字。</summary>
+    internal static ComposedText Composed(IEnumerable<Clause> clauses) => ComposedText.Concat(clauses.Select(c => Candidate(c, c.Text)));
+
+    /// <summary>予測の候補を、前の文節 (見えている文字) とつなげた文字。</summary>
+    internal static ComposedText PredictionText(Prediction prediction) =>
+        ComposedText.Kana(prediction.Before) + ComposedText.Of(prediction.Text.All(c => c < 0x80) ? SpanKind.English : SpanKind.Japanese, prediction.Text);
 }

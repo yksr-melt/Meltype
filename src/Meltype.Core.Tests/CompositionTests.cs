@@ -6184,7 +6184,7 @@ internal static class CompositionTests
             ("I want to go", null, null, "I want to go"),          // 英文はそのまま
         })
         {
-            Assert.Equal(expected, CompositionController.AddSpacesAroundEnglish(text, before, after), text);
+            Assert.Equal(expected, CompositionCommit.AddSpacesAroundEnglish(text, before, after), text);
         }
     }
 
@@ -6207,7 +6207,7 @@ internal static class CompositionTests
             ("買う", null, "15Pro", false, "買う"),                     // キャレットの後ろの語も同じ
         })
         {
-            Assert.Equal(expected, CompositionController.AddSpacesAroundEnglish(text, before, after, english, numbers: true), text);
+            Assert.Equal(expected, CompositionCommit.AddSpacesAroundEnglish(text, before, after, english, numbers: true), text);
         }
     }
 

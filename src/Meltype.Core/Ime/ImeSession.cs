@@ -580,7 +580,7 @@ internal static class ImeSession
             After = state.Field?.After,
             LateResults = lateResults,
             Deadline = lateResults ? 0 : long.MaxValue,
-            Context = () => CompositionController.ContextOf(state.Composition, composition),
+            Context = () => CompositionContext.ContextOf(state.Composition, composition),
         };
         return composition;
     }
