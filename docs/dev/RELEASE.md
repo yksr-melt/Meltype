@@ -100,6 +100,6 @@ node tools/make-manifests.mjs 1.2.0 dist/Meltype-1.2.0-mac.zip dist/Meltype-1.2.
     sudo apt update
     sudo apt install meltype
     ```
-- **dnf (.rpm)**: linux.yml が x86_64 / aarch64 の `meltype` と `meltype-fcitx5` の `.rpm` を Fedora 44 で作り、AlmaLinux 9 で `meltype` を入れて確かめて、release.yml がリリースに付けます。apt と同じ署名鍵 (`APT_SIGNING_KEY_B64`) で署名した dnf リポジトリを、apt リポジトリと一緒に GitHub Pages の `/rpm` に公開します (Pages の設定は apt と共通です)。
+- **dnf (.rpm)**: linux.yml が本体・設定アプリ・Mozc・llama-server を glibc 2.34 の manylinux コンテナでビルドし、fcitx5 のアドオンと x86_64 / aarch64 の `meltype`・`meltype-fcitx5` の `.rpm` を Fedora 44 で作ります。AlmaLinux 9 で `meltype` を入れて確かめて、release.yml がリリースに付けます。apt と同じ署名鍵 (`APT_SIGNING_KEY_B64`) で署名した dnf リポジトリを、apt リポジトリと一緒に GitHub Pages の `/rpm` に公開します (Pages の設定は apt と共通です)。
   - 使う人は `sudo dnf config-manager addrepo --from-repofile=https://yksr-melt.github.io/Meltype/rpm/meltype.repo` (RHEL 9 系は `sudo dnf config-manager --add-repo https://yksr-melt.github.io/Meltype/rpm/meltype.repo`) を一度行うと、`sudo dnf upgrade` で更新できます
 

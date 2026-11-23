@@ -83,16 +83,29 @@ jobs:
       - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: 10.0.x
-      # NativeAOT のリンクと、fcitx5 のアドオン・テストに使うもの
+      # fcitx5 のアドオン・テストと、IBus の結合テストに使うもの
       - name: Packages
         run: |
           sudo apt-get -o Acquire::Retries=3 update
-          sudo apt-get -o Acquire::Retries=3 install -y clang lld pkg-config zlib1g-dev python3 python3-gi gir1.2-ibus-1.0 \
+          sudo apt-get -o Acquire::Retries=3 install -y pkg-config python3 python3-gi gir1.2-ibus-1.0 \
             ibus dbus-x11 xvfb xauth \
             cmake fcitx5 fcitx5-modules-dev libfcitx5core-dev libfcitx5utils-dev libfcitx5config-dev
       - uses: ./.github/actions/linux-native
+      # NativeAOT も、Mozc・llama-server と同じ glibc 2.34 でリンクする。
+      # Ubuntu でリンクした設定アプリは fmod@GLIBC_2.38 を要求し、RHEL 9 系では rpm を入れられない。
       - name: Build
-        run: linux/build.sh
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp/home -e DOTNET_ROOT=/dotnet -e GITHUB_REF -e GITHUB_REF_TYPE \
+            -v "$PWD:/repo" -v "$DOTNET_ROOT:/dotnet:ro" -w /repo \
+            "quay.io/pypa/manylinux_2_34_$NATIVE_MANYLINUX:2026.11.01-2" \
+            bash -c 'export PATH="/dotnet:$PATH"; linux/build.sh'
+      # fcitx5 は Ubuntu のライブラリで使うので、アドオンだけはランナー側でビルドする (rpm は Fedora で作り直す)。
+      - name: Build fcitx5 addon
+        run: |
+          cmake -S linux/fcitx5 -B linux/build/fcitx5 -DMELTYPE_DIR=/opt/meltype -DCMAKE_BUILD_TYPE=Release
+          cmake --build linux/build/fcitx5
+          mkdir -p linux/build/Meltype-linux/fcitx5
+          cp linux/build/fcitx5/meltype.so linux/fcitx5/meltype-addon.conf linux/fcitx5/meltype.conf linux/build/Meltype-linux/fcitx5/
       # fcitx5 のアドオンを、fcitx5 のテスト用のフロントエンドで動かす。Mozc を外した本体だけで、かなの確定と変換の候補を見る
       - name: Test fcitx5 addon
         run: |

@@ -23,6 +23,8 @@ bash linux/build-cli.sh --setup --all
 
 `--all` は、本体のテスト → Mozc のヘルパーのビルド → パッケージの作成までをまとめて行います。できたものは `linux/build/Meltype-linux/` に入ります。
 
+配布用の CI は、本体・設定アプリの NativeAOT と Mozc・llama-server を、対応する中で最も古い glibc 2.34 の manylinux コンテナでビルドします。fcitx5 のアドオンだけは、`.deb` 用を Ubuntu 24.04、`.rpm` 用を Fedora 44 でビルドします。手元で `linux/build.sh` を実行した場合は、その環境の glibc に対してリンクするので、古いディストリビューションに配るときは CI と同じ環境で作ってください。
+
 一部だけ行うときは、次のように分けて実行できます。
 
 ```bash
