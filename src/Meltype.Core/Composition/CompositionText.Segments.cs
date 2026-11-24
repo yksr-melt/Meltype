@@ -215,7 +215,7 @@ internal static partial class CompositionText
     /// </summary>
     private static List<CompositionUnit>? HalfWidthOpeners(CompositionTextState state, IReadOnlyList<CompositionSegment> segments)
     {
-        if (state.KanaInput || !state.Units.Any(u => Openers.ContainsKey(u.Raw) && u.Kana != u.Raw)) return null;
+        if (state.KanaInput || !state.Units.Any(u => Openers.ContainsKey(u.Raw))) return null;
         // 打った英字の 1 文字ずつが英語の区間か
         var english = new List<bool>();
         foreach (var segment in segments) foreach (var _ in segment.Raw) english.Add(segment.IsEnglish);
@@ -226,11 +226,20 @@ internal static partial class CompositionText
         List<CompositionUnit>? adjusted = null;
         for (var i = 0; i < state.Units.Count; i++)
         {
-            if (!Openers.TryGetValue(state.Units[i].Raw, out var closer) || state.Units[i].Kana == state.Units[i].Raw) continue;
+            if (!Openers.TryGetValue(state.Units[i].Raw, out var closer)) continue;
             if (state.FullWidthParentheses && state.Units[i].Raw == "(") continue; // 設定「カッコを全角で入力」: 英語のそばでも全角のまま
+            var closing = Enumerable.Range(i + 1, state.Units.Count - i - 1).FirstOrDefault(k => state.Units[k].Raw == closer, -1);
+            // 開きと閉じは同じ幅にする。開きが半角 (英語の区間で打った printf(') なら、中が日本語でも閉じを半角にする
+            // (printf('こんにちは') の閉じの ' だけ全角 ’ になり、コードの文字列が閉じなくなっていた #2221)
+            if (IsHalf(i))
+            {
+                if (closing < 0 || IsHalf(closing)) continue;
+                adjusted ??= [.. state.Units];
+                adjusted[closing] = state.Units[closing] with { Kana = state.Units[closing].Raw };
+                continue;
+            }
             var nextIsEnglish = i + 1 < state.Units.Count ? offsets[i + 1] < english.Count && english[offsets[i + 1]] && char.IsAsciiLetter(state.Units[i + 1].Raw[0])
                 : CompositionText.Pending(state).Length > 0 && segments.Count > 0 && segments[^1].IsEnglish;
-            var closing = Enumerable.Range(i + 1, state.Units.Count - i - 1).FirstOrDefault(k => state.Units[k].Raw == closer, -1);
             // 閉じの記号が英語の語のすぐ後ろ (間の記号 ! . は飛ばす: …Through!") なら、閉じも、間の記号も半角にする
             var afterEnglish = -1;
             if (closing > i)
