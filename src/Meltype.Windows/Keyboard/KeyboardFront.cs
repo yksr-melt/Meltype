@@ -204,7 +204,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
             (IsDown(VirtualKeys.LWin) || IsDown(VirtualKeys.RWin) ? 8 : 0);
         if (state.HandlesInput && !_stale)
         {
-            if (state.Capture.Shortcuts.Any(key => ToggleShortcut.NormalizeHankakuKey(key.Vk) == ToggleShortcut.NormalizeHankakuKey(e.ShortcutKey) && key.Modifiers == mods)) return true;
+            if (state.Capture.Shortcuts.Any(key => ToggleShortcut.NormalizeKey(key.Vk) == ToggleShortcut.NormalizeKey(e.ShortcutKey) && key.Modifiers == mods)) return true;
             return (mods & ~1) == 0 && KeyText.CharFromKey(e.Vk, e.Scan, (mods & 1) != 0) is { } c && c is > ' ' and <= '~' &&
                 state.Capture.PrintableAscii && !state.Capture.PrintableAsciiExcept.Contains(c);
         }
