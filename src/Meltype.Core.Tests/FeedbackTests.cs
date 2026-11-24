@@ -1222,6 +1222,9 @@ internal static class LanguageLearningTests
         Assert.True(!memory.Entries().Single().Active, "一覧では「2 回目を待っている」");
         memory.Remember("go", english: true);
         Assert.Equal(true, memory.Get("go"), "2 回目で英語として覚える");
+        memory.Remember("no", english: true, context: true);
+        Assert.Equal(null, memory.Get("no", context: true), "文脈ごとに分けても、1 回目はまだ覚えない");
+        Assert.True(!memory.Entries().Single(e => e.Word == "no").Active, "文脈ごとに分けても、一覧では「2 回目を待っている」");
         memory.Remember("to", english: true, explicitChoice: true);
         Assert.Equal(true, memory.Get("to"), "F10 ではっきり直したら 1 回で覚える");
         memory.Remember("api", english: true);
