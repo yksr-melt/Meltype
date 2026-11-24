@@ -28,7 +28,7 @@ GitHub Actions では `.github/workflows/windows.yml` の `mozc` ジョブが同
 
 Linux・macOS では `native/mozc/build-mozc-helper.sh` でビルドします (macOS は Xcode が要る。`mac.yml` の Mac 版のビルドも同じスクリプト)。GitHub Releases の依存ファイルは Bazel の公式ミラー (`mirror.bazel.build`) を先に試し、なければ元の URL から取得します。取得した内容は、依存関係の定義にあるハッシュで Bazel が検証します。
 
-Meltype は Mozc に学習させません。Mozc のユーザーデータの場所 (`%LOCALAPPDATA%\Meltype\mozc\`) は、Meltype が起動のたびに空にします。
+Meltype は Mozc に学習させません。Mozc のユーザーデータの場所 (`%LOCALAPPDATA%\Meltype\mozc\`) は、Meltype が起動のたびに学習データ (`boundary.db`・`segment.db`) だけを消します。
 
 ## Mozc-UT の辞書を使う (任意)
 

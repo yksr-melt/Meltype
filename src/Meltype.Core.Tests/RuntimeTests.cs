@@ -68,8 +68,12 @@ internal static class RuntimeTests
             Directory.CreateDirectory(profile);
             File.WriteAllText(Path.Combine(profile, "boundary.db"), "");
             File.WriteAllText(Path.Combine(profile, "segment.db"), "");
-            runtime.CreateConverter(Path.Combine(directory, "app-without-helpers"));
-            Assert.True(!Directory.Exists(profile) || Directory.GetFileSystemEntries(profile).Length == 0, "前の版の Mozc の学習データを捨てる");
+            var helper = Path.Combine(profile, "meltype_mozc_helper");
+            File.WriteAllText(helper, "installed helper");
+            runtime.CreateConverter(directory);
+            Assert.True(!File.Exists(Path.Combine(profile, "boundary.db")), "前の版の区切りの学習を捨てる");
+            Assert.True(!File.Exists(Path.Combine(profile, "segment.db")), "前の版の候補の学習を捨てる");
+            Assert.Equal("installed helper", File.ReadAllText(helper), "アプリの配置先と同じデータフォルダーでも、ヘルパーを残す");
         });
     }
 

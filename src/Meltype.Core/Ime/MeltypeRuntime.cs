@@ -172,7 +172,7 @@ public sealed class MeltypeRuntime : IDisposable
     }
 
     /// <summary>
-    /// Mozc のユーザーデータの場所。Meltype は Mozc に学習させないので、起動のたびに空にする。
+    /// Mozc のユーザーデータの場所。Meltype は Mozc に学習させないので、起動のたびに学習データだけを消す。
     /// 前の版が Mozc に覚えさせた文節の区切りと候補 (boundary.db・segment.db など) は、読みを誤った位置で区切る変換を固定するので捨てる (issue #2014)。
     /// 場所は残す (渡さないと、Mozc は入れてある Mozc のユーザーデータを読む)。
     /// </summary>
@@ -181,7 +181,10 @@ public sealed class MeltypeRuntime : IDisposable
         var profile = Path.Combine(DataDirectory, "mozc");
         try
         {
-            if (Directory.Exists(profile)) Directory.Delete(profile, recursive: true);
+            // MELTYPE_DATA_DIR がアプリの配置先と同じでも、mozc/ にあるヘルパーや辞書は消さない。
+            // 変換の区切りと候補を覚えるファイルだけを捨てる (#2014)。
+            if (Directory.Exists(profile))
+                foreach (var name in new[] { "boundary.db", "segment.db" }) File.Delete(Path.Combine(profile, name));
         }
         catch (IOException ex)
         {
