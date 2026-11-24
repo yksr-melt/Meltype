@@ -116,6 +116,15 @@ bool IsTkWindow(HWND window) {
     return window != nullptr && GetClassNameW(window, name, 16) > 0 && lstrcmpW(name, L"TkChild") == 0;
 }
 
+// フォーカス移動で前の変換を確定するときも、確定元の TSF コンテキストの窓へ送る (#1463)。
+// GetFocus() は既に移動先の窓なので、送り先には使えない。
+HWND ContextWindow(ITfContext* context) {
+    Microsoft::WRL::ComPtr<ITfContextView> view;
+    HWND window = nullptr;
+    if (context != nullptr && SUCCEEDED(context->GetActiveView(&view))) view->GetWnd(&window);
+    return window;
+}
+
 bool PostText(HWND window, const std::wstring& text) {
     for (const wchar_t ch : text) {
         if (!PostMessageW(window, WM_CHAR, ch, 1)) {
@@ -1654,7 +1663,8 @@ void TextService::MoveCaretAfterCommit(TfEditCookie ec, ITfContext* context, ITf
 
 bool TextService::ExtendOverPrevious(TfEditCookie ec, ITfRange* range, LONG count, const JsonValue& expect) {
     // Tk には文字を書き込まずにポストするので (IsTkWindow)、前に確定した文字を消せない。確定し直さない
-    if (IsTkWindow(GetFocus())) return false;
+    Microsoft::WRL::ComPtr<ITfContext> context;
+    if (SUCCEEDED(range->GetContext(&context)) && IsTkWindow(ContextWindow(context.Get()))) return false;
     Microsoft::WRL::ComPtr<ITfRange> previous;
     if (FAILED(range->Clone(&previous))) return false;
     previous->Collapse(ec, TF_ANCHOR_START);
@@ -1704,7 +1714,7 @@ void TextService::RewriteBeforeCaret(ITfContext* context, ITfRange* end, LONG co
 
 bool TextService::WriteCommit(TfEditCookie ec, ITfContext* context, ITfRange* range, const std::wstring& text, int caretBack, ITfRange** movedCaret) {
     // Tk には、変換中の文字を消して確定してから、文字をポストする (上の IsTkWindow のワークアラウンド)
-    if (const HWND window = GetFocus(); IsTkWindow(window)) {
+    if (const HWND window = ContextWindow(context); IsTkWindow(window)) {
         if (composition_ != nullptr) {
             ITfRange* composing = nullptr;
             if (SUCCEEDED(composition_->GetRange(&composing))) {
