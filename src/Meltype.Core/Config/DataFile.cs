@@ -63,15 +63,29 @@ internal static class DataFile
     }
 
     /// <summary>
-    /// path があれば中身を load に渡す。読めなかったら (壊れていたら) .broken に残してログに出す。
+    /// path があれば中身を load に渡す。中身が壊れていたら .broken に残してログに出す。
+    /// ファイルを読めなかった (ほかのプロセスが開いている・一時的に読めない) ときは、壊れてはいないので .broken に残さず、false を返す。
+    /// 呼び出し側は、前の中身のまま続け、読めなかったファイルを上書きしない (一時的に読めないだけで中身が消える: issue #2272)。
+    /// stamp を渡すと、読めなかったときに忘れさせる (次の <see cref="FileStamp.Changed"/> で読み直す)。
     /// what は「定型文を読めませんでした」のように、ログに出す名前。
     /// </summary>
-    public static void Load(string? path, string what, Action<string> load)
+    public static bool Load(string? path, string what, Action<string> load, FileStamp? stamp = null)
     {
-        if (path is null || !File.Exists(path)) return;
+        if (path is null || !File.Exists(path)) return true;
+        string content;
         try
         {
-            load(File.ReadAllText(path));
+            content = File.ReadAllText(path);
+        }
+        catch (Exception ex) when (IsFileError(ex))
+        {
+            Diagnostics.Log.Warn($"{what}を読めませんでした: {ex.Message}");
+            stamp?.Forget();
+            return false;
+        }
+        try
+        {
+            load(content);
         }
         catch (Exception ex)
         {
@@ -79,5 +93,6 @@ internal static class DataFile
             catch (Exception copyEx) when (IsFileError(copyEx)) { Diagnostics.Log.Warn($"{Path.GetFileName(path)} を .broken に残せませんでした: {copyEx.Message}"); }
             ReportUnreadable(what, ex);
         }
+        return true;
     }
 }
