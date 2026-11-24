@@ -708,11 +708,11 @@ internal static partial class CompositionController
     /// </summary>
     private static void AddCandidates(CompositionState state, CompositionEnv env, Clause clause)
     {
-        if (clause.Engine is not { } engine) return;
+        if (clause.Engine is not { } engine || clause.EngineCandidatesAdded) return;
         var (chosen, text) = (clause.Candidates, clause.Text);
         clause.Candidates = [.. chosen, .. JapaneseCandidates(state, env, clause.Reading, engine, null, zenzai: false).Where(c => !chosen.Contains(c))];
         clause.Index = clause.Candidates.IndexOf(text);
-        clause.Engine = null;
+        clause.EngineCandidatesAdded = true;
     }
 
     /// <summary>
@@ -992,12 +992,12 @@ internal static partial class CompositionController
     private static bool CountsAsLive(string kana) =>
         kana.Where((c, i) => IsKana(c) && !(i > 0 && KanaChars.IsSmallKana(c) && IsKana(kana[i - 1]))).Count() >= LiveConversionMinLength;
 
-    /// <summary>ライブ変換の文節 (読みと変換した文字)。予測変換で最後の文節を探すときも、同じ打鍵で変換した結果を使う。</summary>
-    private static List<(string Reading, string Text)> LiveClauses(CompositionState state, CompositionEnv env, string kana, bool afterEnglish, string before)
+    /// <summary>ライブ変換の文節 (読み・変換エンジンの答え・学習などで選び直した後の文字)。予測変換で最後の文節を探すときも、同じ打鍵で変換した結果を使う。</summary>
+    private static List<(string Reading, string? Engine, string Text)> LiveClauses(CompositionState state, CompositionEnv env, string kana, bool afterEnglish, string before)
     {
         var key = string.Join("\u0001", kana, afterEnglish, before, EnglishInComposition(state, env), env.Context().FollowingText, env.Services.History?.Version);
         if (state.LiveCache.TryGetValue(key, out var cached)) return cached;
-        var clauses = ConvertJapaneseSegment(state, WithoutWaiting(env), kana, afterEnglish, before, zenzai: true).Select(c => (c.Reading, c.Text)).ToList();
+        var clauses = ConvertJapaneseSegment(state, WithoutWaiting(env), kana, afterEnglish, before, zenzai: true).Select(c => (c.Reading, c.Engine, c.Text)).ToList();
         if (state.LiveCache.Count > 256) state.LiveCache.Clear();
         state.LiveCache[key] = clauses;
         return clauses;
