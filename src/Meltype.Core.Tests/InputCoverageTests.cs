@@ -13,8 +13,8 @@ internal static class InputCoverageTests
     [Test]
     public static void SpaceAroundEnglish_SeparatesEnglishFromJapanese()
     {
-        Assert.Equal("今日は google で検索", CompositionController.AddSpacesAroundEnglish("今日はgoogleで検索", null, null));
-        Assert.Equal("今日は google で検索", CompositionController.AddSpacesAroundEnglish("今日は google で検索", null, null));
+        Assert.Equal("今日は google で検索", CompositionCommit.AddSpacesAroundEnglish("今日はgoogleで検索", null, null));
+        Assert.Equal("今日は google で検索", CompositionCommit.AddSpacesAroundEnglish("今日は google で検索", null, null));
     }
 
     [Test]

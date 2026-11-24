@@ -55,6 +55,7 @@ enum KeyMapping {
         // 入力モードのキー (意味は本体が決める)
         case kVK_JIS_Eisu: return 0xF0
         case kVK_JIS_Kana: return 0x15
+        case kVK_CapsLock: return 0x14
         default: return nil
         }
     }
