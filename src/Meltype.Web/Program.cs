@@ -91,8 +91,8 @@ public static partial class WebExports
 
     /// <summary>
     /// <see cref="ExportData"/> で取り出したファイルを戻す。<see cref="Init"/> の前 (前に保存したもの) と、
-    /// ほかのタブが保存したときに呼ぶ。動いている Core は、ほかのプロセスがファイルを書き換えたときと同じく、
-    /// 1 秒ごとの確かめ (<see cref="MeltypeRuntime"/> の Learning.Refresh) で読み直す。
+    /// ほかのタブが保存したときに呼ぶ。動いている Core は、ほかのプロセスがファイルを書き換えたときと同じく読み直す。
+    /// 1 秒ごとの確かめを待たずにすぐ読み直す (待つ間に確定すると、覚えたことを保存のときに捨てるため)。
     /// </summary>
     [JSExport]
     public static void ImportData(string json)
@@ -107,6 +107,7 @@ public static partial class WebExports
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             File.WriteAllText(path, content);
         }
+        s_runtime?.Learning.Refresh();
     }
 
     /// <summary>学習データをすべて消す (ユーザー辞書と設定は消さない)。</summary>
