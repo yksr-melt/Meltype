@@ -257,7 +257,15 @@ internal static class ImeSession
             if (caret.Moved)
             {
                 ForgetLastCommit(state);
-                ForgetDirectInput(state);
+                // 確定済みの英語の続きを通したときは、同じ語の途中から判定し直さない。
+                // キーボードは続いた通知をまとめ、途中の通知では入力欄を省く。
+                if (DirectEnglishWord(state) &&
+                    caret is { FocusLeft: false, FocusEntered: false, Ctrl: false, PassedKey: > 0, PassedChar: >= '!' and <= '~' and var passedChar } &&
+                    EnglishWordCharacters.Contains((char)passedChar) &&
+                    (e.Field is null || e.Field is { Composing: false, Selection: null or "", Before: [.., var last] } && last == passedChar))
+                    CompositionController.AbandonDirectHold(state.Composition);
+                else
+                    ForgetDirectInput(state);
             }
             if (caret.PassedKey is { } vk) CaretMoved(state, vk, caret.Ctrl);
             // 入力欄を出入りした (入った知らせだけで、出た知らせが来ないこともある)
