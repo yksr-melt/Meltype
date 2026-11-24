@@ -125,7 +125,7 @@ internal static partial class CompositionText
             }
             state.Pending.Insert(0, pulled.ToString());
             // zh / zj / zk / zl → ← ↓ ↑ →。z が 1 文字のときだけ (puzzle の zz の次の l は英単語)。
-            if (state.Pending.Length == 1 && char.ToLowerInvariant(state.Pending[0]) == 'z' && env.Settings.ZSymbols && ZSymbol(c) is { } arrow)
+            if (state.Pending.Length == 1 && char.ToLowerInvariant(state.Pending[0]) == 'z' && ZSymbol(c) is { } arrow)
             {
                 var raw = state.Pending[0].ToString() + c;
                 state.Pending.Clear();
@@ -138,7 +138,7 @@ internal static partial class CompositionText
             CompositionText.Normalize(state, env, final: false);
             return;
         }
-        if (state.Pending.Length > 0 && char.ToLowerInvariant(state.Pending[^1]) == 'z' && env.Settings.ZSymbols && ZSymbol(c) is { } z)
+        if (state.Pending.Length > 0 && char.ToLowerInvariant(state.Pending[^1]) == 'z' && ZSymbol(c) is { } z)
         {
             var raw = state.Pending[^1].ToString() + c;
             state.Pending.Length--;

@@ -477,7 +477,7 @@ internal static class SessionFacadeTests
     public static void Predictions_SentToNativeSide()
     {
         // Meltype IME の DLL も予測変換の候補の一覧を出せるように、候補と Tab で選んでいる候補を JSON に入れる
-        var session = new TestSession(() => new Settings { PredictiveCandidates = true },
+        var session = new TestSession(() => new Settings(),
             services: new CompositionServices { Predictor = new Predictor(null, null, null) });
         // 固定の操作ガイドを出さない OS・入力方式 (Settings.ShowsGuide) では、文脈の案内だけ
         static string Guide(string hint) => new Settings().ShowsGuide ? hint : "";
@@ -507,7 +507,7 @@ internal static class SessionFacadeTests
     public static void SelectPrediction_Commits()
     {
         // Meltype IME の候補の一覧で予測変換の候補をクリックしたら、その候補を確定する
-        var session = new TestSession(() => new Settings { PredictiveCandidates = true },
+        var session = new TestSession(() => new Settings(),
             services: new CompositionServices { Predictor = new Predictor(null, null, null) });
         var predictions = Type(session, "decis", "I made ")[^1].View!.Predictions!;
         var result = session.SelectCandidate(1);

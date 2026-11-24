@@ -30,7 +30,7 @@ internal static class SlashDateTests
         space.Type("1/2 ");
         Assert.Equal("1/2 ", space.Host.Document, "Space では日付にしない");
         // 計算式の結果の候補は、日付の候補より先に残る
-        var calc = new Keyboard(now: () => new DateTime(2026, 10, 1)) { CalculatorCandidates = true };
+        var calc = new Keyboard(now: () => new DateTime(2026, 10, 1));
         calc.Type("1/2");
         calc.Press(VirtualKeys.Convert);
         var candidates = calc.Host.View!.Candidates.ToList();

@@ -30,7 +30,7 @@ public:
         std::ofstream config(directory_ + "/config.json");
         config << R"({"SettingsVersion":5,"DetectionLevel":")"
                << (manual ? "Manual" : "Balanced")
-               << R"(","InputStyle":"Romaji","LiveConversion":false,"LearningEnabled":false,"PredictiveCandidates":false,"TabConversion":true,"SpaceAroundEnglish":false)" << guideSetting << '}';
+               << R"(","InputStyle":"Romaji","LiveConversion":false,"LearningEnabled":false,"TabConversion":true,"SpaceAroundEnglish":false)" << guideSetting << '}';
         return config.good() && setenv("MELTYPE_DATA_DIR", directory_.c_str(), 1) == 0;
     }
 

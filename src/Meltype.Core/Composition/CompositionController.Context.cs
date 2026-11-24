@@ -22,7 +22,6 @@ internal static partial class CompositionController
         state.Text.KanaInput = KanaInput(state, env);
         state.Text.FullWidthParentheses = env.Settings.FullWidthParentheses;
         state.Text.SquareBrackets = env.Settings.SquareBrackets;
-        state.Text.LaughterAfterKana = env.Settings.LaughterAfterKana;
     }
 
     /// <summary>

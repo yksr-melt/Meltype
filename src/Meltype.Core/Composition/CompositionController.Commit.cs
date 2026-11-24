@@ -147,10 +147,10 @@ internal static partial class CompositionController
         CommitText(state, env, text, english: false, preserveText: true, rule: "保護区間 (メンション・URL・メール・パス) で終わるので、打ったまま");
     }
 
-    /// <summary>確定した日本語の語句を、予測変換のために覚える (設定「予測変換」が ON のとき)。</summary>
+    /// <summary>確定した日本語の語句を、予測変換のために覚える 。</summary>
     private static void RememberPhrase(CompositionState state, CompositionEnv env, string reading, string text, bool english)
     {
-        if (!english && Learning(state, env) && env.Settings.PredictiveCandidates) env.Learning.RememberPhrase(reading, text);
+        if (!english && Learning(state, env)) env.Learning.RememberPhrase(reading, text);
     }
 
     /// <summary>確定した文節を学習する。設定「ユーザー学習を使う」が OFF なら、新しく覚えない (issue #277)</summary>

@@ -265,7 +265,7 @@ internal static partial class CompositionController
     private static UtilityCandidates? Utilities(CompositionState state, CompositionEnv env, IReadOnlyList<CompositionSegment> segments)
     {
         var reading = segments is [{ IsEnglish: false, Kana.Length: > 0 } only] ? only.Kana : null;
-        var context = new UtilityContext(env.Settings, env.Services.Now(), env.Services.UtcNow(), env.Services.LocalTimeZone(), env.Clipboard, env.NowPlaying, env.Services.GitHubTitles(), env.OtherTipVersion);
+        var context = new UtilityContext(env.Settings, env.Services.Now(), env.Clipboard, env.NowPlaying, env.Services.GitHubTitles(), env.OtherTipVersion);
         return UtilityConversions.Convert(new UtilityInput(state.Text, reading, state.Direct, context));
     }
 
@@ -322,7 +322,7 @@ internal static partial class CompositionController
     /// </summary>
     private static void AddTranslations(CompositionState state, CompositionEnv env, Clause clause)
     {
-        if (clause.IsEnglish || env.Services.Translations is not { } dictionary || !env.Settings.TranslationCandidates) return;
+        if (clause.IsEnglish || env.Services.Translations is not { } dictionary) return;
         var words = dictionary.Lookup(clause.Text, clause.Reading).Where(w => !clause.Candidates.Contains(w)).ToList();
         if (words.Count == 0) return;
         var learned = env.Services.TranslationHistory?.Get(clause.Reading) ?? [];

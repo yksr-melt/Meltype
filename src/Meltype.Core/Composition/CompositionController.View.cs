@@ -67,7 +67,7 @@ internal static partial class CompositionController
                 clauses,
                 state.SelectedClause,
                 CandidateNotes(selected),
-                env.Settings.ShowCandidateMeanings ? CandidateMeaning(state, env, selected) : null,
+                CandidateMeaning(state, env, selected),
                 Suggestion(MisspellingSuggestion(state, env)),
                 Typed: TypedKeys(state, env),
                 Committed: ComposedText.Concat(clauses), ContextHint: zenzai ? "Zenzai" : null));
@@ -135,7 +135,7 @@ internal static partial class CompositionController
 
     private static List<Prediction> BuildPredictions(CompositionState state, CompositionEnv env)
     {
-        if (env.Services.Predictor is not { } predictor || !env.Settings.PredictiveCandidates || state.Text.Mode != DisplayMode.Auto) return [];
+        if (env.Services.Predictor is not { } predictor || state.Text.Mode != DisplayMode.Auto) return [];
         if (CompositionText.IsAlphanumeric(state.Text, env))
         {
             // 英単語 1 語の打ちかけ (decis → decisions)
@@ -159,7 +159,7 @@ internal static partial class CompositionController
                     heads.Length == 0 ? words : words.Where(w => heads.Any(h => w.StartsWith(h, StringComparison.Ordinal)));
                 Add(Connected(predictor.PredictJapanese(reading)), before, reading);
                 // 英字で書く社名・サービス名 (しゃお → Xiaomi)。日本語の予測の後ろに足す
-                if (env.Settings.EnglishNamePredictions) Add(Connected(predictor.PredictEnglishNames(reading)), before, reading);
+                Add(Connected(predictor.PredictEnglishNames(reading)), before, reading);
             }
         }
         // 長い英単語は、打ち終わるまでローマ字として見えていることがある (decis → でしs)。英字だけを 4 文字以上打っていれば英単語の続きも出す
