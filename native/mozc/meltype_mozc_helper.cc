@@ -4,11 +4,15 @@
 // 標準入力から 1 行に 1 つの要求を受け取り、標準出力に 1 行で答える (UTF-8)。
 //   C<TAB>前の文字列<TAB>読み
 //       変換。文節ごとに「読み<US>候補1<US>候補2…」を <RS> でつないで返す (US = 0x1F, RS = 0x1E)。変換できなければ空行。
+//       ユーザー辞書の語を含む候補 (活用した形も) は、頭に <GS> (0x1D) を付ける。
 //   R<TAB>文字列
 //       逆変換。文字列の読み (ひらがな) を返す。逆変換できなければ空行。
+//   D<TAB>読み1<US>語1<US>品詞1<RS>読み2<US>語2<US>品詞2…
+//       ユーザー辞書。語をすべて入れ替え、変換に使えるようにしてから "OK" (できなければ "NG") を返す。
+//       品詞は Mozc の品詞名 (名詞・人名・動詞ワ行五段…) か、ほかの日本語入力の品詞名 (さ変名詞・ら行五段…)。知らない品詞は名詞。
+//       語はメモリにだけ置き、起動し直したら Meltype が送り直す。
 //   Q   終了する。
-// 起動が終わったら "READY" を 1 行出す。引数 1 つ目は Mozc のユーザーデータの場所 (省略可)。
-// Mozc には何も学習させない。確定した区切りを覚えさせると、読みを誤った位置で区切る変換を固定してしまう (issue #2014)。
+// 起動が終わったら "READY" を 1 行出す。引数 1 つ目は学習データの保存先 (省略可)。
 
 #include <iostream>
 #include <memory>
@@ -16,19 +20,26 @@
 #include <utility>
 #include <vector>
 
+#include "absl/status/status.h"
+#include "absl/strings/str_cat.h"
 #include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
 #include "base/init_mozc.h"
 #include "base/system_util.h"
 #include "composer/composer.h"
 #include "config/config_handler.h"
+#include "converter/attribute.h"
 #include "converter/candidate.h"
 #include "converter/converter_interface.h"
 #include "converter/segments.h"
+#include "dictionary/dictionary_interface.h"
+#include "dictionary/user_dictionary_util.h"
+#include "dictionary/user_dictionary_importer.h"
 #include "engine/engine.h"
 #include "engine/engine_factory.h"
 #include "protocol/commands.pb.h"
 #include "protocol/config.pb.h"
+#include "protocol/user_dictionary_storage.pb.h"
 #include "request/conversion_request.h"
 
 #ifdef _WIN32
@@ -40,6 +51,7 @@ namespace {
 
 constexpr char kUnitSeparator = '\x1f';
 constexpr char kRecordSeparator = '\x1e';
+constexpr char kUserDictionaryMark = '\x1d';
 
 class Helper {
  public:
@@ -71,6 +83,7 @@ class Helper {
       out += segment.key();
       for (size_t j = 0; j < segment.candidates_size(); ++j) {
         out += kUnitSeparator;
+        if (segment.candidate(j).attributes & mozc::converter::Attribute::USER_DICTIONARY) out += kUserDictionaryMark;
         out += segment.candidate(j).value;
       }
     }
@@ -108,6 +121,34 @@ class Helper {
       }
     }
     return half;
+  }
+
+  // ユーザー辞書を words の語で入れ替える。Mozc のユーザー辞書のファイル (user_dictionary.db) は使わない。
+  // 品詞は、ほかの日本語入力の品詞名 (Microsoft IME・ATOK など) も Mozc の取り込みと同じ対応表 (ConvertEntry) で読み替える。
+  // build-mozc-helper.sh・Build-MozcHelper.ps1 が、取り込みの Bazel の visibility をこのパッケージに広げている。
+  bool SetDictionary(absl::string_view words) {
+    mozc::user_dictionary::UserDictionaryStorage storage;
+    mozc::user_dictionary::UserDictionary* dictionary = storage.add_dictionaries();
+    for (absl::string_view record : absl::StrSplit(words, kRecordSeparator, absl::SkipEmpty())) {
+      const std::vector<absl::string_view> fields = absl::StrSplit(record, kUnitSeparator);
+      if (fields.size() < 3) return false;
+      const mozc::user_dictionary::RawEntry raw{.key = std::string(fields[0]), .value = std::string(fields[1]), .pos = std::string(fields[2])};
+      mozc::user_dictionary::UserDictionary::Entry entry;
+      // 知らない品詞名は名詞にする (語を落とさない)
+      if (!mozc::user_dictionary::ConvertEntry(raw, &entry)) {
+        entry.set_key(raw.key);
+        entry.set_value(raw.value);
+        entry.set_pos(mozc::user_dictionary::UserDictionary::NOUN);
+      }
+      mozc::user_dictionary::SanitizeEntry(&entry);
+      // Mozc が登録できない語 (読みが長すぎる・使えない文字) は飛ばし、ほかの語は登録する
+      if (!mozc::user_dictionary::ValidateEntry(entry).ok()) continue;
+      *dictionary->add_entries() = std::move(entry);
+    }
+    mozc::dictionary::UserDictionaryInterface& user_dictionary = engine_->GetModulesForTesting().GetUserDictionary();
+    // 起動したときに Mozc がファイルから読む (裏のスレッド) のを待ってから入れ替える (後から上書きされないように)
+    user_dictionary.WaitForReloader();
+    return user_dictionary.Load(storage);
   }
 
  private:
@@ -161,6 +202,8 @@ int main(int argc, char** argv) {
       std::cout << helper.Convert(fields[1], fields[2]) << "\n";
     } else if (fields[0] == "R" && fields.size() >= 2) {
       std::cout << helper.Reverse(fields[1]) << "\n";
+    } else if (fields[0] == "D" && fields.size() >= 2) {
+      std::cout << (helper.SetDictionary(fields[1]) ? "OK" : "NG") << "\n";
     } else {
       std::cout << "\n";
     }

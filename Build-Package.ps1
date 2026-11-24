@@ -104,6 +104,11 @@ dotnet publish (Join-Path $root 'src\Meltype.Windows\Meltype.Windows.csproj') -c
     -p:AppHostDotNetSearch=AppRelative -p:AppHostRelativeDotNet=dotnet
 if ($LASTEXITCODE -ne 0) { throw "ビルドに失敗しました (exit code $LASTEXITCODE)。" }
 
+# 設定アプリ (src\Meltype.Settings)。NativeAOT でビルドし、同梱の .NET ランタイムを使わない (ランタイムは下で Meltype.exe が使うものだけに削るため)。
+# Meltype.exe と同じフォルダーに置く (ポータブル版の印 Meltype.portable を同じフォルダーから見て、同じデータフォルダーを使うため)
+dotnet publish (Join-Path $root 'src\Meltype.Settings\Meltype.Settings.csproj') -c Release -r win-x64 -o $app -p:DebugType=none
+if ($LASTEXITCODE -ne 0) { throw "設定アプリのビルドに失敗しました (exit code $LASTEXITCODE)。" }
+
 # Mozc の変換ヘルパー (native\mozc\Build-MozcHelper.ps1 で作ったもの) を同梱する。無ければ漢字に変換できない (かなのまま)。
 if (Test-Path -LiteralPath (Join-Path $mozcBin 'meltype_mozc_helper.exe')) {
     # ヘルパーが使う Visual C++ のランタイム (MSVCP140.dll など) は、Build-MozcHelper.ps1 がビルドに使った Visual Studio から bin に置いている。
@@ -127,6 +132,14 @@ else {
 # Zenzai (llama.cpp の llama-server と zenz-v3.2-small。native\zenzai\Get-Zenzai.ps1 で取ってきたもの) を同梱する (issue #1120)。
 # 「Zenzai を使う」は既定 ON で、場所が空なら app\zenzai のものを使う。無ければ今までの変換エンジンだけで変換する。
 if (Test-Path -LiteralPath (Join-Path $zenzaiBin 'llama-server.exe')) {
+    # llama-server が使う Visual C++ のランタイム (VCRUNTIME140.dll など) は Get-Zenzai.ps1 が横に置き、VC-RUNTIME.txt に書いている。
+    # 無いまま配ると、「Visual C++ 再頒布可能パッケージ」が入っていない PC で llama-server が起動できない
+    $zenzaiRuntimeList = Join-Path $zenzaiBin 'VC-RUNTIME.txt'
+    $zenzaiRuntimeDlls = if (Test-Path -LiteralPath $zenzaiRuntimeList) { @(Get-Content -LiteralPath $zenzaiRuntimeList | Where-Object { $_.Trim() }) } else { @() }
+    $zenzaiMissing = $zenzaiRuntimeDlls | Where-Object { -not (Test-Path -LiteralPath (Join-Path $zenzaiBin $_)) }
+    if ($zenzaiRuntimeDlls.Count -eq 0 -or $zenzaiMissing) {
+        throw "llama-server と一緒に置く Visual C++ のランタイムがありません ($(if ($zenzaiMissing) { $zenzaiMissing -join ', ' } else { 'VC-RUNTIME.txt' }))。native\zenzai\Get-Zenzai.ps1 を実行し直してください。"
+    }
     New-Item -ItemType Directory -Force -Path (Join-Path $app 'zenzai') | Out-Null
     Copy-Item -Path (Join-Path $zenzaiBin '*') -Destination (Join-Path $app 'zenzai') -Force
     Write-Host 'Zenzai (llama-server とモデル) を同梱しました。'
@@ -163,7 +176,7 @@ Copy-Item -LiteralPath (Join-Path $dotnetRoot 'ThirdPartyNotices.txt') -Destinat
 #      ネイティブの DLL は、デバッグ用 (mscordaccore, mscordbi, DiaSymReader, createdump) と WPF の描画用を削る。
 #   2. 実際に読み込まれたかで削る: 1 の状態で自己診断を走らせ、読み込まれなかった大きなアセンブリ (512KB 超) を削る
 #      (XML・ネットワーク・暗号などは WinForms から参照されているが、Meltype の使い方では読み込まれない)。
-#      設定で ON にしたときだけ使う部品 (Zenzai・GitHub の題名の HTTP など) は、自己診断 (SelfTest.Run) の中で一度使って読み込ませる。
+#      設定で ON にしたときだけ使う部品 (Zenzai・GitHub の題名の HTTP など) は、自己診断 (Core の部品は Meltype.Core の SelfCheck.Checks、画面などは SelfTest.Run) の中で一度使って読み込ませる。
 #      読み込まれないと、ここで削られ、ON にしたとたん動かなくなる (#973)。機能を足すときは、自己診断にも足す。
 #      (Zenzai は loopback の偽の llama-server に変換を頼む。GitHub の題名の HTTPS は型に触るだけで、TLS の接続そのものは自己診断では確かめていない)
 #   どちらの後も自己診断を走らせ、削りすぎていないことを確かめる。
@@ -247,13 +260,13 @@ if ($Step -eq 'Build') {
 }
 
 # コード署名 (証明書があるときだけ): 環境変数 MELTYPE_SIGN_PFX (証明書の .pfx) と MELTYPE_SIGN_PASSWORD を設定すると、
-# Meltype.exe・Meltype.dll・Mozc のヘルパーに署名する (SmartScreen の警告とウイルス対策ソフトの誤検知を減らすため)。
+# Meltype.exe・Meltype.dll・設定アプリ・Mozc のヘルパーに署名する (SmartScreen の警告とウイルス対策ソフトの誤検知を減らすため)。
 # GitHub Actions では、秘密 SIGN_PFX_BASE64 / SIGN_PASSWORD を登録すると windows.yml が設定する。
 if ($env:MELTYPE_SIGN_PFX -and (Test-Path -LiteralPath $env:MELTYPE_SIGN_PFX)) {
     $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
         Where-Object { $_.FullName -like '*\x64\*' } | Sort-Object FullName | Select-Object -Last 1
     if (-not $signtool) { throw 'signtool.exe が見つかりません (Windows SDK が必要です)。' }
-    $targets = @(@('Meltype.exe', 'Meltype.dll', 'Meltype.Core.dll', 'mozc\meltype_mozc_helper.exe') |
+    $targets = @(@('Meltype.exe', 'Meltype.dll', 'Meltype.Core.dll', 'MeltypeSettings.exe', 'mozc\meltype_mozc_helper.exe') |
         ForEach-Object { Join-Path $app $_ } | Where-Object { Test-Path -LiteralPath $_ }) + @(Get-MeltypeImeDlls)
     & $signtool.FullName sign /f $env:MELTYPE_SIGN_PFX /p $env:MELTYPE_SIGN_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $targets
     if ($LASTEXITCODE -ne 0) { throw "署名に失敗しました (exit code $LASTEXITCODE)。" }
@@ -261,15 +274,6 @@ if ($env:MELTYPE_SIGN_PFX -and (Test-Path -LiteralPath $env:MELTYPE_SIGN_PFX)) {
 }
 else {
     Write-Host '証明書が無いので署名しません (MELTYPE_SIGN_PFX)。'
-}
-
-# 配布する Meltype IME の DLL (署名した後) のハッシュ。インストールのとき、管理者として登録する前に、DLL が書き換えられていないかを確かめるのに使う。
-# (MeltypeTip.dll.sha256・MeltypeTipImpl.dll.sha256 は署名する前の中身のハッシュで、更新のときに「同じ DLL か」を比べるのに使う。
-#  MeltypeTipImpl.dll.sha256 は、インストール先の impl のフォルダー名と、Meltype.exe が要求の impl を照合するのにも使う)
-foreach ($dll in Get-MeltypeImeDlls) {
-    $sha = [System.Security.Cryptography.SHA256]::Create()
-    try { $hash = [BitConverter]::ToString($sha.ComputeHash([IO.File]::ReadAllBytes($dll))).Replace('-', '') } finally { $sha.Dispose() }
-    [IO.File]::WriteAllText("$dll.package.sha256", $hash)
 }
 }
 

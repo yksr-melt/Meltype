@@ -108,7 +108,7 @@ public static class ProjectInfo
     /// 欄の id (typed・actual・expected・key・zenzai・context) は、ひな形と合わせる。
     /// Zenzai の欄は、直したときの「Zenzai を使う」の設定 (Correction.Zenzai) で入れる。分からなければ空のまま (issue #1197)。
     /// </summary>
-    public static string MisdetectionReportUrl(Composition.Correction correction, string os, string version, string environment) =>
+    public static string MisdetectionReportUrl(Meltype.Diagnostics.Correction correction, string os, string version, string environment) =>
         GitHubReportUrl("2-misdetection.yml", os, version, environment) +
         $"&title={Uri.EscapeDataString("[誤判定] " + correction.Typed)}" +
         $"&typed={Uri.EscapeDataString(correction.Typed)}" +

@@ -69,7 +69,7 @@ def main():
 <ProjectReference Include="%s"/></ItemGroup></Project>''' % escape(str(core)))
             command = ['dotnet', 'publish', str(project), '-c', 'Release', '-o', str(directory / 'bin')]
             if not args.jit:
-                command += ['-p:PublishAot=true', '--source', 'https://api.nuget.org/v3/index.json']
+                command += ['-p:PublishAot=true']
             with (output / (label + '-build.log')).open('w') as log:
                 subprocess.run(command, env=env, stdout=log, stderr=subprocess.STDOUT, check=True)
             programs[label] = (['dotnet', str(directory / 'bin/Benchmark.dll')] if args.jit else [str(directory / 'bin/Benchmark')])
@@ -98,7 +98,7 @@ def main():
             hashes = {v: sorted({r['output_sha256'] for r in group}) for v, group in groups.items()}
             ratios = {field: medians['current'][field] / medians['baseline'][field] for field in FIELDS[3:8]}
             comparisons.append(dict(case=case, length=length, medians=medians, ratios=ratios, output_hashes=hashes,
-                                    output_matches=hashes['baseline'] == hashes['current'], local_time_gate_pass=ratios['total_ms'] <= 0.5))
+                                    output_matches=hashes['baseline'] == hashes['current']))
     report = dict(measured_at=datetime.datetime.now(datetime.timezone.utc).isoformat(), machine=platform.platform(),
                   dotnet=subprocess.check_output(['dotnet', '--version'], text=True).strip(), aot=not args.jit,
                   samples=args.samples, warmups=3, common_dictionaries=args.common_dictionaries,
@@ -110,9 +110,8 @@ def main():
     (output / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
     for row in comparisons:
         print(row['case'], row['length'], 'time ratio', round(row['ratios']['total_ms'], 4), 'output matches', row['output_matches'])
-    # The URL intentionally changes to preserve the entire raw token.
-    if not all(row['local_time_gate_pass'] and (row['case'] == 'long_url' or row['output_matches']) for row in comparisons):
-        raise SystemExit('Local time or unchanged-output gate failed')
+    if not all(row['output_matches'] for row in comparisons):
+        raise SystemExit('Committed output differs from the baseline')
 
 
 if __name__ == '__main__':

@@ -196,6 +196,8 @@ General Public License for more details.
   <a href="https://github.com/itouuuuuuuuu"><img src="https://github.com/itouuuuuuuuu.png?size=120" width="60" alt="@itouuuuuuuuu" title="@itouuuuuuuuu"></a>
   <a href="https://github.com/organic817"><img src="https://github.com/organic817.png?size=120" width="60" alt="@organic817" title="@organic817"></a>
   <a href="https://github.com/amanetoki7"><img src="https://github.com/amanetoki7.png?size=120" width="60" alt="@amanetoki7" title="@amanetoki7"></a>
+  <a href="https://github.com/YukiWorks432"><img src="https://github.com/YukiWorks432.png?size=120" width="60" alt="@YukiWorks432" title="@YukiWorks432"></a>
+  <a href="https://github.com/kagankan"><img src="https://github.com/kagankan.png?size=120" width="60" alt="@kagankan" title="@kagankan"></a>
 </p>
 <!-- sponsors:end -->
 <sub>名前を公開にして応援してくださった方を載せています。</sub>
