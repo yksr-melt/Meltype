@@ -642,6 +642,19 @@ kbd {
   margin-bottom: 28px;
 }
 
+.hero-try {
+  margin: -12px 0 28px;
+  font-family: var(--font-head);
+  font-weight: 700;
+}
+
+.hero-try a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  color: var(--sky-deep);
+}
+
 .hero-stats {
   display: flex;
   flex-wrap: wrap;
@@ -3739,4 +3752,469 @@ em {
 
 .typing-counts .is-retired {
   color: var(--muted);
+}
+
+/* ブラウザーで試す (/playground/) */
+
+.playground {
+  display: grid;
+  gap: 20px;
+  padding-bottom: 64px;
+}
+
+.playground .step-title {
+  margin-bottom: 8px;
+}
+
+.playground-field {
+  position: relative;
+  margin-top: 12px;
+}
+
+.playground-field .textarea {
+  min-height: 11em;
+  font-size: 1.15rem;
+}
+
+.playground-status {
+  margin: 10px 0 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.playground-status.is-ready::before {
+  content: "● ";
+  color: var(--ok);
+}
+
+.playground-status.is-error {
+  color: var(--danger);
+}
+
+.playground-samples {
+  margin: 12px 0 16px;
+}
+
+.playground-samples button {
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  padding: 3px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--ink-strong);
+  cursor: pointer;
+}
+
+.playground-samples button:hover {
+  border-color: var(--sky-deep);
+  color: var(--sky-deep);
+}
+
+.playground-keys {
+  margin: 0 0 10px;
+  padding-left: 1.2em;
+  display: grid;
+  gap: 6px;
+}
+
+/* meltype-web.js が出す、変換中の文字と候補の一覧 */
+.meltype-box {
+  position: absolute;
+  z-index: 100;
+  width: max-content;
+  min-width: 8em;
+  max-width: min(32em, calc(100vw - 32px));
+  padding: 6px 0;
+  background: var(--surface);
+  color: var(--ink-strong);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-s);
+  box-shadow: 0 8px 24px rgb(31 42 68 / 0.14);
+  font-family: var(--font-body);
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.meltype-text {
+  padding: 2px 14px;
+}
+
+.meltype-text span {
+  text-decoration: underline 1px;
+  text-underline-offset: 4px;
+}
+
+.meltype-text .meltype-selected-clause {
+  text-decoration-color: var(--sky-deep);
+  text-decoration-thickness: 3px;
+}
+
+.meltype-typed,
+.meltype-hint {
+  padding: 0 14px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.meltype-candidates {
+  margin: 6px 0 4px;
+  padding: 4px 0 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+  /* 9 件 (数字キーで選べる数) を見せ、残りはスクロールする */
+  max-height: calc(9 * (1.5em + 4px));
+  overflow-y: auto;
+}
+
+.meltype-candidates li {
+  padding: 2px 14px;
+  cursor: pointer;
+}
+
+.meltype-candidates li:hover {
+  background: var(--sky-soft);
+}
+
+.meltype-candidates li.meltype-selected {
+  color: var(--on-accent);
+  background: var(--sky-deep);
+}
+
+/* /playground/ の画面のキーボード (指で操作する端末だけ出す)。画面の下に固定する */
+.vkeys {
+  --vkeys-key: 44px;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 90;
+  display: grid;
+  gap: 6px;
+  padding: 8px max(6px, env(safe-area-inset-right, 0px)) calc(8px + env(safe-area-inset-bottom, 0px)) max(6px, env(safe-area-inset-left, 0px));
+  background: var(--surface-2);
+  border-top: 1px solid var(--line-strong);
+  box-shadow: 0 -6px 18px rgb(31 42 68 / 0.1);
+}
+
+.vkeys[hidden] {
+  display: none;
+}
+
+.vkeys-row {
+  display: flex;
+  gap: 5px;
+}
+
+.vkeys button {
+  flex: 1 1 0;
+  min-width: 0;
+  height: var(--vkeys-key);
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--ink-strong);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-bottom-width: 3px;
+  border-radius: 8px;
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.vkeys button.is-func {
+  font-size: 0.95rem;
+  color: var(--muted);
+  background: var(--surface-2);
+}
+
+.vkeys button:active,
+.vkeys button.is-pressed {
+  color: var(--on-accent);
+  background: var(--sky-deep);
+}
+
+/* readonly の入力欄に描くカーソル (playground.js) */
+.vkeys-caret {
+  position: absolute;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--sky-deep);
+  border-radius: 1px;
+  pointer-events: none;
+  animation: vkeys-blink 1s steps(1) infinite;
+}
+
+.vkeys-caret[hidden] {
+  display: none;
+}
+
+@keyframes vkeys-blink {
+  50% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vkeys-caret {
+    animation: none;
+  }
+}
+
+/* キーボードの高さ (5 段) だけ、ページの下を空ける */
+body.has-vkeys {
+  padding-bottom: calc(5 * 44px + 4 * 6px + 16px + env(safe-area-inset-bottom, 0px));
+}
+
+/* 変換の候補はキャレットの下ではなく、キーボードのすぐ上に出す (キーを隠さないように)。
+   meltype-web.js が left・top を書くので !important で上書きする */
+body.has-vkeys .meltype-box {
+  position: fixed !important;
+  left: 8px !important;
+  right: 8px;
+  top: auto !important;
+  bottom: calc(5 * 44px + 4 * 6px + 24px + env(safe-area-inset-bottom, 0px));
+  width: auto;
+  max-width: none;
+}
+
+/* 入力欄を画面の上へ送ったとき、ヘッダーの下に出す */
+body.has-vkeys .playground-field .textarea {
+  scroll-margin-top: calc(var(--header-h) + 12px);
+  min-height: 8em;
+}
+
+body.has-vkeys .meltype-candidates {
+  max-height: calc(4 * (1.5em + 4px));
+}
+
+body.has-vkeys .meltype-hint {
+  display: none;
+}
+
+/* Web エンジン (/web-engine/) */
+
+/* エンジンの候補の欄・画面のキーボードもサイトの色と字にする (エンジンの Shadow DOM の中に受け継がれる) */
+body.web-engine-page {
+  --meltype-accent: var(--sky-deep);
+  --meltype-on-accent: var(--on-accent);
+  --meltype-bg: var(--surface);
+  --meltype-fg: var(--ink-strong);
+  --meltype-muted: var(--muted);
+  --meltype-border: var(--line-strong);
+  --meltype-key-bg: var(--surface);
+  --meltype-keyboard-bg: var(--surface-2);
+  --meltype-font: var(--font-body);
+}
+
+/* 何行もあるコード */
+.codebox.is-block {
+  align-items: flex-start;
+  max-width: 720px;
+}
+
+.codebox.is-block code {
+  white-space: pre;
+  line-height: 1.7;
+  padding: 6px 0;
+}
+
+.engine-hero-code {
+  margin-top: 24px;
+}
+
+.engine-demo {
+  display: grid;
+  gap: 12px;
+}
+
+.engine-demo-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.engine-progress {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.engine-progress[hidden],
+.engine-demo .btn[hidden] {
+  display: none;
+}
+
+.engine-progress-bar {
+  width: 0;
+  height: 100%;
+  background: var(--sky);
+  transition: width 0.2s;
+}
+
+.engine-status {
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.engine-status:empty {
+  display: none;
+}
+
+.engine-status.is-ready::before {
+  content: "● ";
+  color: var(--ok);
+}
+
+.engine-status.is-error {
+  color: var(--danger);
+}
+
+.engine-field {
+  min-height: 9em;
+  font-size: 1.1rem;
+}
+
+.engine-samples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.engine-samples button {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  padding: 3px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--ink-strong);
+  cursor: pointer;
+}
+
+.engine-samples button:hover:not([disabled]) {
+  border-color: var(--sky-deep);
+  color: var(--sky-deep);
+}
+
+.engine-samples button[disabled] {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.engine-features {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.engine-features .ic {
+  width: 28px;
+  height: 28px;
+  color: var(--sky-deep);
+  margin-bottom: 8px;
+}
+
+.engine-callout {
+  margin-bottom: 24px;
+}
+
+.engine-panel {
+  display: grid;
+  /* 列を中のコードの長さに合わせて広げない (コードは箱の中でスクロールする) */
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+
+.engine-panel[hidden] {
+  display: none;
+}
+
+.engine-panel .codebox {
+  margin-bottom: 0;
+}
+
+.engine-table {
+  overflow-x: auto;
+  margin-bottom: 20px;
+}
+
+.engine-table table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  font-size: 0.93rem;
+}
+
+.engine-table th,
+.engine-table td {
+  padding: 10px 14px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--line);
+}
+
+.engine-table th {
+  color: var(--ink-strong);
+  background: var(--surface-2);
+  white-space: nowrap;
+}
+
+.engine-table td:first-child {
+  white-space: nowrap;
+}
+
+.engine-sub {
+  font-size: 1.1rem;
+  font-weight: 800;
+  margin: 32px 0 12px;
+}
+
+.engine-notes {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+}
+
+.engine-notes .card {
+  display: grid;
+  grid-template-columns: 9em minmax(0, 1fr);
+  gap: 16px;
+}
+
+.engine-notes dt {
+  font-family: var(--font-head);
+  font-weight: 800;
+  color: var(--ink-strong);
+}
+
+.engine-notes dd {
+  margin: 0;
+}
+
+@media (max-width: 860px) {
+  .engine-features {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .engine-features,
+  .engine-notes .card {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .engine-notes .card {
+    gap: 4px;
+  }
 }

@@ -100,4 +100,6 @@ web-ime/mozc/build-mozc-wasm.sh   # Mozc (初回は 30 分以上。作らなけ�
 web-engine/build.sh                # → web-engine/dist/
 ```
 
+紹介ページ (できること・インストールの方法・API・デモ) は、Meltype のサイトの [/web-engine/](../web/README.md#web-エンジン-web-engine) にあります。
+
 `web-engine/example/` は、作ったものを試すページです。`web-engine/` を静的なサーバーで開き、`/example/` を見てください。

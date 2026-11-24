@@ -4,6 +4,7 @@
 #
 # ブラウザー版を作る。出力先のフォルダーを静的なサイトに置き、meltype-web.js を読み込む。
 #   web-ime/build.sh [出力先 (既定: web-ime/dist)]
+# サイトの /playground/ は web/ の npm run playground で web/public/playground/engine/ に作る。
 # 必要なもの: .NET 10 SDK と wasm-tools のワークロード (dotnet workload install wasm-tools)。
 # Mozc の WebAssembly (mozc/build-mozc-wasm.sh で作る) が web-ime/mozc/out/ にあれば同梱する。
 set -euo pipefail

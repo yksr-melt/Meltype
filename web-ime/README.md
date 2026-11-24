@@ -8,7 +8,7 @@ web-ime/mozc/build-mozc-wasm.sh   # Mozc (初回は 30 分以上。無くても�
 web-ime/build.sh [出力先]          # 既定は web-ime/dist/
 ```
 
-ページに埋め込むときは、出力先の中身を置いて次のように付けます。
+Meltype のサイトの [/playground/](../web/README.md#ブラウザーで試す-playground) は、これを `web/public/playground/engine/` に作って使います。ほかのページに埋め込むときは、出力先の中身を置いて次のように付けます。
 
 ```html
 <link rel="stylesheet" href="meltype-web.css">
