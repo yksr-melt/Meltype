@@ -237,6 +237,7 @@
   (copy-install-script work)
   (fake-tool work "ditto" "cp -R \"$1\" \"$2\"")
   (fake-tool work "codesign" "exit 0")
+  (fake-tool work "install-settings-app.sh" "echo settings >> \"$MELTYPE_TEST_LOG\"")
   (write-file (merge-pathnames "select-input-source.swift" work) "// fake selector")
   (fake-tool work "swift" "echo selected >> \"$MELTYPE_TEST_LOG\"")
   (dolist (name '("pkill" "killall" "xattr" "lsregister"))
@@ -244,7 +245,7 @@
   (fake-tool work "killall" "echo UNEXPECTED_MENU_REFRESH >> \"$MELTYPE_TEST_LOG\"")
   (fake-tool work "open" "echo UNEXPECTED_OPEN >> \"$MELTYPE_TEST_LOG\"; exit 1")
   (run-script work "install.sh" nil)
-  (assert (equal '("app:--register-input-source" "started" "selected")
+  (assert (equal '("app:--register-input-source" "started" "settings" "selected")
                  (uiop:read-file-lines (merge-pathnames "calls" work)))))
 
 (defun test-update-keeps-input-menu (work)
