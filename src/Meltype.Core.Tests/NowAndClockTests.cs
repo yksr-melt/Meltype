@@ -50,48 +50,9 @@ internal static class NowAndClockTests
         Assert.True(k.Host.View!.Candidates.Contains("ラジオ番組") && !k.Host.View.Candidates.Any(c => c.StartsWith("ラジオ番組 /", StringComparison.Ordinal)), "アーティストが無ければ曲名だけ (/ を付けない)");
     }
 
-    [Test]
-    public static void Issue1401_ClockUsesConfiguredZone()
-    {
-        // 2026-07-01 23:30 UTC は ニューヨーク (夏時間 UTC-4) で 19:30、東京で 翌 8:30
-        var utc = new DateTime(2026, 7, 1, 23, 30, 0, DateTimeKind.Utc);
-        var ny = new Keyboard { ClockTimeZone = "America/New_York", UtcNow = utc };
-        ny.Type("tokei ");
-        Assert.True(ny.Host.View!.Candidates.Contains("19:30"), "夏時間を反映: " + string.Join(",", ny.Host.View.Candidates));
-        Assert.True(ny.Host.View.Candidates.Contains("午後7時30分"), "午前・午後の表記");
-        var tokyo = new Keyboard { ClockTimeZone = "Tokyo Standard Time", UtcNow = utc };
-        tokyo.Type("jikoku ");
-        Assert.True(tokyo.Host.View!.Candidates.Contains("08:30"), "Windows の ID も読む: " + string.Join(",", tokyo.Host.View.Candidates));
-        Assert.True(tokyo.Host.View.Candidates.Any(c => c.StartsWith("7/2(木) 08:30", StringComparison.Ordinal)), "日付をまたいだ日付を付ける");
-    }
 
-    [Test]
-    public static void Issue1401_WinterTimeAndUnknownZone()
-    {
-        // 1 月はニューヨークが標準時 (UTC-5)
-        var k = new Keyboard { ClockTimeZone = "America/New_York", UtcNow = new DateTime(2026, 1, 15, 12, 5, 0, DateTimeKind.Utc) };
-        k.Type("tokei ");
-        Assert.True(k.Host.View!.Candidates.Contains("07:05"), string.Join(",", k.Host.View.Candidates));
-        Assert.True(ClockConversion.Zone("Not/AZone") is null && ClockConversion.Zone(" ") is null, "見つからない・空はこの PC の時刻");
-    }
 
-    [Test]
-    public static void Issue1401_ImaUsesConfiguredZone()
-    {
-        // いま も、とけい・じこく と同じく設定のタイムゾーンの時刻 (2026-07-01 23:30 UTC はニューヨークで 19:30)
-        var k = new Keyboard { ClockTimeZone = "America/New_York", UtcNow = new DateTime(2026, 7, 1, 23, 30, 0, DateTimeKind.Utc) };
-        k.Type("ima ");
-        Assert.True(k.Host.View!.Candidates.Contains("19:30"), string.Join(",", k.Host.View.Candidates));
-    }
 
-    [Test]
-    public static void Issue1401_SameZoneAsThisPcHasNoZoneName()
-    {
-        // この PC と同じタイムゾーンを書いても、タイムゾーンの名前を付けた候補は出さない (設定の説明どおり)
-        var k = new Keyboard { ClockTimeZone = "Asia/Tokyo", LocalTimeZone = ClockConversion.Zone("Tokyo Standard Time")!, UtcNow = new DateTime(2026, 7, 1, 23, 30, 0, DateTimeKind.Utc) };
-        k.Type("tokei ");
-        Assert.True(!k.Host.View!.Candidates.Any(c => c.Contains("Asia/Tokyo", StringComparison.Ordinal)), string.Join(",", k.Host.View.Candidates));
-    }
 
     [Test]
     public static void Issue1400_ChosenSongIsNotLearned()

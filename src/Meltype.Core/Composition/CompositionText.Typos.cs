@@ -148,13 +148,9 @@ internal static partial class CompositionText
         // (english-words.txt の短い語が音の途中から見つかる kiyagat|taw の taw で、笑いの w を英字にしていた)
         var letters = string.Concat(state.Units.Skip(start).Take(end - start).Select(u => u.Raw)) + pending;
         var laugh = letters;
-        // 設定「かな + w を笑いにする」: 1 つのかなの音 (ね・さ) だけの後ろの w は、その 2 つで英単語 (new・saw) にしない (issue #713・#492)。
-        // もっと長い英単語 (snow・window) の終わりは、今までどおり英単語
-        var soleSyllable = state.LaughterAfterKana && start > 0 && state.Units[start - 1].Kana is [>= 'ぁ' and <= 'ん'] && state.Units[start - 1].Raw.All(char.IsAsciiLetter);
         for (var i = start - 1; i >= 0 && IsLetters(state.Units[i]); i--)
         {
             letters = state.Units[i].Raw + letters;
-            if (soleSyllable && i == start - 1) continue;
             var runStart = i == 0 || !IsLetters(state.Units[i - 1]);
             if (letters.Length >= 3 && (runStart ? env.Detector.IsKnownEnglishWord(LearningContext(state, env), letters) : env.Detector.IsListedEnglishWord(LearningContext(state, env), letters.ToLowerInvariant()))) return end;
         }

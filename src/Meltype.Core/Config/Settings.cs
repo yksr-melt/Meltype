@@ -343,10 +343,6 @@ public sealed class Settings
      Description("数字と + - * / ( ) だけの式を打って Space で変換すると、計算した結果 (1+2*3 → 7) と「式=結果」を候補に出します。")]
     public bool CalculatorCandidates { get; set; }
 
-    [Category("7. 記号・スペース"), DisplayName("かな + w を笑い (ねw・さw) にする"),
-     Description("ね・さ などの 1 文字のかなの後ろの w を、英単語 (new・saw) にせず笑いの w にします (なるほどnew → なるほどねw)。英単語の new や saw を打つ人は OFF のままにしてください。")]
-    public bool LaughterAfterKana { get; set; }
-
     [Category("10. 学習"), DisplayName("英語 / 日本語の学習を前の文脈ごとに分ける"),
      Description("英字 / かなに直した語 (new → ねw など) の学習を、直前が英語だったか日本語だったかごとに別々に覚えます。同じローマ字でも、英語の文の中と日本語の文の中で使い分けられます。ON にする前に覚えた学習は、どちらの文脈でも使います。")]
     public bool ContextualLearning { get; set; }
@@ -372,10 +368,6 @@ public sealed class Settings
     [Category("6. 候補"), DisplayName("「なう」で再生中の曲を候補に出す"), Platforms(Platform.Windows),
      Description("「なう」を変換したとき、今再生している曲 (曲名 / アーティスト) を候補に出します。Windows のメディアの操作 (音量のボタンを押したときに出る再生中の表示) に曲を知らせるアプリ (Spotify・ブラウザーなど) が対象です。ON の間は、曲・再生状態が変わったときに Windows から知らせを受けて今の曲を読みます (変換を待たせないため。変わらない間は読みません)。メモリに今の 1 曲を持つだけで、保存・送信はしません。選んでも学習しません。再生中の曲が無いときは、今までどおり時刻を出します。")]
     public bool NowPlayingCandidates { get; set; } = true;
-
-    [Category("6. 候補"), DisplayName("時計の候補のタイムゾーン"),
-     Description("「とけい」「じこく」「いま」「なう」を変換したときに候補に出す、今の時刻 (19:21 / 19時21分 / 午後7時21分) のタイムゾーン。IANA の ID (例: America/New_York・Europe/London) か Windows の ID (例: Eastern Standard Time) を書きます。空ならこの PC のタイムゾーン (既定)。夏時間も反映します。この PC と違うタイムゾーンなら、「とけい」「じこく」では日付とタイムゾーンの名前を付けた候補も出します。")]
-    public string ClockTimeZone { get; set; } = "";
 
     [Category("1. 全般"), DisplayName("Meltype の一時停止 / 再開のホットキー"), Platforms(Platform.Windows),
      Description("Meltype 全体の一時停止 / 再開に使うキーの組み合わせ (例: Ctrl+Alt+F10)。空のときは Ctrl+Alt+F12 (使えなければ Ctrl+Alt+F11 など)。変更は Meltype を起動し直すと効きます。変換・無変換キーが無い US 配列のキーボード向けです。")]
@@ -409,10 +401,6 @@ public sealed class Settings
      Description("GPU 版 (Vulkan・CUDA) の llama-server で、計算に使う GPU の名前 (例: Vulkan0)。llama-server の --device に渡し、GPU に載せる量は llama-server が空いているメモリに合わせて決めます。空なら CPU だけで計算します (既定)。名前は llama-server --list-devices で確かめられます。変えると llama-server を起動し直します。")]
     public string ZenzaiDevice { get; set; } = "";
 
-    [Category("6. 候補"), DisplayName("英訳の候補"),
-     Description("変換の候補の後ろに英訳も出します (複雑な → complex, complicated)。JMdict のよく使う語から。選んだ英訳は少しずつ前に出ます。")]
-    public bool TranslationCandidates { get; set; } = true;
-
     [Category("6. 候補"), DisplayName("予測変換の候補"),
      Description("打っている途中に、続きの候補を変換ボックスの下に出します (前に確定した語句・ユーザー辞書・選び直した変換の学習・よく使うあいさつ・英単語の続き)。Tab / Shift+Tab で選んで Enter で確定します。確定した語句は %LOCALAPPDATA%\\Meltype\\phrases.txt に暗号化せずに覚え (この PC の外には送りません)、「学習データをリセット」で消えます。")]
     public bool PredictiveCandidates { get; set; } = true;
@@ -444,10 +432,6 @@ public sealed class Settings
     [Category("6. 候補"), DisplayName("子音の略入力を候補に出す"),
      Description("子音だけの略入力 (ast → 明日、ngt → ノート など) を、変換の候補に出します。候補は同梱の candidates.txt の英字の読みから出します。既定は OFF です。")]
     public bool ConsonantAbbreviations { get; set; }
-
-    [Category("9. 表示"), DisplayName("候補の意味を表示"),
-     Description("変換中に同じ候補で少し (約 1.5 秒) 止まると、その候補の意味をウィクショナリー日本語版から候補の一覧の横に出します (日本語の意味が無い語は JMdict の英訳: 橋 → bridge)。同音異義語を選ぶときの手がかりに。")]
-    public bool ShowCandidateMeanings { get; set; } = true;
 
     [Category("9. 表示"), DisplayName("打ったキーを表示"), Platforms(Platform.Windows),
      Description("打ったキー (ローマ字: kyouhagoogle) を小さく出します。Meltype キーボードでは変換ボックスの文字の下に、Meltype IME では候補の一覧の上に出します。打ち間違いに気づきやすくなります。")]
@@ -486,7 +470,6 @@ public sealed class Settings
     public ModeIndicatorTiming EffectiveModeIndicator => ModeIndicator != ModeIndicatorTiming.Default ? ModeIndicator
         : OperatingSystem.IsWindows() ? Mode == InputMode.Keyboard ? ModeIndicatorTiming.OnSwitchAndFocus : ModeIndicatorTiming.Never
         : ModeIndicatorTiming.OnSwitch;
-
 
     [Category("3. 入力モード"), DisplayName("入力モードの表示の色: 日本語 (あ)"), Platforms(Platform.Windows),
      Description("「あ」の背景色を #RRGGBB で書きます (例: #007ACC)。空なら青。壁紙・アプリのテーマで見えにくいときに変えます。")]
@@ -527,7 +510,6 @@ public sealed class Settings
     [Category("9. 表示"), DisplayName("変換ボックスの不透明度"), Platforms(Platform.Windows),
      Description("変換ボックスを少し透かして、後ろの文字を見えるようにします。100% は透けません。")]
     public CompositionOpacity CompositionOpacity { get; set; } = CompositionOpacity.Opaque;
-
 
     /// <summary>変換ボックスをライトの色で出すか。windowsLight は Windows のアプリ モードがライトか (分からなければ null = ダーク)。</summary>
     public bool CompositionIsLight(bool? windowsLight) => CompositionTheme switch
@@ -952,7 +934,6 @@ public sealed class Settings
             ToggleShortcuts = valid;
         }
         ZenzaiDevice = ZenzaiDevice?.Trim() ?? "";
-        ClockTimeZone = ClockTimeZone?.Trim() ?? "";
         // 数値で書いた config.json の、今は無い番号 (消した IME 自動切替・両方を判定) は初期値にする
         if (!Enum.IsDefined(Mode)) Mode = InputMode.Tsf;
         if (!Enum.IsDefined(InputStyle)) InputStyle = InputStyle.Romaji;

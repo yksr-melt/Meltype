@@ -66,7 +66,7 @@ internal static class CompositionPresentation
                 clauses,
                 state.SelectedClause,
                 CandidateNotes(selected),
-                env.Settings.ShowCandidateMeanings ? CandidateMeaning(state, env, selected) : null,
+                CandidateMeaning(state, env, selected),
                 Suggestion(CompositionSpelling.MisspellingSuggestion(state, env)),
                 Typed: TypedKeys(state, env),
                 Committed: ComposedText.Concat(clauses), ContextHint: zenzai ? "Zenzai" : null));
