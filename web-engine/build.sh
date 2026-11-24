@@ -5,7 +5,7 @@
 # Meltype Web Engine を web-engine/dist/ に作る。dist/ がそのまま npm のパッケージで、<script> で読むときも dist/ を置けばよい。
 #   web-engine/build.sh
 # 必要なもの: .NET 10 SDK と wasm-tools のワークロード (dotnet workload install wasm-tools)。
-# 漢字変換の Mozc の WebAssembly は、web-ime/mozc/out/ にあれば同梱する (無ければ、かなのまま確定する版になる)。
+# 漢字変換の Mozc は web-ime/mozc/build-mozc-wasm.sh が作る web-ime/mozc/out/ を使う (無ければ、かなのまま確定する版になる)。
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 out="$here/dist"
@@ -21,6 +21,6 @@ if [[ -f "$mozc/mozc.wasm" ]]; then
     mkdir -p "$out/mozc"
     cp "$mozc/mozc.js" "$mozc/mozc.wasm" "$out/mozc/"
 else
-    echo "注意: $mozc に Mozc がないので、漢字変換をしない版を作りました" >&2
+    echo "注意: $mozc に Mozc がないので、漢字変換をしない版を作りました (web-ime/mozc/build-mozc-wasm.sh で作れます)" >&2
 fi
 echo "できました: $out"

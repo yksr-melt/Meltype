@@ -11,7 +11,7 @@ using Meltype.Ime;
 namespace Meltype.Web;
 
 /// <summary>
-/// ブラウザーの入力欄 (web-engine/src/meltype.js) から呼ぶ関数。出来事は <see cref="ImeEvent"/> の JSON、答えは <see cref="ImeOutput"/> の JSON。
+/// ブラウザーの入力欄 (web-ime/meltype-web.js・web-engine/src/meltype.js) から呼ぶ関数。出来事は <see cref="ImeEvent"/> の JSON、答えは <see cref="ImeOutput"/> の JSON。
 /// 設定・学習データはブラウザーのメモリー上のファイル (<see cref="DataDirectory"/>) に置く。残すときはページの側が
 /// <see cref="ExportData"/> で取り出して IndexedDB に保存し、次に開いたときに <see cref="ImportData"/> で戻す。
 /// </summary>

@@ -96,9 +96,8 @@ GPL-3.0-or-later です。このエンジン (JS・WebAssembly) はページを�
 
 ```bash
 dotnet workload install wasm-tools
+web-ime/mozc/build-mozc-wasm.sh   # Mozc (初回は 30 分以上。作らなければ、かなのまま確定する版になる)
 web-engine/build.sh                # → web-engine/dist/
 ```
-
-漢字変換の Mozc の WebAssembly (`mozc.js`・`mozc.wasm`) は、`web-ime/mozc/out/` にあれば同梱します。無ければ、かなのまま確定する版になります。
 
 `web-engine/example/` は、作ったものを試すページです。`web-engine/` を静的なサーバーで開き、`/example/` を見てください。

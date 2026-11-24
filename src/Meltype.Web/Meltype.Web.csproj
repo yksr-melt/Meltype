@@ -1,8 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk.WebAssembly">
   <!--
-    Meltype.Core をブラウザーで動かす (WebAssembly)。web-engine/ の meltype.js が読み込む。
+    Meltype.Core をブラウザーで動かす (WebAssembly)。web-ime/ の meltype-web.js が読み込む。
       dotnet publish src/Meltype.Web -c Release
-    Mozc は別の WebAssembly で動かし、変換ヘルパーの要求 1 行を JS の関数で答える (Android 版と同じ形)。
+    Mozc は別の WebAssembly (web-ime/mozc/) で動かし、変換ヘルパーの要求 1 行を JS の関数で答える (Android 版と同じ形)。
     ブラウザーの .NET は 1 つのスレッドで動くので、Core の裏の処理はキーの処理が返った後に同じスレッドで動く。
   -->
   <PropertyGroup>
