@@ -57,19 +57,20 @@ internal static partial class CompositionController
             if (!selected.Expanded) Expand(state, env, selected);
             // 出している文節に Zenzai の答えがあれば、説明の頭に「Zenzai」と出す (学習・選び直しで変わった文節は数えない。issue #1152)
             var zenzai = state.Clauses.Any(c => c.ZenzaiText is { } z && c.Text == z);
-            CompositionOutput.Show(state.Out, env, new CompositionView(
-                string.Concat(state.Clauses.Select(c => c.Text)),
-                selected.Candidates,
+            var clauses = state.Clauses.Select(c => Composed([c])).ToList();
+            CompositionOutput.Show(state.Out, env, new ComposedView(
+                ComposedText.Concat(clauses),
+                [.. selected.Candidates.Select(c => Candidate(selected, c))],
                 selected.Index,
                 true,
                 (zenzai ? "Zenzai · " : "") + "←→ 文節　Space/↓ 候補　1〜9 選択　Shift+←→ 区切り　Enter 確定　Esc 戻る",
-                state.Clauses.Select(c => c.Text).ToList(),
+                clauses,
                 state.SelectedClause,
                 CandidateNotes(selected),
-                env.Settings.ShowCandidateMeanings ? CandidateMeaning(state, env, selected) : null,
-                MisspellingSuggestion(state, env),
+                CandidateMeaning(state, env, selected),
+                Suggestion(MisspellingSuggestion(state, env)),
                 Typed: TypedKeys(state, env),
-                Committed: string.Concat(state.Clauses.Select(c => c.Text)), ContextHint: zenzai ? "Zenzai" : null));
+                Committed: ComposedText.Concat(clauses), ContextHint: zenzai ? "Zenzai" : null));
         }
         else
         {
@@ -89,15 +90,23 @@ internal static partial class CompositionController
                 contextHint = "Tab 予測の候補を選ぶ";
                 hint = contextHint + "　" + hint;
             }
-            var selected = predictionIndex >= 0 ? predictions[predictionIndex].Before + predictions[predictionIndex].Text : null;
-            var display = selected ?? CurrentDisplay(state, env, final: false);
+            var selected = predictionIndex >= 0 ? PredictionText(predictions[predictionIndex]) : null;
+            var display = selected ?? CurrentComposed(state, env, final: false);
             // 設定「入力中も変換候補をいくつか表示」: Space の前から候補を出す (issue #666)
             var preview = selected is null && misspelling is null ? TypingCandidates(state, env) : null;
-            CompositionOutput.Show(state.Out, env, new CompositionView(display, preview ?? [], preview?.IndexOf(display) ?? -1, false, hint, Suggestion: misspelling,
-                Predictions: predictions.Count > 0 ? predictions.Select(p => p.Text).ToList() : null, SelectedPrediction: predictionIndex, Typed: TypedKeys(state, env),
-                Committed: selected ?? CurrentDisplay(state, env, final: true), ContextHint: contextHint));
+            CompositionOutput.Show(state.Out, env, new ComposedView(display, [.. (preview ?? []).Select(c => ComposedText.Of(SpanKind.Japanese, c))], preview?.IndexOf(display.Text) ?? -1, false, hint,
+                Suggestion: Suggestion(misspelling),
+                Predictions: predictions.Count > 0 ? predictions.Select(p => ComposedText.Of(SpanKind.Japanese, p.Text)).ToList() : null, SelectedPrediction: predictionIndex, Typed: TypedKeys(state, env),
+                Committed: selected ?? CurrentComposed(state, env, final: true), ContextHint: contextHint));
         }
     }
+
+    /// <summary>文節 clause の候補 candidate の文字。</summary>
+    private static ComposedText Candidate(Clause clause, string candidate) =>
+        clause.IsEnglish ? ComposedText.English(candidate) : ComposedText.Converted(clause.Reading, candidate);
+
+    /// <summary>書き間違いの修正の案内 (もしかして)。</summary>
+    private static ComposedText? Suggestion(string? suggestion) => suggestion is null ? null : ComposedText.Of(SpanKind.Japanese, suggestion);
 
     /// <summary>設定「入力中も変換候補をいくつか表示」: 今打っているひらがなの変換候補 (5 件まで)。出さないときは null。</summary>
     private static List<string>? TypingCandidates(CompositionState state, CompositionEnv env)

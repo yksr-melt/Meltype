@@ -265,7 +265,7 @@ internal static partial class CompositionController
     private static UtilityCandidates? Utilities(CompositionState state, CompositionEnv env, IReadOnlyList<CompositionSegment> segments)
     {
         var reading = segments is [{ IsEnglish: false, Kana.Length: > 0 } only] ? only.Kana : null;
-        var context = new UtilityContext(env.Settings, env.Services.Now(), env.Services.UtcNow(), env.Services.LocalTimeZone(), env.Clipboard, env.NowPlaying, env.Services.GitHubTitles(), env.OtherTipVersion);
+        var context = new UtilityContext(env.Settings, env.Services.Now(), env.Clipboard, env.NowPlaying, env.Services.GitHubTitles(), env.OtherTipVersion);
         return UtilityConversions.Convert(new UtilityInput(state.Text, reading, state.Direct, context));
     }
 
@@ -322,7 +322,7 @@ internal static partial class CompositionController
     /// </summary>
     private static void AddTranslations(CompositionState state, CompositionEnv env, Clause clause)
     {
-        if (clause.IsEnglish || env.Services.Translations is not { } dictionary || !env.Settings.TranslationCandidates) return;
+        if (clause.IsEnglish || env.Services.Translations is not { } dictionary) return;
         var words = dictionary.Lookup(clause.Text, clause.Reading).Where(w => !clause.Candidates.Contains(w)).ToList();
         if (words.Count == 0) return;
         var learned = env.Services.TranslationHistory?.Get(clause.Reading) ?? [];
@@ -708,11 +708,11 @@ internal static partial class CompositionController
     /// </summary>
     private static void AddCandidates(CompositionState state, CompositionEnv env, Clause clause)
     {
-        if (clause.Engine is not { } engine) return;
+        if (clause.Engine is not { } engine || clause.EngineCandidatesAdded) return;
         var (chosen, text) = (clause.Candidates, clause.Text);
         clause.Candidates = [.. chosen, .. JapaneseCandidates(state, env, clause.Reading, engine, null, zenzai: false).Where(c => !chosen.Contains(c))];
         clause.Index = clause.Candidates.IndexOf(text);
-        clause.Engine = null;
+        clause.EngineCandidatesAdded = true;
     }
 
     /// <summary>
@@ -978,11 +978,11 @@ internal static partial class CompositionController
     /// ライブ変換: Space を押したときと同じく、文脈・手がかり辞書・学習を使って文節ごとに変換した結果を見せる。
     /// 打つたびに呼ばれるので、かな・文脈・学習の状態が同じならキャッシュを使う。
     /// </summary>
-    private static string LiveConvert(CompositionState state, CompositionEnv env, string kana, bool afterEnglish, string before)
+    private static ComposedText LiveConvert(CompositionState state, CompositionEnv env, string kana, bool afterEnglish, string before)
     {
         // 記号 (～ ! ? …) は数えない。かなが短いうちに記号を足しただけで、的外れな漢字にしない (な～～～ が 名～～～ になっていた: issue #505)
-        if (!CountsAsLive(kana)) return kana;
-        return string.Concat(LiveClauses(state, env, kana, afterEnglish, before).Select(c => c.Text));
+        if (!CountsAsLive(kana)) return ComposedText.Kana(kana);
+        return ComposedText.Concat(LiveClauses(state, env, kana, afterEnglish, before).Select(c => ComposedText.Converted(c.Reading, c.Text)));
     }
 
     /// <summary>
@@ -992,12 +992,12 @@ internal static partial class CompositionController
     private static bool CountsAsLive(string kana) =>
         kana.Where((c, i) => IsKana(c) && !(i > 0 && KanaChars.IsSmallKana(c) && IsKana(kana[i - 1]))).Count() >= LiveConversionMinLength;
 
-    /// <summary>ライブ変換の文節 (読みと変換した文字)。予測変換で最後の文節を探すときも、同じ打鍵で変換した結果を使う。</summary>
-    private static List<(string Reading, string Text)> LiveClauses(CompositionState state, CompositionEnv env, string kana, bool afterEnglish, string before)
+    /// <summary>ライブ変換の文節 (読み・変換エンジンの答え・学習などで選び直した後の文字)。予測変換で最後の文節を探すときも、同じ打鍵で変換した結果を使う。</summary>
+    private static List<(string Reading, string? Engine, string Text)> LiveClauses(CompositionState state, CompositionEnv env, string kana, bool afterEnglish, string before)
     {
         var key = string.Join("\u0001", kana, afterEnglish, before, EnglishInComposition(state, env), env.Context().FollowingText, env.Services.History?.Version);
         if (state.LiveCache.TryGetValue(key, out var cached)) return cached;
-        var clauses = ConvertJapaneseSegment(state, WithoutWaiting(env), kana, afterEnglish, before, zenzai: true).Select(c => (c.Reading, c.Text)).ToList();
+        var clauses = ConvertJapaneseSegment(state, WithoutWaiting(env), kana, afterEnglish, before, zenzai: true).Select(c => (c.Reading, c.Engine, c.Text)).ToList();
         if (state.LiveCache.Count > 256) state.LiveCache.Clear();
         state.LiveCache[key] = clauses;
         return clauses;
