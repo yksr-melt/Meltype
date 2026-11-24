@@ -33,7 +33,7 @@ internal sealed class PhraseHistory
         Reload();
     }
 
-    private static Dictionary<(string Reading, string Text), (int Count, long Used)>? Load(string? path)
+    private static Dictionary<(string Reading, string Text), (int Count, long Used)>? Load(string? path, Config.FileStamp stamp)
     {
         var entries = new Dictionary<(string Reading, string Text), (int Count, long Used)>();
         var read = Config.DataFile.Load(path, "予測変換の学習データ", content =>
@@ -47,7 +47,7 @@ internal sealed class PhraseHistory
                 if (StaleWords.IsStale(parts[0], parts[1])) continue;
                 entries[(parts[0], parts[1])] = (Math.Max(1, count), used);
             }
-        });
+        }, stamp);
         return read ? entries : null;
     }
 
@@ -65,11 +65,7 @@ internal sealed class PhraseHistory
     {
         _stamp.Synced();
         // 読めなかったら前の中身のまま (Config.DataFile.Load)
-        if (Load(_path) is not { } entries)
-        {
-            _stamp.Forget();
-            return;
-        }
+        if (Load(_path, _stamp) is not { } entries) return;
         lock (_gate)
         {
             _entries = entries;

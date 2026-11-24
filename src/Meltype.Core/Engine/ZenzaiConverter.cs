@@ -64,6 +64,8 @@ internal sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     // 応答が遅かった (CPU の負荷が高いなど) ときは、しばらく使わず Mozc に任せる。
     private const int DefaultPauseMs = 5000;
     private long _pausedUntil;
+    // 続けて間に合わなくなった最初の時刻 (間に合えば 0)。_gate の中で読み書きする
+    private long _timingOutSince;
 
     /// <summary>応答が遅かったときに休む時間 (テストでは縮める)。</summary>
     public int PauseMs { get; init; } = DefaultPauseMs;
@@ -112,6 +114,12 @@ internal sealed class ZenzaiConverter : IKanjiConverter, IDisposable
 
     /// <summary>何度も失敗して諦めたか (起動しない・答えない)。ファイルは見ない (ZenzaiHolder が変換のたびに見る)。</summary>
     public bool GaveUp => _failures >= 3;
+
+    /// <summary>
+    /// 間に合わないのがこの時間続いたら諦める (接続だけ受けて答えなくなった llama-server を作り直す: issue #2270)。
+    /// 回数で諦めると、少しのあいだ遅いだけ (ほかの処理で CPU が重い) の llama-server まで止めて、5 分使えなくなるので時間で見る。
+    /// </summary>
+    public int GiveUpAfterMs { get; init; } = 60_000;
 
     /// <summary>llama-server が起動して、変換を頼めるか (起動中は false)。</summary>
     public bool IsReady { get { lock (_gate) return _ready; } }
@@ -180,9 +188,13 @@ internal sealed class ZenzaiConverter : IKanjiConverter, IDisposable
         lock (_gate)
         {
             if (slow) Interlocked.Exchange(ref _pausedUntil, Environment.TickCount64 + PauseMs);
-            // 答えが無いのは、遅くても失敗に数える (llama-server が接続だけ受けて答えなくなると、休むのを繰り返して作り直されない: issue #2270)
-            if (answer is null) _failures++;
-            else { _failures = 0; _hasAnswered = true; }
+            if (answer is null && slow)
+            {
+                if (_timingOutSince == 0) _timingOutSince = Environment.TickCount64;
+                else if (Environment.TickCount64 - _timingOutSince >= GiveUpAfterMs) _failures = 3;
+            }
+            else if (answer is null) _failures++;
+            else { _failures = 0; _timingOutSince = 0; _hasAnswered = true; }
             if (_cache.Count >= MaxCache) _cache.Clear();
             // 使わないと決めた答えも覚える (打鍵のたびに聞き直さない)。失敗・遅いときは覚えない
             if (answer is not null && !slow) _cache[key] = text;

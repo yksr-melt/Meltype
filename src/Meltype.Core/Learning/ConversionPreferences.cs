@@ -131,7 +131,7 @@ internal sealed class ConversionHistory
         Reload();
     }
 
-    private static Dictionary<string, Entry>? Load(string? path)
+    private static Dictionary<string, Entry>? Load(string? path, Config.FileStamp stamp)
     {
         var entries = new Dictionary<string, Entry>(StringComparer.Ordinal);
         var read = Config.DataFile.Load(path, "変換の学習データ", content =>
@@ -141,7 +141,7 @@ internal sealed class ConversionHistory
             if (loaded is not null)
                 foreach (var (reading, entry) in loaded)
                     if (IsLearnableReading(reading) && !StaleWords.IsStale(reading, entry.Text)) entries[reading] = entry;
-        });
+        }, stamp);
         return read ? entries : null;
     }
 
@@ -159,11 +159,7 @@ internal sealed class ConversionHistory
     {
         _stamp.Synced();
         // 読めなかったら前の中身のまま (Config.DataFile.Load)
-        if (Load(_path) is not { } entries)
-        {
-            _stamp.Forget();
-            return;
-        }
+        if (Load(_path, _stamp) is not { } entries) return;
         lock (_gate)
         {
             _entries = entries;

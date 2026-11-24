@@ -27,14 +27,17 @@ public sealed class SnippetStore
         Reload();
     }
 
-    private static Dictionary<string, string>? Load(string? path)
+    private static Dictionary<string, string>? Load(string? path, Config.FileStamp stamp)
     {
-        var snippets = new Dictionary<string, string>(StringComparer.Ordinal);
-        var read = Config.DataFile.Load(path, "定型文", content =>
+        // 読めない・壊れているときは null (前の定型文のまま。壊れたファイルは .broken に残り、次の保存で前の定型文に戻す)
+        Dictionary<string, string>? snippets = path is not null && File.Exists(path) ? null : new(StringComparer.Ordinal);
+        Config.DataFile.Load(path, "定型文", content =>
         {
-            foreach (var (name, text) in Parse(content)) snippets[name] = text;
-        });
-        return read ? snippets : null;
+            var parsed = Parse(content).ToList();
+            snippets = new(StringComparer.Ordinal);
+            foreach (var (name, text) in parsed) snippets[name] = text;
+        }, stamp);
+        return snippets;
     }
 
     /// <summary>
@@ -51,11 +54,7 @@ public sealed class SnippetStore
         // 読む前に更新時刻を覚える (読んでいる間に書かれても、次にまた読み直す)。展開 (Get) を待たせないように、読むのは lock の外
         _stamp.Synced();
         // 読めなかったら前の中身のまま (Config.DataFile.Load)
-        if (Load(_path) is not { } snippets)
-        {
-            _stamp.Forget();
-            return;
-        }
+        if (Load(_path, _stamp) is not { } snippets) return;
         lock (_gate) _snippets = snippets;
     }
 
@@ -123,6 +122,12 @@ public sealed class SnippetStore
     private void Save()
     {
         if (_path is null) return;
+        // 読めなかったファイル (Changed のまま) は上書きしない
+        if (_stamp.Changed)
+        {
+            Diagnostics.Log.Warn("定型文のファイルを読めないので、保存しません");
+            return;
+        }
         try
         {
             var json = Export();

@@ -134,14 +134,14 @@ internal sealed class TranslationHistory
         Reload();
     }
 
-    private static Dictionary<string, Dictionary<string, int>>? Load(string? path)
+    private static Dictionary<string, Dictionary<string, int>>? Load(string? path, Config.FileStamp stamp)
     {
         var counts = new Dictionary<string, Dictionary<string, int>>(StringComparer.Ordinal);
         var read = Config.DataFile.Load(path, "英訳の学習データ", content =>
         {
             var loaded = JsonSerializer.Deserialize(content, Config.LearningJsonContext.Default.Translations);
             if (loaded is not null) foreach (var (key, value) in loaded) counts[key] = value;
-        });
+        }, stamp);
         return read ? counts : null;
     }
 
@@ -159,11 +159,7 @@ internal sealed class TranslationHistory
     {
         _stamp.Synced();
         // 読めなかったら前の中身のまま (Config.DataFile.Load)
-        if (Load(_path) is not { } counts)
-        {
-            _stamp.Forget();
-            return;
-        }
+        if (Load(_path, _stamp) is not { } counts) return;
         lock (_gate) _counts = counts;
     }
 

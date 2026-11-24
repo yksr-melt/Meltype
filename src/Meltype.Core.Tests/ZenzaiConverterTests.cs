@@ -423,13 +423,19 @@ internal static class ZenzaiConverterTests
     {
         // 接続は受けるが答えない llama-server は、休むのを繰り返さずに諦める (ZenzaiHolder が作り直す)
         using var server = new FakeServer { Answer = p => { Thread.Sleep(300); return "遅い"; } };
-        using var zenzai = new ZenzaiConverter(server.Endpoint, timeoutMs: 100) { PauseMs = 0 };
+        using var zenzai = new ZenzaiConverter(server.Endpoint, timeoutMs: 100) { PauseMs = 0, GiveUpAfterMs = 3000 };
+        for (var i = 0; i < 3; i++)
+        {
+            zenzai.ConvertClauses("う" + new string('い', i), "前の文");
+            Thread.Sleep(100);
+        }
+        Assert.True(!zenzai.GaveUp, "少しのあいだ間に合わないだけでは諦めない");
         for (var i = 0; i < 50 && !zenzai.GaveUp; i++)
         {
             zenzai.ConvertClauses("あ" + new string('い', i), "前の文");
             Thread.Sleep(100);
         }
-        Assert.True(zenzai.GaveUp, "答えないのが続いたら諦める");
+        Assert.True(zenzai.GaveUp, "間に合わないのが続いたら諦める");
     }
 
     [Test]

@@ -70,14 +70,14 @@ internal sealed class LanguageMemory
         Reload();
     }
 
-    private static Dictionary<string, Entry>? Load(string? path)
+    private static Dictionary<string, Entry>? Load(string? path, Config.FileStamp stamp)
     {
         var entries = new Dictionary<string, Entry>(StringComparer.Ordinal);
         var read = Config.DataFile.Load(path, "英語 / 日本語の学習データ", content =>
         {
             var loaded = JsonSerializer.Deserialize(content, Config.LearningJsonContext.Default.Languages);
             if (loaded is not null) foreach (var (word, entry) in loaded) entries[word] = entry;
-        });
+        }, stamp);
         return read ? entries : null;
     }
 
@@ -95,11 +95,7 @@ internal sealed class LanguageMemory
     {
         _stamp.Synced();
         // 読めなかったら前の中身のまま (Config.DataFile.Load)
-        if (Load(_path) is not { } entries)
-        {
-            _stamp.Forget();
-            return;
-        }
+        if (Load(_path, _stamp) is not { } entries) return;
         lock (_gate)
         {
             _entries = entries;

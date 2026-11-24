@@ -3,6 +3,7 @@
 
 using Meltype.Dictionary;
 using Meltype.Ime;
+using Meltype.Input;
 using Meltype.Learning;
 
 namespace Meltype.Tests;
@@ -82,12 +83,62 @@ internal static class ExternalEditTests
                 Assert.Equal("署名", snippets.Get("sig"), "読めないあいだは前の定型文のまま");
                 Assert.Equal(null, snippets.Get("ty"), "読めないあいだは読み直さない");
                 Assert.Equal(1, phrases.Count, "読めないあいだは前の学習のまま");
+                snippets.Set("new", "新しい");
             }
+            Assert.Equal("ありがとうございます", new SnippetStore(snippetsPath).Get("ty"), "読めなかったファイルを上書きしない");
             Assert.True(!File.Exists(snippetsPath + ".broken") && !File.Exists(phrasesPath + ".broken"), "壊れていないので .broken に残さない");
             snippets.Refresh();
             phrases.Refresh();
             Assert.Equal("ありがとうございます", snippets.Get("ty"), "読めるようになったら読み直す");
             Assert.Equal(2, phrases.Count, "読めるようになったら読み直す");
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Test]
+    public static void BrokenSnippets_KeepTheSnippetsInUse()
+    {
+        // 動いているあいだにファイルが壊れても、使っている定型文は消さない (壊れたファイルは .broken に残る)
+        var directory = Directory.CreateTempSubdirectory("meltype-external-").FullName;
+        try
+        {
+            var path = Path.Combine(directory, "snippets.json");
+            var snippets = new SnippetStore(path);
+            snippets.Set("sig", "署名");
+            Tick();
+            File.WriteAllText(path, "{\"sig\":\"署");
+            snippets.Refresh();
+            Assert.Equal("署名", snippets.Get("sig"), "壊れたファイルを読んでも、前の定型文のまま");
+            Assert.True(File.Exists(path + ".broken"), "壊れたファイルは .broken に残す");
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Test]
+    public static void KeyCountThatCannotBeReadAtStart_IsNotOverwritten()
+    {
+        // 起動したときに読めなかった打鍵数を、0 から数えた数で上書きしない
+        var directory = Directory.CreateTempSubdirectory("meltype-external-").FullName;
+        try
+        {
+            var path = Path.Combine(directory, "keycount.json");
+            File.WriteAllText(path, "{\"Total\":12345,\"Enabled\":true}");
+            KeyCounter counter;
+            using (new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+            {
+                counter = new KeyCounter(path);
+                counter.Enabled = true;
+                counter.Save();
+            }
+            Assert.Equal(12345L, new KeyCounter(path).Total, "読めないあいだは保存しない");
+            counter.Save();
+            Assert.Equal(12345L, counter.Total, "読めるようになったら読み直す");
         }
         finally
         {

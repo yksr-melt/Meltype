@@ -64,11 +64,12 @@ internal static class DataFile
 
     /// <summary>
     /// path があれば中身を load に渡す。中身が壊れていたら .broken に残してログに出す。
-    /// ファイルを読めなかった (ほかのプロセスが開いている・一時的に読めない) ときは、壊れてはいないので .broken に残さず、false を返す
-    /// (読み直すときは前の中身のまま続ける。空で差し替えると、一時的に読めないだけで中身が消える: issue #2272)。
+    /// ファイルを読めなかった (ほかのプロセスが開いている・一時的に読めない) ときは、壊れてはいないので .broken に残さず、false を返す。
+    /// 呼び出し側は、前の中身のまま続け、読めなかったファイルを上書きしない (一時的に読めないだけで中身が消える: issue #2272)。
+    /// stamp を渡すと、読めなかったときに忘れさせる (次の <see cref="FileStamp.Changed"/> で読み直す)。
     /// what は「定型文を読めませんでした」のように、ログに出す名前。
     /// </summary>
-    public static bool Load(string? path, string what, Action<string> load)
+    public static bool Load(string? path, string what, Action<string> load, FileStamp? stamp = null)
     {
         if (path is null || !File.Exists(path)) return true;
         string content;
@@ -78,7 +79,8 @@ internal static class DataFile
         }
         catch (Exception ex) when (IsFileError(ex))
         {
-            Diagnostics.Log.Warn($"{what}を読めませんでした (前の内容のまま続けます): {ex.Message}");
+            Diagnostics.Log.Warn($"{what}を読めませんでした: {ex.Message}");
+            stamp?.Forget();
             return false;
         }
         try
