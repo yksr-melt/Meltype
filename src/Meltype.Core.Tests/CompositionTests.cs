@@ -2015,7 +2015,7 @@ internal static class CompositionTests
         {
             "template", "memorial", "memories", "matches", "baggage", "bachelor", "authority", "bedding", "biggest", "bending",
             "home-made", "data-driven", "use-case", "meta-analysis", "name-based", "time-zone",
-            "bare-bones", "bare-metal", "bare-minimum",
+            "bare-bones", "bare-metal", "bare-minimum", "meme-based", "meme-themed",
         })
         {
             var k = new Keyboard(direct: true);
@@ -2081,6 +2081,26 @@ internal static class CompositionTests
             var k = new Keyboard(direct: true);
             k.Type(keys + "\n");
             Assert.Equal(expected, k.Host.Document, keys);
+        }
+    }
+
+    [Test]
+    public static void DirectMode_AmbiguousHyphenSurvivesAPause()
+    {
+        foreach (var (beforePause, afterPause, committed, direct) in new[]
+        {
+            ("bare-", "bones", "bare-bones\n", true),
+            ("tore-n", "inngu", "とれーにんぐ", false),
+            ("tore-ni", "nngu", "とれーにんぐ", false),
+            ("tore-", "", "とれー", false),
+        })
+        {
+            var k = new Keyboard(direct: true);
+            k.Type(beforePause);
+            k.Wait(950);
+            k.Type(afterPause + "\n");
+            Assert.Equal(committed, k.Host.Document, beforePause + afterPause);
+            Assert.Equal(direct, k.Direct, beforePause + afterPause);
         }
     }
 

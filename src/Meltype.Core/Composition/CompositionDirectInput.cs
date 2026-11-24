@@ -11,14 +11,16 @@ namespace Meltype.Composition;
 /// <summary>英数状態の打鍵をすぐアプリに通し、ローマ字と分かったら未確定入力へ移す。</summary>
 internal static class CompositionDirectInput
 {
-    /// <summary>英数状態の判定で、この時間打鍵が無ければ英語とみなして判定をやめる。</summary>
+    /// <summary>英数状態でふつうの語の判定を打ち切る無入力時間。</summary>
     private const long DirectHoldIdleMs = 700;
 
     /// <summary>英数状態で一定時間打鍵が止まったら、続きがないものとして判定する。</summary>
     internal static void Tick(CompositionState state, CompositionEnv env, long nowMs)
     {
         if (state.HeldLetters.Length == 0 || nowMs - state.HeldLastKeyTime < DirectHoldIdleMs) return;
-        DecideHeld(state, env, final: true);
+        // bare- に続く bones も、とれー に続く「にんぐ」も、途中の無入力だけでは区別できない。
+        var letters = state.HeldLetters.ToString();
+        if (!IsAmbiguousHyphen(letters, letters.LastIndexOf('-'))) DecideHeld(state, env, final: true);
     }
 
     // - を付けて使う英語の接頭辞 (e-mail、re-do、co-op、x-ray)
@@ -52,7 +54,7 @@ internal static class CompositionDirectInput
     /// <summary>長音としても読める語が、まだ - の後ろを待っているか。終わりなら Space・Enter で変換・確定する。</summary>
     internal static bool HasPendingLongVowel(CompositionState state) =>
         state.HeldLetters.Length > 1 && state.HeldLetters[^1] == '-' &&
-        !CompositionDetector.IsHyphenPrefix(state.HeldLetters.ToString(0, state.HeldLetters.Length - 1));
+        IsAmbiguousHyphen(state.HeldLetters.ToString(), state.HeldLetters.Length - 1);
 
     /// <summary>英数状態の保留を判定する。final は次の打鍵がないものとして判定するとき。</summary>
     internal static void DecideHeld(CompositionState state, CompositionEnv env, bool final)
@@ -62,7 +64,7 @@ internal static class CompositionDirectInput
         var hyphen = letters.LastIndexOf('-');
         var part = letters[(hyphen + 1)..];
         var verdict = env.Detector.IsHyphenatedEnglishWord(CompositionText.LearningContext(state.Text, env), letters) ? Verdict.English
-            : hyphen >= 0 && IsKnownLongVowelReading(env, letters[..hyphen], part, final) ? Verdict.Japanese
+            : IsAmbiguousHyphen(letters, hyphen) && IsKnownLongVowelReading(env, letters[..hyphen], part, final) ? Verdict.Japanese
             : part.Length == 0 ? Verdict.Undecided
             : env.ClassifyDirect!(part, final);
         // 2 文字の英単語 (up、my) でも、ローマ字の打ちかけとして読める (う + p) なら、続きを見てから決める
@@ -73,19 +75,16 @@ internal static class CompositionDirectInput
             verdict = Verdict.Undecided;
         }
         Diagnostics.Log.Info($"英数状態の判定: {Diagnostics.Log.Text(state.HeldLetters.ToString())}→ {verdict}{(final ? " (打ち終わり)" : "")}");
-        if (verdict == Verdict.Japanese)
-        {
-            SwitchHeldToJapanese(state, env);
-            // 末尾の - を Space・Enter で判定したときは同じキーで変換する。消す英字を前の文脈に含めない。
-            if (part.Length == 0) CompositionOutput.FlushPendingDelete(state.Out);
-        }
+        if (verdict == Verdict.Japanese) SwitchHeldToJapanese(state, env);
         else if (verdict != Verdict.Undecided || final) ReleaseHeldAsEnglish(state, env);
     }
 
+    // e- などの英語の接頭辞は従来の規則で保留する。ほかの語は、長音の読みもあるときだけ - が保留に入る。
+    private static bool IsAmbiguousHyphen(string letters, int hyphen) =>
+        hyphen > 0 && !CompositionDetector.IsHyphenPrefix(letters[..hyphen]);
+
     private static bool IsKnownLongVowelReading(CompositionEnv env, string beforeHyphen, string afterHyphen, bool final)
     {
-        // e- などの英語の接頭辞は後ろだけで判定する。ほかの語は、既知の長音の読み (とれー など) があるときだけ - を保留している。
-        if (CompositionDetector.IsHyphenPrefix(beforeHyphen)) return false;
         if (afterHyphen.Length == 0) return final;
         if (env.Detector.Romaji.AnalyzeFragment(afterHyphen) is not { IsValid: true, Partial: "" } suffix) return false;
         var prefix = env.Detector.Romaji.AnalyzeFragment(beforeHyphen);

@@ -87,9 +87,8 @@ internal static class CompositionKeys
             {
                 var firstPart = state.HeldLetters.Length == part.Length;
                 var prefix = firstPart && CompositionDetector.IsHyphenPrefix(part);
-                var englishWord = firstPart && !prefix &&
-                    env.Detector.IsListedEnglishWord(CompositionText.LearningContext(state.Text, env), part) &&
-                    env.ClassifyDirect!(part, true) == Verdict.English;
+                // meme も、完全一致は無くても memento の接頭辞として英語と判定できる。
+                var englishWord = firstPart && !prefix && env.ClassifyDirect!(part, true) == Verdict.English;
                 if (!englishWord || CommonReadings.Words.Contains(romaji.Kana + 'ー'))
                 {
                     state.HeldLetters.Append('-');
@@ -105,7 +104,7 @@ internal static class CompositionKeys
                 }
             }
             // 長音で終わる語も、Space・Enter で打ち終わったと分かれば、そのキーで変換・確定できる。
-            if (part.Length == 0 && vk is VirtualKeys.Space or VirtualKeys.Return && !state.Shift && !state.Modifier)
+            if (part.Length == 0 && !state.Shift && !state.Modifier && vk is VirtualKeys.Space or VirtualKeys.Return)
                 CompositionDirectInput.DecideHeld(state, env, final: true);
             else
             {

@@ -23,6 +23,9 @@ internal static class CompositionOutput
         var before = env.Before;
         if (before is null) return null;
         foreach (var edit in state.Commits) before = before[..^Math.Min(edit.DeleteBefore, before.Length)] + edit.Text;
+        // Space・Enter で英数の保留から日本語に戻るとき、置き換える英字はこの変換の前の文脈に含めない。
+        if (env.CanDeleteBackward && state.PendingExpect is { } pending && before.EndsWith(pending, StringComparison.Ordinal))
+            before = before[..^pending.Length];
         return FromSetting(env.Settings.Punctuation, before);
     }
 
@@ -42,18 +45,12 @@ internal static class CompositionOutput
 
     public static SessionResult Result(CompositionOutputState state, CompositionEnv env, bool consumed, Config.Settings settings)
     {
-        FlushPendingDelete(state);
+        if (state.PendingDelete > 0) CompositionOutput.Add(state, "");
         // アプリに渡したキーの文字は、確定した文字の続きとしては分からない
         if (!consumed) state.Committed.Clear();
         // 操作ガイドを出さない設定では、入力に応じた案内 (手動判定の提案・予測など) だけ。どのフロントもこの表示を受け取る
         var view = state.Hidden || state.View is not { } shown ? null : SessionResult.ForFront(shown, settings.ShowsGuide, settings.NumberKeysSelectCandidates);
         return new SessionResult(consumed, state.Commits.ToList(), view);
-    }
-
-    /// <summary>先に送ったキーの削除を確定し、この出来事の残りでは削除後の文脈を使えるようにする。</summary>
-    public static void FlushPendingDelete(CompositionOutputState state)
-    {
-        if (state.PendingDelete > 0) Add(state, "");
     }
 
     public static void PassCurrent(CompositionOutputState state) => state.PassedCurrent = true;
