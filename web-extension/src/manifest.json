@@ -44,6 +44,7 @@
         "<all_urls>"
       ],
       "js": [
+        "storage.js",
         "content.js"
       ],
       "run_at": "document_idle",
@@ -55,7 +56,10 @@
       "resources": [
         "engine/*",
         "engine/_framework/*",
-        "engine/mozc/*"
+        "engine/mozc/*",
+        "frame.html",
+        "frame.js",
+        "storage.js"
       ],
       "matches": [
         "<all_urls>"

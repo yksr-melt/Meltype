@@ -19,7 +19,25 @@ export interface LearningStorage {
   clear(): Promise<void>;
 }
 
-export interface AttachOptions extends LoadOptions {
+/** Core (判定・変換・学習) だけ。loadCore が返す。create・handle は、ほかの場所で動かすときは Promise を返してよい */
+export interface Core {
+  readonly version: string;
+  readonly mozc: boolean;
+  /** 入力欄 1 つの本体を作り、番号を返す */
+  create(): number | Promise<number>;
+  /** 出来事 (ImeEvent の JSON) を渡し、答え (ImeOutput の JSON) を返す */
+  handle(host: number, json: string): string | Promise<string>;
+  /** 変換の結果が後から届いたときに呼ぶ。返す関数で外す */
+  onReady(listener: () => void): () => void;
+  clearLearning(): Promise<void>;
+}
+
+export interface EngineOptions extends LoadOptions {
+  /** ほかの場所 (拡張機能のページなど) で動かしている Core。渡すとこのページでは Core を読まない */
+  core?: Core;
+}
+
+export interface AttachOptions extends EngineOptions {
   /** 画面のキーボードを出すか。"auto" (既定) は指で操作する端末だけ */
   keyboard?: "auto" | "always" | "never";
   /** 確定した文字を入力欄に入れたとき */
@@ -43,15 +61,18 @@ export interface Engine {
 }
 
 /** 本体を読み込む。2 回目からは同じものを返す */
-export function load(options?: LoadOptions): Promise<Engine>;
+export function load(options?: EngineOptions): Promise<Engine>;
+
+/** Core だけを読み込む (入力欄の画面は持たない) */
+export function loadCore(options?: LoadOptions): Promise<Core>;
 
 /** 入力欄に付ける。本体をまだ読んでいなければ読む */
 export function attach(element: HTMLElement, options?: AttachOptions): Promise<Attachment>;
 
-declare const Meltype: { load: typeof load; attach: typeof attach };
+declare const Meltype: { load: typeof load; loadCore: typeof loadCore; attach: typeof attach };
 export default Meltype;
 
 declare global {
   /** <script src="meltype.js"> で読んだとき */
-  var Meltype: { load: typeof load; attach: typeof attach };
+  var Meltype: { load: typeof load; loadCore: typeof loadCore; attach: typeof attach };
 }

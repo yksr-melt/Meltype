@@ -86,9 +86,10 @@ async function showCurrentSite() {
   $("[data-site-name]").textContent = currentSite;
   $("[data-site-row]").hidden = false;
   $("[data-site-toggle]").addEventListener("change", (event) => setExcluded(currentSite, !event.target.checked));
-  // サイトの CSP のために動かせなかったか (ページのスクリプトがまだ無いページは答えない)
+  // このページでどう動いているか (ページのスクリプトがまだ無いページは答えない)
   api.tabs.sendMessage(tab.id, { type: "meltype:status" }).then((status) => {
     if (status?.blocked) $("[data-blocked-note]").hidden = false;
+    else if (status?.remote) $("[data-remote-note]").hidden = false;
   }, () => {});
 }
 

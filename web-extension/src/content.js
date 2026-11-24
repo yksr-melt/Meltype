@@ -3,8 +3,10 @@
 //
 // どのページにも入れる小さなスクリプト。入力欄に初めてフォーカスしたときだけ、拡張機能の中の Web エンジン (engine/) を読み、
 // その入力欄に付ける (重いので、入力欄を使わないページでは読まない)。
-// エンジンはこのコンテンツスクリプトの中で動く。キーをページに通すかをその場で決める必要があるので、裏のページとのやり取りにはできない。
-// 覚えたことは拡張機能の storage に置く (ページの IndexedDB に置くと、そのサイトから読めてしまう)。
+// エンジンは、ふだんはこのコンテンツスクリプトの中で動く (キーをページに通すかを、その場で Core に聞ける)。
+// ページの CSP が WebAssembly を止めている (script-src に 'wasm-unsafe-eval' が無い) と、コンテンツスクリプトの中でも動かせないので、
+// Core だけを拡張機能のページ (frame.html) で動かし、見えない iframe でページに置いてやり取りする (remoteCore)。
+// 覚えたことは拡張機能の storage に置く (storage.js)。
 
 (() => {
   "use strict";
@@ -14,31 +16,86 @@
   const TEXT_INPUT_TYPES = new Set(["text", "search", ""]);
 
   let enginePromise = null;
-  // 覚えたことを消したら、このタブを読み込み直すまで残さない (エンジンはまだ前のことを覚えているので)
-  let cleared = false;
   const attachments = new Map();
   let disabledSites = [];
   // 一時的にオフ (ショートカットキー・ポップアップ。background.js がブラウザーの起動でオンに戻す)
   let paused = false;
 
-  const storage = {
-    get: async () => (await api.storage.local.get("learning")).learning ?? null,
-    set: async (json) => {
-      if (!cleared) await api.storage.local.set({ learning: json });
-    },
-    clear: () => api.storage.local.remove("learning"),
-  };
-
-  // 読めなかったら、このページでは読み直さない (入力欄を選ぶたびに 40MB を読み直さないように)。
-  // ページの CSP が WebAssembly を許していない (script-src に 'wasm-unsafe-eval' が無い) と、拡張機能のスクリプトの中でも動かせない
+  // 読めなかったら、このページでは読み直さない (入力欄を選ぶたびに読み直さないように)
   const loadEngine = () => enginePromise ??= (async () => {
     await import(api.runtime.getURL("engine/meltype.js"));
-    return globalThis.Meltype.load({ baseUrl: api.runtime.getURL("engine/"), storage });
+    const baseUrl = api.runtime.getURL("engine/");
+    const core = await wasmAllowed() ? undefined : await remoteCore();
+    return globalThis.Meltype.load({ baseUrl, storage: globalThis.meltypeLearningStorage, core });
   })().catch((error) => {
     blocked = true;
     throw error;
   });
   let blocked = false;
+  // Core を拡張機能のページで動かしているか (ポップアップが見せる)
+  let remote = false;
+
+  /** このページの CSP の下で、WebAssembly を作れるか (いちばん小さいモジュールで試す) */
+  async function wasmAllowed() {
+    try {
+      await WebAssembly.compile(new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * 拡張機能のページ (frame.html) で動かす Core。ページに見えない iframe で置き、runtime.connect でやり取りする。
+   * iframe は閉じた Shadow DOM の中に置き、サイトのスクリプトから触れないようにする。
+   */
+  async function remoteCore() {
+    remote = true;
+    const token = crypto.randomUUID();
+    const holder = document.createElement("meltype-engine");
+    Object.assign(holder.style, { position: "fixed", width: "0", height: "0", overflow: "hidden", visibility: "hidden" });
+    const frame = document.createElement("iframe");
+    frame.src = api.runtime.getURL(`frame.html?token=${token}`);
+    frame.setAttribute("aria-hidden", "true");
+    frame.tabIndex = -1;
+    holder.attachShadow({ mode: "closed" }).append(frame);
+    const loaded = new Promise((resolve) => frame.addEventListener("load", resolve, { once: true }));
+    document.documentElement.append(holder);
+    await loaded;
+
+    const port = api.runtime.connect({ name: `meltype:${token}` });
+    const calls = new Map();
+    const listeners = new Set();
+    let nextId = 0;
+    port.onMessage.addListener(({ id, op, result, error }) => {
+      if (op === "ready") return listeners.forEach((f) => f());
+      const call = calls.get(id);
+      calls.delete(id);
+      if (error) call?.reject(new Error(error));
+      else call?.resolve(result);
+    });
+    port.onDisconnect.addListener(() => {
+      for (const call of calls.values()) call.reject(new Error("Meltype の本体とのつながりが切れました"));
+      calls.clear();
+    });
+    const call = (op, args = {}) => new Promise((resolve, reject) => {
+      const id = nextId++;
+      calls.set(id, { resolve, reject });
+      port.postMessage({ id, op, ...args });
+    });
+    const { version, mozc } = await call("info");
+    return {
+      version,
+      mozc,
+      create: () => call("create"),
+      handle: (host, json) => call("handle", { host, json }),
+      onReady(listener) {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+      clearLearning: () => globalThis.meltypeLearningStorage.clear(),
+    };
+  }
 
   const siteEnabled = () => !paused && !disabledSites.includes(location.hostname);
 
@@ -86,6 +143,8 @@
   api.storage.local.get(["disabledSites", "paused"]).then((value) => {
     disabledSites = value.disabledSites ?? [];
     paused = value.paused === true;
+    // このスクリプトが入る前にフォーカスがあった入力欄 (開くと自動でフォーカスするページ) にも付ける
+    attachTo(focusedElement());
   });
   api.storage.onChanged.addListener((changes, area) => {
     if (area !== "local") return;
@@ -96,14 +155,13 @@
       if (siteEnabled()) attachTo(focusedElement());
       else detachAll();
     }
-    if (changes.learning && changes.learning.newValue === undefined) cleared = true;
   });
   document.addEventListener("focusin", onFocusIn, true);
   // ポップアップが、このページで動いているかを聞く (一番上のフレームだけが答える)
   if (window === window.top) {
     api.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       if (message?.type !== "meltype:status") return;
-      sendResponse({ blocked, loaded: enginePromise !== null && !blocked });
+      sendResponse({ blocked, remote, loaded: enginePromise !== null && !blocked });
     });
   }
 })();

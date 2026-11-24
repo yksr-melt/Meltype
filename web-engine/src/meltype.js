@@ -56,10 +56,12 @@
   let ui = null;
 
   /**
-   * 本体 (Core と Mozc) を読み込む。2 回目からは同じものを返す。
+   * 本体 (Core と Mozc) を読み込み、入力欄に付けられるようにする。2 回目からは同じものを返す。
    * options.baseUrl: 本体を置いた場所。options.persist: 学習データを残すか (既定は true)。
    * options.storage: 学習データの置き場 ({ get(): Promise<string | null>, set(json), clear() })。既定はそのページの IndexedDB。
    * options.onProgress({ phase, loaded, total }): 読み込みの進み具合 (phase は "core"・"dictionary"・"ready")。
+   * options.core: ほかの場所で動かしている Core (loadCore の返す物と同じ形で、create・handle が Promise を返す)。
+   *   拡張機能 (web-extension/) が、ページの CSP が WebAssembly を止めているときに、拡張機能の中で動かす Core を渡す。
    */
   function load(options = {}) {
     return enginePromise ??= start(options).catch((error) => {
@@ -71,12 +73,31 @@
   async function start(options) {
     if (options.baseUrl) baseUrl = new URL(options.baseUrl, location.href);
     if (!baseUrl) throw new Error("Meltype: 本体の場所が分かりません。load({ baseUrl }) で指定してください");
-    const progress = options.onProgress ?? (() => {});
-    const persist = options.persist !== false;
     const css = await fetch(new URL("meltype.css", baseUrl)).then((response) => {
       if (!response.ok) throw new Error(`meltype.css: ${response.status}`);
       return response.text();
     });
+    const core = options.core ?? await loadCore(options);
+    ui = createUi(css);
+    return {
+      version: core.version,
+      mozc: core.mozc,
+      attach: (element, attachOptions) => attachTo(core, element, attachOptions),
+      /** 覚えたことを消す (次に読み込んだときから、覚える前に戻る)。 */
+      clearLearning: () => core.clearLearning(),
+    };
+  }
+
+  /**
+   * Core (判定・変換・学習) だけを読み込む。入力欄の画面は持たない。
+   * 返す物: { version, mozc, create(), handle(host, json), onReady(listener) → 外す関数, clearLearning() }。
+   * create は入力欄 1 つの本体の番号を、handle は出来事 (ImeEvent の JSON) への答え (ImeOutput の JSON) を返す。
+   */
+  async function loadCore(options = {}) {
+    if (options.baseUrl) baseUrl = new URL(options.baseUrl, location.href);
+    if (!baseUrl) throw new Error("Meltype: 本体の場所が分かりません。loadCore({ baseUrl }) で指定してください");
+    const progress = options.onProgress ?? (() => {});
+    const persist = options.persist !== false;
 
     progress({ phase: "core" });
     const { dotnet } = await import(new URL("_framework/dotnet.js", baseUrl).href);
@@ -95,16 +116,12 @@
     const saved = store ? await store.get() : null;
     if (saved) core.ImportData(saved);
     core.Init(mozc !== null);
-    ui = createUi(css);
 
     let saveTimer = 0;
     const save = () => {
       clearTimeout(saveTimer);
       saveTimer = 0;
       store?.set(core.ExportData())?.catch?.((error) => console.warn("Meltype: 学習データを残せませんでした", error));
-    };
-    const scheduleSave = () => {
-      if (store && !saveTimer) saveTimer = setTimeout(save, SAVE_DELAY_MS);
     };
     // ページを閉じる・隠すときは待たずに写す
     addEventListener("pagehide", () => saveTimer && save());
@@ -114,8 +131,17 @@
     return {
       version: core.Version(),
       mozc: mozc !== null,
-      attach: (element, attachOptions) => attachTo({ core, listeners, scheduleSave }, element, attachOptions),
-      /** 覚えたことを消す (次に読み込んだときから、覚える前に戻る)。 */
+      create: () => core.Create(),
+      handle(host, json) {
+        const output = core.Handle(host, json);
+        // 確定したら学習データを写す (Core はファイルを少し遅れて書くので、確定のたびではなく間を空けて)
+        if (store && !saveTimer && !output.includes('"commits":[]')) saveTimer = setTimeout(save, SAVE_DELAY_MS);
+        return output;
+      },
+      onReady(listener) {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
       async clearLearning() {
         clearTimeout(saveTimer);
         saveTimer = 0;
@@ -207,21 +233,49 @@
   /**
    * options.keyboard: 画面のキーボードを出すか。"auto" (既定) は指で操作する端末だけ、"always"・"never"。
    * options.onCommit(text): 確定した文字を入れたとき。
+   *
+   * Core がこのページで動いているときは、答えをその場で受け取り、キーを入力欄に通すかを Core が決める。
+   * ほかの場所で動いている (core.create が Promise を返す。拡張機能) ときは答えを待てないので、
+   * Core が前の答えで知らせた「受け取るキー」(ImeState.Capture。Windows の TSF 版と同じ) でその場で決め、
+   * 外れたら (受け取ると決めたのに Core が通したら) 、そのキーの動きを代わりに入力欄に書く。
    */
-  function attachTo(engine, element, options = {}) {
+  function attachTo(core, element, options = {}) {
     const field = element.isContentEditable ? editableField(element) : textField(element);
-    const host = engine.core.Create();
+    const created = core.create();
+    const remote = created instanceof Promise;
+    let host = remote ? null : created;
     const box = createBox();
     let view = null;
+    let state = null;
     let focused = false;
+    // 答えを待っている出来事の数と、その順番 (ほかの場所の Core に、送った順に答えさせる)
+    let pending = 0;
+    let queue = remote ? created.then((h) => { host = h; }) : null;
 
+    /** 出来事を送る。Core がこのページにあれば受け取ったか (consumed) を、ほかの場所にあればそれを返す Promise を返す */
     const send = (type, extra = {}) => {
       const event = {
         version: IME_VERSION, type, instance: "web",
         field: { ...field.context(), composing: view !== null, app: location.hostname || null, title: document.title || null },
         ...extra,
       };
-      const output = JSON.parse(engine.core.Handle(host, JSON.stringify(event)));
+      const json = JSON.stringify(event);
+      if (!remote) return finish(type, core.handle(host, json));
+      pending++;
+      const answer = queue.then(() => core.handle(host, json)).then((output) => {
+        pending--;
+        return finish(type, output);
+      }, (error) => {
+        pending--;
+        throw error;
+      });
+      queue = answer.catch((error) => console.warn("Meltype: 答えを受け取れませんでした", error));
+      return answer;
+    };
+
+    const finish = (type, text) => {
+      const output = JSON.parse(text);
+      state = output.state;
       apply(output.result);
       // 日本語のモードだけで使う (MODE_KEYS)。Core の設定のショートカットなどで英数を選んだら、日本語に戻す。
       // コードの行は日本語を選んだままでも英数になる (languageMode) ので、選んでいるモード (imeOpen) で見る
@@ -229,12 +283,28 @@
       return output.result.consumed;
     };
 
+    /**
+     * ほかの場所の Core が、このキーを受け取るか (答えを待たずに決める)。変換中・答えを待っている間は、修飾キーの無いキーはすべて受け取る。
+     * 変換していなければ、Core が前の答えで知らせた受け取るキー (印字できる ASCII と、Space などのショートカット) だけ。
+     */
+    const predictConsumed = (e, key) => {
+      if (state && !state.handlesInput) return false;
+      const capture = state?.capture;
+      const modifiers = (e.shiftKey ? 1 : 0) | (e.ctrlKey ? 2 : 0) | (e.altKey ? 4 : 0) | (e.metaKey ? 8 : 0);
+      const vk = key.vk || (/^[a-z]$/i.test(e.key) ? e.key.toUpperCase().charCodeAt(0) : /^\d$/.test(e.key) ? e.key.charCodeAt(0) : 0);
+      const matches = (list) => (list ?? []).some((s) => s.vk === vk && s.modifiers === modifiers);
+      if (view || pending > 0) return !(e.ctrlKey || e.altKey || e.metaKey) || matches(capture?.ctrlKeysWhileComposing);
+      if (key.ch >= 0x21 && key.ch <= 0x7e && !(e.ctrlKey || e.altKey || e.metaKey)) {
+        return (capture?.printableAscii ?? true) && !(capture?.printableAsciiExcept ?? "").includes(e.key);
+      }
+      return matches(capture?.shortcuts);
+    };
+
     const apply = (result) => {
       for (const commit of result.commits) {
         field.insert(commit.text, commit.removeBefore ?? "", commit.moveCaretBack);
         options.onCommit?.(commit.text);
       }
-      if (result.commits.length) engine.scheduleSave();
       view = result.view;
       drawBox(box, view, () => field.caretRect());
       keyboard?.drawCaret();
@@ -257,6 +327,22 @@
       if (key.vk < 0) {
         // Core が知らないキー (F1 など) は、変換中の文字を確定してから通す
         if (view) send("CommitRequested", { caret: { moved: true, passedKey: 0 } });
+        return;
+      }
+      if (remote) {
+        if (predictConsumed(e, key)) {
+          e.preventDefault();
+          send("KeyPressed", { key }).then((consumed) => {
+            if (consumed) return;
+            // 外れた: Core が通したキーを、ブラウザーの代わりに入力欄に書く
+            field.passKey(e.key);
+            if (key.vk) send("CaretMoved", { caret: { moved: true, passedKey: key.vk, ctrl: key.ctrl } });
+          });
+        } else {
+          // 変換中に Ctrl などと一緒に押したキーは、変換中の文字を確定してから通す (確定はブラウザーが反映した後に届く)
+          if (view) send("CommitRequested", { caret: { moved: true, passedKey: 0 } });
+          if (key.vk) setTimeout(() => send("CaretMoved", { caret: { moved: true, passedKey: key.vk, ctrl: key.ctrl } }));
+        }
         return;
       }
       if (send("KeyPressed", { key })) {
@@ -297,7 +383,7 @@
     element.addEventListener("blur", onBlur);
     box.addEventListener("pointerdown", onPointerDownBox);
     box.addEventListener("click", onClickCandidate);
-    engine.listeners.add(onReady);
+    const offReady = core.onReady(onReady);
     send("StateRequested");
     // フォーカスがあってから付けた (本体を読んでいる間に入力欄を選んだ・拡張機能が付けた) ときは、ここで入ったことにする
     if (element.getRootNode().activeElement === element) onFocus();
@@ -309,7 +395,7 @@
         element.removeEventListener("pointerup", onPointerUp);
         element.removeEventListener("focus", onFocus);
         element.removeEventListener("blur", onBlur);
-        engine.listeners.delete(onReady);
+        offReady();
         keyboard?.remove();
         box.remove();
       },
@@ -689,6 +775,7 @@
 
   globalThis.Meltype = {
     load,
+    loadCore,
     attach,
     /** ES モジュール (index.mjs) が、自分の場所を本体の場所として渡す */
     setBaseUrl(url) {

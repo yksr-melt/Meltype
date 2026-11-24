@@ -182,6 +182,7 @@ web-engine/build.sh</code><button class="copy" type="button" data-copy="git clon
               <tr><td><code>attach(element, options)</code></td><td>入力欄に付けます。本体をまだ読んでいなければ読みます。返す物の <code>detach()</code> で外します</td></tr>
               <tr><td><code>load(options)</code></td><td>本体だけを先に読みます。返す物 (<code>Engine</code>) の <code>attach()</code> は待たずに付けられます</td></tr>
               <tr><td><code>engine.clearLearning()</code></td><td>覚えたことを消します</td></tr>
+              <tr><td><code>loadCore(options)</code></td><td>判定・変換・学習だけを読みます。拡張機能のページなど、ほかの場所で動かして <code>load({ core })</code> で渡すときに使います</td></tr>
             </tbody>
           </table>
         </div>

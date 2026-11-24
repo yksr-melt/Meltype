@@ -39,6 +39,7 @@ await attach(document.querySelector("textarea"));
 | `attach(element, options)` | `<textarea>`・`<input>`・`contenteditable` の要素に付ける。本体をまだ読んでいなければ読む。返す物の `detach()` で外す |
 | `load(options)` | 本体だけを先に読む。返す物 (`Engine`) の `attach()` は待たずに付けられる。2 回目からは同じものを返す |
 | `engine.clearLearning()` | 覚えたことを消す |
+| `loadCore(options)` | Core (判定・変換・学習) だけを読む。入力欄の画面は持たない。ほかの場所 (拡張機能のページなど) で Core を動かし、`load({ core })` で渡すときに使う |
 
 | 設定 | 既定 | 内容 |
 | --- | --- | --- |
@@ -48,6 +49,7 @@ await attach(document.querySelector("textarea"));
 | `onCommit(text)` | | 確定した文字を入力欄に入れたとき |
 | `onProgress({ phase, loaded, total })` | | 読み込みの進み具合。`phase` は `"core"`・`"dictionary"` (辞書。`loaded`・`total` はバイト数)・`"ready"` |
 | `baseUrl` | `meltype.js`・`index.mjs` の場所 | 本体を置いた場所 |
+| `core` | | ほかの場所で動かしている Core (`loadCore` の返す物と同じ形。`create`・`handle` は Promise を返してよい)。渡すと、このページでは Core を読まない |
 
 型は `index.d.ts` にあります。
 
@@ -71,6 +73,8 @@ await attach(document.querySelector("textarea"));
   - `contenteditable` は `readonly` にできないので、Android の Firefox では端末のキーボードも出ます。
 - 覚えたことは、既定ではそのブラウザーのそのサイトの IndexedDB にだけ残ります (`storage` で置き場を変えられます)。プライベートブラウズなどで残せないときは、ページを閉じると忘れます。
 - パスワードの入力欄 (`type="password"`) では何もしません。
+
+Core をほかの場所で動かす (`core` を渡す) ときは、答えを待たずにキーを入力欄に通すかを決めます。Core が前の答えで知らせた「受け取るキー」(印字できる文字・Space など) で決め、変換中は修飾キーの無いキーをすべて受け取ります。外れたとき (受け取ったのに Core が通したとき) は、そのキーの動き (文字・Backspace・Enter・← →) を代わりに入力欄に書きます。
 
 ## 組み込むサイトに要るもの
 

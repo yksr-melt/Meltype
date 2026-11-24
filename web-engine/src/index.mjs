@@ -11,5 +11,5 @@ const { Meltype } = globalThis;
 // 本体 (_framework/・mozc/) は、このファイルの隣に置いてある
 Meltype.setBaseUrl(new URL(".", import.meta.url));
 
-export const { load, attach } = Meltype;
+export const { load, loadCore, attach } = Meltype;
 export default Meltype;
