@@ -38,7 +38,7 @@ public sealed class AppState
         }
         else if (File.Exists(configPath))
         {
-            DataFile.Load(configPath, "config.json の状態の値", json =>
+            var read = DataFile.Load(configPath, "config.json の状態の値", json =>
             {
                 state = Parse(json);
                 // 動作モードが IME 自動切替 (消した) だった: 初めて起動したときと同じく、
@@ -46,7 +46,8 @@ public sealed class AppState
                 if (Settings.TopLevelStringIs(json, nameof(Settings.Mode), "AutoSwitch")) state.TsfIntroduced = false;
             });
             state._path = path;
-            state.Save();
+            // 読めなかったら state.json を作らない (作ると、次の起動で移行しない)
+            if (read) state.Save();
         }
         state._path = path;
         return state;

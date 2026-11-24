@@ -33,12 +33,12 @@ internal static class ShortcutSettingsTests
             var settings = new Settings { ShowNotifications = true }.Normalize();
             Assert.True(TrayApplicationContext.ProfileSwitchMessage(settings) is not null, "通常の切替では Info 通知");
             var values = settings.ProfileValues();
-            values[nameof(Settings.ToggleShortcuts)] = new System.Text.Json.Nodes.JsonArray(new System.Text.Json.Nodes.JsonObject { ["Key"] = 28 });
+            values[nameof(Settings.ToggleShortcuts)] = new System.Text.Json.Nodes.JsonArray(new System.Text.Json.Nodes.JsonObject { ["Key"] = 0x70 });
             settings.Profiles.Add(new SettingsProfile { Name = "古い設定", Values = values });
             var next = settings.SwitchProfile("古い設定");
             Assert.True(TrayApplicationContext.ProfileSwitchMessage(next) is null, "除外した切替では Info を要求しない");
             var warning = TrayApplicationContext.TakeShortcutExclusionMessage(next.ShowNotifications);
-            Assert.True(warning is not null && warning.Contains("変換"), "Info の判定で除外警告を消費しない");
+            Assert.True(warning is not null && warning.Contains("F1"), "Info の判定で除外警告を消費しない");
             Assert.True(TrayApplicationContext.TakeShortcutExclusionMessage(true) is null, "Warning は一度だけ取り出す");
             next.ShowNotifications = false;
             Assert.True(TrayApplicationContext.ProfileSwitchMessage(next) is null, "通知 OFF では Info も省略");
@@ -53,9 +53,9 @@ internal static class ShortcutSettingsTests
         Meltype.Diagnostics.ShortcutExclusions.Drain();
         try
         {
-            new Settings { ToggleShortcuts = [new() { Key = 28 }, new() { Key = 29 }] }.Normalize();
+            new Settings { ToggleShortcuts = [new() { Key = 0x70 }, new() { Key = 0x71 }] }.Normalize();
             var message = TrayApplicationContext.TakeShortcutExclusionMessage(true);
-            Assert.True(message is not null && message.Contains("変換") && message.Contains("無変換"), "トレイ生成前の複数の除外をまとめる");
+            Assert.True(message is not null && message.Contains("F1") && message.Contains("F2"), "トレイ生成前の複数の除外をまとめる");
             Assert.True(TrayApplicationContext.TakeShortcutExclusionMessage(true) is null, "消費後は再通知しない");
             new Settings { ToggleShortcuts = [new() { Key = -1 }] }.Normalize();
             Assert.True(TrayApplicationContext.TakeShortcutExclusionMessage(false) is null, "通知 OFF では表示しない");
@@ -68,7 +68,7 @@ internal static class ShortcutSettingsTests
     [Test]
     public static void Shortcut_ExclusionNotificationShowsKeysAndRemainingCount()
     {
-        var item = new Meltype.Diagnostics.ShortcutExclusion(new() { Key = 28 }, ShortcutValidationError.ConvertKeys, "仕事");
+        var item = new Meltype.Diagnostics.ShortcutExclusion(new() { Key = 28 }, ShortcutValidationError.UnmodifiedKey, "仕事");
         var message = TrayApplicationContext.ShortcutExclusionMessage([item, item with { Shortcut = new() { Key = 29 } }, item with { Shortcut = null }, item]);
         Assert.True(message.Contains("変換") && message.Contains("無変換") && message.Contains("null"), "除外キーの名前を表示");
         Assert.True(message.Contains("ほか 1 件") && message.Contains("ログ / 判定理由"), "残り件数とログへの案内");
@@ -84,7 +84,7 @@ internal static class ShortcutSettingsTests
             new() { Key = 0x19, Modifiers = ShortcutModifiers.Control },
             new() { Key = 0x55, Modifiers = ShortcutModifiers.Control },
             new() { Key = 0x76 },
-            new() { Key = 0x1C }, new() { Key = 0xA4 },
+            new() { Key = 0x41 }, new() { Key = 0xA4 },
         }) Assert.True(ToggleShortcutValidator.Validate(binding, settings, []) != ShortcutValidationError.None, "既存操作との衝突");
         Assert.True(ToggleShortcutValidator.Validate(new ToggleShortcut { Key = 0x09, Modifiers = ShortcutModifiers.Alt }, settings, []) == ShortcutValidationError.None, "Alt+Tab の登録を拒否しない");
         var valid = new ToggleShortcut { Key = 0x20, Modifiers = ShortcutModifiers.Control };
