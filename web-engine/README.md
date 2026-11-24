@@ -45,7 +45,7 @@ await attach(document.querySelector("textarea"));
 | --- | --- | --- |
 | `keyboard` | `"auto"` | 画面のキーボードを出すか。`"auto"` は指で操作する端末だけ、`"always"`・`"never"` |
 | `persist` | `true` | 覚えたこと (変換の選び方など) を残すか |
-| `storage` | そのページの IndexedDB | 覚えたことの置き場 (`{ get(), set(json), clear() }`。どれも Promise を返す) |
+| `storage` | そのページの IndexedDB | 覚えたことの置き場 (`{ get(), set(json), onChange(listener) }`。`get`・`set` は Promise を返す。`onChange` は、ほかのタブなどが保存した・消した (`null`) ときに呼んでもらう関数を受け取る) |
 | `onCommit(text)` | | 確定した文字を入力欄に入れたとき |
 | `onProgress({ phase, loaded, total })` | | 読み込みの進み具合。`phase` は `"core"`・`"dictionary"` (辞書。`loaded`・`total` はバイト数)・`"ready"` |
 | `baseUrl` | `meltype.js`・`index.mjs` の場所 | 本体を置いた場所 |
@@ -72,7 +72,9 @@ await attach(document.querySelector("textarea"));
   - `<textarea>`・`<input>` は `readonly` にしてカーソルを描きます (Android の Firefox は `inputmode="none"` でも端末のキーボードを出すことがあるため)。
   - `contenteditable` は `readonly` にできないので、Android の Firefox では端末のキーボードも出ます。
 - 覚えたことは、既定ではそのブラウザーのそのサイトの IndexedDB にだけ残ります (`storage` で置き場を変えられます)。プライベートブラウズなどで残せないときは、ページを閉じると忘れます。
-- パスワードの入力欄 (`type="password"`) では何もしません。
+- 同じサイトを複数のタブで開いていても、覚えたことは上書きし合いません。ほかのタブが保存したら、このタブも読み直します (デスクトップ版で、入力と設定画面が学習データを共有するのと同じ)。`clearLearning()` で消すと、ほかのタブも消えます。
+- 付けられる `<input>` は、文字を打つもの (`text`・`search`・`url`・`tel`) だけです。パスワード・メールアドレス・数字などの入力欄に `attach()` しても、何もしません。
+- 変換に使ったキー (確定の Enter など) は、ページのほかのキーのリスナーにも届きません。Enter で送信するページでも、確定で送信されません。
 
 Core をほかの場所で動かす (`core` を渡す) ときは、答えを待たずにキーを入力欄に通すかを決めます。Core が前の答えで知らせた「受け取るキー」(印字できる文字・Space など) で決め、変換中は修飾キーの無いキーをすべて受け取ります。外れたとき (受け取ったのに Core が通したとき) は、そのキーの動き (文字・Backspace・Enter・← →) を代わりに入力欄に書きます。
 
@@ -96,7 +98,7 @@ GPL-3.0-or-later です。このエンジン (JS・WebAssembly) はページを�
 
 ```bash
 dotnet workload install wasm-tools
-web-ime/mozc/build-mozc-wasm.sh   # Mozc (初回は 30 分以上。作らなければ、かなのまま確定する版になる)
+native/mozc/build-mozc-wasm.sh    # Mozc (初回は 30 分以上。作らなければ、かなのまま確定する版になる)
 web-engine/build.sh                # → web-engine/dist/
 ```
 

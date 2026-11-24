@@ -4,5 +4,4 @@ node_modules/
 dist/
 public/guide/
 public/assets/js/typing-sentences.js
-public/playground/engine/
 public/web-engine/engine/

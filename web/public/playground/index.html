@@ -1,5 +1,5 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
-<!-- Copyright (C) 2026 Yukishiro -->
+<!-- Copyright (C) 2026 hisiragi -->
 
 <!doctype html>
 <html lang="ja">
@@ -26,7 +26,7 @@
   <link rel="stylesheet" href="/assets/css/site.css">
   <script type="module" src="/assets/js/playground.js"></script>
 </head>
-<body>
+<body class="uses-meltype">
   <a class="skip" href="#main">本文へ移動</a>
 
   <header class="site-header" data-header>
@@ -65,11 +65,9 @@
     </section>
 
     <div class="playground wrap">
-      <p class="callout is-info" hidden data-touch-note><svg class="ic"><use href="/assets/img/icons.svg#i-info"/></svg><span>スマートフォン・タブレットでは、画面の下のキーボードで打ちます (端末のキーボードの変換と混ざらないように、端末のキーボードは出しません)。</span></p>
-
       <section class="card" aria-labelledby="try-title">
         <h2 class="step-title" id="try-title"><span class="step-no">1</span>打ってみる</h2>
-        <p class="hint" data-desktop-hint>IME をオフ (半角英数) にしてから打ってください。</p>
+        <p class="hint">IME をオフ (半角英数) にしてから打ってください。スマートフォン・タブレットでは、画面の下に出るキーボードで打ちます (端末のキーボードの変換と混ざらないように、端末のキーボードは出しません)。</p>
         <div class="playground-field">
           <textarea class="textarea" id="playground-text" placeholder="kyouhagooglede kensakusita" spellcheck="false" autocomplete="off" disabled data-field></textarea>
         </div>
@@ -92,12 +90,10 @@
           <li><kbd>←</kbd><kbd>→</kbd> 文節を移る　<kbd>Shift</kbd>+<kbd>←</kbd><kbd>→</kbd> 区切りを変える　<kbd>1</kbd>〜<kbd>9</kbd> 候補を選ぶ</li>
           <li>日本語と英語の切り替えはありません。どちらもそのまま打てます</li>
         </ul>
-        <p class="hint">アプリと違い、覚えたことはページを閉じると消えます。AI の変換 (Zenzai) はありません。</p>
+        <p class="hint">覚えたことは、このブラウザーの中に残ります。AI の変換 (Zenzai) はありません。</p>
       </section>
     </div>
   </main>
-
-  <div class="vkeys" hidden data-vkeys aria-label="キーボード"></div>
 
   <footer class="site-footer">
     <div class="wrap footer-inner">
@@ -111,6 +107,7 @@
         <li><a href="https://discord.gg/y44wBbBgHt">Discord</a></li>
         <li><a href="https://github.com/sponsors/yksr-melt">応援する</a></li>
         <li><a href="/playground/">ブラウザーで試す</a></li>
+        <li><a href="/web-engine/">Web エンジン</a></li>
         <li><a href="/typing/">タイピング</a></li>
         <li><a href="/report/">問題を報告する</a></li>
       </ul>

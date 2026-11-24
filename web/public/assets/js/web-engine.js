@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Yukishiro
+// Copyright (C) 2026 hisiragi
 
 // /web-engine/: Web エンジンの紹介とデモ。
-// デモのエンジン (web-engine/dist/) は npm run web-engine が public/web-engine/engine/ に写す (コミットしない)。
-// 20 MB ほどあるので、開いただけでは読まず、「デモを読み込む」を押したときに読む。
+// エンジンは 20 MB ほどあるので、開いただけでは読まず、「デモを読み込む」を押したときに読む。
 
 import { initCopyButtons, initHeader } from "./common.js";
+import { loadEngine, sampleLabel, typeSample } from "./meltype-engine.js";
 
 initHeader();
 initCopyButtons();
@@ -39,7 +39,7 @@ const hint = document.querySelector("[data-demo-hint]");
 const progress = document.querySelector("[data-progress]");
 const bar = document.querySelector("[data-progress-bar]");
 
-// 末尾の <Key> は最後に押すキー。日本語と英語の区切りが分かれやすい入力を選んでいる
+// 日本語と英語の区切りが分かれやすい入力を選んでいる
 const SAMPLES = [
   "kyouhagooglede kensakusita<Enter>",
   "nijigadeta<Space>",
@@ -47,40 +47,23 @@ const SAMPLES = [
   "dottonetto<Space>",
 ];
 const sampleButtons = SAMPLES.map((sample) => {
-  const button = Object.assign(document.createElement("button"), { type: "button", textContent: sample.replace(/<(\w+)>$/, " + $1"), disabled: true });
-  button.addEventListener("click", () => typeSample(sample));
+  const button = Object.assign(document.createElement("button"), { type: "button", textContent: sampleLabel(sample), disabled: true });
+  button.addEventListener("click", () => typeSample(field, sample));
   const item = document.createElement("li");
   item.append(button);
   document.querySelector("[data-samples]").append(item);
   return button;
 });
 
-// 例を打つ。合成したキーではブラウザーが文字を入れないので、Meltype が受け取らなかった文字はここで入れる
-async function typeSample(sample) {
-  field.focus();
-  const [, text, last] = sample.match(/^(.*?)(?:<(\w+)>)?$/);
-  for (const key of [...text, ...(last ? [last === "Space" ? " " : last] : [])]) {
-    if (field.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true })) && [...key].length === 1) {
-      field.setRangeText(key, field.selectionStart, field.selectionEnd, "end");
-    }
-    await new Promise((resolve) => setTimeout(resolve, 60));
-  }
-}
-
 start.addEventListener("click", async () => {
   start.disabled = true;
   progress.hidden = false;
   status.textContent = "Meltype を読み込み中…";
   try {
-    // .mjs を JavaScript として配らないサーバーもあるので、<script> 向けの meltype.js を読む (globalThis.Meltype になる)
-    await import("/web-engine/engine/meltype.js");
-    const engine = await globalThis.Meltype.load({
-      baseUrl: "/web-engine/engine/",
-      onProgress: ({ phase, loaded, total }) => {
-        if (phase !== "dictionary" || !total) return;
-        bar.style.width = `${Math.round(loaded / total * 100)}%`;
-        status.textContent = `漢字変換の辞書を読み込み中… ${(loaded / 1e6).toFixed(1)} / ${(total / 1e6).toFixed(1)} MB`;
-      },
+    const engine = await loadEngine(({ phase, loaded, total }) => {
+      if (phase !== "dictionary" || !total) return;
+      bar.style.width = `${Math.round(loaded / total * 100)}%`;
+      status.textContent = `漢字変換の辞書を読み込み中… ${(loaded / 1e6).toFixed(1)} / ${(total / 1e6).toFixed(1)} MB`;
     });
     engine.attach(field);
     field.disabled = false;

@@ -132,22 +132,15 @@ https://meltype.moe/report/?form=bug&os=Windows+11&version=0.0.0&environment=ENV
 - お手本は `sentences/*.txt` に、1 行に 1 文の「表示する文|読み」の形で書きます。ファイル名は「並び順-種類の id.txt」(例: `3-chat.txt`) で、先頭に「種類: 表示名」の行を書きます。新しい種類は、ファイルを足せばページの選択肢に出ます。読みはひらがなと「ー、。！？〜…「」（）」(英語の部分は英小文字・数字・「-」・空白) で 40 字まで (「！？〜「」（）」は `!` `?` `~` `[` `]` `(` `)`、「…」は `.` を 3 回打つ)、文と読みの「、。」の数をそろえます。`npm run sentences` (`dev`・`test`・`deploy` でも動く) が確かめて `public/assets/js/typing-sentences.js` を作ります (コミットしない)。
 - 文の id は文と読みから作るので、直すと別の文になります。集めたデータは id でお手本を指すので、一度出したお手本の行は消しません。出すのをやめるときは、行の頭に「出さない:」を付けます (ページには出なくなり、id からは引ける)。
 
-## ブラウザーで試す (`/playground/`)
+## ブラウザーで試す (`/playground/`) と Web エンジン (`/web-engine/`)
 
-Meltype の Core と Mozc を WebAssembly にして、ブラウザーの中だけで動かします。打った文字はどこにも送りません。本体 (`public/playground/engine/`) は作ったものなのでコミットせず、デプロイの前に作ります。
+`/playground/` は、インストールせずに Meltype を試すページです。`/web-engine/` は、ほかのサイトに Meltype を組み込むエンジン ([web-engine/](../web-engine/README.md)) の紹介とデモです。
+どちらも同じエンジン (`public/web-engine/engine/`) をブラウザーの中だけで動かし、打った文字はどこにも送りません。エンジンは作ったものなのでコミットせず、デプロイの前に作ります (`deploy` ジョブも作る)。
 
 ```bash
 dotnet workload install wasm-tools
-../web-ime/mozc/build-mozc-wasm.sh   # Mozc。初回は 30 分以上かかる。作らなければ、かなのまま確定する
-npm run playground
-```
-
-作り方と中身は [web-ime/README.md](../web-ime/README.md) にあります。WebAssembly を動かすため、`public/_headers` の CSP の `script-src` に `'wasm-unsafe-eval'` を入れています。
-
-## Web エンジン (`/web-engine/`)
-
-ほかのサイトに Meltype を組み込むエンジン ([web-engine/](../web-engine/README.md)) の紹介とデモです。デモのエンジン (`public/web-engine/engine/`) は作ったものなのでコミットせず、デプロイの前に作ります。`/playground/` とは別のもので、互いに使いません。
-
-```bash
+../native/mozc/build-mozc-wasm.sh   # Mozc。初回は 30 分以上かかる。作らなければ、かなのまま確定する
 npm run web-engine
 ```
+
+WebAssembly を動かすため、`public/_headers` の CSP の `script-src` に `'wasm-unsafe-eval'` を入れています。

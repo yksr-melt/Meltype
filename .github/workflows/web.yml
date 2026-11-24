@@ -4,6 +4,9 @@ on:
   pull_request:
     paths: &paths
       - 'web/**'
+      # /playground/・/web-engine/ のエンジン。Core だけを変えたときは、次に web/ をデプロイしたときに出る
+      - 'web-engine/**'
+      - 'src/Meltype.Web/**'
       - 'docs/*.md'
       - 'docs/images/**'
       - '.github/workflows/web.yml'
@@ -50,12 +53,14 @@ jobs:
         run: npx wrangler deploy --dry-run --outdir dist
 
   # main に入った web/ の変更を meltype.moe に出す (#1450)。
+  # /playground/・/web-engine/ の Web エンジン (Core と Mozc の WebAssembly) はコミットしないので、ここで作る。
+  # Mozc のビルドは初回 30 分以上かかるので、Bazel のキャッシュを残す (mac.yml と同じ)
   # Cloudflare のトークンは環境 web-production の secrets に置く (無ければ失敗にする。本番に出ていないことに気づけるように。fork では動かさない)
   deploy:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'yksr-melt/Meltype'
     needs: web
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 90
     environment:
       name: web-production
       url: https://meltype.moe
@@ -82,7 +87,38 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: 10.0.x
+      - name: wasm-tools
+        run: dotnet workload install wasm-tools
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/bazel-cache
+            ~/mozc-wasm/src/third_party_cache
+          key: mozc-wasm-${{ hashFiles('native/mozc/MOZC_COMMIT') }}-${{ hashFiles('native/mozc/*.cc', 'native/mozc/BUILD.wasm.fragment', 'native/mozc/thread-inline.patch') }}
+          restore-keys: |
+            mozc-wasm-${{ hashFiles('native/mozc/MOZC_COMMIT') }}-
+      # Bazelisk は版を固定し、ダウンロードしたものが公開されているものと同じか (SHA-256) を確かめる (linux.yml と同じ)
+      - name: Bazelisk
+        working-directory: .
+        run: |
+          mkdir -p "$HOME/tools"
+          if ! curl -fsSL --retry 3 --connect-timeout 15 --max-time 120 -o "$HOME/tools/bazelisk" https://github.com/bazelbuild/bazelisk/releases/download/v1.29.0/bazelisk-linux-amd64; then
+            curl -fsSL --retry 3 --connect-timeout 15 --max-time 120 -H 'Accept: application/octet-stream' -o "$HOME/tools/bazelisk" https://api.github.com/repos/bazelbuild/bazelisk/releases/assets/406879103
+          fi
+          echo "5a408715e932c0250d28bd84555f12edbf70117de42f9181691c736eacc4a992  $HOME/tools/bazelisk" | sha256sum -c -
+          chmod +x "$HOME/tools/bazelisk"
+      - name: Build Mozc (WebAssembly)
+        working-directory: .
+        run: BAZEL="$HOME/tools/bazelisk" native/mozc/build-mozc-wasm.sh "$HOME/mozc-wasm" "$HOME/bazel-cache"
       - name: Install
         run: npm ci
+      # Mozc が無いと、かなのまま確定する版になるので、できたことを確かめる
+      - name: Build Web engine
+        run: |
+          npm run web-engine
+          test -f public/web-engine/engine/mozc/mozc.wasm
       - name: Deploy
         run: npm run deploy

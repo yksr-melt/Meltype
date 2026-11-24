@@ -1,4 +1,4 @@
-# script-src の 'wasm-unsafe-eval' は、/playground/ で Meltype の Core と Mozc (WebAssembly) を動かすため。
+# script-src の 'wasm-unsafe-eval' は、/playground/ と /web-engine/ で Web エンジン (Meltype の Core と Mozc の WebAssembly) を動かすため。
 /*
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
@@ -26,5 +26,5 @@
   Cache-Control: public, max-age=0, must-revalidate
 
 # mozc.wasm などは名前に版が入らないので、毎回確かめる
-/playground/engine/*
+/web-engine/engine/*
   Cache-Control: public, max-age=0, must-revalidate

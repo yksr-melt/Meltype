@@ -1,5 +1,5 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
-<!-- Copyright (C) 2026 Yukishiro -->
+<!-- Copyright (C) 2026 hisiragi -->
 
 <!doctype html>
 <html lang="ja">
@@ -26,7 +26,7 @@
   <link rel="stylesheet" href="/assets/css/site.css">
   <script type="module" src="/assets/js/web-engine.js"></script>
 </head>
-<body class="web-engine-page">
+<body class="uses-meltype">
   <a class="skip" href="#main">本文へ移動</a>
 
   <header class="site-header" data-header>
@@ -165,8 +165,8 @@ await attach(document.querySelector("textarea"));</code><button class="copy" typ
           <div class="codebox is-block"><code>git clone https://github.com/yksr-melt/Meltype.git
 cd Meltype
 dotnet workload install wasm-tools
-web-ime/mozc/build-mozc-wasm.sh
-web-engine/build.sh</code><button class="copy" type="button" data-copy="git clone https://github.com/yksr-melt/Meltype.git&#10;cd Meltype&#10;dotnet workload install wasm-tools&#10;web-ime/mozc/build-mozc-wasm.sh&#10;web-engine/build.sh"><svg class="ic"><use href="/assets/img/icons.svg#i-copy"/></svg><span class="sr-only">コピー</span></button></div>
+native/mozc/build-mozc-wasm.sh
+web-engine/build.sh</code><button class="copy" type="button" data-copy="git clone https://github.com/yksr-melt/Meltype.git&#10;cd Meltype&#10;dotnet workload install wasm-tools&#10;native/mozc/build-mozc-wasm.sh&#10;web-engine/build.sh"><svg class="ic"><use href="/assets/img/icons.svg#i-copy"/></svg><span class="sr-only">コピー</span></button></div>
           <p class="hint"><code>web-engine/dist/</code> ができます。これがそのまま npm のパッケージで、<code>&lt;script&gt;</code> で使うときもこのフォルダーを置きます。</p>
         </div>
       </div>
