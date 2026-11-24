@@ -255,6 +255,48 @@ internal static class BackgroundConversionTests
         }
     }
 
+    private sealed class ReadingAnswer : TestConverter
+    {
+        public Dictionary<string, ConversionClause[]> Map { get; } = [];
+
+        public override string? Convert(string hiragana, string? before) => string.Concat(ConvertClauses(hiragana, before)!.Select(c => c.Text));
+
+        public override IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) => Map.TryGetValue(hiragana, out var c) ? c : [new(hiragana, hiragana)];
+    }
+
+    [Test]
+    public static void Refresh_KeepsWholeSentenceWhenTheAlternativesBecomeTheSame()
+    {
+        // 英日の区切りの案を候補にした文全体の文節を出したあと、届いた答えで案の文が同じになっても、普通の文節 (bot|と) に分けない。
+        // 分けると、次の Space が案の文でなく先頭の文節の候補 (bot → Bot) を選んでいた
+        var converter = new ReadingAnswer();
+        var session = Session(converter);
+        SessionFacadeTests.Type(session, "botto");
+        var opened = session.HandleKey(VirtualKeys.Space, null, false, false, false, false).View;
+        Assert.Equal("botと", string.Join("|", opened?.Clauses ?? []));
+        converter.Map["ぼっと"] = [new("ぼっと", "botと")];
+        var refreshed = session.RefreshConversion()?.View ?? opened;
+        Assert.Equal("botと", string.Join("|", refreshed?.Clauses ?? []), "文全体の文節のまま");
+        var next = session.HandleKey(VirtualKeys.Space, null, false, false, false, false).View;
+        Assert.True(next?.Clauses is [var text] && text != "botと", "Space は文全体の候補を選ぶ: " + string.Join("|", next?.Clauses ?? []));
+    }
+
+    [Test]
+    public static void Refresh_ShowsAlternativesThatBecomeDifferent()
+    {
+        // 案の文が同じでも文全体の文節にして、届いた答えで違ってきた案の文 (ぼっと) を、次の Space で選べる
+        var converter = new ReadingAnswer();
+        converter.Map["ぼっと"] = [new("ぼっと", "botと")];
+        var session = Session(converter);
+        SessionFacadeTests.Type(session, "botto");
+        var opened = session.HandleKey(VirtualKeys.Space, null, false, false, false, false).View;
+        Assert.Equal("botと", string.Join("|", opened?.Clauses ?? []));
+        converter.Map.Clear();
+        session.RefreshConversion();
+        var next = session.HandleKey(VirtualKeys.Space, null, false, false, false, false).View;
+        Assert.Equal("ぼっと", string.Join("|", next?.Clauses ?? []));
+    }
+
     private sealed class ChangingAnswer : TestConverter
     {
         public IReadOnlyList<ConversionClause> Clauses { get; set; } = [];

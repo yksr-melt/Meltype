@@ -125,8 +125,9 @@ internal static partial class CompositionController
         var alternatives = utility is null && !asKana ? CompositionText.ConversionSegmentAlternatives(state.Text, env, MaxSegmentationAlternatives) : [segments];
         var clauses = BuildClauses(state, env, alternatives[0], preferJapanese, zenzai: true);
         if (clauses.Count == 0) return;
-        if (alternatives.Count > 1 && WholeSentenceClause(state, env, [clauses, .. OtherAlternatives(state, env, alternatives, preferJapanese)]) is { } whole)
-            clauses = [whole];
+        // 文全体の文節にするかは区切りの案の数で決め、案の文で決めない。案の文は後から届いた答えで同じになる・違ってくるので、
+        // 案の文で決めると、届いた答えで作り直すたびに文全体の文節と普通の文節が入れ替わり、Space が案の文を選ぶか先頭の文節の候補を選ぶかが変わる
+        if (alternatives.Count > 1) clauses = [WholeSentenceClause(state, env, [clauses, .. OtherAlternatives(state, env, alternatives, preferJapanese)])];
         if (utility is not null) clauses = [WithUtility(state, env, clauses, utility, segments[0].Kana)];
         // 変換したあとに続けて打っていたら、前に選んでいた候補を同じ読みの文節で使う
         foreach (var clause in clauses)
@@ -210,27 +211,37 @@ internal static partial class CompositionController
 
     /// <summary>
     /// 区切りの案ごとの文節 (先頭がいちばん良い案) を、文全体の 1 つの文節にする。候補は案ごとの文 (botto → botと、ボット) の後ろに、
-    /// 文節が 1 つの案のその文節の候補 (sushi → 寿司 の 鮨・すし)。案の文がすべて同じなら null。
+    /// 文節が 1 つの案のその文節の候補 (sushi → 寿司 の 鮨・すし)。案の文がすべて同じなら、案の文の候補は 1 つになる。
     /// </summary>
-    private static Clause? WholeSentenceClause(CompositionState state, CompositionEnv env, List<List<Clause>> alternatives)
+    private static Clause WholeSentenceClause(CompositionState state, CompositionEnv env, List<List<Clause>> alternatives)
     {
         var texts = new Dictionary<string, List<Clause>>(StringComparer.Ordinal);
         foreach (var clauses in alternatives) texts.TryAdd(string.Concat(clauses.Select(c => c.Text)), clauses);
-        if (texts.Count < 2) return null;
         var whole = new Clause(CompositionText.AllKana(state.Text, env, final: true), false, [.. texts.Keys]) { Raw = CompositionText.Raw(state.Text), Alternatives = texts };
         AddSingleClauseCandidates(whole);
         return whole;
     }
 
-    /// <summary>文全体の文節の候補の後ろに、文節が 1 つの案のその文節の候補を足す。</summary>
+    /// <summary>
+    /// 文全体の文節の候補の、案の文の後ろに、文節が 1 つの案のその文節の候補を足す。足す候補は、その文節の一覧で前にある候補のすぐ後ろに入れる
+    /// (Expand で足した 後 語 碁 を、末尾でなく ご の後ろにする)。選んでいる候補は変えない。
+    /// </summary>
     private static void AddSingleClauseCandidates(Clause whole)
     {
+        var text = whole.Text;
         foreach (var clauses in whole.Alternatives!.Values)
         {
             if (clauses is not [var only]) continue;
+            var at = whole.Alternatives.Keys.Max(whole.Candidates.IndexOf) + 1;
             foreach (var candidate in only.Candidates)
-                if (!whole.Candidates.Contains(candidate)) whole.Candidates.Add(candidate);
+            {
+                var index = whole.Candidates.IndexOf(candidate);
+                if (index < 0) whole.Candidates.Insert(at++, candidate);
+                // ほかの案の文と同じ候補 (ぼっと の一覧にある botと) は案の文の位置にあるので、そこへは戻らない
+                else at = Math.Max(at, index + 1);
+            }
         }
+        whole.Index = whole.Candidates.IndexOf(text);
     }
 
     /// <summary>
