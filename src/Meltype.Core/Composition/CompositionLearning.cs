@@ -2,9 +2,18 @@
 // Copyright (C) 2026 aster-void
 
 using System.Text.RegularExpressions;
+using Meltype.Detection;
+using Meltype.Engine;
+using Meltype.Learning;
 using Clause = Meltype.Composition.CompositionController.Clause;
 
 namespace Meltype.Composition;
+
+/// <summary>
+/// 確定した入力の文節 1 つ (<see cref="CompositionController.CommittedClauses"/>)。Engine は変換エンジンの答え (英語の文節など、変換エンジンに頼まなかった文節は null)。
+/// Text は確定した文字のうちこの文節の分 (F6〜F8 の形を当てた入力で、文節の読みをつなげたものが入力のかなと合わなければ null)。
+/// </summary>
+internal sealed record CommittedClause(string Reading, string? Engine, string? Text);
 
 /// <summary>
 /// 確定した入力を学習する (変換履歴・言語の学習・英訳の記録・予測変換の語句・変換エンジン)。
@@ -13,41 +22,13 @@ namespace Meltype.Composition;
 /// </summary>
 internal sealed partial class CompositionLearning(CompositionServices services, IKanjiConverter converter)
 {
-    private static readonly string[] EraNames = ["令和", "平成", "昭和", "大正", "明治"];
-    private static readonly string[] EraReadings = ["れいわ", "へいせい", "しょうわ", "たいしょう", "めいじ"];
-
     /// <summary>計算の言葉 (かける・わる …) の文節の読み。前後に数字が付いていてもよい (変換エンジンが 3かける を 1 つの文節にする)。</summary>
     [GeneratedRegex("^[0-9０-９]*(?:かける|わる|たす|ひく|ぷらす|まいなす|いこーる)[0-9０-９]*$")]
     private static partial Regex MathOperator();
 
     /// <summary>確定したこの文節を学習するか。ユーティリティ変換の候補・日時や版から作る語・計算の言葉の記号は学習しない。</summary>
     public static bool Learnable(Clause clause) =>
-        !clause.NotLearned.Contains(clause.Text) && !IsStale(clause.Reading, clause.Text) && !IsOperatorChoice(clause);
-
-    /// <summary>
-    /// 変換エンジンが今の日時・版から作る語か (きょう → 2026/11/10・火曜日、ことし → 令和八年、ばーじょん → Mozc-2.31)。学習しない。
-    /// 読みに無い数字・元号を含むか、読みに無い「曜日」で終わる語。いちばん → 1番 も当てはまるが、Meltype の学習から外すだけで、Mozc は自分で学習する。
-    /// </summary>
-    // TODO: 推測をやめ、変換エンジンが付ける「学習しない」の印で決める。Mozc は日時・版の候補に NO_LEARNING を付けているので、
-    // meltype_mozc_helper が候補と一緒に返す。
-    // そうすれば いちばん → 1番 を巻き添えにしない。
-    public static bool IsVolatile(string reading, string text) =>
-        !reading.Any(IsDigit) && text.Any(IsDigit) ||
-        EraNames.Any(text.Contains) && !EraReadings.Any(reading.Contains) ||
-        text.EndsWith("曜日", StringComparison.Ordinal) && !reading.Contains("ようび", StringComparison.Ordinal);
-
-    private static bool IsDigit(char c) => char.IsAsciiDigit(c) || c is >= '０' and <= '９';
-
-    /// <summary>
-    /// 覚えない語 (学習データに入っていても、読み込むときに捨てる)。日時・版から作る語、前の版が学習から外し漏れていた
-    /// ユーティリティ変換の候補 (時候の挨拶・クリップボードの文字)、アプリの画面の文字が混ざった語 (U+FFFC を含む。
-    /// Discord の画面の文字が文脈に入り、Zenzai がそれをそのまま返した: issue #1537)。
-    /// </summary>
-    public static bool IsStale(string reading, string text) =>
-        IsVolatile(reading, text) ||
-        text.Contains('\uFFFC', StringComparison.Ordinal) ||
-        reading is "じこう" or "じこうのあいさつ" && text.Contains("の候", StringComparison.Ordinal) ||
-        reading is "くりっぷぼーど" or "ぺーすと" && text != CompositionText.ToKatakana(reading);
+        !clause.NotLearned.Contains(clause.Text) && !StaleWords.IsStale(clause.Reading, clause.Text) && !IsOperatorChoice(clause);
 
     /// <summary>計算の言葉の文節で、変換エンジンの記号の候補 (3かける4 → 3×4) を選んだか。学習しない (覚えると 電話をかける まで × になる)。</summary>
     private static bool IsOperatorChoice(Clause clause) =>
@@ -80,9 +61,8 @@ internal sealed partial class CompositionLearning(CompositionServices services, 
         // ただし数字・記号の 1 文字 (1 → ①、( → （) は、かなの途中に巻き込まれないので覚える (issue #672)。
         foreach (var clause in clauses.Where(c => !c.IsEnglish && c.Changed && (c.Reading.Length >= 2 || c.Reading.Length == 1 && c.Reading[0] is < 'ぁ' or > 'ヿ' && !char.IsAsciiLetter(c.Reading[0]))))
         {
-            // かな・カタカナのまま確定したのは、その場限りのことが多いので覚えない。
             // 打ったままの英字を選んだのは、上で英語として覚えた。
-            if (clause.Text == clause.Reading || clause.Text == CompositionText.ToKatakana(clause.Reading) || clause.Text == clause.Raw) continue;
+            if (clause.Text == clause.Raw) continue;
             // 英訳は上で英訳の記録に入れた (ここで覚えると次から 1 番目に出てしまう)。
             if (clause.Translations.Contains(clause.Text)) continue;
             if (!Learnable(clause)) continue;
@@ -92,18 +72,17 @@ internal sealed partial class CompositionLearning(CompositionServices services, 
 
     /// <summary>
     /// 変換エンジン (Mozc) にも、確定した文節を覚えさせる。英語の文節・打ったままの英字・ユーティリティ変換の候補で区切った、日本語の文節のまとまりごとに。
-    /// 日時・版から作る語 (<see cref="IsVolatile"/>) は Mozc が自分で学習しないので、そのまま渡す。変換エンジンとのやり取りで入力を待たせないよう、裏で行う。
+    /// 日時・版から作る語 (<see cref="StaleWords.IsVolatile"/>) は Mozc が自分で学習しないので、そのまま渡す。変換エンジンとのやり取りで入力を待たせないよう、裏で行う。
     /// </summary>
     private void LearnConversion(IReadOnlyList<Clause> clauses, string? before)
     {
-        if (converter is not ILearningConverter learner) return;
         var run = new List<ConversionClause>();
         void Flush()
         {
             if (run.Count == 0) return;
             var learned = run.ToList();
             run.Clear();
-            ThreadPool.QueueUserWorkItem(_ => learner.Learn(before, learned));
+            ThreadPool.QueueUserWorkItem(_ => converter.Learn(before, learned));
         }
         foreach (var clause in clauses)
         {
@@ -146,7 +125,7 @@ internal sealed partial class CompositionLearning(CompositionServices services, 
     {
         if (services.Predictor?.Phrases is not { } phrases) return;
         if (!text.Any(c => c is >= '一' and <= '鿿' or >= '㐀' and <= '䶿') || reading.Length < 3 || reading.Any(char.IsAsciiLetter)) return;
-        if (IsStale(reading, text)) return;
+        if (StaleWords.IsStale(reading, text)) return;
         phrases.Remember(reading, text);
     }
 }

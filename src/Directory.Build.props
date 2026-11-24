@@ -2,17 +2,16 @@
   SPDX-License-Identifier: GPL-3.0-or-later
   Copyright (C) 2026 Yukishiro
 
-  静的解析の結果を SARIF に書き出す (.github/workflows/quality.yml。issue #1083)。
-  MeltypeSarifDir を渡したときだけ効く。ふだんのビルドは変わらない。
-
   リリース (GitHub Actions でタグから作るビルド) では、版にコミット ID (1.5.1+abc...) を付けない。
   タグの無い自己ビルドでは付けたままにし、「ばーじょん」の候補でどのコミットか分かるようにする (issue #1868)。
+
+  Meltype の版は、ここの Version の 1 か所に書く (Meltype.exe・Meltype.Core・設定アプリが同じ版になる)。/release (meltype-bot.mjs) はここを確かめる。
 -->
 <Project>
+  <PropertyGroup>
+    <Version>1.7.1</Version>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(GITHUB_REF_TYPE)' == 'tag'">
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(MeltypeSarifDir)' != ''">
-    <ErrorLog>$(MeltypeSarifDir)/$(MSBuildProjectName).sarif,version=2.1</ErrorLog>
   </PropertyGroup>
 </Project>

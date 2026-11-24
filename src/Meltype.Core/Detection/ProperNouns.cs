@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
 
+using Meltype.Libraries.Lexicon;
+
 namespace Meltype.Detection;
 
 /// <summary>
 /// 英語の固有名詞 (dictionaries/propernouns.txt)。小文字で引き、正しい大文字小文字の形 (GitHub, iPhone) を返す。
 /// ローマ字としても読めてしまう固有名詞 (amazon, adobe) を英語として扱うのに使う。
 /// </summary>
-public sealed class ProperNouns
+internal sealed class ProperNouns
 {
     private readonly Dictionary<string, string> _canonical = new(StringComparer.Ordinal);
     private readonly WordList _words = new();
@@ -23,18 +25,7 @@ public sealed class ProperNouns
         // それまで英語にしたい国名は、確かめて propernouns.txt に書く (Benin・Panama)
         var romaji = new RomajiDetector();
         nouns.AddText(DictionarySource.ReadEmbedded("countries.txt"), word => romaji.Analyze(word) is not { IsValid: true, Partial: "" or "n" });
-        if (userDirectory is not null)
-        {
-            var path = Path.Combine(userDirectory, "propernouns.txt");
-            try
-            {
-                if (File.Exists(path)) nouns.AddText(File.ReadAllText(path));
-            }
-            catch (Exception ex)
-            {
-                Diagnostics.Log.Warn($"ユーザーの固有名詞辞書を読めませんでした: {ex.Message}");
-            }
-        }
+        Config.DataFile.LoadUserText(userDirectory, "propernouns.txt", "ユーザーの固有名詞辞書", text => nouns.AddText(text));
         return nouns;
     }
 

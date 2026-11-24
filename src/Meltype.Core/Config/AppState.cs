@@ -23,12 +23,6 @@ public sealed class AppState
     /// <summary>リリースノートを最後に見せた版 (更新したあとの初めての起動で一度だけ見せる。issue #1207)。</summary>
     public string? ReleaseNotesShown { get; set; }
 
-    /// <summary>設定画面の下に、項目の説明を出すか (設定画面のスイッチで切り替える)。</summary>
-    public bool SettingsShowHelp { get; set; } = true;
-
-    /// <summary>設定画面で、プルダウンの上でホイールを回したときに値を変えるか (OFF なら設定の一覧をスクロールする)。</summary>
-    public bool SettingsWheelChangesValue { get; set; } = true;
-
     private string? _path;
 
     /// <summary>
@@ -67,7 +61,7 @@ public sealed class AppState
         {
             DataFile.Write(path, temp => File.WriteAllText(temp, JsonSerializer.Serialize(this, AppStateJsonContext.Default.AppState)));
         }
-        catch (Exception ex)
+        catch (Exception ex) when (DataFile.IsFileError(ex))
         {
             Diagnostics.Log.Warn($"state.json を保存できませんでした: {ex.Message}");
         }

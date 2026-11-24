@@ -57,6 +57,35 @@ public sealed record ToggleShortcut
     public bool Overlaps(ToggleShortcut other) => Modifiers == other.Modifiers &&
         (Matches(other.Key, other.Modifiers) || other.Matches(Key, Modifiers));
 
+    /// <summary>画面・通知に出す名前 (Ctrl + Alt + F10 など)。</summary>
+    public string Describe()
+    {
+        var names = new List<string>();
+        foreach (var (flag, label) in new[] { (ShortcutModifiers.Control, "Ctrl"), (ShortcutModifiers.Alt, "Alt"), (ShortcutModifiers.Shift, "Shift"), (ShortcutModifiers.Win, OperatingSystem.IsMacOS() ? "Command" : "Win") })
+        {
+            if ((Modifiers & flag) != 0) names.Add(label);
+        }
+        names.Add(KeyName(Key));
+        return string.Join(" + ", names);
+    }
+
+    /// <summary>仮想キーコードの名前。</summary>
+    public static string KeyName(int key) => key switch
+    {
+        Hankaku => "半角/全角",
+        Grave => "` (バッククォート)",
+        0x1C => "変換",
+        0x1D => "無変換",
+        0x20 => "Space",
+        >= 0x30 and <= 0x39 or >= 0x41 and <= 0x5A => ((char)key).ToString(),
+        >= 0x70 and <= 0x87 => $"F{key - 0x6F}",
+        _ => $"キー 0x{key:X2}",
+    };
+
+    /// <summary>設定画面で選べるキー (上の名前を付けたもの)。</summary>
+    public static IReadOnlyList<int> SelectableKeys { get; } =
+        [Hankaku, Grave, 0x1C, 0x1D, 0x20, .. Enumerable.Range(0x41, 26), .. Enumerable.Range(0x30, 10), .. Enumerable.Range(0x70, 24)];
+
     // デフォルトの切り替えキー
     public static List<ToggleShortcut> Defaults() =>
     [

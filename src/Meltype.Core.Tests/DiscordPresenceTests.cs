@@ -20,21 +20,25 @@ internal static class DiscordPresenceTests
     }
 
     [Test]
-    public static void Activity_ShowsOnlyCountsWithDigitGrouping()
+    public static void Activity_ShowsCountsAndStartupTime()
     {
-        using var doc = JsonDocument.Parse(DiscordPresence.ActivityJson(new(12345, 1234567), 250));
+        var startedAt = new DateTimeOffset(2009, 2, 14, 8, 31, 30, 750, TimeSpan.FromHours(9));
+        using var doc = JsonDocument.Parse(DiscordPresence.ActivityJson(new(12345, 1234567), 250, startedAt));
         var root = doc.RootElement;
         Assert.Equal("今日 12,345 打", root.GetProperty("details").GetString());
         Assert.Equal("合計 1,234,567 打 · 250 打/分", root.GetProperty("state").GetString());
-        // 入力内容・アプリ名などは入れない (表示する欄だけ)
+        var timestamps = root.GetProperty("timestamps");
+        Assert.Equal(1_234_567_890L, timestamps.GetProperty("start").GetInt64());
+        Assert.True(!timestamps.TryGetProperty("end", out _), "終了時刻は送らず、経過時間を表示する");
+        // 表示する欄だけ。入力内容・アプリ名などは入れない
         var names = root.EnumerateObject().Select(p => p.Name).Order(StringComparer.Ordinal).ToArray();
-        Assert.Equal("buttons,details,state", string.Join(",", names));
+        Assert.Equal("buttons,details,state,timestamps", string.Join(",", names));
     }
 
     [Test]
     public static void Activity_OmitsKpmBeforeSecondUpdate()
     {
-        using var doc = JsonDocument.Parse(DiscordPresence.ActivityJson(new(0, 0), null));
+        using var doc = JsonDocument.Parse(DiscordPresence.ActivityJson(new(0, 0), null, DateTimeOffset.UnixEpoch));
         Assert.Equal("合計 0 打", doc.RootElement.GetProperty("state").GetString());
     }
 
