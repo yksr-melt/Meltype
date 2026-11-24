@@ -9,7 +9,7 @@ namespace Meltype.Config;
 /// 同梱したリリースノート (docs/release-notes/&lt;版&gt;.md) を、画面に出すための行に分ける。
 /// 見出しの #、強調の **、インラインコードの `、リンクの URL を外す (リンクは文字だけ残す)。
 /// </summary>
-internal static class ReleaseNotesMarkdown
+public static class ReleaseNotesMarkdown
 {
     public enum LineKind
     {

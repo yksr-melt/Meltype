@@ -40,13 +40,10 @@ internal sealed class MeltypeEngine : IDisposable
     /// <summary>Discord のステータスに打鍵数を出す (打鍵数の「Discord に表示する」が ON の間だけ。入力とは別のスレッドで送る)。</summary>
     private readonly DiscordPresence _discordPresence;
 
-    private Action<KeyEvent>? _shortcutCapture;
-    private bool _captureHankakuTail;
-    private readonly HashSet<int> _captureDown = [];
     // ほかのソフトが送ったキーを通したことを、1 回だけログに書いたか (#250)
     private bool _injectedHintLogged;
 
-    public MeltypeEngine(Composition.MeltypeRuntime runtime)
+    public MeltypeEngine(Ime.MeltypeRuntime runtime)
     {
         Runtime = runtime;
         // 先に受け取り始める (読んでから受け取り始めるまでに読み直した分を逃さないように。その間に届いた分は、下で読む)
@@ -66,7 +63,7 @@ internal sealed class MeltypeEngine : IDisposable
     }
 
     /// <summary>設定・辞書・学習データ (どの OS も同じもの)。</summary>
-    public Composition.MeltypeRuntime Runtime { get; }
+    public Ime.MeltypeRuntime Runtime { get; }
 
     /// <summary>config.json の設定。設定画面・トレイはこれを写して変える (<see cref="Running"/> を写すと、Meltype キーボードを保存してしまう)。</summary>
     public Settings Settings => _settings;
@@ -122,36 +119,12 @@ internal sealed class MeltypeEngine : IDisposable
         get => _settings.Enabled;
         set
         {
-            var next = _settings.Clone();
-            next.Enabled = value;
-            ApplySettings(next);
+            EditSettings(settings => settings.Enabled = value);
         }
     }
 
-    public void CaptureShortcut(Action<KeyEvent>? capture) => Volatile.Write(ref _shortcutCapture, capture);
-
     private bool OnKey(KeyEvent e)
     {
-        // 登録画面の取り込みは入力より先。終了後も飲み込んだキー解放は対にする。
-        // 取り込みを終えた F3 解放に続く F4 押下を、通常の切り替えとして実行しない。
-        if (_captureHankakuTail)
-        {
-            _captureHankakuTail = false;
-            if (!e.Injected && e.IsDown && e.Vk == VirtualKeys.OemEnlw && e.Scan == 0x29 && !e.Extended) return true;
-        }
-        var capture = Volatile.Read(ref _shortcutCapture);
-        if (!e.Injected && capture is not null)
-        {
-            if (e.IsDown) _captureDown.Add(e.PhysicalId); else _captureDown.Remove(e.PhysicalId);
-            _captureHankakuTail = e.IsUp && e.Vk == VirtualKeys.OemAuto && e.Scan == 0x29 && !e.Extended;
-            capture(e);
-            return true;
-        }
-        if (e.IsUp && _captureDown.Remove(e.PhysicalId))
-        {
-            _captureHankakuTail = e.Vk == VirtualKeys.OemAuto && e.Scan == 0x29 && !e.Extended;
-            return true;
-        }
         var settings = _running;
         // 遠隔操作 (AnyDesk・VNC) のキーは、ほかのソフトが送ったキー (LLKHF_INJECTED) として届く。設定で許可していれば手で打ったキーとして扱う。
         // Meltype 自身が送り直したキーは、印 (InjectedMarker) でフックの入口で除いているので、ここには来ない (自分の出力を処理し直さない)。
@@ -211,7 +184,19 @@ internal sealed class MeltypeEngine : IDisposable
     private bool KeyCountAllowed(Settings settings) =>
         settings.Enabled && settings.IsAppEnabled(_foreground.Current.ProcessName) && Focus is { Resolved: true, Current.IsPassword: false };
 
-    public void ApplySettings(Settings settings) => Runtime.Settings.Apply(settings);
+    /// <summary>
+    /// config.json を読み直してから change で 1 項目を変えて保存する (設定アプリが直前に書いた値を戻さない)。
+    /// 保存できなくても、このプロセスでは変えた設定を使う (一時停止などが効かなくならないように)。
+    /// </summary>
+    public void EditSettings(Action<Settings> change) => ReplaceSettings(settings =>
+    {
+        var next = settings.Clone();
+        change(next);
+        return next;
+    });
+
+    /// <summary><see cref="EditSettings"/> と同じで、プロファイルの切り替えなど設定全体を作り直す。</summary>
+    public void ReplaceSettings(Func<Settings, Settings> change) => Runtime.Settings.Edit(change, useUnsaved: true);
 
     /// <summary>設定が変わった後の処理 (UI スレッド)。設定画面で変えたときも、config.json を外で書き換えたときも呼ぶ。</summary>
     public void OnSettingsChanged(Settings previous, Settings next)

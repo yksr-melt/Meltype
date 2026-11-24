@@ -3,10 +3,8 @@
 
 using System.Globalization;
 using System.Text;
-using Meltype.Composition.Utility;
 using Meltype.Config;
-using Meltype.Detection;
-using Meltype.Input;
+using static Meltype.Libraries.Chars.TextChars;
 
 namespace Meltype.Composition;
 
@@ -24,27 +22,22 @@ internal static partial class CompositionController
         state.Text.KanaInput = KanaInput(state, env);
         state.Text.FullWidthParentheses = env.Settings.FullWidthParentheses;
         state.Text.SquareBrackets = env.Settings.SquareBrackets;
-        state.Text.LaughterAfterKana = env.Settings.LaughterAfterKana;
+    }
+
+    /// <summary>
+    /// 入力欄の文脈 (<see cref="TextEnv.Context"/>)。フロントが渡したキャレットの前後の文字 (この出来事で確定した文字を入れたもの) から決める。
+    /// 自分が確定した直後と、キャレットの前が読めないときは、自分の確定の記録 (最後に確定した語) を使う。
+    /// </summary>
+    internal static TextContext ContextOf(CompositionState state, CompositionEnv env)
+    {
+        var after = CompositionOutput.After(env);
         // 自分が確定した直後は、アプリ側のテキストがまだ更新されていないかもしれないので自分の記録を信じる。
         var recentOwnCommit = env.NowMs - state.LastCommitTime < OwnCommitTrustMs;
-        state.PrecedingText = state.LastCommitEnglish is null ? null : state.LastCommitText;
-        state.FollowingText = null;
-        state.Text.PrecedingEnglish = state.LastCommitEnglish;
-        state.Text.PrecedingEnglishSentence = state.LastCommitEnglish == true && IsEnglishSentence(state.LastCommitText);
-        state.Text.PrecedingEnglishName = state.LastCommitEnglish == true && IsEnglishNameContext(state.LastCommitText);
-        // フロントが渡したキャレットの前の文字 (このキーで確定した文字を入れたもの)。読めなければ null で、キャレットの位置は確かめない (今までどおり直す)。
-        // 確定し直してよいか (直前に確定した語が今のキャレットの位置にあるか) の判断にも使う。
-        var before = CompositionOutput.Before(state.Out, env);
-        state.CaretBefore = before;
-        if (!recentOwnCommit && before is not null)
-        {
-            state.PrecedingText = before;
-            if (LanguageOf(before) is { } english) state.Text.PrecedingEnglish = english;
-            state.Text.PrecedingEnglishSentence = IsEnglishSentence(before);
-            state.Text.PrecedingEnglishName = IsEnglishNameContext(before);
-        }
-        state.FollowingText = state.Out.After;
-        state.Text.FollowingEnglish = LanguageOfStart(state.Out.After);
+        if (!recentOwnCommit && CompositionOutput.Before(state.Out, env) is { } before)
+            return new TextContext(before, LanguageOf(before) ?? state.Last?.English, IsEnglishSentence(before), IsEnglishNameContext(before), after, LanguageOfStart(after));
+        var last = state.Last;
+        return new TextContext(last?.Text, last?.English,
+            last is { English: true } && IsEnglishSentence(last.Text), last is { English: true } && IsEnglishNameContext(last.Text), after, LanguageOfStart(after));
     }
 
     /// <summary>
@@ -81,41 +74,5 @@ internal static partial class CompositionController
         var last = words[^1].ToLowerInvariant();
         return last is "called" or "named" || words.Length >= 2 && last == "is" &&
             words[^2].ToLowerInvariant() is "name" or "surname" or "nickname";
-    }
-
-    /// <summary>確定済みの文字列の最後の (空白以外の) 文字が英数字なら英語、かな・漢字・全角記号なら日本語。</summary>
-    internal static bool? LanguageOf(string? text)
-    {
-        if (string.IsNullOrEmpty(text)) return null;
-        for (var i = text.Length - 1; i >= 0; i--)
-        {
-            if (Classify(text[i]) is { } english) return english;
-            if (text[i] >= 0x80 && !char.IsWhiteSpace(text[i]) && text[i] != '　') return null;
-        }
-        return null;
-    }
-
-    /// <summary>キャレットの後ろの文字列の最初の (空白以外の) 文字で判断する。</summary>
-    internal static bool? LanguageOfStart(string? text)
-    {
-        if (string.IsNullOrEmpty(text)) return null;
-        foreach (var c in text)
-        {
-            if (c is '\r' or '\n') return null; // 次の行は別の文
-            if (Classify(c) is { } english) return english;
-            if (c >= 0x80 && !char.IsWhiteSpace(c) && c != '　') return null;
-        }
-        return null;
-    }
-
-    /// <summary>
-    /// 英数字なら英語 (true)、かな・漢字・全角文字・日本語の文で使う記号 (○ ※ ★ 「」 など U+2000 以降) なら日本語 (false)、
-    /// 空白や英文の記号なら判断しない (null)。
-    /// </summary>
-    private static bool? Classify(char c)
-    {
-        if (char.IsAsciiLetterOrDigit(c)) return true;
-        if (c >= '\u2000' && !char.IsWhiteSpace(c) && c != '\u3000') return false;
-        return null;
     }
 }

@@ -4,7 +4,11 @@
 using System.Text.Json;
 using Meltype.Composition;
 using Meltype.Config;
+using Meltype.Detection;
+using Meltype.Dictionary;
+using Meltype.Ime;
 using Meltype.Input;
+using Meltype.Learning;
 
 namespace Meltype.Tests;
 
@@ -922,11 +926,11 @@ internal static class SessionFacadeTests
             {
                 (["sore\n"], "それ"),
                 (["hello\n", "\b\b\b\b\b", "sore\n"], "それ"),
-                (["game\n"], "game"),
-                (["suru\n", "\b\b", "game\n"], "game"),
+                (["tone\n"], "tone"),
+                (["suru\n", "\b\b", "tone\n"], "tone"),
                 // 続けて確定したときは、前の確定の言語を使う
                 (["hello\n", "sore\n"], "hellosore"),
-                (["suru\n", "game\n"], "するがme"),
+                (["suru\n", "tone\n"], "するとね"),
             })
             {
                 var detector = CompositionDetector.CreateDefault();
@@ -1105,7 +1109,7 @@ internal static class SessionFacadeTests
                 _ => [],
             };
             using var runtime = new MeltypeRuntime(directory);
-            var parts = runtime.SessionParts(new CompositionTests.FakeConverter(), More, _ => null);
+            var parts = runtime.SessionParts(new CompositionTests.FakeConverter(), (reading, _) => More(reading), _ => null);
             var a = new TestSession(parts, () => runtime.Settings.Current);
             var b = new TestSession(parts, () => runtime.Settings.Current);
             void Choose(TestSession session, string typed, string word)
