@@ -6,14 +6,18 @@ using Meltype.Detection;
 using Meltype.Diagnostics;
 using Meltype.Engine;
 using Meltype.Input;
+using Meltype.Learning;
 
 namespace Meltype.Composition;
 
 /// <summary>入力中の文字列の処理 (<see cref="CompositionText"/>) が使う、入力欄の状態でないもの (判定器・入力欄のアプリの設定・ローマ字の打ち間違いの直し方)。</summary>
-internal record TextEnv(CompositionDetector Detector, Config.Settings Settings, RomajiTypoCorrector? RomajiTypos)
+internal record TextEnv(CompositionDetector Detector, Config.Settings Settings, RomajiTypoCorrector? RomajiTypos, ConversionHistory? History = null)
 {
     /// <summary>打った英字を読み直す断片なら、読み直す元の入力 (<see cref="CompositionText.FragmentEnv"/>)。断片でなければ null。</summary>
     public FragmentOrigin? Fragment { get; init; }
+
+    /// <summary>コードの入力欄の文字列リテラルの中か (require('jquery') などの識別子を自動で大文字にしない)。</summary>
+    public bool CodeString { get; init; }
 
     /// <summary>入力欄の文脈。使うたびに、そのときの入力欄の文字と自分の確定の記録から決める (<see cref="CompositionContext.ContextOf"/>)。</summary>
     public required Func<TextContext> Context { get; init; }
@@ -37,9 +41,9 @@ internal sealed record FragmentOrigin(bool? LearningContext);
 /// 変換ボックスの処理が使う、入力欄の状態でないもの (判定器・変換エンジン・辞書・学習データ・入力欄のアプリの設定・OS の機能)。出来事ごとに作って渡す。
 /// </summary>
 internal sealed record CompositionEnv(CompositionDetector Detector, IKanjiConverter Converter, CompositionServices Services, Config.Settings Settings)
-    : TextEnv(Detector, Settings, Services.RomajiTypos)
+    : TextEnv(Detector, Settings, Services.RomajiTypos, Services.History)
 {
-    public CompositionLearning Learning { get; } = new(Services, Converter);
+    public CompositionLearning Learning { get; } = new(Services, Converter, Detector.ProperNouns);
 
     /// <summary>
     /// 変換エンジンの答えを後から受け取れるフロント (<see cref="IKanjiConverter.ResultReady"/> を受けて <see cref="CompositionController.RefreshConversion"/> を呼ぶ) か。
