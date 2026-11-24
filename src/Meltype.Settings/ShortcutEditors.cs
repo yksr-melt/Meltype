@@ -65,12 +65,11 @@ internal static class ShortcutEditors
         ToggleShortcutValidator.Validate(shortcut, settings, others) switch
         {
             ShortcutValidationError.Invalid => "このキー操作は登録できません。Ctrl + 半角/全角 は Meltype の有効／無効に使用します。",
-            ShortcutValidationError.UnmodifiedKey => "修飾キーなし、または Shift のみで登録できるのは半角/全角・変換・無変換です。Ctrl・Alt・Win との組み合わせを選んでください。",
+            ShortcutValidationError.UnmodifiedKey => "修飾キーなし、または Shift のみで登録できるのは半角/全角・CapsLock・カタカナ/ひらがな・変換・無変換です。Ctrl・Alt・Win との組み合わせを選んでください。",
             ShortcutValidationError.Duplicate => "同じショートカットがすでに登録されています。",
             ShortcutValidationError.ControlKeyBinding => "既存の「Control キーの割り当て」と競合します。先にその割り当てを変更してください。",
             ShortcutValidationError.Conversion => "このショートカットは既存の変換操作に使用します。",
             ShortcutValidationError.FunctionKey => "F6〜F10 は既存のかな・英字変換に使用します。修飾キーとの組み合わせを選んでください。",
-            ShortcutValidationError.ConvertKeys => "無変換・変換は、英数・日本語にするキーです。修飾キーと組み合わせてください。",
             ShortcutValidationError.ShiftSpaceHalfWidth => "設定「スペースの幅」が「半角」のときは、Shift + Space は切り替えに使えません。先にその設定を変えてください。",
             _ => null,
         };

@@ -189,8 +189,7 @@ public sealed class MeltypeRuntime : IDisposable
                     // 後から変わった語をもう送った
                     if (version < _engineDictionarySent) return;
                     _engineDictionarySent = version;
-                    // userdict.txt は品詞を持たないので名詞にする
-                    converter.SetUserDictionary([.. words.Select(w => (w.Reading, w.Word, "名詞"))]);
+                    converter.SetUserDictionary([.. words.Select(w => (w.Reading, w.Word, w.Pos))]);
                 }
             });
         }

@@ -69,6 +69,7 @@ internal static class CompositionLifecycle
     {
         CompositionText.Clear(state.Text);
         state.Conversion = null;
+        state.LeftConversion = null;
     }
 
     /// <summary>パスワード欄に移ったとき、未確定入力と前の欄の文脈を確定せずに捨てる。</summary>

@@ -30,9 +30,12 @@ internal sealed class Clause(string reading, bool isEnglish, List<string> candid
 
     /// <summary>
     /// 日本語の文節の、文の中での変換結果 (変換エンジンの答え・ユーザー辞書の語)。<see cref="CompositionConversion"/> が、その読みだけの変換などの候補をこの後ろに並べる。
-    /// 候補を足し終えた文節と、変換エンジンに頼まない文節 (英語・記号) は null。
+    /// 変換エンジンに頼まない文節 (英語・記号) は null。
     /// </summary>
-    public string? Engine { get; set; }
+    public string? Engine { get; init; }
+
+    /// <summary><see cref="CompositionConversion"/> が候補を足し終えたか。</summary>
+    public bool EngineCandidatesAdded { get; set; }
 
     /// <summary>外部変換エンジンの候補追加が完了したか。<see cref="Fixed"/> の文節では追加せずに完了扱いにする。</summary>
     public bool Expanded { get; set; }
