@@ -117,7 +117,7 @@
           <li class="card">
             <svg class="ic"><use href="/assets/img/icons.svg#i-palette"/></svg>
             <h3>どの入力欄にも</h3>
-            <p><code>&lt;textarea&gt;</code>・<code>&lt;input&gt;</code>・<code>contenteditable</code> に付けられます。色と字は CSS の変数で変えられます。</p>
+            <p><code>&lt;textarea&gt;</code>・<code>&lt;input&gt;</code>・<code>contenteditable</code> に付けられます。候補の欄は Shadow DOM の中に描くのでサイトの CSS と混ざらず、色と字は CSS の変数で変えられます。</p>
           </li>
         </ul>
       </div>
@@ -190,11 +190,11 @@ web-engine/build.sh</code><button class="copy" type="button" data-copy="git clon
             <thead><tr><th scope="col">設定</th><th scope="col">既定</th><th scope="col">内容</th></tr></thead>
             <tbody>
               <tr><td><code>keyboard</code></td><td><code>"auto"</code></td><td>画面のキーボードを出すか。<code>"auto"</code> は指で操作する端末だけ、<code>"always"</code>・<code>"never"</code></td></tr>
-              <tr><td><code>persist</code></td><td><code>true</code></td><td>覚えたことをブラウザーの IndexedDB に残すか</td></tr>
+              <tr><td><code>persist</code></td><td><code>true</code></td><td>覚えたことを残すか</td></tr>
+              <tr><td><code>storage</code></td><td>IndexedDB</td><td>覚えたことの置き場 (<code>{ get(), set(json), clear() }</code>)</td></tr>
               <tr><td><code>onCommit(text)</code></td><td></td><td>確定した文字を入力欄に入れたとき</td></tr>
               <tr><td><code>onProgress(p)</code></td><td></td><td>読み込みの進み具合。<code>p.phase</code> は <code>"core"</code>・<code>"dictionary"</code>・<code>"ready"</code></td></tr>
               <tr><td><code>baseUrl</code></td><td>スクリプトの隣</td><td>本体を置いた場所</td></tr>
-              <tr><td><code>styles</code></td><td><code>true</code></td><td><code>false</code> なら <code>meltype.css</code> を読みません</td></tr>
             </tbody>
           </table>
         </div>
@@ -210,7 +210,7 @@ web-engine/build.sh</code><button class="copy" type="button" data-copy="git clon
       <div class="wrap">
         <h2 class="sec-title" id="notes-title">組み込むときに</h2>
         <dl class="engine-notes">
-          <div class="card"><dt>CSP</dt><dd>WebAssembly を動かすため、<code>script-src</code> に <code>'wasm-unsafe-eval'</code> が要ります。本体を別のドメインに置くときは、そのドメインも <code>script-src</code>・<code>connect-src</code>・<code>style-src</code> に入れます。</dd></div>
+          <div class="card"><dt>CSP</dt><dd>WebAssembly を動かすため、<code>script-src</code> に <code>'wasm-unsafe-eval'</code> が要ります。本体を別のドメインに置くときは、そのドメインも <code>script-src</code>・<code>connect-src</code> に入れます。</dd></div>
           <div class="card"><dt>配り方</dt><dd><code>.wasm</code> は <code>application/wasm</code> で配ります。別のドメインに置くときは、<code>Access-Control-Allow-Origin</code> を返します。</dd></div>
           <div class="card"><dt>大きさ</dt><dd>最初に 20 MB ほど (圧縮後) 読み込みます。入力欄を使うページでだけ読むか、押したときに <code>load()</code> を呼ぶと、ほかのページを重くしません。</dd></div>
           <div class="card"><dt>ライセンス</dt><dd>GPL-3.0-or-later です。エンジンはページを開いた人のブラウザーに配られるので、組み込んだサイトは、このエンジンについて GPL の条件 (ソースを手に入れられるようにするなど) を守ります。Mozc は BSD-3-Clause です。</dd></div>

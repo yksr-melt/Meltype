@@ -4,12 +4,19 @@
 export interface LoadOptions {
   /** 本体 (_framework/・mozc/) を置いた場所。npm・<script> で読んだときは、そのファイルの隣を使うので要らない */
   baseUrl?: string | URL;
-  /** 覚えたこと (変換の選び方など) をブラウザーの IndexedDB に残すか。既定は true */
+  /** 覚えたこと (変換の選び方など) を残すか。既定は true */
   persist?: boolean;
-  /** false なら meltype.css を読まない (自分で用意するとき)。既定は true */
-  styles?: boolean;
+  /** 覚えたことの置き場。既定はそのページの IndexedDB */
+  storage?: LearningStorage;
   /** 読み込みの進み具合。phase は "core" (Meltype)・"dictionary" (漢字変換の辞書。loaded・total はバイト数)・"ready" */
   onProgress?: (progress: { phase: "core" | "dictionary" | "ready"; loaded?: number; total?: number }) => void;
+}
+
+/** 覚えたことの置き場。中身は JSON の文字列 1 つ */
+export interface LearningStorage {
+  get(): Promise<string | null | undefined>;
+  set(json: string): Promise<void>;
+  clear(): Promise<void>;
 }
 
 export interface AttachOptions extends LoadOptions {

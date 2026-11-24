@@ -9,6 +9,7 @@
 // 判断はすべて Core (src/Meltype.Web をブラウザーの .NET で動かしたもの) がする。ここは出来事 (ImeEvent) を送り、
 // 答え (ImeOutput) を入力欄に書くだけ (src/Meltype.Core/Ime/ImeProtocol.cs)。漢字変換は Mozc の WebAssembly (mozc/)。
 // 変換中の文字は入力欄に入れず、キャレットの下に重ねた箱に出す (入力欄の値は確定した文字だけにする)。
+// 箱・画面のキーボード・カーソルは Shadow DOM の中に描く (どのサイトの CSS とも混ざらないように。拡張機能 web-extension/ も使う)。
 // 入力モードは日本語だけ。Meltype は日本語のモードのままで英語も打てるので、英数のモードは出さない。
 // <script> でも読めるように、ES モジュールの構文 (import・export・import.meta) は使わない。
 
@@ -51,12 +52,14 @@
   // <script> で読んだときは、そのファイルの場所から本体 (_framework/・mozc/) を探す
   let baseUrl = document.currentScript?.src ? new URL(".", document.currentScript.src) : null;
   let enginePromise = null;
+  // 箱・キーボード・カーソルを入れる Shadow DOM (load で作る)
+  let ui = null;
 
   /**
    * 本体 (Core と Mozc) を読み込む。2 回目からは同じものを返す。
-   * options.baseUrl: 本体を置いた場所。options.persist: 学習データを IndexedDB に残すか (既定は true)。
+   * options.baseUrl: 本体を置いた場所。options.persist: 学習データを残すか (既定は true)。
+   * options.storage: 学習データの置き場 ({ get(): Promise<string | null>, set(json), clear() })。既定はそのページの IndexedDB。
    * options.onProgress({ phase, loaded, total }): 読み込みの進み具合 (phase は "core"・"dictionary"・"ready")。
-   * options.styles: false なら meltype.css を読まない (自分で用意するとき)。
    */
   function load(options = {}) {
     return enginePromise ??= start(options).catch((error) => {
@@ -69,8 +72,11 @@
     if (options.baseUrl) baseUrl = new URL(options.baseUrl, location.href);
     if (!baseUrl) throw new Error("Meltype: 本体の場所が分かりません。load({ baseUrl }) で指定してください");
     const progress = options.onProgress ?? (() => {});
-    if (options.styles !== false) addStyles();
     const persist = options.persist !== false;
+    const css = await fetch(new URL("meltype.css", baseUrl)).then((response) => {
+      if (!response.ok) throw new Error(`meltype.css: ${response.status}`);
+      return response.text();
+    });
 
     progress({ phase: "core" });
     const { dotnet } = await import(new URL("_framework/dotnet.js", baseUrl).href);
@@ -85,16 +91,17 @@
     const core = (await runtime.getAssemblyExports("MeltypeWeb")).Meltype.Web.WebExports;
 
     mozc = await loadMozc((loaded, total) => progress({ phase: "dictionary", loaded, total }));
-    const store = persist ? await openStore() : null;
+    const store = persist ? options.storage ?? await openStore() : null;
     const saved = store ? await store.get() : null;
     if (saved) core.ImportData(saved);
     core.Init(mozc !== null);
+    ui = createUi(css);
 
     let saveTimer = 0;
     const save = () => {
       clearTimeout(saveTimer);
       saveTimer = 0;
-      if (store) store.put(core.ExportData());
+      store?.set(core.ExportData())?.catch?.((error) => console.warn("Meltype: 学習データを残せませんでした", error));
     };
     const scheduleSave = () => {
       if (store && !saveTimer) saveTimer = setTimeout(save, SAVE_DELAY_MS);
@@ -121,13 +128,6 @@
   async function attach(element, options = {}) {
     const engine = await load(options);
     return engine.attach(element, options);
-  }
-
-  function addStyles() {
-    if (document.querySelector("link[data-meltype-styles]")) return;
-    const link = Object.assign(document.createElement("link"), { rel: "stylesheet", href: new URL("meltype.css", baseUrl).href });
-    link.dataset.meltypeStyles = "";
-    document.head.append(link);
   }
 
   /** Mozc の WebAssembly (mozc/mozc.js)。読めなければ null で、かなのまま確定する。 */
@@ -193,7 +193,7 @@
       });
       return {
         get: () => run("readonly", (s) => s.get("files")),
-        put: (json) => run("readwrite", (s) => s.put(json, "files")).catch((error) => console.warn("Meltype: 学習データを残せませんでした", error)),
+        set: (json) => run("readwrite", (s) => s.put(json, "files")),
         clear: () => run("readwrite", (s) => s.delete("files")),
       };
     } catch (error) {
@@ -299,6 +299,8 @@
     box.addEventListener("click", onClickCandidate);
     engine.listeners.add(onReady);
     send("StateRequested");
+    // フォーカスがあってから付けた (本体を読んでいる間に入力欄を選んだ・拡張機能が付けた) ときは、ここで入ったことにする
+    if (element.getRootNode().activeElement === element) onFocus();
 
     return {
       detach() {
@@ -456,11 +458,49 @@
 
   // ---- 変換中の文字と候補 ----
 
+  /**
+   * 箱・キーボード・カーソルを入れる Shadow DOM。ページの左上を原点にして置く (中の座標はページの座標)。
+   * 見た目は meltype.css を Shadow DOM にだけ当てる。色と字は、ページの --meltype-* の変数を受け継いで変えられる。
+   */
+  function createUi(css) {
+    const host = document.createElement("meltype-ui");
+    Object.assign(host.style, { position: "absolute", top: "0", left: "0", width: "0", height: "0", zIndex: "2147483647" });
+    const root = host.attachShadow({ mode: "open" });
+    // style 要素はページの CSP (style-src) で止められることがあるので、止められない CSSStyleSheet で当てる
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync(css);
+    root.adoptedStyleSheets = [sheet];
+    let paddingBefore = null;
+    return {
+      root,
+      /** 外されていたら (ページの作り直しなどで) 付け直す */
+      ensure() {
+        // <body> の中に置く (ページが <body> に決めた --meltype-* の変数を受け継ぐように)
+        if (!host.isConnected) (document.body ?? document.documentElement).append(host);
+      },
+      get keyboardOpen() {
+        return host.classList.contains("vkeys-open");
+      },
+      /** 画面のキーボードを出している間は、キーボードの高さだけページの下を空ける */
+      setKeyboardOpen(open) {
+        host.classList.toggle("vkeys-open", open);
+        if (open && paddingBefore === null) {
+          paddingBefore = document.body.style.paddingBottom;
+          document.body.style.paddingBottom = `${root.querySelector(".meltype-vkeys")?.offsetHeight ?? 0}px`;
+        } else if (!open && paddingBefore !== null) {
+          document.body.style.paddingBottom = paddingBefore;
+          paddingBefore = null;
+        }
+      },
+    };
+  }
+
   function createBox() {
     const box = document.createElement("div");
     box.className = "meltype-box";
     box.hidden = true;
-    document.body.append(box);
+    ui.ensure();
+    ui.root.append(box);
     return box;
   }
 
@@ -468,6 +508,7 @@
   function drawBox(box, view, caretRect) {
     box.hidden = !view || (!view.text && !view.candidates);
     if (box.hidden) return;
+    ui.ensure();
     box.replaceChildren();
     const line = document.createElement("div");
     line.className = "meltype-text";
@@ -493,9 +534,9 @@
       box.append(list);
     }
     if (view.hint) box.append(Object.assign(document.createElement("div"), { className: "meltype-hint", textContent: view.hint }));
-    // 画面のキーボードがあるときは、キーボードのすぐ上に固定して出す (meltype.css が位置を決める)
+    // 画面のキーボードがあるときは、キーボードのすぐ上に固定して出す (meltype.css の :host(.vkeys-open) が位置を決める)
     box.style.left = box.style.top = "";
-    if (!document.documentElement.classList.contains("meltype-vkeys-open")) {
+    if (!ui.keyboardOpen) {
       const caret = caretRect();
       // 画面の右端からはみ出さないようにする
       box.style.left = `${Math.max(scrollX, Math.min(caret.left + scrollX, scrollX + document.documentElement.clientWidth - box.offsetWidth - 8))}px`;
@@ -536,7 +577,8 @@
     const caret = document.createElement("span");
     caret.className = "meltype-caret";
     caret.hidden = true;
-    document.body.append(keys, caret);
+    ui.ensure();
+    ui.root.append(keys, caret);
 
     const drawCaret = () => {
       caret.hidden = !active?.drawsCaret || !active.field.collapsed();
@@ -593,7 +635,8 @@
       show(target) {
         active = target;
         keys.hidden = false;
-        document.documentElement.classList.add("meltype-vkeys-open");
+        ui.ensure();
+        ui.setKeyboardOpen(true);
         drawCaret();
       },
       hide(target) {
@@ -601,7 +644,7 @@
         clearTimeout(repeatTimer);
         active = null;
         keys.hidden = true;
-        document.documentElement.classList.remove("meltype-vkeys-open");
+        ui.setKeyboardOpen(false);
         drawCaret();
       },
     };

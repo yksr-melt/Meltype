@@ -3994,7 +3994,7 @@ body.has-vkeys .meltype-hint {
 
 /* Web エンジン (/web-engine/) */
 
-/* エンジンの候補の欄・画面のキーボードもサイトの色と字にする。エンジンの meltype.css が :root に既定の値を置くので、body で上書きする */
+/* エンジンの候補の欄・画面のキーボードもサイトの色と字にする (エンジンの Shadow DOM の中に受け継がれる) */
 body.web-engine-page {
   --meltype-accent: var(--sky-deep);
   --meltype-on-accent: var(--on-accent);

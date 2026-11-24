@@ -43,17 +43,17 @@ await attach(document.querySelector("textarea"));
 | 設定 | 既定 | 内容 |
 | --- | --- | --- |
 | `keyboard` | `"auto"` | 画面のキーボードを出すか。`"auto"` は指で操作する端末だけ、`"always"`・`"never"` |
-| `persist` | `true` | 覚えたこと (変換の選び方など) をブラウザーの IndexedDB に残すか |
+| `persist` | `true` | 覚えたこと (変換の選び方など) を残すか |
+| `storage` | そのページの IndexedDB | 覚えたことの置き場 (`{ get(), set(json), clear() }`。どれも Promise を返す) |
 | `onCommit(text)` | | 確定した文字を入力欄に入れたとき |
 | `onProgress({ phase, loaded, total })` | | 読み込みの進み具合。`phase` は `"core"`・`"dictionary"` (辞書。`loaded`・`total` はバイト数)・`"ready"` |
 | `baseUrl` | `meltype.js`・`index.mjs` の場所 | 本体を置いた場所 |
-| `styles` | `true` | `false` なら `meltype.css` を読まない (見た目を自分で用意するとき) |
 
 型は `index.d.ts` にあります。
 
 ## 見た目を変える
 
-`meltype.css` の `--meltype-*` の変数を上書きします。
+候補の欄・画面のキーボード・カーソルは Shadow DOM の中に描くので、ページの CSS とは混ざりません。色と字は、ページで `--meltype-*` の変数を決めると変わります (`--meltype-bg`・`--meltype-fg`・`--meltype-muted`・`--meltype-accent`・`--meltype-on-accent`・`--meltype-border`・`--meltype-key-bg`・`--meltype-keyboard-bg`・`--meltype-font`・`--meltype-key-height`)。
 
 ```css
 :root {
@@ -69,12 +69,12 @@ await attach(document.querySelector("textarea"));
 - 指で操作する端末では、端末のキーボードを出さずに、画面の下に Meltype のキーボードを出します (端末のキーボードの IME が打鍵を変換してしまうため)。
   - `<textarea>`・`<input>` は `readonly` にしてカーソルを描きます (Android の Firefox は `inputmode="none"` でも端末のキーボードを出すことがあるため)。
   - `contenteditable` は `readonly` にできないので、Android の Firefox では端末のキーボードも出ます。
-- 覚えたことはそのブラウザーの中 (IndexedDB) にだけ残ります。プライベートブラウズなどで残せないときは、ページを閉じると忘れます。
+- 覚えたことは、既定ではそのブラウザーのそのサイトの IndexedDB にだけ残ります (`storage` で置き場を変えられます)。プライベートブラウズなどで残せないときは、ページを閉じると忘れます。
 - パスワードの入力欄 (`type="password"`) では何もしません。
 
 ## 組み込むサイトに要るもの
 
-- **CSP**: WebAssembly を動かすため、`script-src` に `'wasm-unsafe-eval'` が要ります。本体を別のドメインに置くときは、そのドメインも `script-src`・`connect-src`・`style-src` に入れてください。
+- **CSP**: WebAssembly を動かすため、`script-src` に `'wasm-unsafe-eval'` が要ります。本体を別のドメインに置くときは、そのドメインも `script-src`・`connect-src` に入れてください。
 - **MIME**: `.wasm` は `application/wasm` で配ってください。
 - **CORS**: 本体を別のドメインに置くときは、そのドメインで `Access-Control-Allow-Origin` を返してください。
 
