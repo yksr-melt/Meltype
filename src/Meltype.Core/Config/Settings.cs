@@ -339,7 +339,9 @@ public sealed class Settings
      Description("カッコだけ（「」・（）・() など）を確定したときに、カーソルをカッコの中へ移動します。Windows の Meltype IME・Meltype キーボードで対応しています。macOS・Linux は未対応です。")]
     public bool CursorIntoBrackets { get; set; }
 
-
+    [Category("6. 候補"), DisplayName("計算式を変換すると結果を候補に出す"),
+     Description("数字と + - * / ( ) だけの式を打って Space で変換すると、計算した結果 (1+2*3 → 7) と「式=結果」を候補に出します。")]
+    public bool CalculatorCandidates { get; set; }
 
     [Category("10. 学習"), DisplayName("英語 / 日本語の学習を前の文脈ごとに分ける"),
      Description("英字 / かなに直した語 (new → ねw など) の学習を、直前が英語だったか日本語だったかごとに別々に覚えます。同じローマ字でも、英語の文の中と日本語の文の中で使い分けられます。ON にする前に覚えた学習は、どちらの文脈でも使います。")]
@@ -366,7 +368,6 @@ public sealed class Settings
     [Category("6. 候補"), DisplayName("「なう」で再生中の曲を候補に出す"), Platforms(Platform.Windows),
      Description("「なう」を変換したとき、今再生している曲 (曲名 / アーティスト) を候補に出します。Windows のメディアの操作 (音量のボタンを押したときに出る再生中の表示) に曲を知らせるアプリ (Spotify・ブラウザーなど) が対象です。ON の間は、曲・再生状態が変わったときに Windows から知らせを受けて今の曲を読みます (変換を待たせないため。変わらない間は読みません)。メモリに今の 1 曲を持つだけで、保存・送信はしません。選んでも学習しません。再生中の曲が無いときは、今までどおり時刻を出します。")]
     public bool NowPlayingCandidates { get; set; } = true;
-
 
     [Category("1. 全般"), DisplayName("Meltype の一時停止 / 再開のホットキー"), Platforms(Platform.Windows),
      Description("Meltype 全体の一時停止 / 再開に使うキーの組み合わせ (例: Ctrl+Alt+F10)。空のときは Ctrl+Alt+F12 (使えなければ Ctrl+Alt+F11 など)。変更は Meltype を起動し直すと効きます。変換・無変換キーが無い US 配列のキーボード向けです。")]
@@ -400,8 +401,13 @@ public sealed class Settings
      Description("GPU 版 (Vulkan・CUDA) の llama-server で、計算に使う GPU の名前 (例: Vulkan0)。llama-server の --device に渡し、GPU に載せる量は llama-server が空いているメモリに合わせて決めます。空なら CPU だけで計算します (既定)。名前は llama-server --list-devices で確かめられます。変えると llama-server を起動し直します。")]
     public string ZenzaiDevice { get; set; } = "";
 
+    [Category("6. 候補"), DisplayName("予測変換の候補"),
+     Description("打っている途中に、続きの候補を変換ボックスの下に出します (前に確定した語句・ユーザー辞書・選び直した変換の学習・よく使うあいさつ・英単語の続き)。Tab / Shift+Tab で選んで Enter で確定します。確定した語句は %LOCALAPPDATA%\\Meltype\\phrases.txt に暗号化せずに覚え (この PC の外には送りません)、「学習データをリセット」で消えます。")]
+    public bool PredictiveCandidates { get; set; } = true;
 
-
+    [Category("6. 候補"), DisplayName("予測変換に英字の社名・サービス名"),
+     Description("「予測変換の候補」が ON のとき、読みを打ちかけたところで、英字で書く社名・サービス名・語の候補も出します (しゃお → Xiaomi、ぎっとは → GitHub)。読みを 3 文字以上打ったときだけ出します。英単語の続き (decis → decision) は「予測変換の候補」だけで出ます。")]
+    public bool EnglishNamePredictions { get; set; }
 
     [Category("5. 変換"), DisplayName("Tab で変換"),
      Description("打っている途中に Tab を押すと、Space と同じく変換を始めます (Microsoft IME と同じ)。Tab で始めた変換の中では Tab で次の候補、Shift+Tab で前の候補、Enter で確定します。もしかして・手動の提案・予測変換の候補が出ているときは、今までどおりそちらに使います。英語で終わっているとき・Space で始めた変換の中では、今までどおり確定してから Tab をアプリに渡します。")]
@@ -427,7 +433,6 @@ public sealed class Settings
      Description("子音だけの略入力 (ast → 明日、ngt → ノート など) を、変換の候補に出します。候補は同梱の candidates.txt の英字の読みから出します。既定は OFF です。")]
     public bool ConsonantAbbreviations { get; set; }
 
-
     [Category("9. 表示"), DisplayName("打ったキーを表示"), Platforms(Platform.Windows),
      Description("打ったキー (ローマ字: kyouhagoogle) を小さく出します。Meltype キーボードでは変換ボックスの文字の下に、Meltype IME では候補の一覧の上に出します。打ち間違いに気づきやすくなります。")]
     public bool ShowTypedKeys { get; set; } = true;
@@ -447,9 +452,12 @@ public sealed class Settings
     public bool CorrectTypos { get; set; } = true;
 
     [Category("7. 記号・スペース"), DisplayName("かなの後ろの /"),
-     Description("かなのすぐ後ろで打った / を、中黒「・」(いーろん/ますく → イーロン・マスク) か全角のスラッシュ「／」にします。英字・数字の後ろ (and/or、3/4、URL) は / のままです。文章の入力欄の打ち始めの / は、この設定に関係なく「・」になり、Space で / にできます。「/ のまま」のときも、z/ または / を打って Space で「・」にできます。")]
+     Description("かなのすぐ後ろで打った / を、中黒「・」(いーろん/ますく → イーロン・マスク) か全角のスラッシュ「／」にします。英字・数字の後ろ (and/or、3/4、URL) は / のままです。文章の入力欄の打ち始めの / は、この設定に関係なく「・」になり、Space で / にできます。「/ のまま」のときも、z/ (設定「z + 記号・hjkl で記号・矢印を入れる」が ON のとき) または / を打って Space で「・」にできます。")]
     public SlashStyle Slash { get; set; } = SlashStyle.Slash;
 
+    [Category("7. 記号・スペース"), DisplayName("z + 記号・hjkl で記号・矢印を入れる"),
+     Description("日本語入力のとき、z の後ろに記号や h j k l を打つと記号・矢印にします (Microsoft IME・Google 日本語入力と同じ。z/ → ・、z. → …、z, → ‥、z- → ～、z[ → 『、z] → 』、zh zj zk zl → ← ↓ ↑ →)。OFF にすると、z はほかの英字と同じに扱います (1000Hz. や quiz. の z. を … にしません)。")]
+    public bool ZSymbols { get; set; } = true;
 
     [Category("3. 入力モード"), DisplayName("入力モードをカーソルの近くに表示"),
      Description("入力モードを切り替えたとき (と入力欄に入ったとき) に、カーソルの近くに「あ」(日本語) か「A」(英数) を一瞬表示します。Meltype キーボードの使用中は Windows の IME を OFF にしているので、タスクバーの IME の表示は常に「A」になります。今のモードはこの表示かトレイの Meltype のアイコンで確認してください。")]
@@ -462,7 +470,6 @@ public sealed class Settings
     public ModeIndicatorTiming EffectiveModeIndicator => ModeIndicator != ModeIndicatorTiming.Default ? ModeIndicator
         : OperatingSystem.IsWindows() ? Mode == InputMode.Keyboard ? ModeIndicatorTiming.OnSwitchAndFocus : ModeIndicatorTiming.Never
         : ModeIndicatorTiming.OnSwitch;
-
 
     [Category("3. 入力モード"), DisplayName("入力モードの表示の色: 日本語 (あ)"), Platforms(Platform.Windows),
      Description("「あ」の背景色を #RRGGBB で書きます (例: #007ACC)。空なら青。壁紙・アプリのテーマで見えにくいときに変えます。")]
@@ -503,7 +510,6 @@ public sealed class Settings
     [Category("9. 表示"), DisplayName("変換ボックスの不透明度"), Platforms(Platform.Windows),
      Description("変換ボックスを少し透かして、後ろの文字を見えるようにします。100% は透けません。")]
     public CompositionOpacity CompositionOpacity { get; set; } = CompositionOpacity.Opaque;
-
 
     /// <summary>変換ボックスをライトの色で出すか。windowsLight は Windows のアプリ モードがライトか (分からなければ null = ダーク)。</summary>
     public bool CompositionIsLight(bool? windowsLight) => CompositionTheme switch

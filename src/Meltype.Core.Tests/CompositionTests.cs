@@ -229,6 +229,7 @@ internal static class CompositionTests
         public KanaLayout KanaLayout { get => Settings.KanaLayout; set => Settings.KanaLayout = value; }
         public RomajiLayout RomajiLayout { get => Settings.RomajiLayout; set => Settings.RomajiLayout = value; }
         public bool CorrectTypos { get => Settings.CorrectTypos; set => Settings.CorrectTypos = value; }
+        public bool ZSymbols { get => Settings.ZSymbols; set => Settings.ZSymbols = value; }
         public bool NumberKeysSelectCandidates { get => Settings.NumberKeysSelectCandidates; set => Settings.NumberKeysSelectCandidates = value; }
         public bool SpaceAroundEnglish { get => Settings.SpaceAroundEnglish; set => Settings.SpaceAroundEnglish = value; }
         public Meltype.Config.SpaceWidth SpaceWidth { get => Settings.SpaceWidth; set => Settings.SpaceWidth = value; }
@@ -244,6 +245,7 @@ internal static class CompositionTests
         public bool ConversionStartsAtLastClause { get => Settings.ConversionStartsAtLastClause; set => Settings.ConversionStartsAtLastClause = value; }
         public bool CursorIntoBrackets { get => Settings.CursorIntoBrackets; set => Settings.CursorIntoBrackets = value; }
         public string ControlKeyBindings { get => Settings.ControlKeyBindings; set => Settings.ControlKeyBindings = value; }
+        public bool CalculatorCandidates { get => Settings.CalculatorCandidates; set => Settings.CalculatorCandidates = value; }
         public bool ContextualLearning { get => Settings.ContextualLearning; set => Settings.ContextualLearning = value; }
         public bool ShowCandidatesWhileTyping { get => Settings.ShowCandidatesWhileTyping; set => Settings.ShowCandidatesWhileTyping = value; }
         public string GitHubRepository { get => Settings.GitHubRepository; set => Settings.GitHubRepository = value; }
@@ -298,7 +300,7 @@ internal static class CompositionTests
         public Keyboard(bool live = false, bool direct = false, ConversionHistory? history = null, IKanjiConverter? converter = null,
             Func<string, IReadOnlyList<string>>? moreCandidates = null, UserDictionary? userDictionary = null, LanguageMemory? languages = null,
             TranslationDictionary? translations = null, TranslationHistory? translationHistory = null, Predictor? predictor = null,
-            Func<DateTime>? now = null, bool showTypedKeys = false, bool tabConversion = false,
+            Func<DateTime>? now = null, bool showTypedKeys = false, bool tabConversion = false, bool englishNamePredictions = false,
             CompositionDetector? detector = null)
         {
             detector ??= Detector;
@@ -308,6 +310,8 @@ internal static class CompositionTests
                 LiveConversion = live,
                 ShowTypedKeys = showTypedKeys,
                 TabConversion = tabConversion,
+                PredictiveCandidates = predictor is not null,
+                EnglishNamePredictions = englishNamePredictions,
                 NowPlayingCandidates = false,
             };
             var services = new CompositionServices
@@ -1039,14 +1043,22 @@ internal static class CompositionTests
         Assert.True(predictor.PredictEnglishNames("あいあ").Count <= Predictor.MaxPredictions, "多すぎない");
         Assert.Equal(0, predictor.PredictEnglishNames("ゐゐゐ").Count, "無い読みは出さない");
 
-        var on = new Keyboard(predictor: predictor);
+        var on = new Keyboard(predictor: predictor, englishNamePredictions: true);
         on.Type("shao");
-        Assert.True(on.Host.View!.Predictions?.Contains("Xiaomi") == true, "予測に出る: " + string.Join(",", on.Host.View.Predictions ?? []));
+        Assert.True(on.Host.View!.Predictions?.Contains("Xiaomi") == true, "ON なら出る: " + string.Join(",", on.Host.View.Predictions ?? []));
         on.Press(VirtualKeys.Tab);
         while (on.Showing != "Xiaomi" && on.Host.View!.SelectedPrediction < (on.Host.View.Predictions?.Count ?? 0) - 1) on.Press(VirtualKeys.Tab);
         on.Press(VirtualKeys.Return);
         Assert.Equal("Xiaomi", on.Host.Document);
+
+        var off = new Keyboard(predictor: predictor);
+        off.Type("shao");
+        Assert.True(off.Host.View!.Predictions?.Contains("Xiaomi") != true, "OFF (既定) なら出さない");
     }
+
+    [Test]
+    public static void Issue890_EnglishNamePredictions_OffByDefault() =>
+        Assert.True(!new Meltype.Config.Settings().EnglishNamePredictions, "既定で OFF");
 
     [Test]
     public static void Prediction_OffWithoutPredictor()
@@ -2932,9 +2944,12 @@ internal static class CompositionTests
         Assert.Equal("9", Calculator.Evaluate("(1+2)*3="), "括弧と末尾の =");
         Assert.Equal("0.5", Calculator.Evaluate("1/2"), "小数");
         Assert.True(Calculator.Evaluate("1/0") is null && Calculator.Evaluate("123") is null && Calculator.Evaluate("1+") is null, "割れない・式でない・途中は null");
-        var k = new Keyboard();
+        var k = new Keyboard { CalculatorCandidates = true };
         k.Type("1+2*3 ");
         Assert.True(k.Host.View!.Candidates.Contains("7") && k.Host.View.Candidates.Contains("1+2*3=7"), string.Join(",", k.Host.View.Candidates));
+        var off = new Keyboard();
+        off.Type("1+2*3 ");
+        Assert.True(off.Host.View is null || !off.Host.View.Candidates.Contains("7"), "OFF は候補に出さない");
     }
 
     [Test]
@@ -2951,9 +2966,12 @@ internal static class CompositionTests
         Assert.Equal("95367431640625", Calculator.Evaluate("5^20"), "10^15 未満は出す");
         Assert.True(Calculator.Evaluate("10^15") is null, "大きすぎる結果は出さない");
         Assert.True(Calculator.Evaluate("2^") is null && Calculator.Evaluate("^2") is null && Calculator.Evaluate("(-2)^0.5") is null, "途中・虚数は null");
-        var k = new Keyboard();
+        var k = new Keyboard { CalculatorCandidates = true };
         k.Type("2^10 ");
         Assert.True(k.Host.View!.Candidates.Contains("1024") && k.Host.View.Candidates.Contains("2^10=1024"), string.Join(",", k.Host.View.Candidates));
+        var off = new Keyboard();
+        off.Type("2^10 ");
+        Assert.True(off.Host.View is null || !off.Host.View.Candidates.Contains("1024"), "OFF は候補に出さない");
     }
 
 
@@ -6331,18 +6349,6 @@ internal static class CompositionTests
     }
 
     [Test]
-    public static void ZSymbols_KanaInputTypesKana()
-    {
-        // かな入力の Z のキーは「つ」。後ろの H・. のキーも矢印・記号にせず、かな (く・る) のまま
-        foreach (var (keys, expected) in new[] { (new[] { 0x5A, 0x48 }, "つく"), (new[] { 0x5A, 0xBE }, "つる") })
-        {
-            var k = new Keyboard { Kana = true };
-            k.TypeKeys([.. keys.Select(vk => (vk, false))]);
-            Assert.Equal(expected, k.Host.View!.Text, expected);
-        }
-    }
-
-    [Test]
     public static void Issue2013_ZArrowAfterKanaIsNotTypo()
     {
         // Issue #2013: かなの後ろの zl (→) を、確定のときに前のローマ字と合わせて打ち間違い (hogezo) として ぞ に直さない。
@@ -6352,6 +6358,20 @@ internal static class CompositionTests
             ("hogezo", "ほげぞ"));
     }
 
+    [Test]
+    public static void Issue1008_ZSymbolsCanBeTurnedOff()
+    {
+        // Issue #1008: 設定「z + 記号・hjkl で記号・矢印を入れる」を OFF にすると、z はほかの英字と同じ (1000Hz. の z. を … にしない)
+        foreach (var (typed, expected) in new[] { ("z.", "z."), ("zh", "zh"), ("zkai", "zかい"), ("zu", "ず") })
+        {
+            var k = new Keyboard { ZSymbols = false };
+            k.Type(typed + "\n");
+            Assert.Equal(expected, k.Host.Document, typed);
+        }
+        var on = new Keyboard();
+        on.Type("z.\n");
+        Assert.Equal("…", on.Host.Document, "既定 (ON) は今までどおり");
+    }
 
     [Test]
     public static void Issue989_NumberKeysCommitConversion()

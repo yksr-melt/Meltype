@@ -731,6 +731,7 @@ internal static class ImeContractTests
             var phrases = new PhraseHistory(null);
             phrases.Remember("にほんごでにゅうりょく", "日本語で入力");
             var front = new Front { Services = new CompositionServices { Languages = languages, Predictor = new Predictor(phrases, null, null) } };
+            front.Settings.PredictiveCandidates = true;
             Assert.True(Candidates(front.Type("nihongo")[^1]).Contains("日本語で入力"), front.Trace);
             front.Traits.Add("Password");
             AssertPasswordPass(front, front.Event(type, extra: extra));
@@ -809,6 +810,7 @@ internal static class ImeContractTests
             var phrases = new PhraseHistory(null);
             var front = new Front { Converter = converter, LateResults = true, Services = new CompositionServices { Predictor = new Predictor(phrases, null, null) } };
             front.Settings.LiveConversion = true;
+            front.Settings.PredictiveCandidates = true;
             Assert.Equal("にほんご", View(front.Type("nihongo")[^1]).GetProperty("text").GetString(), front.Trace);
             front.Traits.Add("Password");
             AssertPasswordPass(front, front.Event("CaretMoved", extra: Entered));
@@ -898,6 +900,7 @@ internal static class ImeContractTests
                 MoreCandidates = (reading, _) => reading == "にほんご" ? ["日本語", "日本語文"] : [],
             }
         };
+        front.Settings.PredictiveCandidates = true;
         front.Settings.LearningEnabled = mode != "設定OFF";
 
         void SetField(bool beforeCommit)
@@ -1027,6 +1030,7 @@ internal static class ImeContractTests
                     Sends = null,
                     Services = new CompositionServices { Predictor = new Predictor(phrases, null, null) },
                 };
+                front.Settings.PredictiveCandidates = true;
                 var index = Candidates(front.Type("nihongo")[^1]).IndexOf("日本語で入力");
                 Assert.True(index >= 0, front.Trace);
 
@@ -1233,6 +1237,7 @@ internal static class ImeContractTests
     {
         // マウスでなぞった (CandidateHighlighted) だけでは予測変換の候補を確定しない。クリックしたら確定する
         var front = new Front { Services = new CompositionServices { Predictor = new Predictor(null, null, null) } };
+        front.Settings.PredictiveCandidates = true;
         front.Document = "I made ";
         var list = front.Type("decis")[^1].GetProperty("result").GetProperty("view").GetProperty("candidates");
         Assert.True(list.ValueKind == JsonValueKind.Object && list.GetProperty("items").GetArrayLength() > 1, "予測変換の候補を出す\n" + front.Trace);

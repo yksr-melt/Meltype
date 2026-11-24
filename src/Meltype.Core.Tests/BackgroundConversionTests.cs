@@ -143,7 +143,7 @@ internal static class BackgroundConversionTests
             _ => []);
         var phrases = new PhraseHistory(null);
         phrases.Remember("とることができる", "取ることができる");
-        var session = new TestSession(() => new Settings { LiveConversion = true }, converter,
+        var session = new TestSession(() => new Settings { LiveConversion = true, PredictiveCandidates = true }, converter,
             new CompositionServices { Predictor = new Predictor(phrases, null, null) }, lateResults: true);
         Assert.Equal(0, SessionFacadeTests.Type(session, "tanniwotoru")[^1].View?.Predictions?.Count ?? 0);
 
