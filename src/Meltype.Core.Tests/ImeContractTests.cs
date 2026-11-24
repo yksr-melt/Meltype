@@ -6,8 +6,11 @@ using System.Text.Json;
 using Meltype.Composition;
 using Meltype.Config;
 using Meltype.Detection;
+using Meltype.Dictionary;
+using Meltype.Engine;
 using Meltype.Ime;
 using Meltype.Input;
+using Meltype.Learning;
 
 namespace Meltype.Tests;
 
@@ -32,8 +35,11 @@ internal static class ImeContractTests
         private ImeHost Create()
         {
             MeltypeRuntime.Connect(CompositionTests.Detector, Services);
-            return new ImeHost(this, new SessionParts(CompositionTests.Detector, Converter, Services) { ClassifyDirect = ClassifyDirect }, () => Settings);
+            return new ImeHost(this, new SessionParts(CompositionTests.Detector, Converter, Services) { ClassifyDirect = ClassifyDirect, LateResults = () => LateResults }, () => Settings);
         }
+
+        /// <summary>変換エンジンの答えを待たず、後から受け取るか (<see cref="SessionParts.LateResults"/>)。入力欄を作った後に変えてもよい。</summary>
+        public bool LateResults { get; set; }
 
         /// <summary>英数状態で打ち始めた英字がローマ字 (日本語) かの判定。null なら判定しない。</summary>
         public Func<string, bool, Settings, Verdict>? ClassifyDirect { get; init; }
@@ -516,6 +522,13 @@ internal static class ImeContractTests
         front.Settings.KanaLayout = KanaLayout.Nicola;
         front.Key(VirtualKeys.NonConvert);
         Assert.True(front.Open, "NICOLA の無変換は切り替えない\n" + front.Trace);
+        // 変換・無変換が 1 つのキーのキーボードでは、そのキーを切り替えキーに登録して日本語 / 英数を行き来する
+        var toggle = new Front();
+        toggle.Settings.ToggleShortcuts = [new() { Key = VirtualKeys.Convert }];
+        toggle.Key(VirtualKeys.Convert);
+        Assert.True(!toggle.Open, "切り替えキーの変換で英数\n" + toggle.Trace);
+        toggle.Key(VirtualKeys.Convert);
+        Assert.True(toggle.Open, "もう一度押して日本語\n" + toggle.Trace);
     }
 
     [Test]
@@ -676,6 +689,36 @@ internal static class ImeContractTests
     }
 
     [Test]
+    public static void Password_TerminalPromptPassesKeys()
+    {
+        // 履歴の /* で、後ろの行が複数行コメントの中と判定される (#1201)
+        const string history = "$ ls /etc/*\nfoo bar\n$ sudo ls\n";
+        foreach (var prompt in new[]
+                 {
+                     "[sudo] password for user: ", "[sudo] user のパスワード:", "[sudo] Passwort für user: ", "[sudo] user 的密码：",
+                     "[sudo: authenticate] Password: ", "[sudo: authenticate] パスワード: ", "Password: ", "user@host's password: ",
+                     "Enter passphrase for key '/home/user/.ssh/id_ed25519': ", "Password for 'https://user@github.com': ",
+                 })
+        {
+            // Meltype キーボードはターミナルと知らせず、アプリ名だけ送る
+            foreach (var front in new[] { new Front { Terminal = true, Sends = history + prompt }, new Front { App = "WindowsTerminal.exe", Sends = history + prompt } })
+            {
+                foreach (var key in "nihongo\n")
+                {
+                    AssertPasswordPass(front, front.Key(key));
+                }
+            }
+        }
+
+        var comment = new Front { Terminal = true, Sends = history + "[sudo] password for user: \n$ echo # " };
+        comment.Type("sa");
+        Assert.Equal("さ", comment.Composition["t1"], "プロンプトの次の行では、今までどおり判定する\n" + comment.Trace);
+        var text = new Front { Sends = "Password: " };
+        text.Type("sa");
+        Assert.Equal("さ", text.Composition["t1"], "ターミナルでない入力欄では変換する\n" + text.Trace);
+    }
+
+    [Test]
     public static void Password_CancelsExistingInputOnTheFirstEvent()
     {
         foreach (var (type, extra) in new[]
@@ -763,10 +806,9 @@ internal static class ImeContractTests
                 if (reading != "にほんご" || !release.Wait(5000)) return null;
                 return [new ConversionClause(reading, "日本語")];
             }, _ => []);
-            converter.Budget.Enable();
             converter.ResultReady += ready.Set;
             var phrases = new PhraseHistory(null);
-            var front = new Front { Converter = converter, Services = new CompositionServices { Predictor = new Predictor(phrases, null, null) } };
+            var front = new Front { Converter = converter, LateResults = true, Services = new CompositionServices { Predictor = new Predictor(phrases, null, null) } };
             front.Settings.LiveConversion = true;
             front.Settings.PredictiveCandidates = true;
             Assert.Equal("にほんご", View(front.Type("nihongo")[^1]).GetProperty("text").GetString(), front.Trace);
@@ -784,13 +826,33 @@ internal static class ImeContractTests
         }
     }
 
-    private sealed class LearningConverter : IKanjiConverter, ILearningConverter
+    [Test]
+    public static void LateResults_TakesEffectAfterTheHostIsCreated()
+    {
+        // fcitx5 は入力欄を作ってから、答えを後から受け取ると知らせる (meltype_set_conversion_ready)。その後のキーは答えを待たない
+        using var release = new ManualResetEventSlim();
+        using var converter = new BackgroundCallbackConverter((reading, _) =>
+        {
+            if (reading != "にほんご" || !release.Wait(5000)) return null;
+            return [new ConversionClause(reading, "日本語")];
+        }, _ => []);
+        var front = new Front { Converter = converter };
+        front.Settings.LiveConversion = true;
+        front.Event("StateRequested");
+        front.LateResults = true;
+        var started = Environment.TickCount64;
+        Assert.Equal("にほんご", View(front.Type("nihongo")[^1]).GetProperty("text").GetString(), front.Trace);
+        Assert.True(Environment.TickCount64 - started < 2000, "変換エンジンの答えを待たない");
+        release.Set();
+    }
+
+    private sealed class LearningConverter : TestConverter
     {
         private readonly CompositionTests.FakeConverter _converter = new();
         public ConcurrentQueue<(string? Context, IReadOnlyList<ConversionClause> Clauses)> Learned { get; } = new();
-        public string? Convert(string hiragana) => _converter.Convert(hiragana);
-        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) => _converter.ConvertClauses(hiragana, context);
-        public void Learn(string? context, IReadOnlyList<ConversionClause> clauses) => Learned.Enqueue((context, clauses));
+        public override string? Convert(string hiragana, string? before) => _converter.Convert(hiragana, before);
+        public override IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) => _converter.ConvertClauses(hiragana, before);
+        public override void Learn(string? context, IReadOnlyList<ConversionClause> clauses) => Learned.Enqueue((context, clauses));
     }
 
     [Test]
@@ -835,7 +897,7 @@ internal static class ImeContractTests
             {
                 Languages = languages, History = history, Predictor = new Predictor(phrases, null, history),
                 Translations = TranslationDictionary.Parse("川\tn\triver"), TranslationHistory = translationHistory,
-                MoreCandidates = reading => reading == "にほんご" ? ["日本語", "日本語文"] : [],
+                MoreCandidates = (reading, _) => reading == "にほんご" ? ["日本語", "日本語文"] : [],
             }
         };
         front.Settings.PredictiveCandidates = true;
@@ -1065,6 +1127,24 @@ internal static class ImeContractTests
         var toggle = new Front();
         toggle.Settings.ToggleShortcuts = [new() { Key = 0x14 }];
         Assert.True(Consumed(toggle.Key(0x14)) && !toggle.Open, "切り替えキーの CapsLock で英数\n" + toggle.Trace);
+    }
+
+    [Test]
+    public static void KanaKey_IsTheSameKeyOnEveryFront()
+    {
+        // カタカナ/ひらがな キーは Windows が 0xF2、IBus・fcitx5・Mac が 0x15 で送る
+        foreach (var vk in new[] { VirtualKeys.OemCopy, VirtualKeys.Kana })
+        {
+            var front = new Front();
+            front.Key(VirtualKeys.NonConvert);
+            Assert.True(Consumed(front.Key(vk)) && front.Open, $"0x{vk:X2}: 日本語にする\n" + front.Trace);
+            var toggle = new Front();
+            toggle.Settings.ToggleShortcuts = [new() { Key = VirtualKeys.Kana }];
+            toggle.Key(vk);
+            Assert.True(!toggle.Open, $"0x{vk:X2}: 切り替えキーに登録したら英数\n" + toggle.Trace);
+            toggle.Key(vk);
+            Assert.True(toggle.Open, $"0x{vk:X2}: もう一度押して日本語\n" + toggle.Trace);
+        }
     }
 
     [Test]

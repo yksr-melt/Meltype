@@ -73,10 +73,10 @@ public static class ProjectInfo
 
     /// <summary>
     /// 更新したあとの初めての起動で、リリースノートを見せるか (issue #1207)。最後に見せた版と今の版が違えば見せる。
-    /// 初めて起動したとき (新しく入れたとき) は、更新ではないので見せない。
+    /// 初めて起動したとき (新しく入れたとき) は、更新ではないので見せない。autoShow が OFF なら見せない。
     /// </summary>
-    public static bool ShouldShowReleaseNotes(string? shownVersion, string currentVersion, bool firstRun) =>
-        !firstRun && currentVersion != "?" && shownVersion != currentVersion;
+    public static bool ShouldShowReleaseNotes(string? shownVersion, string currentVersion, bool firstRun, bool autoShow = true) =>
+        autoShow && !firstRun && currentVersion != "?" && shownVersion != currentVersion;
 
     /// <summary>不具合報告のフォーム (ReportForm) があるか。無ければ GitHub の Issue の画面で報告してもらう。</summary>
     public static bool HasReportForm => ReportForm.Length > 0;
@@ -108,7 +108,7 @@ public static class ProjectInfo
     /// 欄の id (typed・actual・expected・key・zenzai・context) は、ひな形と合わせる。
     /// Zenzai の欄は、直したときの「Zenzai を使う」の設定 (Correction.Zenzai) で入れる。分からなければ空のまま (issue #1197)。
     /// </summary>
-    public static string MisdetectionReportUrl(Composition.Correction correction, string os, string version, string environment) =>
+    public static string MisdetectionReportUrl(Meltype.Diagnostics.Correction correction, string os, string version, string environment) =>
         GitHubReportUrl("2-misdetection.yml", os, version, environment) +
         $"&title={Uri.EscapeDataString("[誤判定] " + correction.Typed)}" +
         $"&typed={Uri.EscapeDataString(correction.Typed)}" +

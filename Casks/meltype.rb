@@ -1,8 +1,8 @@
 cask "meltype" do
-  version "1.7.0-rc.1"
-  sha256 "4faeb5b75bda816dc560c79d85c18392deffa114ecd0684fc60bf9dc39222114"
+  version "1.7.1"
+  sha256 "7f91df261c359fc5f64ac8f99e1f4ef4ff84483150a3163cab2ef7677b70abf0"
 
-  url "https://github.com/yksr-melt/Meltype/releases/download/v1.7.0-rc.1/Meltype-#{version}-mac.zip"
+  url "https://github.com/yksr-melt/Meltype/releases/download/v1.7.1/Meltype-#{version}-mac.zip"
   name "Meltype"
   desc "半角/全角を押さずに、日本語と英語をそのまま打てる日本語入力 (英単語は英字のまま、ローマ字は日本語に)"
   homepage "https://github.com/yksr-melt/Meltype"
@@ -14,6 +14,8 @@ cask "meltype" do
 
   depends_on arch: :arm64
   depends_on macos: :ventura
+
+  app "Meltype-mac/Meltype Settings.app"
 
   installer script: {
     executable: "Meltype-mac/install.sh",

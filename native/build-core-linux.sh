@@ -8,6 +8,8 @@
 # 先に Mozc の変換ヘルパーを native/mozc/build-mozc-helper.sh で (native/mozc/bin/linux/)、
 # Zenzai の llama-server を native/zenzai/build-llama-server.sh で (native/zenzai/bin/linux-<版>/) ビルドしておく。
 # 必要なもの: .NET 10 SDK、clang (NativeAOT のリンクに使う)、zlib (zlib1g-dev)、curl (Zenzai のモデルを取るのに使う)
+# 配布物と同じく glibc 2.34 (RHEL 9 系) で動くようにするには、環境変数 MELTYPE_SYSROOT に sysroot を設定し、lld も入れる (src/Directory.Build.props)。
+# 設定しなければ、ビルドするマシンの glibc に対してリンクする
 set -euo pipefail
 out="$1"
 work="$2"
@@ -43,10 +45,8 @@ fi
 mkdir -p "$out/mozc"
 
 echo "== 本体 (C#, NativeAOT) をビルド"
-# リポジトリの nuget.config は NuGet を使わない設定 (Windows の開発環境用) なので、NativeAOT のコンパイラを取るために nuget.org を指定する。
 dotnet publish "$root/src/Meltype.Core.CApi/Meltype.Core.CApi.csproj" -c Release -r "$rid" \
-    -p:PublishAot=true -p:NativeLib=Shared -p:StripSymbols=true -p:TreatWarningsAsErrors=true \
-    --source https://api.nuget.org/v3/index.json -o "$work/native"
+    -p:PublishAot=true -p:NativeLib=Shared -p:StripSymbols=true -p:TreatWarningsAsErrors=true -o "$work/native"
 cp "$work/native/MeltypeNative.so" "$out/libMeltypeNative.so"
 cp "$root/LICENSE" "$root/THIRD-PARTY-NOTICES.md" "$out/"
 

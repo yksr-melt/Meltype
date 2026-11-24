@@ -11,12 +11,12 @@ using Meltype.Config;
 namespace Meltype.Input;
 
 /// <summary>
-/// Discord のステータス (Rich Presence) に打鍵数を出す (打鍵数の「Discord に表示する」。既定は OFF)。
+/// Discord のステータス (Rich Presence) に打鍵数と起動からの経過時間を出す (打鍵数の「Discord に表示する」。既定は OFF)。
 /// Discord のローカル IPC (Windows は名前付きパイプ discord-ipc-N、macOS・Linux は Unix ソケット) で送り、外のサーバーは使わない。
-/// 送るのは今日と合計の打鍵数・直近の 1 分あたりの打鍵数だけ (打った文字・変換候補・入力先のアプリ名は送らない)。
+/// 送るのは今日と合計の打鍵数・直近の 1 分あたりの打鍵数・Meltype の起動時刻だけ (打った文字・変換候補・入力先のアプリ名は送らない)。
 /// 入力とは別のスレッドで UpdateInterval ごとに送り、Discord が起動していない・切れたときは次の回につなぎ直す (入力には影響しない)。
 /// </summary>
-internal sealed class DiscordPresence : IDisposable
+public sealed class DiscordPresence : IDisposable
 {
     /// <summary>Discord の開発者ポータルで作ったアプリの ID (Application ID)。空なら何も送らない。</summary>
     public const string ClientId = "1567084278423093311";
@@ -30,6 +30,8 @@ internal sealed class DiscordPresence : IDisposable
     private readonly Func<bool> _enabled;
     private readonly Func<Stats> _stats;
     private readonly string _clientId;
+    // 再接続や表示の OFF/ON で経過時間がリセットされないよう、起動時に一度だけ記録する。
+    private readonly DateTimeOffset _startedAt = DateTimeOffset.UtcNow;
     private readonly CancellationTokenSource _stop = new();
     private readonly Task _loop;
     private Stream? _stream;
@@ -50,11 +52,17 @@ internal sealed class DiscordPresence : IDisposable
         {
             try { await TickAsync(_stop.Token); }
             catch (OperationCanceledException) when (_stop.IsCancellationRequested) { break; }
-            catch (Exception ex)
+            catch (Exception ex) when (IsConnectionFailure(ex))
             {
                 // Discord が起動していない・閉じた・応答しないときは、次の回につなぎ直す
                 if (_stream is not null) Diagnostics.Log.Info($"Discord との接続が切れました: {ex.Message}");
                 Disconnect();
+            }
+            catch (Exception ex)
+            {
+                // それ以外はコードの誤り。この Task の例外は誰も受け取らない (Dispose が待つだけ) ので、ここで中身ごとログに書いて止める
+                Diagnostics.Log.Error($"Discord に表示できなくなりました: {ex}");
+                break;
             }
             try { await Task.Delay(UpdateInterval, _stop.Token); }
             catch (OperationCanceledException) { break; }
@@ -78,7 +86,7 @@ internal sealed class DiscordPresence : IDisposable
         var now = DateTimeOffset.Now;
         long? kpm = _last is { } last && now > last.At ? KeysPerMinute(stats.Total - last.Total, now - last.At) : null;
         _last = (stats.Total, now);
-        var activity = ActivityJson(stats, kpm);
+        var activity = ActivityJson(stats, kpm, _startedAt);
         if (_stream is null)
         {
             await ConnectAsync(token);
@@ -89,12 +97,17 @@ internal sealed class DiscordPresence : IDisposable
         _sent = activity;
     }
 
+    /// <summary>Discord とのやり取りで、Discord のせいで起きる例外 (起動していない・閉じた・応答しない・答えが壊れている)。</summary>
+    private static bool IsConnectionFailure(Exception ex) =>
+        ex is IOException or System.ComponentModel.Win32Exception or TimeoutException or ObjectDisposedException or OperationCanceledException
+            or UnauthorizedAccessException or System.Text.Json.JsonException;
+
     /// <summary>OFF にした・終わるときに、出していた表示を消す (失敗してもかまわない)。</summary>
     private async Task ClearAsync()
     {
         if (_stream is null || _sent is null) return;
         try { await SendAsync(1, SetActivityJson(null), CancellationToken.None); }
-        catch (Exception) { }
+        catch (Exception ex) when (IsConnectionFailure(ex)) { }
         _sent = null;
     }
 
@@ -238,11 +251,14 @@ internal sealed class DiscordPresence : IDisposable
         });
 
     /// <summary>表示する内容 (activity)。打った文字やアプリ名は入れない。</summary>
-    public static string ActivityJson(Stats stats, long? kpm) =>
+    public static string ActivityJson(Stats stats, long? kpm, DateTimeOffset startedAt) =>
         Write(w =>
         {
             w.WriteString("details", Format($"今日 {stats.Today:N0} 打"));
             w.WriteString("state", kpm is { } k ? Format($"合計 {stats.Total:N0} 打 · {k:N0} 打/分") : Format($"合計 {stats.Total:N0} 打"));
+            w.WriteStartObject("timestamps");
+            w.WriteNumber("start", startedAt.ToUnixTimeSeconds());
+            w.WriteEndObject();
             w.WriteStartArray("buttons");
             w.WriteStartObject();
             w.WriteString("label", "Meltype");

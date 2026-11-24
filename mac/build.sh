@@ -4,7 +4,7 @@
 #
 # Meltype の Mac 版をビルドして ~/Library/Input Methods にインストールする。
 #   ./build.sh            ビルドしてインストール
-#   ./build.sh --no-install  ビルドだけ (build/Meltype.app)
+#   ./build.sh --no-install  ビルドだけ (build/Meltype.app と build/Meltype Settings.app)
 # 必要なもの: macOS 13.3 以降、Xcode (またはコマンドライン ツール: xcode-select --install)、.NET 10 SDK、
 # Mozc の変換ヘルパー (mac/README.md の「ビルドする」に従って native/mozc/bin/mac/ に置く)
 set -euo pipefail
@@ -24,24 +24,24 @@ VERSION="${MELTYPE_VERSION:-$(dotnet msbuild ../src/Meltype.Core/Meltype.Core.cs
 if [[ "${GITHUB_REF:-}" == refs/tags/v* ]]; then VERSION="${GITHUB_REF_NAME#v}"; fi
 [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]] || { echo "版番号が不正です: $VERSION" >&2; exit 1; }
 APP="$BUILD/Meltype.app"
+# 設定アプリ (src/Meltype.Settings)。入力メソッドの Meltype.app は Launchpad に出ない場所 (~/Library/Input Methods) に入るので、別の .app にする
+SETTINGS_APP="$BUILD/Meltype Settings.app"
 MOZC=../native/mozc/bin/mac
 if [[ ! -x "$MOZC/meltype_mozc_helper" ]]; then
     echo 'Mozc の変換ヘルパーがありません。mac/README.md の「ビルドする」に従って native/mozc/bin/mac/ に置いてください。' >&2
     exit 1
 fi
-rm -rf "$BUILD/native" "$APP"
+rm -rf "$BUILD/native" "$BUILD/settings" "$APP" "$SETTINGS_APP"
 mkdir -p "$BUILD"
 
-echo "== 1/3 本体 (C#, NativeAOT) をビルド"
-# リポジトリの nuget.config は NuGet を使わない設定 (Windows の開発環境用) なので、NativeAOT のコンパイラを取るために nuget.org を指定する。
+echo "== 1/4 本体 (C#, NativeAOT) をビルド"
 dotnet publish ../src/Meltype.Core.CApi/Meltype.Core.CApi.csproj -c Release -r "$RID" \
-    -p:PublishAot=true -p:NativeLib=Shared -p:StripSymbols=true -p:Version="$VERSION" -p:TreatWarningsAsErrors=true \
-    --source https://api.nuget.org/v3/index.json -o "$BUILD/native"
+    -p:PublishAot=true -p:NativeLib=Shared -p:StripSymbols=true -p:Version="$VERSION" -p:TreatWarningsAsErrors=true -o "$BUILD/native"
 
-echo "== 2/3 IME (Swift) をビルド"
+echo "== 2/4 IME (Swift) をビルド"
 swift build -c release
 
-echo "== 3/3 Meltype.app を組み立て"
+echo "== 3/4 Meltype.app を組み立て"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Frameworks"
 BIN="$(swift build -c release --show-bin-path)"
 cp "$BIN/MeltypeIME" "$APP/Contents/MacOS/Meltype"
@@ -137,6 +137,17 @@ if fetch_verified "https://github.com/ggml-org/llama.cpp/releases/download/$LLAM
 else
     zenzai_missing "llama-server"
 fi
+echo "== 4/4 設定アプリ (C#, NativeAOT) をビルドして Meltype Settings.app を組み立て"
+dotnet publish ../src/Meltype.Settings/Meltype.Settings.csproj -c Release -r "$RID" \
+    -p:StripSymbols=true -p:Version="$VERSION" -o "$BUILD/settings"
+mkdir -p "$SETTINGS_APP/Contents/MacOS" "$SETTINGS_APP/Contents/Resources"
+# 実行ファイルと、描画に使うライブラリ (libSkiaSharp・libHarfBuzzSharp・libAvaloniaNative。実行ファイルの隣から読む)
+cp "$BUILD/settings/MeltypeSettings" "$BUILD/settings/"*.dylib "$SETTINGS_APP/Contents/MacOS/"
+cp Resources/Settings/Info.plist "$SETTINGS_APP/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$SETTINGS_APP/Contents/Info.plist"
+cp -R Resources/Settings/ja.lproj "$SETTINGS_APP/Contents/Resources/"
+sips -s format icns Resources/Settings/icon.png --out "$SETTINGS_APP/Contents/Resources/icon.icns" > /dev/null
+
 # 同梱する実行ファイル・ライブラリの最低の macOS が、Meltype.app の LSMinimumSystemVersion より新しければ止める
 # (Bazel でビルドした Mozc のヘルパーは、指定しないとビルドした Mac の SDK の版になり、古い macOS で起動できなかった)
 MIN_OS="$(/usr/libexec/PlistBuddy -c "Print :LSMinimumSystemVersion" "$APP/Contents/Info.plist")"
@@ -149,12 +160,12 @@ while IFS= read -r -d '' item; do
         echo "最低の macOS ($minos) が Meltype.app の $MIN_OS より新しい: ${item#"$APP"/}" >&2
         too_new=1
     fi
-done < <(find "$APP/Contents" -type f -print0)
+done < <(find "$APP/Contents" "$SETTINGS_APP/Contents" -type f -print0)
 if [[ $too_new -ne 0 ]]; then exit 1; fi
 # 署名: 環境変数 MELTYPE_MAC_IDENTITY (Developer ID Application の証明書の名前) があれば配布用に署名する
 # (Hardened Runtime・タイムスタンプ付き。公証 (notarization) は mac.yml で行う)。無ければ自分の Mac で使うための署名。
 # Contents/Resources の実行ファイル・ライブラリ (Mozc のヘルパー・llama-server) は --deep では署名されないので、1 つずつ署名する
-nested=("$APP/Contents/Frameworks/"* "$APP/Contents/Resources/mozc/meltype_mozc_helper")
+nested=("$APP/Contents/Frameworks/"* "$APP/Contents/Resources/mozc/meltype_mozc_helper" "$SETTINGS_APP/Contents/MacOS/"*.dylib)
 for item in "$ZENZAI"/llama-server "$ZENZAI"/*.dylib; do
     if [[ -e "$item" ]]; then nested+=("$item"); fi
 done
@@ -163,19 +174,22 @@ if [[ -n "${MELTYPE_MAC_IDENTITY:-}" ]]; then
         codesign --force --sign "$MELTYPE_MAC_IDENTITY" --options runtime --timestamp "$item"
     done
     codesign --force --deep --sign "$MELTYPE_MAC_IDENTITY" --options runtime --timestamp "$APP"
+    codesign --force --deep --sign "$MELTYPE_MAC_IDENTITY" --options runtime --timestamp "$SETTINGS_APP"
     echo "配布用に署名しました: $MELTYPE_MAC_IDENTITY"
 else
     for item in "${nested[@]}"; do
         codesign --force --sign - "$item"
     done
     codesign --force --deep --sign - "$APP"
+    codesign --force --deep --sign - "$SETTINGS_APP"
 fi
-echo "作成しました: $APP"
+echo "作成しました: ${APP}・${SETTINGS_APP}"
 
 if [[ $INSTALL -eq 1 ]]; then
     TARGET="$HOME/Library/Input Methods"
     bash "$PWD/install-app.sh" "$APP" "$TARGET/Meltype.app"
     echo "インストールしました: $TARGET/Meltype.app"
+    bash "$PWD/install-settings-app.sh" "$SETTINGS_APP"
     # Keep the build copy out of the input-source add dialog after installing.
     /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -u "$PWD/$APP" 2>/dev/null || true
     echo "初めてのときは、いったんログアウトしてログインし直してから、"

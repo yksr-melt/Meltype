@@ -1,0 +1,140 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Yukishiro
+
+namespace Meltype.Dictionary;
+
+/// <summary>
+/// 変換候補の補助辞書 (読み → 候補)。変換エンジンの候補に無い同音異義語 (はし → 橋/箸/端、とうてん → 当店/読点) を足す。
+/// 形式は 1 行に「読み 候補 候補 …」。# 以降はコメント。
+/// 組み込みの dictionaries/candidates.txt と %LOCALAPPDATA%\Meltype\dictionaries\candidates.txt を読む。
+/// </summary>
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Naming", "CA1711:Identifiers should not have incorrect suffix", Justification = "日本語入力の辞書を表す既存の公開名。コレクション型を表すものではない。")]
+internal sealed class CandidateDictionary
+{
+    private readonly Dictionary<string, string[]> _entries = new(StringComparer.Ordinal);
+
+    // 絵文字・顔文字 (emoji.txt・emoji-cldr.txt)。変換の候補では最後にまとめて出すので、ほかの候補と分けて持つ。
+    private readonly Dictionary<string, string[]> _emoji = new(StringComparer.Ordinal);
+
+    // 分野の辞書 (dictionaries/domain-*.txt。医療・駅名・人名など)。ふだん使わない人には誤った候補になりうるので、
+    // ほかの候補と分けて持ち、ひらがな・カタカナの後ろに並べる (#1650)。
+    private readonly Dictionary<string, string[]> _domain = new(StringComparer.Ordinal);
+
+    // 英単語のカタカナ表記 (dictionaries/katakana-spellings.txt。export → エクスポート)。英単語で引くので、読みで引くほかの候補と分けて持つ。
+    private readonly Dictionary<string, string[]> _katakana = new(StringComparer.Ordinal);
+
+    public int Count => _entries.Count + _emoji.Keys.Count(k => !_entries.ContainsKey(k));
+
+    public static CandidateDictionary Load(string? userDirectory)
+    {
+        var dictionary = new CandidateDictionary();
+        dictionary.AddText(Libraries.Lexicon.DictionarySource.ReadEmbedded("candidates.txt"));
+        dictionary.AddTabText(Libraries.Lexicon.DictionarySource.ReadEmbedded("emoji.txt"));
+        // Unicode CLDR の日本語の名前・キーワードから作った絵文字 (手で書いた emoji.txt の後に並ぶ)
+        dictionary.AddTabText(Libraries.Lexicon.DictionarySource.ReadEmbedded("emoji-cldr.txt"));
+        // 英字で書く語 (リナックス → Linux)。JMdict から作ったもの
+        dictionary.AddText(Libraries.Lexicon.DictionarySource.ReadEmbedded("loanwords.txt"));
+        // JMdict に無い社名・サービス名 (しゃおみ → Xiaomi)。手で書いたもの
+        dictionary.AddText(Libraries.Lexicon.DictionarySource.ReadEmbedded("brands.txt"));
+        foreach (var line in Libraries.Lexicon.DictionarySource.LinesWithoutComments(Libraries.Lexicon.DictionarySource.ReadEmbedded("katakana-spellings.txt")))
+        {
+            var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length >= 2) Add(dictionary._katakana, parts[0], parts.Skip(1));
+        }
+        foreach (var name in Libraries.Lexicon.DictionarySource.EmbeddedNames("domain-"))
+            dictionary.AddDomainText(Libraries.Lexicon.DictionarySource.ReadEmbedded(name));
+        Config.DataFile.LoadUserText(userDirectory, "emoji.txt", "ユーザーの絵文字辞書", dictionary.AddTabText);
+        Config.DataFile.LoadUserText(userDirectory, "candidates.txt", "ユーザーの候補辞書", dictionary.AddText);
+        return dictionary;
+    }
+
+    public void AddText(string text)
+    {
+        foreach (var line in Libraries.Lexicon.DictionarySource.LinesWithoutComments(text))
+        {
+            var parts = line.Split([' ', '\t', '\r', '　'], StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length < 2) continue;
+            Add(parts[0], parts.Skip(1));
+        }
+    }
+
+    /// <summary>
+    /// 絵文字・顔文字の辞書 (emoji.txt)。顔文字には空白や # が入るので、区切りはタブだけ、コメントは行頭の # だけ。
+    /// </summary>
+    public void AddTabText(string text)
+    {
+        foreach (var rawLine in text.Split('\n'))
+        {
+            var line = rawLine.TrimEnd('\r');
+            if (line.TrimStart().StartsWith('#')) continue;
+            var parts = line.Split('\t', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (parts.Length < 2) continue;
+            Add(_emoji, parts[0], parts.Skip(1));
+        }
+    }
+
+    /// <summary>分野の辞書 (domain-*.txt)。形式は「読み<Tab>表記<Tab>表記 …」、行頭が # の行はコメント。</summary>
+    public void AddDomainText(string text)
+    {
+        foreach (var line in Libraries.Lexicon.DictionarySource.DataLines(text))
+        {
+            var parts = line.Split('\t', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length >= 2) Add(_domain, parts[0], parts.Skip(1));
+        }
+    }
+
+    /// <summary>
+    /// 読みそのものが辞書 (絵文字を含む) にあるか (先頭一致ではなく)。読み全体を 1 つの文節にまとめるのに使う。
+    /// 分野の辞書は含めない。読みが多いので、ふだんの文 (えかく → 絵|描く) が駅名 (永覚) に合わさって 1 つの文節になってしまう。
+    /// </summary>
+    public bool Contains(string reading) => _entries.ContainsKey(reading) || _emoji.ContainsKey(reading);
+
+    public void Add(string reading, IEnumerable<string> words) => Add(_entries, reading, words);
+
+    private static void Add(Dictionary<string, string[]> entries, string reading, IEnumerable<string> words)
+    {
+        var existing = entries.GetValueOrDefault(reading) ?? [];
+        entries[reading] = existing.Concat(words).Distinct(StringComparer.Ordinal).ToArray();
+    }
+
+    /// <summary>
+    /// 文節の読みに対する候補。文節は助詞などを含む (はしを) ので、辞書にある最長の先頭部分を置き換え、
+    /// 残りはかなのまま付ける (箸を / 端を)。
+    /// </summary>
+    // 語の後ろに付いていてよい助詞・「だ」など
+    private static readonly HashSet<string> Endings =
+        ["", "を", "が", "は", "に", "で", "と", "も", "へ", "の", "や", "な", "だ", "です", "から", "まで", "より", "って", "とか", "さ", "ね", "よ"];
+
+    /// <summary>候補 (同音異義語などの後ろに絵文字・顔文字)。</summary>
+    public IReadOnlyList<string> Lookup(string reading) =>
+        LookupWords(reading).Concat(LookupEmoji(reading)).Distinct().ToList();
+
+    /// <summary>絵文字・顔文字以外の候補 (同音異義語・英字で書く語・社名)。</summary>
+    public IReadOnlyList<string> LookupWords(string reading) => Lookup(_entries, reading);
+
+    /// <summary>分野の辞書の候補 (病名・駅名・人名など)。</summary>
+    public IReadOnlyList<string> LookupDomain(string reading) => Lookup(_domain, reading);
+
+    /// <summary>英単語 (小文字) のカタカナ表記 (export → エクスポート)。無ければ空。</summary>
+    public IReadOnlyList<string> KatakanaSpellings(string word) => _katakana.GetValueOrDefault(word) ?? [];
+
+    /// <summary>絵文字・顔文字の候補 (手で書いた emoji.txt の順 → CLDR の順)。</summary>
+    public IReadOnlyList<string> LookupEmoji(string reading) => Lookup(_emoji, reading);
+
+    private static List<string> Lookup(Dictionary<string, string[]> entries, string reading)
+    {
+        for (var length = reading.Length; length >= 1; length--)
+        {
+            // 1 文字の読み (い → 位 胃 …) は、その読みだけの文節のときだけ (いきを → 位きを にしない)。
+            if (length == 1 && reading.Length > 1) break;
+            // 残りが助詞など (はし|を) のときだけ。語の途中 (ふく|ざつな → 服ざつな) では使わない。
+            if (!Endings.Contains(reading[length..])) continue;
+            if (entries.TryGetValue(reading[..length], out var words))
+            {
+                var rest = reading[length..];
+                return words.Select(w => w + rest).ToList();
+            }
+        }
+        return [];
+    }
+}

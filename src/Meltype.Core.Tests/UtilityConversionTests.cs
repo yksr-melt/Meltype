@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 aster-void
 
-using Meltype.Composition;
 using Meltype.Composition.Utility;
+using Meltype.Engine;
 using Meltype.Input;
+using Meltype.Learning;
 using static Meltype.Tests.CompositionTests;
 
 namespace Meltype.Tests;
@@ -13,15 +14,15 @@ internal static class UtilityConversionTests
     private static readonly DateTime Tuesday = new(2026, 11, 10, 20, 5, 0);
 
     /// <summary>決めた文節に区切る変換エンジン。</summary>
-    private sealed class SplitConverter(Dictionary<string, ConversionClause[]> clauses) : IKanjiConverter, ILearningConverter
+    private sealed class SplitConverter(Dictionary<string, ConversionClause[]> clauses) : TestConverter
     {
         private readonly FakeConverter _inner = new();
         public List<string> Learned { get; } = [];
-        public string? Convert(string hiragana) => ConvertClauses(hiragana) is { } parts ? string.Concat(parts.Select(c => c.Text)) : _inner.Convert(hiragana);
-        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) =>
-            clauses.TryGetValue(hiragana, out var result) ? result : _inner.ConvertClauses(hiragana, context);
+        public override string? Convert(string hiragana, string? before) => ConvertClauses(hiragana, before) is { } parts ? string.Concat(parts.Select(c => c.Text)) : _inner.Convert(hiragana, before);
+        public override IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) =>
+            clauses.TryGetValue(hiragana, out var result) ? result : _inner.ConvertClauses(hiragana, before);
 
-        public void Learn(string? context, IReadOnlyList<ConversionClause> learned)
+        public override void Learn(string? context, IReadOnlyList<ConversionClause> learned)
         {
             lock (Learned) Learned.Add(string.Join("|", learned.Select(c => $"{c.Reading}={c.Text}")));
         }
@@ -178,7 +179,7 @@ internal static class UtilityConversionTests
             Assert.Equal("京", history.Get("きょう"));
             Assert.Equal("火曜日", history.Get("かようび"), "読みに ようび がある語は残す");
             foreach (var (reading, text, kept) in new[] { ("じこう", "晩秋の候", false), ("くりっぷぼーど", "パスワード123", false), ("じこう", "時効", true), ("れいわ8ねん", "2026年", true), ("くりっぷぼーど", "クリップボード", true) })
-                Assert.Equal(!kept, CompositionLearning.IsStale(reading, text), $"{reading} → {text}");
+                Assert.Equal(!kept, StaleWords.IsStale(reading, text), $"{reading} → {text}");
             var phrases = Path.Combine(directory, "phrases.txt");
             File.WriteAllLines(phrases, ["きょうは\t2026/11/10は\t3\t0", "きょうは\t今日は\t3\t0", "きょうの\t今日の！\uFFFC他のメッセージオプション\t3\t0"]);
             Assert.Equal("今日は", string.Join(",", new PhraseHistory(phrases).StartingWith("きょ")), "予測変換の語句も捨てる");
@@ -240,7 +241,7 @@ internal static class UtilityConversionTests
         // よく使う語 (readings.txt) とカタカナ語は、どれも呼び名の並びにならない。なれば、普通の変換が漢字の候補に置き換わる
         foreach (var name in new[] { "readings.txt", "readings-extra.txt", "katakana.txt" })
         {
-            var words = Meltype.Detection.DictionarySource.DataLines(Meltype.Detection.DictionarySource.ReadEmbedded(name)).Select(l => l.Split('\t')[0]);
+            var words = Libraries.Lexicon.DictionarySource.DataLines(Libraries.Lexicon.DictionarySource.ReadEmbedded(name)).Select(l => l.Split('\t')[0]);
             Assert.Equal("", string.Join(",", words.Where(w => Kanji(w).Count > 0).Take(10)), name);
         }
     }

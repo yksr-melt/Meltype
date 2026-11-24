@@ -16,6 +16,9 @@ internal static class ReleaseNotesTests
         Assert.True(!ProjectInfo.ShouldShowReleaseNotes("1.3.1", "1.3.1", firstRun: false), "見せた版では、次からは見せない");
         Assert.True(!ProjectInfo.ShouldShowReleaseNotes(null, "1.3.1", firstRun: true), "新しく入れたときは見せない");
         Assert.True(!ProjectInfo.ShouldShowReleaseNotes(null, "?", firstRun: false), "版が分からなければ見せない");
+        Assert.True(!ProjectInfo.ShouldShowReleaseNotes("1.3.0", "1.3.1", firstRun: false, autoShow: false), "設定で自動表示を OFF にしたら見せない");
+        Assert.True(new Settings().ShowReleaseNotesAfterUpdate, "標準では更新後に見せる");
+        Assert.True(!new Settings().ProfileValues().ContainsKey(nameof(Settings.ShowReleaseNotesAfterUpdate)), "プロファイルでは変えない");
     }
 
     [Test]
