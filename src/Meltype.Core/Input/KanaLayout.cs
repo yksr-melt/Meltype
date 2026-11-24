@@ -247,6 +247,27 @@ internal sealed class KanaLayoutEngine(KanaLayout layout)
     {
         var table = _table!;
         bool Active(Held key) => IsShiftOnly(key.Vk) || key.Shifting || time - key.Time <= ChordWindowMs;
+        var shifts = _held.Where(Active).ToList();
+        // 3 キーは、最後に押したキーが表の文字キーとは限らない。2 キーで仮に出したかなも、同じ組全体で打ち直す。
+        for (var i = shifts.Count - 1; i >= 0; i--)
+            for (var j = i - 1; j >= 0; j--)
+            {
+                var group = new[] { shifts[j], shifts[i], new Held(vk, time, 0) };
+                foreach (var target in group)
+                {
+                    var chordShifts = group.Where(key => key != target).ToArray();
+                    if (!table.Chords.TryGetValue((Id(chordShifts.Select(key => key.Vk)), target.Vk), out var text)) continue;
+                    var remove = group.Sum(key => key.Emitted);
+                    foreach (var key in group)
+                    {
+                        key.Emitted = key == target ? text.Length : 0;
+                        key.Target = key == target;
+                        key.Shifting = key != target;
+                    }
+                    _held.Add(group[2]);
+                    return new KanaStroke(true, remove, text);
+                }
+            }
         if (IsShiftOnly(vk))
         {
             var thumb = new Held(vk, time, 0);
@@ -276,8 +297,7 @@ internal sealed class KanaLayoutEngine(KanaLayout layout)
             _lastOutput = press;
             return plain is null ? KanaStroke.NotHandled : new KanaStroke(true, 0, plain);
         }
-        // 押したままのキーとの組み合わせ (後から押したキーが文字キー)。2 キーのシフトを先に見る
-        var shifts = _held.Where(Active).ToList();
+        // 2 キーは、表の文字キーが後か先かの両方を見る。
         foreach (var chord in Subsets(shifts))
         {
             if (!table.Chords.TryGetValue((Id(chord.Select(key => key.Vk)), vk), out var kana)) continue;

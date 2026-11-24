@@ -14,6 +14,18 @@ internal static class KanaLayoutTests
     private static Keyboard Layout(KanaLayout layout) => new() { Kana = true, KanaLayout = layout };
 
     [Test]
+    public static void KanaLayout_Naginata_ThreeKeysIgnorePressOrder()
+    {
+        foreach (var keys in new[] { "jwh", "jhw", "wjh", "whj", "hjw", "hwj", " jw", " wj", "j w", "jw ", "w j", "wj " })
+        {
+            var k = Layout(KanaLayout.Naginata);
+            foreach (var key in keys) { k.Key(char.ToUpperInvariant(key)); k.Wait(10); }
+            foreach (var key in keys) k.Key(char.ToUpperInvariant(key), up: true);
+            Assert.Equal(keys.Contains(' ') ? "ぎ" : "ぎゃ", k.Showing, keys);
+        }
+    }
+
+    [Test]
     public static void KanaLayout_Tsuki_PrefixShift()
     {
         // 月配列: W = と。D・K は 2 段目、S・L は 3 段目の前置シフト。D の次の J = お、K の次の E = ね、L の次の E = じ
