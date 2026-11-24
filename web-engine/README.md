@@ -96,4 +96,6 @@ web-ime/mozc/build-mozc-wasm.sh   # Mozc (初回は 30 分以上。作らなけ�
 web-engine/build.sh                # → web-engine/dist/
 ```
 
+`web-engine/site/` は紹介ページ (できること・インストールの方法・API・デモ) です。`web-engine/build-site.sh` で、デモのエンジンと一緒に `web-engine/site-dist/` に作ります。`site-dist/` をそのまま静的なサイトに置けば公開できます。
+
 `web-engine/example/` は、作ったものを試すページです。`web-engine/` を静的なサーバーで開き、`/example/` を見てください。
