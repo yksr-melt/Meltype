@@ -85,7 +85,7 @@ internal static partial class CompositionController
         if (converting) LearnClauses(state, env);
         else if (Learning(state, env) && !state.EscReverted) env.Learning.LearnLanguage(state.Text, CompositionText.Segments(state.Text, env), CompositionText.LearningContext(state.Text, env));
         if (!converting || state.Clauses.All(CompositionLearning.Learnable))
-            RememberPhrase(state, env, converting ? string.Concat(state.Clauses.Select(c => c.IsEnglish ? "" : c.Reading)) : CompositionText.AllKana(state.Text, env, final: true), text.Text, english);
+            RememberPhrase(state, env, converting ? string.Concat(state.Clauses.Select(c => c.IsEnglish ? "" : c.Reading)) : CompositionText.AllKana(state.Text, env, final: true), CompositionOutput.Render(env, text), english);
         CommitText(state, env, text + ComposedText.English(suffix), english, CompositionText.Raw(state.Text), chosen, preserveText, string.Join("、", rules));
     }
 
@@ -224,9 +224,9 @@ internal static partial class CompositionController
         CommitText(state, env, text, english, english ? text.Text : CompositionText.Raw(state.Text), chosen: true);
     }
 
-    /// <summary>予測の候補を、前の文節 (見えている文字) とつなげた文字。</summary>
+    /// <summary>予測の候補を、前の文節 (見えている文字) とつなげた文字。どちらも打った句読点は無い (予測はひらがなだけの読みで出し、語句は確定した文字のまま覚えている)。</summary>
     private static ComposedText PredictionText(Prediction prediction) =>
-        ComposedText.Kana(prediction.Before) + ComposedText.Of(prediction.Text.All(c => c < 0x80) ? SpanKind.English : SpanKind.Japanese, prediction.Text);
+        ComposedText.Of(SpanKind.Japanese, prediction.Before) + ComposedText.Of(prediction.Text.All(c => c < 0x80) ? SpanKind.English : SpanKind.Japanese, prediction.Text);
 
     /// <summary>予測の候補の読み (前に確定したときの読み)。分からなければ打ちかけの読み。</summary>
     private static string PredictionReading(CompositionState state, CompositionEnv env, string prediction, string typed) =>
@@ -304,7 +304,7 @@ internal static partial class CompositionController
         // 直前に確定した語が、今のキャレットの位置に無い (別の場所をクリックした等) ときは書き換えない。
         // 消すつもりの文字がそこに無いので、消すとキャレットの前の別の文字が消えてしまう。
         // 入力欄の文字をその場で読めるホストだけ確かめる (Windows は別のスレッドで後から読むので、古い値で誤って止めない)。
-        if (CompositionOutput.Before(state.Out, env) is { } caretBefore && !caretBefore.EndsWith(original, StringComparison.Ordinal))
+        if (CompositionOutput.RawBefore(state.Out, env) is { } caretBefore && !caretBefore.EndsWith(CompositionOutput.Render(env, ComposedText.Concat(targets.Select(t => t.Text))), StringComparison.Ordinal))
         {
             Diagnostics.Log.Decision($"キャレットの位置が変わっているので確定し直しません: {Diagnostics.Log.Text(original)}");
             state.Correctable.Clear();

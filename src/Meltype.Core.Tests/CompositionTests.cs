@@ -3438,11 +3438,12 @@ internal static class CompositionTests
         again.Type(", ");
         Assert.Equal("・", again.Showing, "句読点だけを変換すると覚えた候補");
 
-        foreach (var style in Enum.GetValues<Meltype.Config.PunctuationStyle>())
+        foreach (var (style, expected) in new[] { (Meltype.Config.PunctuationStyle.Japanese, "私は、"), (Meltype.Config.PunctuationStyle.FullWidthCommaPeriod, "私は，"),
+            (Meltype.Config.PunctuationStyle.FullWidthCommaKuten, "私は，"), (Meltype.Config.PunctuationStyle.ToutenFullWidthPeriod, "私は、") })
         {
             var live = new Keyboard(live: true, history: history, converter: new SymbolChangingConverter(split: true)) { Punctuation = style };
             live.Type("watasiha,");
-            Assert.Equal(CompositionOutput.ToSetting(style, "私は、"), live.Showing, style + ": かなと一緒に打った句読点は覚えた候補にしない");
+            Assert.Equal(expected, live.Showing, style + ": かなと一緒に打った句読点は覚えた候補にしない");
         }
     }
 
@@ -4560,24 +4561,33 @@ internal static class CompositionTests
     [Test]
     public static void TypedSymbols_StayAfterResizingClauses()
     {
-        // 文節の区切りを変えて変換し直した文節でも、かなと一緒に打った記号は打ったときの文字のまま (変換エンジン・変換履歴が 、 を ・ にしても)
+        // 文節の区切りを変えて変換し直した文節でも、かなと一緒に打った記号は打ったときの文字のまま (変換エンジン・変換履歴が 、 を ・ にしても)。
+        // 打った 、。 は、いつもそれだけの文節 (文節を伸ばしても入らず、縮めた分は 、 の前に新しい文節を作る)
         var history = new ConversionHistory(null);
         history.Remember("、", "・");
+        history.Remember("？", "⁉");
         var k = new Keyboard(history: history, converter: new SymbolChangingConverter(split: true));
         k.Type("watasiha,kyouha? ");
         Assert.Equal("私は|、|今日は|？", string.Join("|", k.Host.View!.Clauses!));
-        k.Press(VirtualKeys.Left);
-        k.Press(VirtualKeys.Left);
-        k.Press(VirtualKeys.Left);
         ShiftArrow(k, VirtualKeys.Right);
-        Assert.Equal("私は、|今日は|？", string.Join("|", k.Host.View!.Clauses!), "伸ばした文節");
+        Assert.Equal("私は|、|今日は|？", string.Join("|", k.Host.View!.Clauses!), "、 は前の文節に入らない");
+        k.Press(VirtualKeys.Right);
+        ShiftArrow(k, VirtualKeys.Right);
+        Assert.Equal("私は|、|今日は|？", string.Join("|", k.Host.View!.Clauses!), "、 は伸ばせない");
+        k.Press(VirtualKeys.Right);
+        ShiftArrow(k, VirtualKeys.Right);
+        Assert.Equal("私は|、|今日は？", string.Join("|", k.Host.View!.Clauses!), "伸ばした文節");
+        k.Press(VirtualKeys.Left);
+        k.Press(VirtualKeys.Left);
+        ShiftArrow(k, VirtualKeys.Left);
+        Assert.Equal("、", k.Host.View!.Clauses![2], "縮めた分は 、 の前の文節: " + string.Join("|", k.Host.View.Clauses));
 
         var end = new Keyboard(history: history, converter: new SymbolChangingConverter(split: true));
-        end.Type("kyouha, ");
+        end.Type("kyouha? ");
         end.Press(VirtualKeys.Left);
         ShiftArrow(end, VirtualKeys.Right);
         ShiftArrow(end, VirtualKeys.Left);
-        Assert.Equal("今日は|、", string.Join("|", end.Host.View!.Clauses!), "縮めてできた 、 だけの文節も、覚えた ・ にしない");
+        Assert.Equal("今日は|？", string.Join("|", end.Host.View!.Clauses!), "縮めてできた ？ だけの文節も、覚えた ⁉ にしない");
     }
 
     /// <summary>決めた文節に区切る変換エンジン。</summary>

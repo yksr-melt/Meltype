@@ -101,9 +101,11 @@ internal static partial class CompositionController
         }
     }
 
-    /// <summary>文節 clause の候補 candidate の文字。</summary>
+    /// <summary>文節 clause の候補 candidate の文字。文全体の文節の案は、確定と同じく案の文節から作る (<see cref="SplitWholeSentence"/>)。</summary>
     private static ComposedText Candidate(Clause clause, string candidate) =>
-        clause.IsEnglish ? ComposedText.English(candidate) : ComposedText.Converted(clause.Reading, candidate);
+        clause.Alternatives?.TryGetValue(candidate, out var clauses) == true ? Composed(clauses)
+        : clause.IsEnglish ? ComposedText.English(candidate)
+        : ComposedText.Converted(clause.Reading, candidate);
 
     /// <summary>書き間違いの修正の案内 (もしかして)。</summary>
     private static ComposedText? Suggestion(string? suggestion) => suggestion is null ? null : ComposedText.Of(SpanKind.Japanese, suggestion);
