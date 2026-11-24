@@ -91,7 +91,7 @@ internal static partial class CompositionText
         {
             // ラティスが単位の途中で区切った (medals|ha の sha): 区間の打った英字を読み直す
             CompositionTextState fragment = new CompositionTextState();
-            var fragmentEnv = FragmentEnv(state, env);
+            var fragmentEnv = FragmentEnv(env);
             foreach (var c in CompositionText.Raw(state)[start..end]) CompositionText.Append(fragment, fragmentEnv, c);
             foreach (var unit in fragment.Units) builder.Append(unit.Kana);
             builder.Append(CompositionText.PendingText(fragment, fragmentEnv, final: true));

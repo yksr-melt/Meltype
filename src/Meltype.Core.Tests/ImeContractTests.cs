@@ -1409,6 +1409,25 @@ internal static class ImeContractTests
     }
 
     [Test]
+    public static void ClosedWhileComposing_CommitsOnce()
+    {
+        // 入力中にアプリが IME を閉じた: TSF の DLL は、開閉だけを先に知らせ (応答の確定は入れない)、入力欄を編集できるようになってから確定を頼む。
+        // 状態だけを受け取る出来事では入力を続け、確定を頼まれたときに 1 回だけ確定する
+        foreach (var notice in new[] { ("StateRequested", ""), ("CaretMoved", ",\"caret\":{}") })
+        {
+            var front = new Front();
+            front.Type("ka");
+            front.Open = false;
+            var noticed = front.Event(notice.Item1, extra: notice.Item2);
+            Assert.True(Commits(noticed).GetArrayLength() == 0 && front.Composition["t1"] == "か" && !Japanese(noticed), front.Trace);
+            front.Event("CommitRequested");
+            Assert.Equal("か", front.Document, front.Trace);
+            front.Event("CommitRequested");
+            Assert.True(!Consumed(front.Key('a')) && front.Document == "かa", "確定した後は英数\n" + front.Trace);
+        }
+    }
+
+    [Test]
     public static void Capture_FollowsTheModeAndSettings()
     {
         static bool HasKey(JsonElement capture, int key, int mods) =>
