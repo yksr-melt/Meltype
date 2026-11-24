@@ -958,7 +958,7 @@ internal static partial class CompositionController
     }
 
     /// <summary>変換エンジンで文節に区切って変換する (待つのは env.Deadline まで)。zenzai は Zenzai にも頼むか (<see cref="ConversionRequest.Zenzai"/>)。</summary>
-    private static IReadOnlyList<ConversionClause>? Engine(CompositionEnv env, string kana, string? before, bool zenzai) =>
+    private static List<ConversionClause>? Engine(CompositionEnv env, string kana, string? before, bool zenzai) =>
         env.Converter.Convert(new ConversionRequest(kana, string.IsNullOrEmpty(before) ? null : before) { Zenzai = zenzai, Deadline = env.Deadline })?.SelectMany(SplitAtMarks).ToList();
 
     /// <summary>
