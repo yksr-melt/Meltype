@@ -430,28 +430,36 @@
     };
   }
 
-  /** <textarea>・<input> のキャレットの位置 (画面の座標)。入力欄と同じ見た目の写しを作って測る */
+  /**
+   * <textarea>・<input> のキャレットの位置 (画面の座標)。入力欄と同じ見た目の写しを作って測る。
+   * 写しはページの中に置くので、ページの CSS (div {…} など) が効かないように、独自のタグにして値を !important で決める
+   */
   function textCaretRect(element) {
     const style = getComputedStyle(element);
-    const mirror = document.createElement("div");
+    const mirror = document.createElement("meltype-mirror");
+    const set = (target, name, value) => target.style.setProperty(name, value, "important");
     // 文字の幅に効くものはすべて写す。font (まとめた書き方) は、font-feature-settings などがあると空で返るので 1 つずつ写す
-    for (const name of ["fontFamily", "fontSize", "fontWeight", "fontStyle", "fontStretch", "fontFeatureSettings", "fontKerning", "letterSpacing", "wordSpacing",
-      "textTransform", "textIndent", "tabSize", "wordBreak", "lineBreak", "padding", "border", "boxSizing", "width", "lineHeight"]) {
-      mirror.style[name] = style[name];
+    for (const name of ["font-family", "font-size", "font-weight", "font-style", "font-stretch", "font-feature-settings", "font-kerning", "letter-spacing", "word-spacing",
+      "text-transform", "text-indent", "tab-size", "word-break", "line-break", "padding-top", "padding-right", "padding-bottom", "padding-left",
+      "border-top-width", "border-right-width", "border-bottom-width", "border-left-width", "box-sizing", "width", "line-height"]) {
+      set(mirror, name, style.getPropertyValue(name));
     }
-    Object.assign(mirror.style, {
-      position: "absolute", visibility: "hidden", top: "0", left: "0", overflow: "hidden",
-      whiteSpace: element.tagName === "TEXTAREA" ? "pre-wrap" : "pre", overflowWrap: "break-word",
-    });
+    for (const [name, value] of [["display", "block"], ["position", "absolute"], ["visibility", "hidden"], ["top", "0"], ["left", "0"], ["margin", "0"],
+      ["border-style", "solid"], ["overflow", "hidden"], ["white-space", element.tagName === "TEXTAREA" ? "pre-wrap" : "pre"], ["overflow-wrap", "break-word"]]) {
+      set(mirror, name, value);
+    }
     mirror.textContent = element.value.slice(0, element.selectionStart);
-    const marker = document.createElement("span");
-    marker.textContent = "​";
+    const marker = document.createElement("meltype-mirror");
+    for (const [name, value] of [["display", "inline"], ["margin", "0"], ["padding", "0"], ["border", "0"], ["font", "inherit"], ["line-height", "inherit"]]) set(marker, name, value);
+    marker.textContent = "\u200b";
     mirror.append(marker);
-    document.body.append(mirror);
+    document.documentElement.append(mirror);
     const rect = element.getBoundingClientRect();
-    const left = rect.left + marker.offsetLeft - element.scrollLeft;
-    const top = rect.top + marker.offsetTop - element.scrollTop;
-    const height = marker.offsetHeight;
+    const mirrorRect = mirror.getBoundingClientRect();
+    const markerRect = marker.getBoundingClientRect();
+    const left = rect.left + markerRect.left - mirrorRect.left - element.scrollLeft;
+    const top = rect.top + markerRect.top - mirrorRect.top - element.scrollTop;
+    const height = markerRect.height;
     mirror.remove();
     return { left, top, bottom: Math.min(top + height, rect.bottom), height };
   }

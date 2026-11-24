@@ -1,0 +1,28 @@
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Copyright (C) 2026 hisiragi -->
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>Meltype</title>
+  <link rel="stylesheet" href="popup.css">
+  <script src="popup.js" defer></script>
+</head>
+<body>
+  <header>
+    <img src="icons/icon-32.png" alt="" width="24" height="24">
+    <h1>Meltype</h1>
+  </header>
+  <p class="lead">ローマ字のまま打つと、日本語と英語を分けて変換します。入力欄を選ぶと使えます。</p>
+  <label class="toggle" hidden data-site-row>
+    <input type="checkbox" data-site-toggle>
+    <span><b data-site-name></b> で使う</span>
+  </label>
+  <p class="note" hidden data-site-note>このページでは使えません。</p>
+  <p class="warn" hidden data-blocked-note>このサイトは、セキュリティの設定 (CSP) で拡張機能の中の WebAssembly も止めているので、Meltype を動かせません。</p>
+  <p class="note" hidden data-reload-note>使わないにすると、すぐに外れます。使うにすると、次に入力欄を選んだときから使えます。</p>
+  <button type="button" data-clear>覚えたことを消す</button>
+  <p class="note" hidden data-cleared>消しました。開いているタブは、読み込み直すまで前に覚えたことを使います。</p>
+  <p class="note">判定も変換もブラウザーの中で動き、打った文字はどこにも送りません。</p>
+</body>
+</html>

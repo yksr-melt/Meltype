@@ -1,0 +1,90 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+/* Copyright (C) 2026 hisiragi */
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff;
+  --fg: #1f2a44;
+  --muted: #5d6984;
+  --line: #e3e8f8;
+  --accent: #1679b8;
+  --on-accent: #ffffff;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #17203a;
+    --fg: #f3f6fc;
+    --muted: #a3aec7;
+    --line: #2a3657;
+    --accent: #7fd0f5;
+    --on-accent: #0d1424;
+  }
+}
+body {
+  width: 300px;
+  margin: 0;
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+  background: var(--bg);
+  color: var(--fg);
+  font: 14px/1.6 system-ui, "Hiragino Sans", "Noto Sans JP", sans-serif;
+}
+header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+h1 {
+  margin: 0;
+  font-size: 18px;
+}
+p {
+  margin: 0;
+}
+.lead {
+  color: var(--fg);
+}
+.note {
+  font-size: 12px;
+  color: var(--muted);
+}
+.warn {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, #c77a14 16%, transparent);
+  font-size: 12px;
+}
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  cursor: pointer;
+}
+.toggle input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+.toggle b {
+  word-break: break-all;
+}
+button {
+  font: inherit;
+  font-weight: 700;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--fg);
+  cursor: pointer;
+}
+button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+[hidden] {
+  display: none !important;
+}
