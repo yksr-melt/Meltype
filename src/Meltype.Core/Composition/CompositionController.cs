@@ -4,7 +4,11 @@
 
 namespace Meltype.Composition;
 
-/// <summary>入力の出来事の入口。キー・確定・再描画を呼び、1 回分の応答を返す。状態の寿命は CompositionLifecycle が管理する。</summary>
+/// <summary>
+/// 入力の出来事の入口。キー・確定・再描画を呼び、1 回分の応答を返す。状態の寿命は CompositionLifecycle が管理する。
+/// ほかの Composition* のクラスは、このクラスを呼び戻さない。キーの処理は変換・確定・表示を呼べるが、変換・確定・表示はキーの処理を呼ばず、表示は確定を呼ばない
+/// (呼び合うと、1 回の出来事の中で処理の順序が追えなくなる)。
+/// </summary>
 internal static class CompositionController
 {
     /// <summary>

@@ -22,7 +22,7 @@
 
 `src/Meltype.Core` の namespace は `Ime` → `Composition` (と `Composition.Utility`) → `Detection`・`Learning`・`Engine`・`Dictionary` → `Libraries.Chars`・`Libraries.Lexicon` の向きにだけ参照する。`Detection`・`Learning`・`Engine`・`Dictionary` どうしと、`Libraries` の中どうしは参照しない。どこからでも使えるのは `Config`・`Input`・`Diagnostics`。
 
-`CompositionController` は出来事の入口だけを受け持ち、キー・変換・確定・表示を別の class に分ける。状態の寿命と、背景の変換結果を反映する条件は [docs/dev/COMPOSITION.md](docs/dev/COMPOSITION.md) を読む。
+`CompositionController` は出来事の入口だけを受け持ち、キー・変換・確定・表示を別の class に分ける。
 
 ## 暗黙知
 
