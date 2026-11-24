@@ -6,8 +6,11 @@ using System.Text.Json;
 using Meltype.Composition;
 using Meltype.Config;
 using Meltype.Detection;
+using Meltype.Dictionary;
+using Meltype.Engine;
 using Meltype.Ime;
 using Meltype.Input;
+using Meltype.Learning;
 
 namespace Meltype.Tests;
 
@@ -676,6 +679,36 @@ internal static class ImeContractTests
             AssertPasswordPass(front, front.Key(key));
         }
         Assert.Equal("aiueo\n", front.Document, "パスワード欄では未確定文字を取り消して打鍵を通す\n" + front.Trace);
+    }
+
+    [Test]
+    public static void Password_TerminalPromptPassesKeys()
+    {
+        // 履歴の /* で、後ろの行が複数行コメントの中と判定される (#1201)
+        const string history = "$ ls /etc/*\nfoo bar\n$ sudo ls\n";
+        foreach (var prompt in new[]
+                 {
+                     "[sudo] password for user: ", "[sudo] user のパスワード:", "[sudo] Passwort für user: ", "[sudo] user 的密码：",
+                     "[sudo: authenticate] Password: ", "[sudo: authenticate] パスワード: ", "Password: ", "user@host's password: ",
+                     "Enter passphrase for key '/home/user/.ssh/id_ed25519': ", "Password for 'https://user@github.com': ",
+                 })
+        {
+            // Meltype キーボードはターミナルと知らせず、アプリ名だけ送る
+            foreach (var front in new[] { new Front { Terminal = true, Sends = history + prompt }, new Front { App = "WindowsTerminal.exe", Sends = history + prompt } })
+            {
+                foreach (var key in "nihongo\n")
+                {
+                    AssertPasswordPass(front, front.Key(key));
+                }
+            }
+        }
+
+        var comment = new Front { Terminal = true, Sends = history + "[sudo] password for user: \n$ echo # " };
+        comment.Type("sa");
+        Assert.Equal("さ", comment.Composition["t1"], "プロンプトの次の行では、今までどおり判定する\n" + comment.Trace);
+        var text = new Front { Sends = "Password: " };
+        text.Type("sa");
+        Assert.Equal("さ", text.Composition["t1"], "ターミナルでない入力欄では変換する\n" + text.Trace);
     }
 
     [Test]

@@ -5,10 +5,9 @@ using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
-using Meltype.Composition;
-using Meltype.Detection;
+using Meltype.Dictionary;
+using Meltype.Engine;
 using Meltype.Ime;
-using Meltype.Input;
 
 namespace Meltype.CApi;
 
@@ -18,6 +17,7 @@ namespace Meltype.CApi;
 ///
 /// 文字列はすべて UTF-8 の NUL 終端。こちらが返す文字列は meltype_free で解放する。
 /// Input Method Kit はメインスレッドから呼ぶので、排他はしない。
+/// 例外は C の側に投げられない (投げるとアプリごと落ちる) ので、どの関数も一番外ですべて捕まえ、中身 (場所) を Log.Error に書いて失敗の値を返す。
 /// </summary>
 public static unsafe class Exports
 {
@@ -32,10 +32,7 @@ public static unsafe class Exports
         {
             var directory = FromUtf8(appDirectory);
             if (string.IsNullOrEmpty(directory)) throw new ArgumentException("appDirectory が空です");
-            s_converter = Runtime.CreateConverter(directory);
-            if (!s_converter.MozcInstalled) return 0;
-            s_converter.WarmUp();
-            return 1;
+            return Runtime.StartConverter(directory) ? 1 : 0;
         }
         catch (Exception ex)
         {
@@ -48,11 +45,6 @@ public static unsafe class Exports
     private static MeltypeRuntime Runtime => s_runtime ??= MeltypeRuntime.OpenDefault();
 
     private static MeltypeRuntime? s_runtime;
-
-    /// <summary>入力欄が使う変換エンジン (meltype_init で作る)。</summary>
-    private static HybridConverter Converter => s_converter ?? throw new InvalidOperationException("meltype_init を先に呼んでください");
-
-    private static HybridConverter? s_converter;
 
     // meltype_set_conversion_ready を呼んだ (変換エンジンの答えを後から受け取れる) フロントか
     private static bool s_lateResults;
@@ -67,7 +59,8 @@ public static unsafe class Exports
         try
         {
             if (mozcRequest == null) return 0;
-            s_converter = Runtime.CreateConverter(new CallbackMozcHelper(mozcRequest));
+            // llama-server は同梱していないので、Zenzai は使えない (変換は Mozc だけ)
+            Runtime.StartConverter(AppContext.BaseDirectory, new CallbackMozcHelper(mozcRequest));
             return 1;
         }
         catch (Exception ex)
@@ -88,7 +81,7 @@ public static unsafe class Exports
         try
         {
             s_lateResults = true;
-            Converter.ResultReady += () => notify();
+            Runtime.ConversionReady += () => notify();
         }
         catch (Exception ex)
         {
@@ -123,8 +116,7 @@ public static unsafe class Exports
     {
         try
         {
-            var parts = Runtime.SessionParts(Converter, Converter.Candidates, Converter.Reading) with { LateResults = () => s_lateResults };
-            return GCHandle.ToIntPtr(GCHandle.Alloc(new ImeHost(new NativeEnvironment(), parts, () => Runtime.Settings.Current)));
+            return GCHandle.ToIntPtr(GCHandle.Alloc(Runtime.CreateHost(new NativeEnvironment(), () => Runtime.Settings.Current, () => s_lateResults)));
         }
         catch (Exception ex)
         {
@@ -202,11 +194,12 @@ public static unsafe class Exports
     {
         public bool IsInstalled => true;
 
+        // アプリの Mozc はユーザー辞書をファイルに保存している
+        public int Launches => 1;
+
         public long WorkingSet => 0;
 
-        public void Start()
-        {
-        }
+        public bool Start() => true;
 
         public string? Send(string line)
         {

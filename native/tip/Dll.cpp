@@ -72,12 +72,16 @@ void UnregisterComServer() {
     RegDeleteTreeW(HKEY_LOCAL_MACHINE, key.c_str());
 }
 
+// GUID_TFCAT_TIPCAP_UIELEMENTENABLED: 候補を自分で描くアプリ (ゲームなど) は、スレッドを TF_TMAE_UIELEMENTENABLEDONLY で始め、
+// このカテゴリの IME だけを有効にする (登録していないと、そのアプリでは IME が動かず、打ったキーがそのまま入る。#2004)。
+// このカテゴリの IME は、候補の一覧を ITfUIElementMgr を通して出す (CandidateWindow.cpp)
 const GUID* const kCategories[] = {
     &GUID_TFCAT_TIP_KEYBOARD,
     &GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER,
     &GUID_TFCAT_TIPCAP_INPUTMODECOMPARTMENT,
     &GUID_TFCAT_TIPCAP_IMMERSIVESUPPORT,
     &GUID_TFCAT_TIPCAP_SYSTRAYSUPPORT,
+    &GUID_TFCAT_TIPCAP_UIELEMENTENABLED,
 };
 
 HRESULT RegisterProfile() {

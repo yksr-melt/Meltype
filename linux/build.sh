@@ -6,6 +6,7 @@
 #   linux/build.sh
 # 本体は native/build-core-linux.sh が組み立てる (先にビルドしておくもの・必要なものはそのファイルの先頭)。
 # fcitx5 のアドオンは、cmake と fcitx5 の開発用のパッケージ (fcitx5-modules-dev) があればビルドする (無ければ IBus だけ)。
+# 設定アプリ (src/Meltype.Settings) は NativeAOT でビルドし、meltype-settings として置く (描画に使う libSkiaSharp.so・libHarfBuzzSharp.so を隣に置く)。
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$(dirname "$here")"
@@ -25,8 +26,19 @@ else
     echo "fcitx5 の開発用のパッケージ (fcitx5-modules-dev) か cmake が無いので、fcitx5 のアドオンは入れません (IBus だけ)。"
 fi
 
-echo "== IBus のエンジン・設定画面"
+echo "== 設定アプリ (C#, NativeAOT)"
+case "$(uname -m)" in
+    x86_64) rid=linux-x64 ;;
+    aarch64) rid=linux-arm64 ;;
+    *) echo "設定アプリをビルドできない CPU です: $(uname -m)" >&2; exit 1 ;;
+esac
+dotnet publish "$root/src/Meltype.Settings/Meltype.Settings.csproj" -c Release -r "$rid" \
+    -p:StripSymbols=true -o "$here/build/settings"
+cp "$here/build/settings/MeltypeSettings" "$out/meltype-settings"
+cp "$here/build/settings/libSkiaSharp.so" "$here/build/settings/libHarfBuzzSharp.so" "$out/"
+
+echo "== IBus のエンジン"
 sed "s|@VERSION@|$version|g" "$here/meltype.xml" > "$out/meltype.xml"
-cp "$here/ibus-engine-meltype" "$here/meltype-settings" "$here/ibus-setup-meltype.desktop" "$here/icon.png" "$out/"
-chmod +x "$out/ibus-engine-meltype" "$out/meltype-settings"
+cp "$here/ibus-engine-meltype" "$here/ibus-setup-meltype.desktop" "$here/icon.png" "$out/"
+chmod +x "$out/ibus-engine-meltype"
 echo "作成しました: $out"

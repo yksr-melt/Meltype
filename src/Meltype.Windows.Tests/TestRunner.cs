@@ -45,7 +45,7 @@ internal static class TestRunner
         if (args.FirstOrDefault() == "--repro")
         {
             // GitHub の bot 用: 報告された打鍵を打ってみて JSON で返す (Meltype.Core.Tests の --repro と同じ)。
-            Repro.Type(args.ElementAtOrDefault(1) ?? "", args.ElementAtOrDefault(2) ?? "enter");
+            Repro.Type(args[1..]);
             return 0;
         }
         if (args.FirstOrDefault() == "--type")
@@ -53,17 +53,17 @@ internal static class TestRunner
             // dotnet run --project src/Meltype.Windows.Tests -- --type "ke-kiwotabeta "
             // 本物の変換エンジンをつないだ変換ボックスに 1 文字ずつ打ち、表示の変化を見る (ライブ変換 ON)。
             // Mozc は MELTYPE_MOZC、無ければ native\mozc\bin のもの (Zenzai は使わない)。
-            using var mozc = new Composition.MozcConverter(new Composition.MozcHelperProcess(MozcHelper() ?? "", Path.Combine(Path.GetTempPath(), "meltype-mozc-profile")));
-            var converter = new Composition.HybridConverter(mozc);
+            using var mozc = new Engine.MozcConverter(new Engine.MozcHelperProcess(MozcHelper() ?? "", Path.Combine(Path.GetTempPath(), "meltype-mozc-profile")));
+            var converter = new Engine.HybridConverter(mozc);
             Console.WriteLine($"変換エンジン: {(mozc.IsInstalled ? "Mozc" : "なし (かなのまま)")}");
-            var translations = Composition.TranslationDictionary.Load();
+            var translations = Dictionary.TranslationDictionary.Load();
             foreach (var text in args.Skip(1))
             {
                 // "前の文字列|打つキー" の形なら、前の文字列をキャレットの前にある確定済みの文字として扱う。
                 var bar = text.IndexOf('|');
                 // MELTYPE_DIRECT=1 なら英数 (直接入力) の状態から打ち始める。
                 var direct = Environment.GetEnvironmentVariable("MELTYPE_DIRECT") == "1";
-                var keyboard = new CompositionTests.Keyboard(live: true, direct: direct, converter: converter, moreCandidates: reading => converter.Candidates(reading, long.MaxValue), userDictionary: new Composition.UserDictionary(null), translations: translations);
+                var keyboard = new CompositionTests.Keyboard(live: true, direct: direct, converter: converter, moreCandidates: reading => converter.Candidates(reading, long.MaxValue), userDictionary: new Dictionary.UserDictionary(null), translations: translations);
                 if (bar >= 0) keyboard.Host.PrecedingText = text[..bar];
                 foreach (var c in bar >= 0 ? text[(bar + 1)..] : text)
                 {
@@ -93,19 +93,14 @@ internal static class TestRunner
         if (args.FirstOrDefault() == "--tip-client") return TipHarness.Client(args[1].Replace("\\n", "\n"));
         if (args.FirstOrDefault() == "--render-forms")
         {
-            // 調査用: 設定画面とユーザー辞書の画面を表示せずに画像にする。
+            // 調査用: Meltype.exe の画面 (報告・使い方・入力モードの表示・変換ボックス) を表示せずに画像にする。
             Application.EnableVisualStyles();
-            var engine = new MeltypeEngine(TestRuntime.Create());
-            using var invoker = new Control();
-            invoker.CreateControl();
-            using var service = new Composition.CompositionService(invoker, engine.Runtime, () => engine.Settings);
-            service.UserDictionary.Add("きごうとう", "記号等");
             var composition = new Composition.CompositionWindow();
             // 候補が 9 個より多いとき (ページに分けて出す) の見た目。2 ページ目の候補を選んでいる。
             composition.ShowView(new Composition.CompositionView("ぶれすれっど", ["ブレスレッド", "ぶれすれっど", "buresureddo"], 0, true, "Space/↓ 候補", Suggestion: "もしかして: ブレスレット　<Tab>で修正"), new Point(-5000, -5000));
             var indicator = new Composition.ModeIndicatorWindow();
             indicator.Flash(true, new Point(-5000, -5000), 1200);
-            foreach (var form in new Form[] { new UI.SettingsForm(engine, new Config.AppState()), new UI.UserDictionaryForm(service), new UI.ReportDialog(new Config.Settings()), new UI.LearnedWordsForm(LearnedSample(), new Composition.ConversionHistory(null)), new UI.WelcomeForm(), indicator, composition })
+            foreach (var form in new Form[] { new UI.ReportDialog(new Config.Settings()), new UI.WelcomeForm(), indicator, composition })
             {
                 using (form)
                 {
@@ -116,16 +111,6 @@ internal static class TestRunner
                     using var bitmap = new Bitmap(form.Width, form.Height);
                     form.DrawToBitmap(bitmap, new Rectangle(0, 0, form.Width, form.Height));
                     bitmap.Save(Path.Combine(args[1], form.GetType().Name + ".png"));
-                    // 設定画面は、アプリ別設定の表のあたりまでスクロールした画像も作る。
-                    if (form is UI.SettingsForm && FindControl(form, c => c is Button { Text: "実行中のアプリから追加…" }) is { } button &&
-                        FindControl(form, c => c is ScrollableControl { AutoScroll: true } s && s.Contains(button)) is ScrollableControl scroller)
-                    {
-                        scroller.ScrollControlIntoView(button.Parent!);
-                        Application.DoEvents();
-                        using var scrolled = new Bitmap(form.Width, form.Height);
-                        form.DrawToBitmap(scrolled, new Rectangle(0, 0, form.Width, form.Height));
-                        scrolled.Save(Path.Combine(args[1], "SettingsForm-apps.png"));
-                    }
                     // スクロールできる画面は、いちばん下までスクロールした画像も作る (一番下の項目が見切れていないか)。
                     if (FindControl(form, c => c is ScrollableControl { AutoScroll: true, VerticalScroll.Visible: true }) is ScrollableControl bottom)
                     {
@@ -151,16 +136,6 @@ internal static class TestRunner
         if (Environment.GetEnvironmentVariable("MELTYPE_MOZC") is { Length: > 0 } configured) return configured;
         var bundled = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "native", "mozc", "bin", "meltype_mozc_helper.exe"));
         return File.Exists(bundled) ? bundled : null;
-    }
-
-    /// <summary>--render-forms 用の、学習した語の見本。</summary>
-    private static Composition.LanguageMemory LearnedSample()
-    {
-        var memory = new Composition.LanguageMemory(null) { IsReadableRomaji = _ => true };
-        memory.Remember("go", english: true);
-        memory.Remember("api", english: true);
-        memory.Remember("sushi", english: false, explicitChoice: true);
-        return memory;
     }
 
     /// <summary>画面の中から条件に合うコントロールを探す (--render-forms 用)。</summary>

@@ -5,12 +5,17 @@
 //   角丸 (DWM)、ライト / ダークは Windows の設定に合わせる、縦 1 列で番号 + 候補、
 //   選んでいる行は背景を薄く塗って左端にアクセントの縦線、9 個ずつのページ。
 // 打ったキーと「もしかして」は一覧の上に、候補の意味は少し止まったら一覧の右に出す。
+//
+// 候補の一覧は、TSF の UI Element (ITfCandidateListUIElement) として ITfUIElementMgr にも知らせる。
+// 候補を自分で描くアプリ (UILess。ゲームなど) は、GUID_TFCAT_TIPCAP_UIELEMENTENABLED の IME だけを有効にし (Dll.cpp)、
+// BeginUIElement で窓を出さないように答えて、候補をこの UI Element から読む。そのときは窓を出さない。
 
 #include "CandidateWindow.h"
 
 #include <d2d1_1.h>
 #include <dwmapi.h>
 #include <dwrite.h>
+#include <wrl/client.h>
 
 #include <algorithm>
 #include <mutex>
@@ -186,8 +191,17 @@ void PlaceWithin(int& x, int& y, int width, int height, const RECT& anchor) {
 
 }  // namespace
 
+class CandidateElement;
+// 窓に出す (大きさと位置を決め直す)
+static void Render(CandidateWindow::Impl& d, const CandidateView& view, const RECT& anchor);
+
 struct CandidateWindow::Impl {
     SelectHandler onSelect;
+    Microsoft::WRL::ComPtr<ITfThreadMgr> threadMgr;
+    Microsoft::WRL::ComPtr<ITfUIElementMgr> elements;  // 取れなければ (古い Windows) 窓だけで出す
+    CandidateElement* element = nullptr;
+    DWORD elementId = TF_INVALID_UIELEMENTID;  // 出している UI Element (BeginUIElement から EndUIElement まで)
+    bool shown = true;  // 窓を出すか (アプリが自分で描くなら false)
     HWND hwnd = nullptr;
     HWND meaningHwnd = nullptr;
     ID2D1HwndRenderTarget* target = nullptr;
@@ -428,6 +442,13 @@ struct CandidateWindow::Impl {
         if (format) format->Release();
     }
 
+    // アプリが UI Element の表示を切り替えた (ITfUIElement::Show)
+    void SetShown(bool show) {
+        shown = show;
+        if (!show) HideAll();
+        else if (elementId != TF_INVALID_UIELEMENTID) Render(*this, CandidateView(view), RECT(anchor));
+    }
+
     void HideAll() {
         if (hwnd != nullptr) {
             KillTimer(hwnd, kMeaningTimer);
@@ -511,6 +532,111 @@ struct CandidateWindow::Impl {
     static int GET_Y_LPARAM_SAFE(LPARAM lParam) { return static_cast<int>(static_cast<short>(HIWORD(lParam))); }
 };
 
+// 候補の一覧の UI Element。アプリのスレッド (TSF のスレッド) だけで使う。
+// 中身は CandidateWindow が持つ今の候補をそのまま読む (写しを持たない)。CandidateWindow が先に消えたら owner は null
+class CandidateElement final : public ITfCandidateListUIElement {
+public:
+    explicit CandidateElement(CandidateWindow::Impl* owner) : owner_(owner) {}
+    void Detach() { owner_ = nullptr; }
+
+    STDMETHODIMP QueryInterface(REFIID riid, void** ppv) override {
+        if (ppv == nullptr) return E_INVALIDARG;
+        *ppv = nullptr;
+        if (IsEqualIID(riid, IID_IUnknown) || IsEqualIID(riid, IID_ITfUIElement) || IsEqualIID(riid, IID_ITfCandidateListUIElement)) {
+            *ppv = static_cast<ITfCandidateListUIElement*>(this);
+            AddRef();
+            return S_OK;
+        }
+        return E_NOINTERFACE;
+    }
+    STDMETHODIMP_(ULONG) AddRef() override { return InterlockedIncrement(&refs_); }
+    STDMETHODIMP_(ULONG) Release() override {
+        ULONG refs = InterlockedDecrement(&refs_);
+        if (refs == 0) delete this;
+        return refs;
+    }
+
+    // ITfUIElement
+    STDMETHODIMP GetDescription(BSTR* description) override {
+        if (description == nullptr) return E_INVALIDARG;
+        *description = SysAllocString(L"Meltype の候補");
+        return *description != nullptr ? S_OK : E_OUTOFMEMORY;
+    }
+    STDMETHODIMP GetGUID(GUID* guid) override {
+        if (guid == nullptr) return E_INVALIDARG;
+        // {0EBEF5FC-6C4D-49E1-AC64-9F16D8014A47}
+        *guid = {0x0ebef5fc, 0x6c4d, 0x49e1, {0xac, 0x64, 0x9f, 0x16, 0xd8, 0x01, 0x4a, 0x47}};
+        return S_OK;
+    }
+    STDMETHODIMP Show(BOOL show) override {
+        if (owner_ != nullptr) owner_->SetShown(show != FALSE);
+        return S_OK;
+    }
+    STDMETHODIMP IsShown(BOOL* shown) override {
+        if (shown == nullptr) return E_INVALIDARG;
+        *shown = owner_ != nullptr && owner_->shown ? TRUE : FALSE;
+        return S_OK;
+    }
+
+    // ITfCandidateListUIElement
+    STDMETHODIMP GetUpdatedFlags(DWORD* flags) override {
+        if (flags == nullptr) return E_INVALIDARG;
+        // 変わったところを覚えずに、毎回すべて読み直してもらう
+        *flags = TF_CLUIE_DOCUMENTMGR | TF_CLUIE_COUNT | TF_CLUIE_SELECTION | TF_CLUIE_STRING | TF_CLUIE_PAGEINDEX | TF_CLUIE_CURRENTPAGE;
+        return S_OK;
+    }
+    STDMETHODIMP GetDocumentMgr(ITfDocumentMgr** documentMgr) override {
+        if (documentMgr == nullptr) return E_INVALIDARG;
+        *documentMgr = nullptr;
+        if (owner_ == nullptr || owner_->threadMgr == nullptr) return E_FAIL;
+        return owner_->threadMgr->GetFocus(documentMgr);
+    }
+    STDMETHODIMP GetCount(UINT* count) override {
+        if (count == nullptr) return E_INVALIDARG;
+        *count = Count();
+        return S_OK;
+    }
+    STDMETHODIMP GetSelection(UINT* index) override {
+        if (index == nullptr) return E_INVALIDARG;
+        *index = owner_ != nullptr && owner_->view.selected > 0 ? static_cast<UINT>(owner_->view.selected) : 0;
+        return S_OK;
+    }
+    STDMETHODIMP GetString(UINT index, BSTR* text) override {
+        if (text == nullptr) return E_INVALIDARG;
+        *text = nullptr;
+        if (index >= Count()) return E_INVALIDARG;
+        const std::wstring& candidate = owner_->view.candidates[index];
+        *text = SysAllocStringLen(candidate.c_str(), static_cast<UINT>(candidate.size()));
+        return *text != nullptr ? S_OK : E_OUTOFMEMORY;
+    }
+    // ページは窓と同じく 9 個ずつ
+    STDMETHODIMP GetPageIndex(UINT* index, UINT size, UINT* pages) override {
+        if (pages == nullptr) return E_INVALIDARG;
+        const UINT count = (Count() + kPage - 1) / kPage;
+        *pages = count;
+        if (index == nullptr) return S_OK;
+        for (UINT i = 0; i < count && i < size; i++) index[i] = i * kPage;
+        return size < count ? S_FALSE : S_OK;
+    }
+    // ページの区切りは Meltype が決める
+    STDMETHODIMP SetPageIndex(UINT*, UINT) override { return E_NOTIMPL; }
+    STDMETHODIMP GetCurrentPage(UINT* page) override {
+        if (page == nullptr) return E_INVALIDARG;
+        UINT selected = 0;
+        GetSelection(&selected);
+        *page = selected / kPage;
+        return S_OK;
+    }
+
+private:
+    static constexpr UINT kPage = static_cast<UINT>(kPageSize);
+    ~CandidateElement() = default;
+    UINT Count() const { return owner_ != nullptr ? static_cast<UINT>(owner_->view.candidates.size()) : 0; }
+
+    LONG refs_ = 1;
+    CandidateWindow::Impl* owner_;
+};
+
 static bool EnsureClasses() {
     std::call_once(g_classOnce, [] {
     WNDCLASSEXW wc = {sizeof(wc)};
@@ -528,9 +654,18 @@ static bool EnsureClasses() {
     return g_registered;
 }
 
-CandidateWindow::CandidateWindow(SelectHandler onSelect) : impl_(new Impl()) { impl_->onSelect = std::move(onSelect); }
+CandidateWindow::CandidateWindow(ITfThreadMgr* threadMgr, SelectHandler onSelect) : impl_(new Impl()) {
+    impl_->onSelect = std::move(onSelect);
+    impl_->threadMgr = threadMgr;
+    if (threadMgr != nullptr && SUCCEEDED(threadMgr->QueryInterface(IID_PPV_ARGS(&impl_->elements)))) impl_->element = new CandidateElement(impl_);
+}
 
 CandidateWindow::~CandidateWindow() {
+    Hide();
+    if (impl_->element) {
+        impl_->element->Detach();
+        impl_->element->Release();
+    }
     if (impl_->target) impl_->target->Release();
     if (impl_->meaningTarget) impl_->meaningTarget->Release();
     if (impl_->meaningHwnd) DestroyWindow(impl_->meaningHwnd);
@@ -540,11 +675,44 @@ CandidateWindow::~CandidateWindow() {
 
 bool CandidateWindow::Visible() const { return impl_->hwnd != nullptr && IsWindowVisible(impl_->hwnd); }
 
-void CandidateWindow::Hide() { impl_->HideAll(); }
+void CandidateWindow::Hide() {
+    Impl& d = *impl_;
+    if (d.elementId != TF_INVALID_UIELEMENTID) {
+        const DWORD id = d.elementId;
+        d.elementId = TF_INVALID_UIELEMENTID;
+        d.elements->EndUIElement(id);
+    }
+    d.shown = true;
+    d.HideAll();
+}
 
 void CandidateWindow::Show(const CandidateView& view, const RECT& anchor) {
-    if (!EnsureFactories() || !EnsureClasses()) return;
     Impl& d = *impl_;
+    const bool begin = d.element != nullptr && d.elementId == TF_INVALID_UIELEMENTID;
+    if (begin) {
+        // BeginUIElement の中でアプリが候補を読むので、先に入れておく (窓は置き直す)
+        d.HideAll();
+        d.view = view;
+        d.anchor = anchor;
+        BOOL show = TRUE;
+        DWORD id = TF_INVALID_UIELEMENTID;
+        if (SUCCEEDED(d.elements->BeginUIElement(d.element, &show, &id))) {
+            d.elementId = id;
+            d.shown = show != FALSE;
+            if (!d.shown) TipLog(L"候補の一覧はアプリが描きます (UI Element)");
+        }
+    }
+    if (d.shown) {
+        Render(d, view, anchor);
+    } else {
+        d.view = view;
+        d.anchor = anchor;
+    }
+    if (!begin && d.elementId != TF_INVALID_UIELEMENTID) d.elements->UpdateUIElement(d.elementId);
+}
+
+static void Render(CandidateWindow::Impl& d, const CandidateView& view, const RECT& anchor) {
+    if (!EnsureFactories() || !EnsureClasses()) return;
     if (d.hwnd == nullptr) {
         d.hwnd = CreateWindowExW(WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW, kClassName, L"", WS_POPUP, 0, 0, 1, 1, nullptr, nullptr, g_module, &d);
         if (d.hwnd == nullptr) return;
@@ -553,7 +721,7 @@ void CandidateWindow::Show(const CandidateView& view, const RECT& anchor) {
     float scale = GetDpiForWindow(d.hwnd) / 96.0f;
     if (scale <= 0) scale = 1;
     // DPI が変わったときも、描画 (render target) と当たり判定の scale がずれないように置き直す
-    bool samePlace = Visible() && EqualRect(&d.anchor, &anchor) && d.view.candidates == view.candidates && d.view.suggestion == view.suggestion &&
+    bool samePlace = d.hwnd != nullptr && IsWindowVisible(d.hwnd) && EqualRect(&d.anchor, &anchor) && d.view.candidates == view.candidates && d.view.suggestion == view.suggestion &&
                      d.view.numbered == view.numbered && d.view.typed == view.typed && d.view.hint == view.hint && scale == d.scale;
     d.view = view;
     d.anchor = anchor;

@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Yukishiro
 //
 // Pull Request のチェック (.github/workflows/core.yml・pr-expectations.yml) の補助。結果は GitHub の「Summary」に表で出す。
-//   node pr-checks.mjs cases <出力ファイル>        … Pull Request の「確かめること」から、確かめる例を集める
+//   node pr-checks.mjs cases <出力ファイル>        … Pull Request の「期待する打鍵と変換」から、確かめる例を集める
 //   node pr-checks.mjs expect <結果の JSON>        … 例の結果を表にし、外れがあれば失敗
 //   node pr-checks.mjs compare <main の JSON> <Pull Request の JSON>  … 品質テストを比べ、新しく外れた例があれば失敗
 //   node pr-checks.mjs impact <main の一覧> <Pull Request の一覧> [全件の出力]  … よく使う語の判定 (--judge-corpus) を比べ、変わった語を出す (失敗にはしない)
@@ -17,8 +17,10 @@ function cases(output) {
   const body = event.pull_request?.body ?? '';
   const list = [];
 
-  // 「## 確かめること」の下の「入力 → 期待」の行
-  const section = body.split(/^##\s*確かめること\s*$/m)[1]?.split(/^##\s/m)[0] ?? '';
+  // 「## 期待する打鍵と変換」の下の「入力 → 期待」の行
+  // 「## 確かめること」は改名前の見出し (#2165)。改名前に開いた PR の本文がこの見出しのままなので、
+  // 読まないと例が 0 個になり、確かめずに成功する。開いている PR の本文を書き換え終えたら消す
+  const section = body.split(/^##\s*(?:期待する打鍵と変換|確かめること)\s*$/m)[1]?.split(/^##\s/m)[0] ?? '';
   for (const line of section.split('\n')) {
     const match = line.replace(/^\s*[-*]\s*/, '').match(/^(.+?)\s*(?:→|->)\s*(.+)$/);
     if (!match || line.trim().startsWith('<!--')) continue;
@@ -33,10 +35,15 @@ function cases(output) {
 function expect(resultFile) {
   const results = JSON.parse(fs.readFileSync(resultFile, 'utf8'));
   const failed = results.filter(r => !r.ok).length;
-  summary(`## 確かめることの再現 ${failed === 0 ? '✅' : '❌'}\n`);
+  summary(`## 期待する打鍵と変換の再現 ${failed === 0 ? '✅' : '❌'}\n`);
   summary('| | 入力 | 期待 | Pull Request の結果 | 比べ方 |\n|---|---|---|---|---|');
   results.forEach(r => summary(`| ${r.ok ? '✅' : '❌'} | ${code(r.typed)} | ${cell(r.expected)} | ${cell(r.actual)} | ${cell(r.kind)} |`));
   if (failed > 0) {
+    // 本文由来の値を含むので、行頭を ❌ にして改行を消し、ワークフローコマンド (::…) として読まれないようにする
+    const line = text => String(text ?? '').replace(/\r\n|[\r\n]/g, ' ');
+    for (const r of results.filter(r => !r.ok)) {
+      console.error(line(`❌ ${r.typed} → 期待: ${r.expected} / 結果: ${r.actual} (${r.kind})`));
+    }
     console.error(`${failed} 個の例が期待どおりになりませんでした`);
     process.exitCode = 1;
   }

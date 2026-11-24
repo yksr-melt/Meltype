@@ -3,6 +3,9 @@
 
 using Meltype.Composition;
 using Meltype.Config;
+using Meltype.Dictionary;
+using Meltype.Engine;
+using Meltype.Ime;
 
 namespace Meltype.Tests;
 
@@ -167,9 +170,12 @@ internal static class RuntimeTests
         {
             Settings? notified = null;
             runtime.SettingsChanged += next => notified = next;
-            var next = runtime.Settings.Current.Clone();
-            next.Punctuation = PunctuationStyle.FullWidthCommaPeriod;
-            runtime.Settings.Apply(next);
+            runtime.Settings.Edit(current =>
+            {
+                var next = current.Clone();
+                next.Punctuation = PunctuationStyle.FullWidthCommaPeriod;
+                return next;
+            });
             Assert.Equal(PunctuationStyle.FullWidthCommaPeriod, notified?.Punctuation ?? PunctuationStyle.Japanese, "変えたことを知らせる");
             Assert.Equal(PunctuationStyle.FullWidthCommaPeriod, Settings.Load(Path.Combine(directory, "config.json")).Punctuation, "config.json に保存する");
             Assert.Equal(PunctuationStyle.FullWidthCommaPeriod, runtime.Settings.Current.Punctuation);

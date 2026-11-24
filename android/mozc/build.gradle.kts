@@ -7,11 +7,10 @@ plugins {
 }
 
 android {
-    namespace = "io.github.ninjin0802.keyboard.mozc"
+    namespace = "app.meltype.keyboard.mozc"
     compileSdk = 36
     defaultConfig {
         minSdk = 26
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles("consumer-rules.pro")
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
@@ -73,7 +72,4 @@ tasks.named("preBuild") {
 
 dependencies {
     api(libs.protobuf.javalite)
-    // テストを動かすためだけのもの。アプリには入らない。
-    androidTestImplementation(libs.androidx.test.runner)
-    androidTestImplementation(libs.junit)
 }
