@@ -9,6 +9,7 @@
 //   native/tip/meltype.ico           16〜256 の 9 サイズ (Meltype IME と Meltype.exe)
 //   linux/icon.png                   64x64
 //   mac/Resources/Settings/icon.png  512x512 (Meltype の設定.app。mac/build.sh が icns にする)
+//   web-extension/icons/icon-*.png   16・32・48・128 (ブラウザーの拡張機能)
 //   mac/Resources/icon.tiff          18pt (18px / 36px) の白黒テンプレート (メニューバー用。macOS がダークモードで白く出す)
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -141,6 +142,7 @@ function save(path, bytes) {
 save("web/public/apple-touch-icon.png", await render(180, { pad: 14, background: "#f5f9ff" }));
 save("linux/icon.png", await render(64));
 save("mac/Resources/Settings/icon.png", await render(512));
+for (const size of [16, 32, 48, 128]) save(`web-extension/icons/icon-${size}.png`, await render(size));
 const sizes = [16, 20, 24, 32, 40, 48, 64, 128, 256];
 const entries = [];
 for (const size of sizes) entries.push({ size, png: await render(size) });
