@@ -140,7 +140,8 @@ internal sealed class ScoreEngine
         }
 
         // tem や memo には既に読めるかながある。続きを見ないと手元やメモリの先頭を英語にしてしまう (#2219)。
-        var waitingForRomaji = !input.IsFinal && letters.Length < pendingLimit && analysis is { IsValid: true, Tokens.Count: > 0 };
+        var waitingForRomaji = !input.IsFinal && letters.Length < pendingLimit && analysis is { IsValid: true, Tokens.Count: > 0 } &&
+            (analysis.Partial.Length > 0 || CommonReadings.Words.Contains(analysis.Kana));
         // "as" (ashita) や "to" (tomodachi) のように日本語の語の先頭でもある間は待つ。
         // 助詞で始まり、助詞の後ろがまだ 3 文字以下の語 (not, nota = の + た…) は、助詞 + 次の語の打ちかけかもしれないので待つ
         // (4 文字になれば日本語の辞書で調べられる)。

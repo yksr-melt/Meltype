@@ -23,9 +23,6 @@ internal static class CompositionOutput
         var before = env.Before;
         if (before is null) return null;
         foreach (var edit in state.Commits) before = before[..^Math.Min(edit.DeleteBefore, before.Length)] + edit.Text;
-        // Space・Enter で英数の保留から日本語に戻るとき、置き換える英字はこの変換の前の文脈に含めない。
-        if (env.CanDeleteBackward && state.PendingExpect is { } pending && before.EndsWith(pending, StringComparison.Ordinal))
-            before = before[..^pending.Length];
         return FromSetting(env.Settings.Punctuation, before);
     }
 

@@ -67,11 +67,8 @@ internal sealed record CompositionEnv(CompositionDetector Detector, IKanjiConver
     /// <summary>文字に使わずに離した親指キーの、もとの働き (変換・無変換) をしているか。かな配列を通さない。</summary>
     public bool BypassKanaLayout { get; init; }
 
-    /// <summary>キャレットの前の確定済みの文字 (この出来事の前のもの。分からなければ null)。</summary>
+    /// <summary>フロントが送ってきた、キャレットの前の確定済みの文字 (この出来事の前のもの。読めなければ null)。</summary>
     public string? Before { get; init; }
-
-    /// <summary>フロントが実際に読んだキャレットの前の文字。前の文字だけを編集できるときに限る。</summary>
-    public string? EditableBefore { get; init; }
 
     /// <summary>フロントが送ってきた、キャレットの後ろの確定済みの文字 (読めなければ null)。</summary>
     public string? After { get; init; }

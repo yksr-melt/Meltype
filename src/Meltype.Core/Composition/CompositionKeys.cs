@@ -79,44 +79,28 @@ internal static class CompositionKeys
                 CompositionDirectInput.Hold(state, env, e);
                 return;
             }
-            // 母音の後の - は長音 (ro-maji → ろーまじ)。英語の接頭辞 (e-mail、co-op) や、bare- のように
-            // 英単語の後ろのハイフンと日本語の長音 (ばれー) の両方に読めるときは、- の続きを見て決める (#2219)。
+            // 母音の後の - は長音 (ro-maji → ろーまじ、de-ta → でーた)。英単語の途中にはまず出てこないので、ローマ字として
+            // 読めれば日本語に戻す。英語の接頭辞 (e-mail、co-op) かもしれないときは - も送って判定を続け、- の後ろで決める
+            // (e-mail → 英語、e-me-ru → えーめーる)。
             var part = CompositionDirectInput.LastHyphenPart(state);
             if (vk == VirtualKeys.OemMinus && !state.Shift && !state.Modifier && part.Length > 0 &&
-                env.Detector.Romaji.AnalyzeFragment(part) is { IsValid: true, Partial: "" } romaji)
+                env.Detector.Romaji.AnalyzeFragment(part) is { IsValid: true, Partial: "" })
             {
-                var firstPart = state.HeldLetters.Length == part.Length;
-                var prefix = firstPart && CompositionDetector.IsHyphenPrefix(part);
-                // meme も、完全一致は無くても memento の接頭辞として英語と判定できる。
-                var englishWord = firstPart && !prefix && env.ClassifyDirect!(part, true) == Verdict.English;
-                if (!englishWord || CommonReadings.Words.Contains(romaji.Kana + 'ー'))
+                var prefix = !state.HeldLetters.ToString().Contains('-') && CompositionDetector.IsHyphenPrefix(part);
+                state.HeldLetters.Append('-');
+                state.HeldLastKeyTime = e.TimeMs;
+                if (prefix)
                 {
-                    state.HeldLetters.Append('-');
-                    state.HeldLastKeyTime = e.TimeMs;
-                    if (prefix || englishWord)
-                    {
-                        CompositionDirectInput.SendHeld(state, e);
-                        return;
-                    }
-                    Diagnostics.Log.Decision($"英数状態でローマ字を検知: {Diagnostics.Log.Text(state.HeldLetters.ToString())} (母音の後の長音)");
-                    CompositionDirectInput.SwitchHeldToJapanese(state, env);
+                    CompositionDirectInput.SendHeld(state, e);
                     return;
                 }
+                Diagnostics.Log.Decision($"英数状態でローマ字を検知: {Diagnostics.Log.Text(state.HeldLetters.ToString())} (母音の後の長音)");
+                CompositionDirectInput.SwitchHeldToJapanese(state, env);
+                return;
             }
-            var pendingLongVowel = CompositionDirectInput.HasPendingLongVowel(state);
-            if (pendingLongVowel && vk == VirtualKeys.Back && !state.Shift && !state.Modifier &&
-                CompositionDirectInput.BackspaceHeld(state, env, e.TimeMs)) return;
-            // Space・Enter や句読点で区切ったら、助詞などが続く長音 (tore-ni) まで含めて判定する。
-            var endsWord = !state.Shift && vk is (VirtualKeys.Space or VirtualKeys.Return) ||
-                e.Scan is > ' ' and <= '~' && !CompositionDirectInput.EnglishWordCharacters.Contains((char)e.Scan);
-            if (pendingLongVowel && endsWord && !state.Modifier)
-                CompositionDirectInput.DecideHeld(state, env, final: true);
-            else
-            {
-                // 英字以外のキー・Shift・Ctrl で判定を打ち切り、英語として出してから、そのキーを普通に処理する。
-                Diagnostics.Log.Info($"英数状態の判定を打ち切り: キー 0x{vk:X2} (Shift {state.Shift})");
-                CompositionDirectInput.ReleaseHeldAsEnglish(state, env);
-            }
+            // 英字以外のキー・Shift・Ctrl で判定を打ち切り、英語として出してから、そのキーを普通に処理する。
+            Diagnostics.Log.Info($"英数状態の判定を打ち切り: キー 0x{vk:X2} (Shift {state.Shift})");
+            CompositionDirectInput.ReleaseHeldAsEnglish(state, env);
         }
 
         // 大文字・文節の区切りの変更に使う Shift は、ほかのキーと一緒に届く。Shift だけでは何もしない。

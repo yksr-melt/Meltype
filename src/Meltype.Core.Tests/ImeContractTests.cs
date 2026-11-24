@@ -1160,51 +1160,6 @@ internal static class ImeContractTests
     }
 
     [Test]
-    public static void DirectMode_BackspaceUsesOnlyEditableSurroundingText()
-    {
-        foreach (var (facts, canEdit) in new[]
-        {
-            ("""{"app":"Code.exe","before":"// tore-ninn"}""", true),
-            ("", false),
-            ("""{"app":"Code.exe"}""", false),
-            ("""{"app":"Code.exe","before":"// tore-ninn","composing":true}""", false),
-            ("""{"app":"Code.exe","before":"// tore-ninn","selection":"selected"}""", false),
-            ("""{"app":"Code.exe","before":"// tore-ninn","canRemove":false}""", false),
-            ("""{"app":"Code.exe","before":"// tore-ninx"}""", false),
-        })
-        {
-            var front = new Front
-            {
-                Open = false,
-                App = "Code.exe",
-                Document = "// ",
-                ClassifyDirect = (letters, final, _) => final && letters == "tore" ? Verdict.English : Verdict.Undecided,
-            };
-            front.Settings.DirectModeAutoDetect = true;
-            front.Type("tore");
-            front.Key(VirtualKeys.OemMinus, '-');
-            front.Type("ninn");
-            Assert.Equal("// tore-ninn", front.Document, front.Trace);
-
-            var field = facts.Length == 0 ? "" : $",\"field\":{facts}";
-            var response = front.Send($$"""
-                {
-                    "version":{{ImeHost.Version}},"type":"KeyPressed","instance":"t1","imeOpen":false{{field}},
-                    "key":{"vk":{{VirtualKeys.Back}}}
-                }
-                """);
-            var commits = response.GetProperty("result").GetProperty("commits");
-            Assert.Equal(canEdit, Consumed(response), front.Trace);
-            Assert.Equal(canEdit ? 1 : 0, commits.GetArrayLength(), front.Trace);
-            if (canEdit)
-            {
-                Assert.Equal("n", commits[0].GetProperty("removeBefore").GetString(), front.Trace);
-                Assert.Equal("", commits[0].GetProperty("text").GetString(), front.Trace);
-            }
-        }
-    }
-
-    [Test]
     public static void OwnCommit_IsNotTrustedAfterTheCaretMoves()
     {
         // 確定した直後はキャレットの前より自分の確定を信じるが、キャレットが動いたら (別の入力欄・アプリに通したキー) 読めた文字を使う

@@ -2076,79 +2076,12 @@ internal static class CompositionTests
             ("tore-do", "とれーど"),
             ("tore-sa-", "とれーさー"),
             ("tore-ra-", "とれーらー"),
-            ("bare-bo-ru", "ばれーぼーる"),
         })
         {
             var k = new Keyboard(direct: true);
             k.Type(keys + "\n");
             Assert.Equal(expected, k.Host.Document, keys);
         }
-    }
-
-    [Test]
-    public static void DirectMode_AmbiguousHyphenSurvivesAPause()
-    {
-        foreach (var (beforePause, afterPause, committed, direct) in new[]
-        {
-            ("bare-", "bones", "bare-bones\n", true),
-            ("tore-n", "inngu", "とれーにんぐ", false),
-            ("tore-ni", "nngu", "とれーにんぐ", false),
-            ("tore-", "", "とれー", false),
-        })
-        {
-            var k = new Keyboard(direct: true);
-            k.Type(beforePause);
-            k.Wait(950);
-            k.Type(afterPause + "\n");
-            Assert.Equal(committed, k.Host.Document, beforePause + afterPause);
-            Assert.Equal(direct, k.Direct, beforePause + afterPause);
-        }
-    }
-
-    [Test]
-    public static void DirectMode_LongVowelCanStartAPhrase()
-    {
-        foreach (var (keys, committed) in new[]
-        {
-            ("tore-ni ", "とれーに"),
-            ("tore-no ", "とれーの"),
-            ("tore-wo ", "とれーを"),
-            ("tore-niirete ", "とれーにいれて"),
-            ("tore-made ", "とれーまで"),
-            ("tore-demo ", "とれーでも"),
-            ("tore-,", "とれー、"),
-            ("tore-ni,", "とれーに、"),
-            ("tore-ni?", "とれーに？"),
-            ("tore-ni!", "とれーに！"),
-        })
-        {
-            var k = new Keyboard(direct: true);
-            k.Type(keys + "\n");
-            Assert.Equal(committed, k.Host.Document, keys);
-        }
-    }
-
-    [Test]
-    public static void DirectMode_CorrectsTheEndOfAnAmbiguousHyphenWord()
-    {
-        foreach (var (keys, committed, direct) in new[]
-        {
-            ("tore-nind\bngu", "とれーにんぐ", false),
-            ("tore-nif\birete", "とれーにいれて", false),
-            ("bare-bok\bnes", "bare-bones\n", true),
-            ("tore-\b-do", "とれーど", false),
-        })
-        {
-            var k = new Keyboard(direct: true);
-            k.Type(keys + "\n");
-            Assert.Equal(committed, k.Host.Document, keys);
-            Assert.Equal(direct, k.Direct, keys);
-        }
-
-        var readOnlyContext = new Keyboard(direct: true);
-        readOnlyContext.Host.CanDeleteBackward = false;
-        readOnlyContext.Type("tore-nind\b");
-        Assert.Equal("tore-nin", readOnlyContext.Host.Document, "周りの文字を直せない入力欄では、BackSpace がアプリに届く");
     }
 
     [Test]
