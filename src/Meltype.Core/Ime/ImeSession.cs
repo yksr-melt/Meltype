@@ -531,7 +531,7 @@ internal static class ImeSession
         var detects = settings.DirectModeAutoDetect && settings.AutoDetection && !game;
         if (!direct || detects) keys.Add(new ImeShortcut(VirtualKeys.Space, (int)ShortcutModifiers.Shift));
         if (!direct && settings.SpaceWidth == SpaceWidth.FullWidth) keys.Add(new ImeShortcut(VirtualKeys.Space, 0));
-        // 入力欄には英字を先に送っているので、保留末尾の長音を変換・確定するキーを明示して受け取る。
+        // 入力欄には英字を先に送っているので、長音かもしれない保留を変換・確定するキーを明示して受け取る。
         if (direct && detects && pendingLongVowel)
         {
             keys.Add(new ImeShortcut(VirtualKeys.Space, 0));
@@ -705,7 +705,8 @@ internal static class ImeSession
         // Ctrl・Option・Command と一緒のキーは、変換ボックスが空ならアプリの操作 (コピーなど) なので触らない。
         var modifier = control || alt || command;
         var settings = env.App;
-        var wordBoundary = ch is { } typed && !EnglishWordCharacters.Contains(typed);
+        var wordBoundary = vk is VirtualKeys.Space or VirtualKeys.Return ||
+            ch is { } typed && !EnglishWordCharacters.Contains(typed);
         if (Direct(state) && state.Composition.DirectEnglishWord &&
             (wordBoundary || before is [.., var previous] && !EnglishWordCharacters.Contains(previous)))
             state.Composition.DirectEnglishWord = false;

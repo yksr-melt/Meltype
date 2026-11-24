@@ -2015,7 +2015,7 @@ internal static class CompositionTests
         {
             "template", "memorial", "memories", "matches", "baggage", "bachelor", "authority", "bedding", "biggest", "bending",
             "home-made", "data-driven", "use-case", "meta-analysis", "name-based", "time-zone",
-            "bare-bones", "bare-metal", "bare-minimum", "meme-based", "meme-themed",
+            "bare-bones", "bare-bone", "bare-metal", "bare-minimum", "meme-based", "meme-themed",
         })
         {
             var k = new Keyboard(direct: true);
@@ -2101,6 +2101,27 @@ internal static class CompositionTests
             k.Type(afterPause + "\n");
             Assert.Equal(committed, k.Host.Document, beforePause + afterPause);
             Assert.Equal(direct, k.Direct, beforePause + afterPause);
+        }
+    }
+
+    [Test]
+    public static void DirectMode_LongVowelCanStartAPhrase()
+    {
+        foreach (var (keys, committed) in new[]
+        {
+            ("tore-ni ", "とれーに"),
+            ("tore-no ", "とれーの"),
+            ("tore-wo ", "とれーを"),
+            ("tore-niirete ", "とれーにいれて"),
+            ("tore-made ", "とれーまで"),
+            ("tore-demo ", "とれーでも"),
+            ("tore-,", "とれー、"),
+            ("tore-ni,", "とれーに、"),
+        })
+        {
+            var k = new Keyboard(direct: true);
+            k.Type(keys + "\n");
+            Assert.Equal(committed, k.Host.Document, keys);
         }
     }
 
