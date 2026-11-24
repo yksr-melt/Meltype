@@ -45,7 +45,21 @@ internal static class ImeSession
         CommitPending(state, ForField(state, env));
     }
 
-    private static bool IsPassword(ImeField? field) => field?.Traits.Contains(ImeTrait.Password) == true;
+    /// <summary>
+    /// パスワード欄か。
+    /// ワークアラウンド: ターミナルの sudo・ssh は、パスワードを尋ねていることを OS に知らせない (エコーを止めるだけ) ので、
+    /// キャレットの前の行がパスワードのプロンプトならパスワード欄とする (#1201)。
+    /// </summary>
+    private static bool IsPassword(ImeField? field) =>
+        field is not null && (field.Traits.Contains(ImeTrait.Password) ||
+            field.Before is { } before && IsTerminal(field) && LineContext.IsPasswordPrompt(before));
+
+    /// <summary>
+    /// ターミナルか。ImeTrait.Terminal は IBus・fcitx5・meltype-tty しか送らないので、Windows・macOS のためにアプリ・要素の名前でも見る。
+    /// アプリ別設定の種類は見ない (種類を「一般」にしたターミナルでも、パスワードは日本語にしない)。
+    /// </summary>
+    private static bool IsTerminal(ImeField field) =>
+        field.Traits.Contains(ImeTrait.Terminal) || field.App is { } app && LineContext.ClassifyFocus(app, field.Element) == CodeFocus.Terminal;
 
     private static bool ForbidsLearning(ImeField? field) => IsPassword(field) || field?.Traits.Contains(ImeTrait.Private) == true;
 
@@ -116,7 +130,7 @@ internal static class ImeSession
             ImeEventType.KeyPressed when e.Key is { } key => active ? HandleKey(state, env, key, e.Field, before, settings, lastSnippet, ref explicitChange) : Leave(state, env),
             ImeEventType.KeyReleased when active && e.Key is { Vk: VirtualKeys.LMenu or VirtualKeys.RMenu } alt => AltReleased(state, env, alt, before, settings, ref explicitChange),
             ImeEventType.KeyReleased when active && e.Key is { } released =>
-                HandleKeyUp(state, env, ToggleShortcut.NormalizeHankakuKey(released.Vk)),
+                HandleKeyUp(state, env, ToggleShortcut.NormalizeKey(released.Vk)),
             ImeEventType.ModeToggleRequested when active => Switch(state, env, !wasJapanese, before, ref explicitChange, toggle: true),
             ImeEventType.JapaneseModeSelected when active => Switch(state, env, true, before, ref explicitChange, toggle: false),
             ImeEventType.AlphanumericModeSelected when active => Switch(state, env, false, before, ref explicitChange, toggle: false),
@@ -306,7 +320,7 @@ internal static class ImeSession
             AppendToLine(state, edit.Text);
         }
         if (e.Type != ImeEventType.KeyPressed || e.Key is not { } key || result.Consumed) return;
-        var vk = key.Vk != 0 ? ToggleShortcut.NormalizeHankakuKey(key.Vk) : VirtualKeyOf(key.Ch);
+        var vk = key.Vk != 0 ? ToggleShortcut.NormalizeKey(key.Vk) : VirtualKeyOf(key.Ch);
         if (key.Ctrl || key.Alt || key.Command) state.Line.Clear();
         else if (key.Text is { Length: > 0 } text) AppendToLine(state, text);
         else if (key.Ch is >= 0x20 and < 0x10000 && !char.IsControl((char)key.Ch)) AppendToLine(state, ((char)key.Ch).ToString());
@@ -337,7 +351,7 @@ internal static class ImeSession
         var composing = IsComposing(state);
         var modifiers = Modifiers(key);
         var plain = modifiers == ShortcutModifiers.None;
-        var vk = key.Vk != 0 ? ToggleShortcut.NormalizeHankakuKey(key.Vk) : VirtualKeyOf(key.Ch);
+        var vk = key.Vk != 0 ? ToggleShortcut.NormalizeKey(key.Vk) : VirtualKeyOf(key.Ch);
         // 左右の Alt の押下は、単独押しかを見分けるためだけに受け取る (変換中の文字はそのまま。アプリに通す)
         if (vk is VirtualKeys.LMenu or VirtualKeys.RMenu)
         {
@@ -566,7 +580,7 @@ internal static class ImeSession
             After = state.Field?.After,
             LateResults = lateResults,
             Deadline = lateResults ? 0 : long.MaxValue,
-            Context = () => CompositionController.ContextOf(state.Composition, composition),
+            Context = () => CompositionContext.ContextOf(state.Composition, composition),
         };
         return composition;
     }

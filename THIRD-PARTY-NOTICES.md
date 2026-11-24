@@ -9,12 +9,12 @@ Meltype のソースコード (このリポジトリ) には、次のものを�
 | 部品 | ライセンス | 同梱先 |
 | --- | --- | --- |
 | .NET ランタイム (Microsoft.NETCore.App, Microsoft.WindowsDesktop.App) | MIT License | `app\dotnet\` (ライセンス: `app\dotnet\LICENSE.txt`、同梱部品の通知: `app\dotnet\ThirdPartyNotices.txt`) |
-| Microsoft Visual C++ のランタイム (`msvcp140.dll`・`vcruntime140.dll` など、Mozc の変換ヘルパーが使うもの。一覧は `app\mozc\VC-RUNTIME.txt`) | Microsoft Visual Studio ソフトウェア ライセンス条項の「再頒布可能コード」(Visual Studio の VC\Redist にあり、REDIST の一覧に載っているファイル。変えずにアプリと一緒に配ることが認められている) | `app\mozc\` |
+| Microsoft Visual C++ のランタイム (`msvcp140.dll`・`vcruntime140.dll` など、Mozc の変換ヘルパーと llama-server が使うもの。一覧は `app\mozc\VC-RUNTIME.txt`・`app\zenzai\VC-RUNTIME.txt`) | Microsoft Visual Studio ソフトウェア ライセンス条項の「再頒布可能コード」(Visual Studio の VC\Redist にあり、REDIST の一覧に載っているファイル。変えずにアプリと一緒に配ることが認められている) | `app\mozc\`・`app\zenzai\` |
 | [Mozc](https://github.com/google/mozc) の変換エンジンと辞書 (`meltype_mozc_helper.exe`。Meltype 用の小さな入出力部分 `native/mozc/meltype_mozc_helper.cc` を足してビルドしたもの) | Mozc: BSD-3-Clause (Copyright Google Inc.)。辞書: IPAdic (NAIST)・ICOT・沖縄辞書 のライセンス。組み込みのライブラリ: Abseil (Apache-2.0)・Protocol Buffers (BSD-3-Clause)・Japanese Usage Dictionary など | `app\mozc\` (ライセンス: `app\mozc\MOZC-LICENSE.txt`、辞書とライブラリの全文: `app\mozc\MOZC-CREDITS.html`。Qt は使っていない) |
-| [llama.cpp](https://github.com/ggml-org/llama.cpp) の `llama-server.exe` と DLL (CPU 版。Zenzai に使う。版とハッシュは `native/zenzai/Get-Zenzai.ps1` で固定) | MIT License (Copyright The ggml authors)。組み込みの LLVM OpenMP (`libomp.dll`): Apache-2.0 WITH LLVM-exception | `app\zenzai\` (ライセンス: `app\zenzai\LICENSE-llama.cpp.txt`・`LICENSE-LLVM-OpenMP`、`app\zenzai\ZENZAI-NOTICE.txt`) |
+| [llama.cpp](https://github.com/ggml-org/llama.cpp) の `llama-server.exe` と DLL (CPU 版。Zenzai に使う。版とハッシュは `native/zenzai/Get-Zenzai.ps1` で固定。横に置く Visual C++ のランタイムの一覧は `app\zenzai\VC-RUNTIME.txt`) | MIT License (Copyright The ggml authors)。組み込みの LLVM OpenMP (`libomp.dll`): Apache-2.0 WITH LLVM-exception | `app\zenzai\` (ライセンス: `app\zenzai\LICENSE-llama.cpp.txt`・`LICENSE-LLVM-OpenMP`、`app\zenzai\ZENZAI-NOTICE.txt`) |
 | [zenz-v3.2-small](https://huggingface.co/Miwa-Keita/zenz-v3.2-small-gguf) (Zenzai のかな漢字変換モデル。`zenz-v3.2-small-Q5_K_M.gguf`) | Apache License 2.0 (Miwa-Keita) | `app\zenzai\` (ライセンス: `app\zenzai\LICENSE-zenz.txt`) |
 
-ポータブル版も通常版と同じフォルダー構成で配布します。アプリと .NET ランタイムに関するライセンス・第三者通知、および Mozc をビルドに含める場合のライセンス・辞書クレジットは、各配布物に同梱します。Mozc の VC ランタイム DLL は元のバイナリを変更せずに実行し、対象ファイルの一覧を `VC-RUNTIME.txt` に記載します。
+ポータブル版も通常版と同じフォルダー構成で配布します。アプリと .NET ランタイムに関するライセンス・第三者通知、および Mozc をビルドに含める場合のライセンス・辞書クレジットは、各配布物に同梱します。Mozc の変換ヘルパーと llama-server の横に置く VC ランタイム DLL は元のバイナリを変更せずに置き、対象ファイルの一覧をそれぞれの `VC-RUNTIME.txt` に記載します。
 
 ## Mac 版 (mac/) に同梱するもの
 
@@ -65,6 +65,48 @@ Meltype のソースコード (このリポジトリ) には、次のものを�
 ### 英字で書く語の候補 (dictionaries/loanwords.txt)
 
 リナックス → Linux のように、カタカナで打った語の候補に英字の書き方を出すのに使います。JMdict の英字で書く語 (Ｌｉｎｕｘ、ＧＨＱ) の書き方とカタカナの読みを `tools/make-loanwords.mjs` で取り出して作りました。著作権・ライセンスは英訳の候補と同じ (EDRDG、CC BY-SA 4.0) で、この派生データも CC BY-SA 4.0 です。
+
+### 英単語のカタカナ表記 (dictionaries/katakana-spellings.txt)
+
+export → エクスポート のように、英語として打った語の変換の候補にカタカナ表記を出すのに使います。JMdict のカタカナ語の英訳から括弧の説明を外し、よく使う英単語 1 語になるものを `tools/make-katakana-spellings.mjs` で取り出して作りました。英訳が一致しただけの別語を減らすため、[CMUdict](https://github.com/cmusphinx/cmudict) の発音とカタカナの子音の並びが一致する組だけを残しています。CMUdict は生成時の照合にだけ使い、実行時には使いません。著作権・ライセンスは英訳の候補と同じ (EDRDG、CC BY-SA 4.0) で、この派生データも CC BY-SA 4.0 です。
+
+CMUdict の LICENSE の全文:
+
+```
+Copyright (C) 1993-2015 Carnegie Mellon University. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+
+1. Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+   The contents of this file are deemed to be source code.
+
+2. Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in
+   the documentation and/or other materials provided with the
+   distribution.
+
+This work was supported in part by funding from the Defense Advanced
+Research Projects Agency, the Office of Naval Research and the National
+Science Foundation of the United States of America, and by member
+companies of the Carnegie Mellon Sphinx Speech Consortium. We acknowledge
+the contributions of many volunteers to the expansion and improvement of
+this dictionary.
+
+THIS SOFTWARE IS PROVIDED BY CARNEGIE MELLON UNIVERSITY ``AS IS'' AND
+ANY EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL CARNEGIE MELLON UNIVERSITY
+NOR ITS EMPLOYEES BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+```
 
 ### 候補の意味 (dictionaries/meanings.txt)
 

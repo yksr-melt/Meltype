@@ -73,12 +73,27 @@ bool IsModifier(UINT vk) {
 
 bool KeyDown(int vk) { return (GetKeyState(vk) & 0x8000) != 0; }
 
-// このスレッドでメニューを開いている (Win+X のメニュー・右クリックのメニュー・メニューバーなど: issue #862)。
-// メニューの間に打つキーはメニューのアクセスキー (Win+X の U など) なので、入力欄の IME として受け取らない
+// このスレッドで Win32 のメニューを開いている (右クリックのメニュー・メニューバーなど: issue #862)。
+// メニューの間に打つキーはアクセスキーなので、入力欄の IME として受け取らない。
+// タスクバーの XAML のメニュー (Win+X など) はこのフラグを立てないため、InTaskbar で調べる。
 bool InMenuMode() {
     GUITHREADINFO info = {sizeof(info)};
     return GetGUIThreadInfo(GetCurrentThreadId(), &info) &&
            (info.flags & (GUI_INMENUMODE | GUI_POPUPMENUMODE | GUI_SYSTEMMENUMODE)) != 0;
+}
+
+bool ClassIs(HWND window, const wchar_t* name) {
+    wchar_t buffer[32];
+    return window && GetClassNameW(window, buffer, 32) > 0 && wcscmp(buffer, name) == 0;
+}
+
+// このスレッドのフォーカスがタスクバー (複数モニターでは Shell_SecondaryTrayWnd) のメニュー・ボタンにある。
+// キーを処理するスレッドのフォーカスを打鍵と同時に読むので、メニューを開いた直後の 1 打目にも間に合う。
+// タスクバーで文字を入力するのは Windows 10 のアドレス ツールバー (Edit) だけなので、Edit は除く。
+bool InTaskbar() {
+    const HWND focus = GetFocus();
+    const HWND root = GetAncestor(focus, GA_ROOT);
+    return (ClassIs(root, L"Shell_TrayWnd") || ClassIs(root, L"Shell_SecondaryTrayWnd")) && !ClassIs(focus, L"Edit");
 }
 
 // US 配列の Alt + ` (半角/全角キー相当)。Alt はキーイベントの lParam も確認する。
@@ -306,7 +321,7 @@ STDMETHODIMP TextService::ActivateEx(ITfThreadMgr* threadMgr, TfClientId clientI
     }
     open_ = !disabled_;
 
-    candidates_ = std::make_unique<CandidateWindow>([this](int index) { SelectCandidate(index); });
+    candidates_ = std::make_unique<CandidateWindow>(threadMgr_, [this](int index) { SelectCandidate(index); });
 
     if (!disabled_) {
         langBar_ = new LangBarButton(this);
@@ -1005,7 +1020,7 @@ STDMETHODIMP TextService::OnPreservedKey(ITfContext* context, REFGUID guid, BOOL
     *eaten = FALSE;
     for (const auto& binding : preservedKeys_) {
         if (!IsEqualGUID(binding.guid, guid)) continue;
-        const UINT scan = ToggleShortcut::NormalizeHankakuKey(binding.key.uVKey) == ToggleShortcut::Hankaku || binding.key.uVKey == ToggleShortcut::Grave
+        const UINT scan = ToggleShortcut::NormalizeKey(binding.key.uVKey) == ToggleShortcut::Hankaku || binding.key.uVKey == ToggleShortcut::Grave
             ? 0x29 : MapVirtualKeyExW(binding.key.uVKey, MAPVK_VK_TO_VSC, GetKeyboardLayout(0));
         const LPARAM keyParam = static_cast<LPARAM>(scan) << 16;
         const UINT slot = ShortcutSlot(binding.key.uVKey, keyParam);
@@ -1045,6 +1060,15 @@ bool TextService::WouldEat(ITfContext* context, UINT vk, LPARAM lParam, wchar_t&
     ch = 0;
     if (disabled_ || vk >= 256) return false;
     if (IsModifier(vk) && !CapturesKey(vk, lParam)) return false;
+    // タスクバーの XAML メニュー (Win+X など) のアクセスキーと Space による選択を、メニューへ渡す (#2000)。
+    // Space を入力モードのキーに割り当てていてもメニューを優先するため、CapturesKey より前で調べる。
+    // タスクバーには変換中の文字が無いので、ここで返しても ResumeOrCommit などの後始末は要らない
+    // (このスレッドの前の入力欄で変換中だった文字は、フォーカスが移ったときに OnSetFocus で確定している)。
+    if (InTaskbar() && !KeyDown(VK_SHIFT) && !KeyDown(VK_CONTROL) && !KeyDown(VK_MENU) && !KeyDown(VK_LWIN) && !KeyDown(VK_RWIN) &&
+        (static_cast<ULONG_PTR>(lParam) & (1u << 29)) == 0) {
+        const wchar_t menuKey = CharOf(vk, lParam);
+        if (vk == VK_SPACE || (menuKey >= L'!' && menuKey <= L'~')) return false;
+    }
     // アプリが確定した打ちかけの文字があれば、このキーの前に、変換中に戻すか確定したことにする
     ResumeOrCommit(context);
     // VK_PACKET: ほかのソフト (パスワード管理・AutoHotkey など) が送り込んだ文字。送り直せないので受け取らずに通す。
@@ -1301,7 +1325,7 @@ void TextService::HandleKey(ITfContext* context, UINT vk, wchar_t ch, bool repea
     }
     // Meltype.exe につながらない (管理者として動くアプリなど) ときの 半角/全角・英数・かな: 開閉だけを切り替え、アプリには通さない
     // (アプリに通すと、PowerShell (PSReadLine) は文字の無いキーを @ として入れる)
-    const UINT key = ToggleShortcut::NormalizeHankakuKey(vk);
+    const UINT key = ToggleShortcut::NormalizeKey(vk);
     const bool modeKey = key == ToggleShortcut::Hankaku || key == ToggleShortcut::Grave || key == 0xF0 || key == 0x15;
     if (failed && modeKey && !repeat) pendingOpen_ = key == 0xF0 ? 0 : key == 0x15 ? 1 : open_ ? 0 : 1;
     FlushOpen();

@@ -7,13 +7,21 @@ using Meltype.Libraries.Lexicon;
 
 namespace Meltype.Dictionary;
 
-/// <summary>ユーザー辞書の 1 語。</summary>
-public sealed record UserWord(string Reading, string Word);
+/// <summary>
+/// ユーザー辞書の 1 語。品詞 (Pos) は変換エンジン (Mozc) に渡し、活用 (動詞・形容詞) とコストに使う。品詞の名前は、Mozc の品詞名か、
+/// 取り込んだ辞書 (Microsoft IME・Google 日本語入力・ATOK) の品詞名のまま持ち、Mozc が自分の品詞に読み替える。
+/// </summary>
+public sealed record UserWord(string Reading, string Word, string Pos = UserWord.Noun)
+{
+    /// <summary>品詞を書いていない語の品詞。</summary>
+    public const string Noun = "名詞";
+}
 
 /// <summary>
-/// ユーザー辞書 (%LOCALAPPDATA%\Meltype\userdict.txt、1 行に「読み[Tab]単語」)。
-/// 変換で最優先に使う: 変換する読みの中に登録した読みが含まれていれば、その部分は変換エンジンの区切りに関係なく
-/// 登録した単語にする (きごうとう → 記号等 を登録すると、きごうとうふくめ → 記号等|含め)。
+/// ユーザー辞書 (%LOCALAPPDATA%\Meltype\userdict.txt、1 行に「読み[Tab]単語」か「読み[Tab]単語[Tab]品詞」。品詞が無ければ名詞)。
+/// 登録した語は変換エンジン (Mozc) のユーザー辞書に渡し (<see cref="EngineWords"/>)、ほかの語との取り合いを Mozc のコストで決める。
+/// 同梱の語句 (phrases.txt) は、変換する読みの中に語句の読みが含まれていれば、その部分は変換エンジンの区切りに関係なく
+/// 語句にする (<see cref="Split"/>)。ユーザーが同じ読みを登録した語句は使わない。
 /// トレイの「ユーザー辞書...」から登録・削除する。
 /// importDirectory (Mac / Linux は データフォルダ/dictionaries) に置いた .plist (macOS の「ユーザ辞書」を書き出したもの) の語も使う (#40)。
 /// .plist の語は userdict.txt には書かず、置いたファイルをそのまま読む。
@@ -40,8 +48,11 @@ public sealed class UserDictionary
     private readonly HashSet<string> _headOnly = new(StringComparer.Ordinal);
     // 同梱の語句のうち、| で文節の区切りを書いたもの (いち|がっき → 一|学期)。読みと語句は | を除いた形で _builtIn に入れる。
     private readonly Dictionary<string, (string Reading, string Word)[]> _clauses = new(StringComparer.Ordinal);
+    // すべての語 (Lookup)
     private Dictionary<string, List<string>> _byReading = new(StringComparer.Ordinal);
-    private int _maxReadingLength;
+    // 同梱の語句 (Split。ユーザーが同じ読みを登録した語句は除き、Mozc に任せる) と、その最長の読み
+    private Dictionary<string, List<string>> _phrasesByReading = new(StringComparer.Ordinal);
+    private int _maxPhraseReadingLength;
     private readonly string? _importDirectory;
     // 最後に読んだ (読もうとした)・保存したときの userdict.txt の更新時刻と、読めたか。同じ更新時刻のまま読めなければ、読み直さない (警告を繰り返さない)
     private DateTime? _fileTime;
@@ -80,6 +91,7 @@ public sealed class UserDictionary
         }
         Load(fileTime, words);
         Version++;
+        WordsChanged?.Invoke();
         Diagnostics.Log.Info("ユーザー辞書が変わったので読み直しました。");
         return true;
     }
@@ -117,7 +129,8 @@ public sealed class UserDictionary
         }
         catch (Exception ex)
         {
-            if (warn) Diagnostics.Log.Warn($"ユーザー辞書を読めませんでした: {ex.Message}");
+            // 利用者が書いた中身から出る例外は型で分けられない (Config.DataFile)
+            if (warn) Config.DataFile.ReportUnreadable("ユーザー辞書", ex);
             return null;
         }
         return words;
@@ -160,7 +173,7 @@ public sealed class UserDictionary
             if (!Directory.Exists(directory)) return;
             files = Directory.GetFiles(directory, "*.plist");
         }
-        catch (Exception ex)
+        catch (Exception ex) when (Config.DataFile.IsFileError(ex))
         {
             Diagnostics.Log.Warn($"ユーザー辞書のフォルダを読めませんでした: {ex.Message}");
             return;
@@ -176,7 +189,8 @@ public sealed class UserDictionary
             }
             catch (Exception ex)
             {
-                Diagnostics.Log.Warn($"ユーザー辞書 {Path.GetFileName(file)} を読めませんでした: {ex.Message}");
+                // 利用者が置いた plist の中身から出る例外は型で分けられない (Config.DataFile)
+                Config.DataFile.ReportUnreadable($"ユーザー辞書 {Path.GetFileName(file)} ", ex);
             }
         }
     }
@@ -193,7 +207,7 @@ public sealed class UserDictionary
             // 制御文字 (ESC など) の入った語は、確定するとアプリにキー操作として届くので読まない
             if (parts.Length >= 2 && parts[0].Trim().Length >= MinRegisteredReadingLength && parts[1].Trim().Length > 0 && !parts[0].Any(char.IsControl) && !parts[1].Any(char.IsControl))
             {
-                words.Add(new UserWord(parts[0].Trim(), parts[1].Trim()));
+                words.Add(new UserWord(parts[0].Trim(), parts[1].Trim(), parts.Length >= 3 && parts[2].Trim() is { Length: > 0 } pos ? pos : UserWord.Noun));
             }
         }
     }
@@ -242,8 +256,14 @@ public sealed class UserDictionary
     /// <summary>変換エンジンの文節の頭から始まるときだけ使う同梱の語句の読みか (^けんりつ)。</summary>
     public bool IsHeadOnly(string reading) => _headOnly.Contains(reading);
 
-    /// <summary>登録内容が変わるたびに増える (変換結果のキャッシュを捨てるため)。</summary>
+    /// <summary>登録内容が変わるたびに増える。</summary>
     public int Version { get; private set; }
+
+    /// <summary>登録した語 (userdict.txt・.plist) が変わった。変えたスレッド (入力・UI のスレッド) で呼ぶので、受け手は待たない。</summary>
+    public event Action? WordsChanged;
+
+    /// <summary>変換エンジンに渡す語 (userdict.txt と .plist の語。同梱の語句は含めない) と、その <see cref="Version"/>。</summary>
+    public (int Version, IReadOnlyList<UserWord> Words) EngineWords() => (Version, [.. _words, .. _imported]);
 
     public int Count => _words.Count;
 
@@ -294,12 +314,12 @@ public sealed class UserDictionary
         _byReading.TryGetValue(reading, out var words) ? words : [];
 
     /// <summary>
-    /// かなを、登録した読みの部分とそれ以外に分ける。先頭から見て、その位置から始まる最も長い登録済みの読みを取る。
-    /// 登録した読みが 1 つも含まれていなければ null。
+    /// かなを、同梱の語句の読みの部分とそれ以外に分ける。先頭から見て、その位置から始まる最も長い語句の読みを取る。
+    /// 語句の読みが 1 つも含まれていなければ null。
     /// </summary>
     public List<(string Reading, string? Word)>? Split(string kana)
     {
-        if (_byReading.Count == 0 || kana.Length < MinRegisteredReadingLength) return null;
+        if (_phrasesByReading.Count == 0 || kana.Length < MinRegisteredReadingLength) return null;
         var pieces = new List<(string Reading, string? Word)>();
         var plain = new StringBuilder();
         var found = false;
@@ -307,11 +327,11 @@ public sealed class UserDictionary
         while (i < kana.Length)
         {
             string? matched = null;
-            for (var length = Math.Min(_maxReadingLength, kana.Length - i); length >= (kana.Length == 1 ? MinRegisteredReadingLength : MinSplitReadingLength); length--)
+            for (var length = Math.Min(_maxPhraseReadingLength, kana.Length - i); length >= (kana.Length == 1 ? MinRegisteredReadingLength : MinSplitReadingLength); length--)
             {
                 // 拗音・小さい母音 (じょ・ふぁ) の途中では切らない (いしょくじょうたい が しょくじ|ょうたい で い食事ょうたい になっていた)
                 if (i + length < kana.Length && KanaChars.IsSmallKana(kana[i + length])) continue;
-                if (_byReading.ContainsKey(kana.Substring(i, length)))
+                if (_phrasesByReading.ContainsKey(kana.Substring(i, length)))
                 {
                     matched = kana.Substring(i, length);
                     break;
@@ -328,7 +348,7 @@ public sealed class UserDictionary
                 pieces.Add((plain.ToString(), null));
                 plain.Clear();
             }
-            pieces.Add((matched, _byReading[matched][0]));
+            pieces.Add((matched, _phrasesByReading[matched][0]));
             found = true;
             i += matched.Length;
         }
@@ -341,40 +361,42 @@ public sealed class UserDictionary
         Rebuild();
         Version++;
         Save();
+        WordsChanged?.Invoke();
     }
 
     private void Rebuild()
     {
-        var byReading = new Dictionary<string, List<string>>(StringComparer.Ordinal);
         // 後から登録したものを先にする。.plist の語はユーザーの登録の後、同梱の語句はさらに後。
-        foreach (var word in Enumerable.Reverse(_words).Concat(_imported).Concat(_builtIn))
+        _byReading = ByReading(Enumerable.Reverse(_words).Concat(_imported).Concat(_builtIn));
+        var userReadings = _words.Concat(_imported).Select(w => w.Reading).ToHashSet(StringComparer.Ordinal);
+        _phrasesByReading = ByReading(_builtIn.Where(w => !userReadings.Contains(w.Reading)));
+        _maxPhraseReadingLength = _phrasesByReading.Count == 0 ? 0 : _phrasesByReading.Keys.Max(k => k.Length);
+    }
+
+    private static Dictionary<string, List<string>> ByReading(IEnumerable<UserWord> words)
+    {
+        var byReading = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        foreach (var word in words)
         {
             if (!byReading.TryGetValue(word.Reading, out var list)) byReading[word.Reading] = list = [];
             if (!list.Contains(word.Word)) list.Add(word.Word);
         }
-        _byReading = byReading;
-        _maxReadingLength = byReading.Count == 0 ? 0 : byReading.Keys.Max(k => k.Length);
-        _builtInOnly = _builtIn.Select(w => w.Reading).Except(_words.Concat(_imported).Select(w => w.Reading)).ToHashSet(StringComparer.Ordinal);
+        return byReading;
     }
-
-    // 同梱の語句だけにある読み (ユーザーが登録した語ではない)。
-    private HashSet<string> _builtInOnly = new(StringComparer.Ordinal);
-
-    /// <summary>ユーザーが登録した (取り込んだ) 語の読みか。同梱の語句だけの読みなら false。</summary>
-    public bool IsUserReading(string reading) => _byReading.ContainsKey(reading) && !_builtInOnly.Contains(reading);
 
     private void Save()
     {
         if (_path is null) return;
         try
         {
-            var lines = new List<string> { "# Meltype ユーザー辞書: 1 行に「読み<Tab>単語」" };
-            lines.AddRange(_words.Select(w => $"{w.Reading}\t{w.Word}"));
+            var lines = new List<string> { "# Meltype ユーザー辞書: 1 行に「読み<Tab>単語」か「読み<Tab>単語<Tab>品詞」(品詞が無ければ名詞)" };
+            // 名詞は品詞を書かない (前の版と、macOS の取り込み (MacUserDictionary.swift) が書く 2 列の行と同じ形にする)
+            lines.AddRange(_words.Select(w => w.Pos == UserWord.Noun ? $"{w.Reading}\t{w.Word}" : $"{w.Reading}\t{w.Word}\t{w.Pos}"));
             Config.DataFile.Write(_path, temp => File.WriteAllLines(temp, lines, new UTF8Encoding(true)));
             _fileTime = FileTime();
             _read = _fileTime is not null;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (Config.DataFile.IsFileError(ex))
         {
             Diagnostics.Log.Warn($"ユーザー辞書を保存できませんでした: {ex.Message}");
         }

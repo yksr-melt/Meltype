@@ -14,17 +14,48 @@ namespace Meltype.Dictionary;
 public sealed class SnippetStore
 {
     private readonly string? _path;
-    private readonly Dictionary<string, string> _snippets = new(StringComparer.Ordinal);
-    // フックのスレッド (展開) と UI スレッド (編集の画面) の両方から使う
+    private Dictionary<string, string> _snippets;
+    // フックのスレッド (展開) と UI スレッド・設定の読み直しのタイマー (編集・読み直し) から使う
     private readonly object _gate = new();
+    private readonly Config.FileStamp _stamp;
 
     public SnippetStore(string? path)
     {
         _path = path;
+        _stamp = new Config.FileStamp(path);
+        _snippets = new(StringComparer.Ordinal);
+        Reload();
+    }
+
+    private static Dictionary<string, string>? Load(string? path, Config.FileStamp stamp)
+    {
+        // 読めない・壊れているときは null (前の定型文のまま。壊れたファイルは .broken に残り、次の保存で前の定型文に戻す)
+        Dictionary<string, string>? snippets = path is not null && File.Exists(path) ? null : new(StringComparer.Ordinal);
         Config.DataFile.Load(path, "定型文", content =>
         {
-            foreach (var (name, text) in Parse(content)) _snippets[name] = text;
-        });
+            var parsed = Parse(content).ToList();
+            snippets = new(StringComparer.Ordinal);
+            foreach (var (name, text) in parsed) snippets[name] = text;
+        }, stamp);
+        return snippets;
+    }
+
+    /// <summary>
+    /// ほかのプロセス (設定アプリ) が snippets.json を書き換えていたら読み直す (<see cref="Config.FileStamp"/>)。
+    /// 編集する前にも呼び、ほかのプロセスで足した定型文を、この編集の保存で消さない。
+    /// </summary>
+    public void Refresh()
+    {
+        if (_stamp.Changed) Reload();
+    }
+
+    private void Reload()
+    {
+        // 読む前に更新時刻を覚える (読んでいる間に書かれても、次にまた読み直す)。展開 (Get) を待たせないように、読むのは lock の外
+        _stamp.Synced();
+        // 読めなかったら前の中身のまま (Config.DataFile.Load)
+        if (Load(_path, _stamp) is not { } snippets) return;
+        lock (_gate) _snippets = snippets;
     }
 
     public int Count { get { lock (_gate) return _snippets.Count; } }
@@ -49,6 +80,7 @@ public sealed class SnippetStore
     public bool Set(string name, string text)
     {
         if (!IsValidName(name) || !IsValidText(text)) return false;
+        Refresh();
         lock (_gate) _snippets[name] = text.ReplaceLineEndings("\n");
         Save();
         return true;
@@ -57,6 +89,7 @@ public sealed class SnippetStore
     public void Remove(string name)
     {
         bool removed;
+        Refresh();
         lock (_gate) removed = _snippets.Remove(name);
         if (removed) Save();
     }
@@ -73,6 +106,7 @@ public sealed class SnippetStore
     public int Import(string json)
     {
         var parsed = Parse(json).ToList();
+        Refresh();
         lock (_gate) foreach (var (name, text) in parsed) _snippets[name] = text;
         if (parsed.Count > 0) Save();
         return parsed.Count;
@@ -88,11 +122,19 @@ public sealed class SnippetStore
     private void Save()
     {
         if (_path is null) return;
+        // 読めなかったファイル (Changed のまま) は上書きしない
+        if (_stamp.Changed)
+        {
+            Diagnostics.Log.Warn("定型文のファイルを読めないので、保存しません");
+            return;
+        }
         try
         {
-            Config.DataFile.Write(_path, temp => File.WriteAllText(temp, Export(), Encoding.UTF8));
+            var json = Export();
+            Config.DataFile.Write(_path, temp => File.WriteAllText(temp, json, Encoding.UTF8));
+            _stamp.Synced();
         }
-        catch (Exception ex)
+        catch (Exception ex) when (Config.DataFile.IsFileError(ex))
         {
             Diagnostics.Log.Warn($"定型文を保存できませんでした: {ex.Message}");
         }

@@ -33,7 +33,8 @@ internal static class UserDictionaryFileTests
         var result = UserDictionaryFile.Parse([.. Encoding.Unicode.GetPreamble(), .. Encoding.Unicode.GetBytes(msime)]);
         Assert.Equal("UTF-16", result.Encoding);
         Assert.Equal(3, result.Words.Count);
-        Assert.Equal(new UserWord("めるたいぷ", "Meltype"), result.Words[1], "カタカナの読みはひらがなにする");
+        Assert.Equal(new UserWord("ゆきしろ", "雪代", "人名"), result.Words[0], "品詞は取り込んだ辞書の名前のまま残す");
+        Assert.Equal(new UserWord("めるたいぷ", "Meltype", "固有名詞"), result.Words[1], "カタカナの読みはひらがなにする");
         Assert.Equal(new UserWord("あ", "亜"), result.Words[2], "1 文字の読みも取り込む");
         Assert.Equal(0, result.Skipped);
 
@@ -42,9 +43,35 @@ internal static class UserDictionaryFileTests
         var g = UserDictionaryFile.Parse(google);
         Assert.Equal("UTF-8", g.Encoding);
         Assert.Equal(new UserWord("きごうとう", "記号等"), g.Words[0]);
+        Assert.Equal("顔文字", g.Words[1].Pos);
 
         // BOM の無い UTF-16
         Assert.Equal(1, UserDictionaryFile.Parse(Encoding.Unicode.GetBytes("ゆきしろ\t雪代\t名詞\r\n")).Words.Count, "BOM の無い UTF-16");
+    }
+
+    [Test]
+    public static void PartOfSpeech_IsKeptInUserdictAndExport()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "meltype-userdict-pos-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var path = Path.Combine(directory, "userdict.txt");
+            // 前の版の userdict.txt は品詞の列が無い。名詞として読む
+            File.WriteAllText(path, "# Meltype ユーザー辞書\nきごうとう\t記号等\n");
+            var dictionary = new UserDictionary(path, builtIn: false);
+            Assert.Equal(new UserWord("きごうとう", "記号等", UserWord.Noun), dictionary.Words.Single(), "品詞の列が無い行は名詞");
+            dictionary.AddRange([new UserWord("ぐぐる", "ググる", "動詞ラ行五段"), new UserWord("てすと", "テスト", "さ変名詞")]);
+            var lines = File.ReadAllLines(path);
+            Assert.True(lines.Contains("きごうとう\t記号等"), "名詞は前の版と同じ 2 列で書く");
+            Assert.True(lines.Contains("ぐぐる\tググる\t動詞ラ行五段"), "名詞でない品詞は 3 列目に書く");
+            var reloaded = new UserDictionary(path, builtIn: false);
+            Assert.Equal("動詞ラ行五段", reloaded.Words.Single(w => w.Word == "ググる").Pos, "読み直しても品詞が残る");
+            Assert.Equal("さ変名詞", reloaded.Words.Single(w => w.Word == "テスト").Pos, "取り込んだ辞書の品詞名のまま残す");
+            var exported = UserDictionaryFile.Parse(UserDictionaryFile.Export(reloaded.Words));
+            Assert.Equal("動詞ラ行五段", exported.Words.Single(w => w.Word == "ググる").Pos, "書き出しても品詞が残る");
+        }
+        finally { Directory.Delete(directory, recursive: true); }
     }
 
     [Test]

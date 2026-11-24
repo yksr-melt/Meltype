@@ -32,5 +32,5 @@ foreach (var length in lengths) foreach (var pair in cases.Where(p => args.Lengt
 }
 static ImeEvent Key(int vk, int ch, bool shift) => new() { Version = ImeHost.Version, Type = ImeEventType.KeyPressed, Key = new ImeKey { Vk = vk, Ch = ch, Shift = shift } };
 static class Bench { public static int Sink; }
-sealed class Environment : IImeEnvironment { public InputMode? InputMethod => null; public SnippetStore Snippets { get; } = new(null); public string? ClipboardText => null; }
+sealed class Environment : IImeEnvironment { public InputMode? InputMethod => null; public SnippetStore Snippets { get; } = new(null); public string? ClipboardText => null; public string? OtherTipVersion => null; }
 sealed class Converter : IKanjiConverter { public IReadOnlyList<ConversionClause>? Convert(ConversionRequest request) => null; }

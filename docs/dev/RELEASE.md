@@ -3,7 +3,7 @@
 ## 版を出す
 
 1. 版を上げる
-   - `src/Meltype.Windows/Meltype.Windows.csproj`・`src/Meltype.Core/Meltype.Core.csproj` の `<Version>`
+   - `src/Directory.Build.props` の `<Version>`
    - `mac/Resources/Info.plist` の `CFBundleShortVersionString` と `CFBundleVersion` (Mac 版の表示の版は Info.plist から読みます)
    - 通貨の換算に使うレートを作り直す: `node tools/make-exchange-rates.mjs` (欧州中央銀行の参照レートを `dictionaries/exchange-rates.txt` に書く。100どる → 約1.6万円 の候補で使う)
    - `docs/release-notes/<版>.md` にリリースノートを書く (例: `docs/release-notes/1.4.0.md`)。配布物に同梱し、更新したあとの初めての起動で Meltype (Windows) が見せる。GitHub のリリースの本文にも同じものを使う。タグのビルドでは、このファイルが無ければ Windows 版のビルドが止まる
@@ -26,11 +26,15 @@ Windows の [Code signing policy](CODE-SIGNING.md) と [SignPath テスト署名
 - `/release 1.2.3` … 通常の版
 - `/pre-release 1.2.3-pre.1`・`/pre-release 1.2.3-rc.1` … プレリリース (リリース候補は `rc`)
 
-bot は、main の `Meltype.Windows.csproj`・`Meltype.Core.csproj`・`Info.plist` の版が書いた版と合っているかを確かめ (版の上げ忘れを防ぐため、合っていなければ止めます)、`docs/release-notes/<版>.md` があるかを確かめ (無ければ止めます)、タグ `v1.2.3` とリリースの下書き (本文はそのファイル) を作って、そのタグで release.yml を始めます。ビルドが終わると、release.yml が下書きに配布物を付けて公開します。
+bot は、main の `src/Directory.Build.props`・`Info.plist` の版が書いた版と合っているかを確かめ (版の上げ忘れを防ぐため、合っていなければ止めます)、`docs/release-notes/<版>.md` があるかを確かめ (無ければ止めます)、タグ `v1.2.3` とリリースの下書き (本文はそのファイル) を作って、そのタグで release.yml を始めます。ビルドが終わると、release.yml が下書きに配布物を付けて公開します。
 
 ### テスト版の配布物を作る
 
 Actions の画面で release.yml をブランチに対して手で実行 (Run workflow) すると、3 つの OS のテスト版の配布物を実行結果の Artifacts に置きます (リリースには付けません)。1 つの OS だけなら、windows.yml・mac.yml・linux.yml を手で実行します。
+
+### Android のプレビューを出す
+
+[Android preview release](https://github.com/yksr-melt/Meltype/actions/workflows/android-release.yml) を `main` で手動実行し、版を `0.1.0-preview.1` の形式で指定します。署名付きの `Meltype.apk` を `android-v<版>` の Pre-release に公開します。署名用の Secrets と更新時の注意点は [Android の署名・配布手順](../../android/docs/SIGNING-DISTRIBUTION.md) を参照してください。
 
 ## 同梱の .NET の更新
 

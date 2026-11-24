@@ -13,7 +13,7 @@ namespace Meltype.Dictionary;
 /// 変換した文節 (複雑な) の英訳 (complex, complicated …) を、変換の候補の後ろに出すのに使う。
 /// </summary>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Naming", "CA1711:Identifiers should not have incorrect suffix", Justification = "日本語入力の辞書を表す既存の公開名。コレクション型を表すものではない。")]
-public sealed class TranslationDictionary
+internal sealed class TranslationDictionary
 {
     // 書き方 [TAB] 品詞 [TAB] 英訳,英訳…
     private readonly Libraries.Lexicon.PackedLines _lines;
@@ -115,23 +115,52 @@ public sealed class TranslationDictionary
 /// 選んだ英訳の記録 (%LOCALAPPDATA%\Meltype\translations.json)。普通の変換の学習より弱く効かせる:
 /// 1 回選んだら英訳の中で先頭に、2 回以上なら変換エンジンの 1 番目の候補のすぐ後ろ (2 番目) に出す。1 番目にはしない。
 /// </summary>
-public sealed class TranslationHistory
+internal sealed class TranslationHistory
 {
     private readonly string? _path;
-    private readonly Dictionary<string, Dictionary<string, int>> _counts = new(StringComparer.Ordinal);
+    // 読み直すときは、中身を書き換えずに丸ごと差し替える (Get は入力のスレッドから lock を取らずに読む)
+    private Dictionary<string, Dictionary<string, int>> _counts;
     private readonly object _gate = new();
     private readonly object _fileGate = new();
     private readonly DeferredSaver _saver;
+    private readonly FileStamp _stamp;
 
     public TranslationHistory(string? path)
     {
         _saver = new DeferredSaver(Write);
         _path = path;
-        Config.DataFile.Load(path, "英訳の学習データ", content =>
+        _stamp = new FileStamp(path);
+        _counts = new(StringComparer.Ordinal);
+        Reload();
+    }
+
+    private static Dictionary<string, Dictionary<string, int>>? Load(string? path, Config.FileStamp stamp)
+    {
+        var counts = new Dictionary<string, Dictionary<string, int>>(StringComparer.Ordinal);
+        var read = Config.DataFile.Load(path, "英訳の学習データ", content =>
         {
             var loaded = JsonSerializer.Deserialize(content, Config.LearningJsonContext.Default.Translations);
-            if (loaded is not null) foreach (var (key, value) in loaded) _counts[key] = value;
-        });
+            if (loaded is not null) foreach (var (key, value) in loaded) counts[key] = value;
+        }, stamp);
+        return read ? counts : null;
+    }
+
+    /// <summary>ほかのプロセス (設定アプリ) が translations.json を書き換えていたら読み直す (<see cref="FileStamp"/>)。</summary>
+    internal void Refresh()
+    {
+        lock (_fileGate)
+        {
+            if (_stamp.Changed) Reload();
+        }
+    }
+
+    // _fileGate の中で呼ぶ。読む前に更新時刻を覚える (読んでいる間に書かれても、次にまた読み直す)
+    private void Reload()
+    {
+        _stamp.Synced();
+        // 読めなかったら前の中身のまま (Config.DataFile.Load)
+        if (Load(_path, _stamp) is not { } counts) return;
+        lock (_gate) _counts = counts;
     }
 
     /// <summary>読みに対して選んだ回数 (多い順)。</summary>
@@ -162,13 +191,19 @@ public sealed class TranslationHistory
         {
             lock (_fileGate)
             {
+                if (_stamp.Changed)
+                {
+                    Reload();
+                    return true;
+                }
                 string json;
                 lock (_gate) json = JsonSerializer.Serialize(_counts, Config.LearningJsonContext.Default.Translations);
                 Config.DataFile.Write(_path, temp => File.WriteAllText(temp, json));
+                _stamp.Synced();
             }
             return true;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (Config.DataFile.IsFileError(ex))
         {
             Diagnostics.Log.Warn($"英訳の学習データを保存できませんでした: {ex.Message}");
             return false;

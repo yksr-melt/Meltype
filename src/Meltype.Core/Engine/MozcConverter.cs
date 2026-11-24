@@ -9,10 +9,12 @@ namespace Meltype.Engine;
 /// Mozc (Google 日本語入力のオープンソース版、BSD-3-Clause) の変換エンジン。変換ヘルパー (<see cref="IMozcHelper"/>) に 1 行ずつ変換を頼む。
 /// ヘルパーが無い・起動できない・応答しないときは null を返す (呼び出し側はかなのまま見せる)。
 /// </summary>
-public sealed class MozcConverter : IKanjiConverter, IDisposable
+internal sealed class MozcConverter : IKanjiConverter, IDisposable
 {
     private const char UnitSeparator = '\x1f';
     private const char RecordSeparator = '\x1e';
+    // 変換の答えで、ユーザー辞書の語を含む候補の頭に付く印 (GS)
+    private const char UserDictionaryMark = '\x1d';
 
     private readonly IMozcHelper _helper;
     // ヘルパーとのやり取りの順番を守る。応答を待つ間も持つので、入力スレッドでは取らない
@@ -20,9 +22,17 @@ public sealed class MozcConverter : IKanjiConverter, IDisposable
     // 変換の結果の控えと、その回数を守る。ヘルパーの応答を待つ間は持たない (_gate の中で取ってよい。逆は取らない)
     private readonly object _resultsGate = new();
     private readonly Dictionary<string, IReadOnlyList<string>> _candidates = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, List<(string Reading, IReadOnlyList<string> Candidates)>?> _conversions = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, List<(string Reading, IReadOnlyList<string> Candidates, bool UserWord)>?> _conversions = new(StringComparer.Ordinal);
     private readonly LatestRequestWorker<(string, string)> _worker;
     private volatile int _failures;
+    // 諦めてから、もう一度ヘルパーを使ってみる時刻 (Environment.TickCount64)
+    private long _retryAt;
+    // 一時的に答えない (重い・ウイルス対策ソフトが調べている) だけで、再起動までかなのままにしない (issue #2269)。
+    // 変換は Mozc が頼りなので、Zenzai (ZenzaiHolder.RetryAfter の 5 分) より早く試し直す。試して失敗したら、また同じだけ待つ
+    private const int DefaultRetryAfterMs = 60_000;
+    // 送りたいユーザー辞書の要求 (D) と、それを受け取ったヘルパーの起動の回数 (受け取っていなければ -1)。_gate の中で読み書きする
+    private string? _dictionary;
+    private int _dictionaryLaunch = -1;
 
     // 性能の計測用の回数と時間 (--perf)。ロックの中で数えるだけなので、ふだんの入力は遅くならない
     private long _requests;
@@ -44,11 +54,14 @@ public sealed class MozcConverter : IKanjiConverter, IDisposable
 
     public event Action? ResultReady;
 
+    /// <summary>何度も失敗して諦めてから、もう一度使ってみるまでの時間 (テストでは縮める)。</summary>
+    public int RetryAfterMs { get; init; } = DefaultRetryAfterMs;
+
     /// <summary>ヘルパーがあるか (起動できるかは使ってみるまで分からない)。</summary>
     public bool IsInstalled => _helper.IsInstalled;
 
-    /// <summary>使えるか。何度も失敗したら諦める。</summary>
-    public bool IsAvailable => IsInstalled && _failures < 3;
+    /// <summary>使えるか。何度も失敗したら、しばらく諦める。</summary>
+    public bool IsAvailable => IsInstalled && (_failures < 3 || Environment.TickCount64 >= Interlocked.Read(ref _retryAt));
 
     public IReadOnlyList<ConversionClause>? Convert(ConversionRequest request) => ConvertWithCandidates(request)?.Select(s => s.Clause).ToList();
 
@@ -68,7 +81,7 @@ public sealed class MozcConverter : IKanjiConverter, IDisposable
 
     /// <summary>before から Mozc に渡す文脈を決めて、request (待つ・待たない) で変換する。</summary>
     private static List<(ConversionClause Clause, IReadOnlyList<string> Candidates)>? WithContext(string hiragana, string? before,
-        Func<string, string, List<(string Reading, IReadOnlyList<string> Candidates)>?> request)
+        Func<string, string, List<(string Reading, IReadOnlyList<string> Candidates, bool UserWord)>?> request)
     {
         if (EngineContext.Sentence(before) is not { } sentence) return WithCandidates(request("", hiragana));
         var withContext = request(sentence, hiragana);
@@ -77,9 +90,9 @@ public sealed class MozcConverter : IKanjiConverter, IDisposable
         return WithCandidates(withContext.Select(s => s.Reading).SequenceEqual(plain.Select(s => s.Reading)) ? withContext : plain);
     }
 
-    private static List<(ConversionClause Clause, IReadOnlyList<string> Candidates)>? WithCandidates(List<(string Reading, IReadOnlyList<string> Candidates)>? segments) =>
+    private static List<(ConversionClause Clause, IReadOnlyList<string> Candidates)>? WithCandidates(List<(string Reading, IReadOnlyList<string> Candidates, bool UserWord)>? segments) =>
         segments is { Count: > 0 }
-            ? segments.Select(s => (new ConversionClause(s.Reading, (s.Candidates.Count > 0 ? s.Candidates[0] : null) ?? s.Reading), s.Candidates)).ToList()
+            ? segments.Select(s => (new ConversionClause(s.Reading, (s.Candidates.Count > 0 ? s.Candidates[0] : null) ?? s.Reading) { UserWord = s.UserWord }, s.Candidates)).ToList()
             : null;
 
     /// <summary>読みの変換候補 (多い順)。直前の変換で同じ読みの文節があればその候補、無ければその読みだけで変換する (deadline まで待つ)。</summary>
@@ -124,6 +137,55 @@ public sealed class MozcConverter : IKanjiConverter, IDisposable
     }
 
     /// <summary>
+    /// Mozc のユーザー辞書を、words の語 (読み・語・Mozc の品詞名) で入れ替える。入れ替えて変換に使えるようになったら true。
+    /// 受け取っていないヘルパー (送るのに失敗した・起動し直した) には、次の要求の前に送る。
+    /// ヘルパーの応答を待つので、入力スレッドでは呼ばない。
+    /// </summary>
+    public bool SetUserDictionary(IReadOnlyList<(string Reading, string Word, string Pos)> words)
+    {
+        var request = "D\t" + string.Join(RecordSeparator, words.Select(w => string.Join(UnitSeparator, Field(w.Reading), Field(w.Word), Field(w.Pos))));
+        lock (_gate)
+        {
+            if (_disposed) return false;
+            _dictionary = request;
+            _dictionaryLaunch = -1;
+            // 前の語での結果を控えから使わない (送るのに失敗しても、次の変換で送り直す)
+            ClearCache();
+            if (!IsAvailable) return false;
+            if (_helper.Start()) return DeliverDictionary();
+            Fail();
+            return false;
+        }
+
+        static string Field(string text) => Clean(text).Replace(UnitSeparator, ' ').Replace(RecordSeparator, ' ');
+    }
+
+    // _dictionary を、まだ受け取っていない動いているヘルパーに送る (_gate の中で呼ぶ)。受け取ったら true
+    private bool DeliverDictionary()
+    {
+        if (_dictionary is not { } dictionary) return false;
+        if (_dictionaryLaunch == _helper.Launches) return true;
+        switch (_helper.Send(dictionary))
+        {
+            case "OK":
+                _dictionaryLaunch = _helper.Launches;
+                _failures = 0;
+                // 登録した語で候補が変わるので、控えを捨てる
+                ClearCache();
+                return true;
+            case null:
+                // 答えなかった。次の要求の前に送り直す
+                Fail();
+                return false;
+            case var answer:
+                // 要求を知らない前の版のヘルパー (空行)・受け取れない語 (NG)。送り直しても同じなので送らない
+                Diagnostics.Log.Warn($"Mozc にユーザー辞書を渡せませんでした ({(answer.Length == 0 ? "要求を知らない前の版のヘルパー" : answer)})。登録した語が変換に出ません。");
+                _dictionary = null;
+                return false;
+        }
+    }
+
+    /// <summary>
     /// 文字列 (漢字かな混じり) の読み (ひらがな)。逆変換できなければ null。
     /// 再変換とユーザー辞書の登録で呼ぶ。キャッシュせず、ヘルパーの応答を待つ。
     /// </summary>
@@ -140,32 +202,24 @@ public sealed class MozcConverter : IKanjiConverter, IDisposable
     /// <summary>1 行送って 1 行受け取る (_gate の中で呼ぶ)。失敗したら・起動しているあいだは null。</summary>
     private string? Send(string request)
     {
-        try
+        if (!_helper.Start())
         {
-            var started = Stopwatch.GetTimestamp();
-            var line = _helper.Send(request);
-            _helperCalls++;
-            _helperTicks += Stopwatch.GetTimestamp() - started;
-
-            if (line is null)
-            {
-                Fail();
-                return null;
-            }
-
-            _failures = 0;
-            return line;
-        }
-        catch (Exception ex)
-        {
-            Diagnostics.Log.Warn($"Mozc を使えませんでした: {ex.Message}");
             Fail();
             return null;
         }
+        // 受け取っていないヘルパーには、先にユーザー辞書を送る。答えなかったら要求は送らない (辞書の無い結果を控えない。次の要求で送り直す)
+        if (_dictionary is not null && !DeliverDictionary() && _dictionary is not null) return null;
+        var started = Stopwatch.GetTimestamp();
+        var line = _helper.Send(request);
+        _helperCalls++;
+        _helperTicks += Stopwatch.GetTimestamp() - started;
+        if (line is null) Fail();
+        else _failures = 0;
+        return line;
     }
 
     /// <summary>入力スレッドからの問い合わせ。キャッシュに無ければワーカーに頼み、deadline (Environment.TickCount64) まで待つ。</summary>
-    private List<(string Reading, IReadOnlyList<string> Candidates)>? Query(string context, string reading, long deadline)
+    private List<(string Reading, IReadOnlyList<string> Candidates, bool UserWord)>? Query(string context, string reading, long deadline)
     {
         if (string.IsNullOrEmpty(reading) || !IsAvailable) return null;
         var request = (Clean(context), Clean(reading));
@@ -174,7 +228,7 @@ public sealed class MozcConverter : IKanjiConverter, IDisposable
         return _worker.Wait(request, ConversionRequest.RemainingMs(deadline)) && TryCached(request, out result) ? result : null;
     }
 
-    private bool TryCached((string Context, string Reading) request, out List<(string Reading, IReadOnlyList<string> Candidates)>? result)
+    private bool TryCached((string Context, string Reading) request, out List<(string Reading, IReadOnlyList<string> Candidates, bool UserWord)>? result)
     {
         result = null;
         if (_disposed) return false;
@@ -183,7 +237,7 @@ public sealed class MozcConverter : IKanjiConverter, IDisposable
             if (!_conversions.TryGetValue(request.Context + "\t" + request.Reading, out result)) return false;
             _requests++;
             _cacheHits++;
-            foreach (var (segmentReading, candidates) in result ?? []) _candidates[segmentReading] = candidates;
+            foreach (var (segmentReading, candidates, _) in result ?? []) _candidates[segmentReading] = candidates;
             return true;
         }
     }
@@ -208,21 +262,13 @@ public sealed class MozcConverter : IKanjiConverter, IDisposable
         lock (_gate)
         {
             if (_disposed || !IsAvailable) return false;
-            try
-            {
-                _helper.Start();
-                return true;
-            }
-            catch (Exception ex)
-            {
-                Diagnostics.Log.Warn($"Mozc を使えませんでした: {ex.Message}");
-                Fail();
-                return false;
-            }
+            if (_helper.Start()) return true;
+            Fail();
+            return false;
         }
     }
 
-    private List<(string Reading, IReadOnlyList<string> Candidates)>? Request(string context, string reading)
+    private List<(string Reading, IReadOnlyList<string> Candidates, bool UserWord)>? Request(string context, string reading)
     {
         if (string.IsNullOrEmpty(reading) || !IsAvailable) return null;
         context = Clean(context);
@@ -239,36 +285,27 @@ public sealed class MozcConverter : IKanjiConverter, IDisposable
                 {
                     _cacheHits++;
                     // 候補の控えは「直前の変換」のものを使うので、使い回したときも控えを入れ直す
-                    foreach (var (segmentReading, candidates) in known ?? []) _candidates[segmentReading] = candidates;
+                    foreach (var (segmentReading, candidates, _) in known ?? []) _candidates[segmentReading] = candidates;
                     return known;
                 }
             }
-            try
+            var line = Send($"C\t{context}\t{reading}");
+            if (line is null) return null;
+            if (line.Length == 0) return Remember(key, null);
+            var segments = new List<(string, IReadOnlyList<string>, bool)>();
+            foreach (var record in line.Split(RecordSeparator))
             {
-                var line = Send($"C\t{context}\t{reading}");
-                if (line is null) return null;
-                if (line.Length == 0) return Remember(key, null);
-                var segments = new List<(string, IReadOnlyList<string>)>();
-                foreach (var record in line.Split(RecordSeparator))
+                var fields = record.Split(UnitSeparator);
+                if (fields[0].Length == 0) continue;
+                var candidates = fields.Skip(1).Select(c => c.TrimStart(UserDictionaryMark)).Where(c => c.Length > 0).Distinct().ToList();
+                segments.Add((fields[0], candidates, fields.Length > 1 && fields[1].StartsWith(UserDictionaryMark)));
+                lock (_resultsGate)
                 {
-                    var fields = record.Split(UnitSeparator);
-                    if (fields[0].Length == 0) continue;
-                    var candidates = fields.Skip(1).Where(c => c.Length > 0).Distinct().ToList();
-                    segments.Add((fields[0], candidates));
-                    lock (_resultsGate)
-                    {
-                        if (_candidates.Count > 512) _candidates.Clear();
-                        _candidates[fields[0]] = candidates;
-                    }
+                    if (_candidates.Count > 512) _candidates.Clear();
+                    _candidates[fields[0]] = candidates;
                 }
-                return Remember(key, segments);
             }
-            catch (Exception ex)
-            {
-                Diagnostics.Log.Warn($"Mozc を使えませんでした: {ex.Message}");
-                Fail();
-                return null;
-            }
+            return Remember(key, segments);
         }
     }
 
@@ -283,18 +320,11 @@ public sealed class MozcConverter : IKanjiConverter, IDisposable
     }
 
     /// <summary>変換の控えの使い回しと、ヘルパーへの問い合わせの回数・時間 (性能の計測用)。入力した文字は含まない。</summary>
-    public MozcStatistics Statistics()
+    internal MozcStatistics Statistics()
     {
         lock (_gate)
         {
-            long workingSet = 0;
-            try
-            {
-                workingSet = _helper.WorkingSet;
-            }
-            catch
-            {
-            }
+            var workingSet = _helper.WorkingSet;
             lock (_resultsGate)
             {
                 return new MozcStatistics(_requests, _cacheHits, _candidateRequests, _candidateCacheHits, _helperCalls,
@@ -304,7 +334,7 @@ public sealed class MozcConverter : IKanjiConverter, IDisposable
     }
 
     /// <summary>変換の結果を覚えておく。</summary>
-    private List<(string Reading, IReadOnlyList<string> Candidates)>? Remember(string key, List<(string Reading, IReadOnlyList<string> Candidates)>? segments)
+    private List<(string Reading, IReadOnlyList<string> Candidates, bool UserWord)>? Remember(string key, List<(string Reading, IReadOnlyList<string> Candidates, bool UserWord)>? segments)
     {
         lock (_resultsGate)
         {
@@ -319,7 +349,7 @@ public sealed class MozcConverter : IKanjiConverter, IDisposable
 
     private void Fail()
     {
-        _failures++;
+        if (++_failures >= 3) Interlocked.Exchange(ref _retryAt, Environment.TickCount64 + RetryAfterMs);
         _helper.Reset();
     }
 
@@ -341,5 +371,5 @@ public sealed class MozcConverter : IKanjiConverter, IDisposable
 /// MozcConverter の計測値 (起動してからの合計)。Requests / CacheHits は変換、CandidateRequests / CandidateCacheHits は候補の一覧、
 /// HelperCalls / HelperTime は変換ヘルパーとのやり取り (学習・保存も含む)、HelperWorkingSet は変換ヘルパーの使っているメモリ (起動していなければ 0)。
 /// </summary>
-public readonly record struct MozcStatistics(long Requests, long CacheHits, long CandidateRequests, long CandidateCacheHits,
+internal readonly record struct MozcStatistics(long Requests, long CacheHits, long CandidateRequests, long CandidateCacheHits,
     long HelperCalls, TimeSpan HelperTime, long HelperWorkingSet);

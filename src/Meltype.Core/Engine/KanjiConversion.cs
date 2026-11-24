@@ -9,7 +9,11 @@ namespace Meltype.Engine;
 /// 文節 1 つ分の変換結果。Reading はその文節の読み (ひらがな)。
 /// Zenzai は、この文字列が Zenzai の答えか (変換ボックスに「Zenzai」と出す。issue #1152)。
 /// </summary>
-public sealed record ConversionClause(string Reading, string Text, bool Zenzai = false);
+internal sealed record ConversionClause(string Reading, string Text, bool Zenzai = false)
+{
+    /// <summary>Mozc がユーザー辞書の語を含む候補にした文節 (活用した形も含む)。</summary>
+    public bool UserWord { get; init; }
+}
 
 /// <summary>
 /// 助詞だけの文節の読み。変換エンジンは助詞だけの文節を漢字にしてしまう (github + に + push → 二) ので、かなのまま使う。
@@ -27,7 +31,7 @@ internal static class JapaneseParticles
 /// <param name="Before">
 /// キャレットの前の確定済みの文字列そのまま (変換の文脈として使うだけで、結果には含めない)。どこまでをどう使うかは変換エンジンが決める。
 /// </param>
-public sealed record ConversionRequest(string Hiragana, string? Before)
+internal sealed record ConversionRequest(string Hiragana, string? Before)
 {
     /// <summary>
     /// Zenzai にも頼むか。英日の区切りの 2 番目以降の案と、文節ごとの候補に足す「その読みだけの変換」は頼まない。
@@ -49,7 +53,7 @@ public sealed record ConversionRequest(string Hiragana, string? Before)
 /// <summary>
 /// ひらがな → 漢字かな混じりの変換。Meltype 自身は変換の辞書を持たず、全 OS で Mozc (と Zenzai) を使う (<see cref="HybridConverter"/>)。
 /// </summary>
-public interface IKanjiConverter
+internal interface IKanjiConverter
 {
     /// <summary>文節に区切って変換する。変換できなければ (変換エンジンが使えない・Deadline までに答えが無い) null。</summary>
     IReadOnlyList<ConversionClause>? Convert(ConversionRequest request);

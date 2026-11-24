@@ -6,7 +6,7 @@ using Meltype.Libraries.Lexicon;
 namespace Meltype.Detection;
 
 /// <summary>単語集合と、その全 prefix の集合。判定はフックのスレッドで走るので O(1) で引けるようにしておく。</summary>
-public sealed class WordList
+internal sealed class WordList
 {
     private readonly HashSet<string> _words = new(StringComparer.Ordinal);
     private readonly Dictionary<char, List<string>> _byFirstLetter = [];
