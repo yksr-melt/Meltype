@@ -3,14 +3,17 @@
 
 using System.Runtime.InteropServices.JavaScript;
 using System.Runtime.Versioning;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Meltype.Engine;
 using Meltype.Ime;
 
 namespace Meltype.Web;
 
 /// <summary>
-/// ブラウザーの入力欄 (web-ime/meltype-web.js) から呼ぶ関数。出来事は <see cref="ImeEvent"/> の JSON、答えは <see cref="ImeOutput"/> の JSON。
-/// 設定・学習データはブラウザーのメモリー上のファイル (/meltype) に置く。保存はページの側が IndexedDB に写す。
+/// ブラウザーの入力欄 (web-ime/meltype-web.js・web-engine/src/meltype.js) から呼ぶ関数。出来事は <see cref="ImeEvent"/> の JSON、答えは <see cref="ImeOutput"/> の JSON。
+/// 設定・学習データはブラウザーのメモリー上のファイル (<see cref="DataDirectory"/>) に置く。残すときはページの側が
+/// <see cref="ExportData"/> で取り出して IndexedDB に保存し、次に開いたときに <see cref="ImportData"/> で戻す。
 /// </summary>
 [SupportedOSPlatform("browser")]
 public static partial class WebExports
@@ -23,7 +26,9 @@ public static partial class WebExports
     private static HybridConverter? s_converter;
     private static readonly List<ImeHost> s_hosts = [];
 
-    private static MeltypeRuntime Runtime => s_runtime ??= new MeltypeRuntime("/meltype");
+    private const string DataDirectory = "/meltype";
+
+    private static MeltypeRuntime Runtime => s_runtime ??= new MeltypeRuntime(DataDirectory);
 
     /// <summary>Mozc の WebAssembly に要求 1 行を渡し、答えの 1 行を受け取る (失敗なら null)。</summary>
     [JSImport("mozcRequest", "meltype")]
@@ -56,6 +61,40 @@ public static partial class WebExports
 
     [JSExport]
     public static string Version() => Config.ProjectInfo.CoreVersion;
+
+    /// <summary>
+    /// 設定・学習データのファイルを {"相対パス": "中身"} の JSON で返す。ログは入れない。
+    /// Core はファイルを少し遅れて書くので、ページは確定のたびではなく、間を空けて呼ぶ。
+    /// </summary>
+    [JSExport]
+    public static string ExportData()
+    {
+        var files = new Dictionary<string, string>();
+        if (Directory.Exists(DataDirectory))
+        {
+            foreach (var path in Directory.EnumerateFiles(DataDirectory, "*", SearchOption.AllDirectories))
+            {
+                if (path.EndsWith(".log", StringComparison.Ordinal)) continue;
+                files[Path.GetRelativePath(DataDirectory, path)] = File.ReadAllText(path);
+            }
+        }
+        return JsonSerializer.Serialize(files, WebJsonContext.Default.DictionaryStringString);
+    }
+
+    /// <summary><see cref="ExportData"/> で取り出したファイルを戻す。<see cref="Init"/> の前に呼ぶ (Core は作るときにファイルを読む)。</summary>
+    [JSExport]
+    public static void ImportData(string json)
+    {
+        if (s_runtime is not null) throw new InvalidOperationException("ImportData は Init の前に呼んでください");
+        var root = Path.GetFullPath(DataDirectory) + Path.DirectorySeparatorChar;
+        foreach (var (name, content) in JsonSerializer.Deserialize(json, WebJsonContext.Default.DictionaryStringString) ?? [])
+        {
+            var path = Path.GetFullPath(Path.Combine(DataDirectory, name));
+            if (!path.StartsWith(root, StringComparison.Ordinal)) throw new ArgumentException($"保存先の外のファイルです: {name}");
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, content);
+        }
+    }
 
     private sealed class WebEnvironment : IImeEnvironment
     {
@@ -90,3 +129,6 @@ public static partial class WebExports
         }
     }
 }
+
+[JsonSerializable(typeof(Dictionary<string, string>))]
+internal sealed partial class WebJsonContext : JsonSerializerContext;

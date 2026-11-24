@@ -1,0 +1,46 @@
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Copyright (C) 2026 hisiragi -->
+<!-- Meltype Web Engine を試すページ。web-engine/ を静的なサーバーで開き、/example/ を見る (build.sh で dist/ を作ってから) -->
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Meltype Web Engine の例</title>
+<style>
+  body { margin: 0 auto; max-width: 720px; padding: 24px 16px; font: 16px/1.6 system-ui, sans-serif; background: Canvas; color: CanvasText; }
+  textarea, input, [contenteditable] { display: block; width: 100%; box-sizing: border-box; font: inherit; padding: 8px 10px; border: 1px solid GrayText; border-radius: 6px; }
+  textarea { height: 8em; }
+  [contenteditable] { min-height: 4em; }
+  label { display: block; margin: 16px 0 4px; font-weight: 600; }
+  #status { color: GrayText; font-size: 14px; }
+</style>
+</head>
+<body>
+<h1>Meltype Web Engine の例</h1>
+<p id="status">読み込み中…</p>
+<label for="area">textarea</label>
+<textarea id="area" placeholder="kyouhagooglede kensakusita"></textarea>
+<label for="line">input</label>
+<input id="line" placeholder="nijigadeta">
+<label id="rich-label">contenteditable</label>
+<div id="rich" contenteditable="true" aria-labelledby="rich-label"></div>
+<label for="password">password (Meltype は何もしない)</label>
+<input id="password" type="password">
+
+<script src="../dist/meltype.js"></script>
+<script>
+  const status = document.getElementById("status");
+  Meltype.load({
+    onProgress: ({ phase, loaded, total }) => {
+      if (phase === "dictionary" && total) status.textContent = `辞書を読み込み中… ${Math.round(loaded / total * 100)}%`;
+    },
+  }).then((engine) => {
+    for (const id of ["area", "line", "rich", "password"]) engine.attach(document.getElementById(id));
+    status.textContent = `準備できました (Meltype ${engine.version}${engine.mozc ? "" : "、漢字変換なし"})`;
+  }, (error) => {
+    status.textContent = `読み込めませんでした: ${error.message}`;
+  });
+</script>
+</body>
+</html>
