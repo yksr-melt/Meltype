@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 hisiragi
+// Copyright (C) 2026 Yukishiro
 //
 // ブラウザー版 (web-ime/) の Mozc。meltype_mozc_helper と同じ要求 1 行を、標準入出力ではなく関数で受けて答える。
 //   meltype_mozc_request("C\t前の文字列\t読み") → 答えの 1 行 (次の呼び出しまで有効)
@@ -41,6 +41,8 @@ EMSCRIPTEN_KEEPALIVE const char* meltype_mozc_request(const char* line) {
     g_answer = g_helper->Learn(fields[1], fields[2]) ? "OK" : "NG";
   } else if (fields[0] == "R" && fields.size() >= 2) {
     g_answer = g_helper->Reverse(fields[1]);
+  } else if (fields[0] == "D" && fields.size() >= 2) {
+    g_answer = g_helper->SetDictionary(fields[1]) ? "OK" : "NG";
   } else if (fields[0] == "S") {
     g_answer = g_helper->Save() ? "OK" : "NG";
   } else {
