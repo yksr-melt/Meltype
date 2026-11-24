@@ -90,6 +90,16 @@ internal sealed class App : Application
                 new Setter(Layoutable.HorizontalAlignmentProperty, HorizontalAlignment.Left),
             },
         });
+        // 上のページがスクロールしても境目が分かるように、線で区切る。左右の余白は page にそろえる
+        Styles.Add(new Style(x => x.OfType<Border>().Class("preview"))
+        {
+            Setters =
+            {
+                new Setter(Border.PaddingProperty, new Thickness(32, 12)),
+                new Setter(Border.BorderThicknessProperty, new Thickness(0, 1, 0, 0)),
+                new Setter(Border.BorderBrushProperty, new DynamicResourceExtension("CardBorder")),
+            },
+        });
         Styles.Add(new Style(x => x.OfType<Border>().Class("sidebar").Descendant().OfType<ListBox>())
         {
             Setters = { new Setter(ListBox.BackgroundProperty, Brushes.Transparent) },
