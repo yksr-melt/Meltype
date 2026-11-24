@@ -300,6 +300,10 @@ jobs:
         run: |
           test -x /opt/meltype/ibus-engine-meltype
           test -x /opt/meltype/mozc/meltype_mozc_helper
+          test -f /opt/meltype/libSkiaSharp.so
+          test -f /opt/meltype/libHarfBuzzSharp.so
+          /opt/meltype/zenzai/llama-server --version
+          ls /opt/meltype/zenzai/*.gguf
           grep -q '<exec>/opt/meltype/ibus-engine-meltype' /usr/share/ibus/component/meltype.xml
           test -f /usr/lib/fcitx5/meltype.so
           # fcitx5 のアドオンが Arch の fcitx5 のライブラリで読み込めるか (未解決のシンボルが無いか)

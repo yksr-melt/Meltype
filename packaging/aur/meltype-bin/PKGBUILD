@@ -27,10 +27,14 @@ package() {
     local src="$srcdir/Meltype-linux" target=/opt/meltype
 
     install -d "$pkgdir$target/mozc"
-    install -m 644 "$src/libMeltypeNative.so" "$src/icon.png" "$src/LICENSE" "$src/THIRD-PARTY-NOTICES.md" "$pkgdir$target/"
+    install -m 644 "$src/libMeltypeNative.so" "$src/libSkiaSharp.so" "$src/libHarfBuzzSharp.so" "$src/icon.png" "$src/LICENSE" "$src/THIRD-PARTY-NOTICES.md" "$pkgdir$target/"
     install -m 755 "$src/ibus-engine-meltype" "$pkgdir$target/"
     install -m 755 "$src/mozc/meltype_mozc_helper" "$pkgdir$target/mozc/"
     install -m 644 "$src"/mozc/MOZC-* "$pkgdir$target/mozc/"
+    # Zenzai のモデルと共有ライブラリは、リリースのディレクトリ構成を保って配置する。
+    cp -R "$src/zenzai" "$pkgdir$target/"
+    find "$pkgdir$target/zenzai" -type f -exec chmod 644 {} +
+    chmod 755 "$pkgdir$target/zenzai/llama-server"
 
     install -d "$pkgdir/usr/share/ibus/component"
     sed "s|@DIR@|$target|g" "$src/meltype.xml" > "$pkgdir/usr/share/ibus/component/meltype.xml"
