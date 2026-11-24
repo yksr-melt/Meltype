@@ -5,7 +5,7 @@ namespace Meltype.Engine;
 
 /// <summary>
 /// Zenzai (llama-server + zenz の GGUF) の持ち主。設定で ON のときだけ作り、指定の場所・GPU の設定が変わるたびに作り直す。
-/// 使えなくなった (作れない・変換で例外になった <see cref="Failed"/>・何度も失敗して ZenzaiConverter が諦めた) ときは止めて、
+/// 使えなくなった (作れない・何度も失敗して ZenzaiConverter が諦めた) ときは止めて、
 /// しばらくたってから作り直す (打つたびに例外にしない。一時的な失敗で、ずっと止めたままにもしない。#973)。
 /// 続けて使えないときは、待つ時間を <see cref="RetryAfter"/> から倍にしていく (<see cref="MaxRetryAfter"/> まで)。
 /// 止める (Dispose) のはここだけで、使う側 (HybridConverter) は止めない。
@@ -66,7 +66,9 @@ internal sealed class ZenzaiHolder(Func<string, string, string, ZenzaiConverter>
             }
             catch (Exception ex)
             {
-                // 作れないとき (#973: 同梱の .NET に System.Net.Http が無い) は、変換は Mozc で続ける
+                // 作れないとき (#973: 同梱の .NET に System.Net.Http が無い) は、変換は Mozc で続ける。
+                // アセンブリが欠けている・合わないときの例外は、FileNotFoundException・TypeLoadException・MissingMethodException・BadImageFormatException など
+                // 型で列挙しきれないので、作る所は型で絞らない (絞ると入力のスレッドまで届き、打つたびに作り直して同じ例外になる)
                 // (HybridConverter は Zenzai が無ければ今までどおり変換する)。例外の中身を書くのは、この場所で 1 回目だけ
                 var wait = WaitBeforeRetry();
                 var detail = _loggedCreateError ? ex.Message : ex.ToString();
@@ -75,12 +77,6 @@ internal sealed class ZenzaiHolder(Func<string, string, string, ZenzaiConverter>
             }
         }
         return _zenzai;
-    }
-
-    /// <summary>変換で例外になった Zenzai を止める (HybridConverter から)。しばらくたってから作り直す。</summary>
-    public void Failed(ZenzaiConverter failed)
-    {
-        if (ReferenceEquals(failed, _zenzai)) StopAndWait("変換で例外になったので Zenzai を止めました");
     }
 
     public void Dispose()

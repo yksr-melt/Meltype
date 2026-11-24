@@ -21,7 +21,7 @@ namespace Meltype.Engine;
 /// 起動はバックグラウンドで行い、準備できるまでの変換は待たずに null を返す。
 /// 結果は文節に区切らず、読み全体 1 つの文節で返す。
 /// </summary>
-public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
+internal sealed class ZenzaiConverter : IKanjiConverter, IDisposable
 {
     private const char InputMark = '';
     private const char OutputMark = '';
@@ -62,8 +62,13 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     private const int SettleMs = 60;
 
     // 応答が遅かった (CPU の負荷が高いなど) ときは、しばらく使わず Mozc に任せる。
-    private const int BackoffMs = 5000;
+    private const int DefaultPauseMs = 5000;
     private long _pausedUntil;
+    // 続けて間に合わなくなった最初の時刻 (間に合えば 0)。_gate の中で読み書きする
+    private long _timingOutSince;
+
+    /// <summary>応答が遅かったときに休む時間 (テストでは縮める)。</summary>
+    public int PauseMs { get; init; } = DefaultPauseMs;
 
     /// <param name="serverPath">llama-server の実行ファイル。</param>
     /// <param name="modelPath">zenz の GGUF ファイル。</param>
@@ -93,8 +98,8 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
         return arguments;
     }
 
-    /// <summary>すでに動いている llama-server を使う (テストと Windows の SelfTest 用)。</summary>
-    public ZenzaiConverter(Uri endpoint, int timeoutMs = DefaultTimeoutMs) : this("", "", timeoutMs)
+    /// <summary>すでに動いている llama-server を使う (テストと自己診断の SelfCheck 用)。</summary>
+    internal ZenzaiConverter(Uri endpoint, int timeoutMs = DefaultTimeoutMs) : this("", "", timeoutMs)
     {
         _fixedEndpoint = endpoint;
         _endpoint = endpoint;
@@ -109,6 +114,12 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
 
     /// <summary>何度も失敗して諦めたか (起動しない・答えない)。ファイルは見ない (ZenzaiHolder が変換のたびに見る)。</summary>
     public bool GaveUp => _failures >= 3;
+
+    /// <summary>
+    /// 間に合わないのがこの時間続いたら諦める (接続だけ受けて答えなくなった llama-server を作り直す: issue #2270)。
+    /// 回数で諦めると、少しのあいだ遅いだけ (ほかの処理で CPU が重い) の llama-server まで止めて、5 分使えなくなるので時間で見る。
+    /// </summary>
+    public int GiveUpAfterMs { get; init; } = 60_000;
 
     /// <summary>llama-server が起動して、変換を頼めるか (起動中は false)。</summary>
     public bool IsReady { get { lock (_gate) return _ready; } }
@@ -132,7 +143,6 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     public IReadOnlyList<ConversionClause>? Convert(ConversionRequest request)
     {
         var (hiragana, before) = (request.Hiragana, request.Before);
-        ThrowWorkerFailure();
         if (string.IsNullOrEmpty(hiragana) || hiragana.Length > MaxReading || !IsAvailable || Environment.TickCount64 < Interlocked.Read(ref _pausedUntil)) return null;
         var context = EngineContext.Passage(before) ?? NeutralContext;
         var key = context + "\u0000" + hiragana;
@@ -145,16 +155,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
         var live = new LiveRequest(hiragana, context, key);
         _worker.Submit(live);
         if (!_worker.Wait(live, ConversionRequest.RemainingMs(request.Deadline))) return null;
-        ThrowWorkerFailure();
         lock (_gate) return _cache.TryGetValue(key, out var answered) && answered is not null ? [new ConversionClause(hiragana, answered)] : null;
-    }
-
-    // ワーカーの例外は入力スレッドで投げ直す (HybridConverter が受けて持ち主に知らせる: #973)
-    private Exception? _workerFailure;
-
-    private void ThrowWorkerFailure()
-    {
-        if (Interlocked.Exchange(ref _workerFailure, null) is { } failure) throw new InvalidOperationException("Zenzai の変換で例外になりました", failure);
     }
 
     private readonly record struct LiveRequest(string Hiragana, string Context, string Key);
@@ -167,9 +168,12 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
             // 壊れた答えは知らせる (使うかは HybridConverter が Mozc の候補と比べて決めるので、ここでは分からない。使わなければ表示は変わらない)
             if (ConvertNow(request.Hiragana, request.Context, request.Key) is not null) ResultReady?.Invoke();
         }
-        catch (Exception ex)
+        catch
         {
-            Volatile.Write(ref _workerFailure, ex);
+            // 失敗は ConvertNow の中で null にするので、ここに来るのはコードの誤り。使い続けると要求のたびに同じ例外になるので諦め
+            // (ZenzaiHolder が止めて作り直す)、例外は背景の処理の一番外 (LatestRequestWorker) に投げてログに 1 回書く
+            Fail();
+            throw;
         }
     }
 
@@ -177,15 +181,20 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     {
         var started = Environment.TickCount64;
         var answer = Complete(Prompt(hiragana, context));
-        // 読みのまま (変換していない: かんたん → かんたん) の答えは使わない。Mozc に任せる。
+        // 読みのまま (変換していない: かんたん → かんたん) の答えは使わない。Mozc に任せる。記号の幅は、zenz に半角で渡すので見ない (ほんとう？ → ほんとう?)。
         // 壊れた答え (はーどうぇ → ハードウェアウェア…) かは、Mozc の候補と比べられる HybridConverter が決める
-        var text = answer == hiragana ? null : answer;
+        var text = answer is null || ToHalfWidth(answer) == ToHalfWidth(hiragana) ? null : answer;
         var slow = Environment.TickCount64 - started >= _timeoutMs;
         lock (_gate)
         {
-            if (slow) Interlocked.Exchange(ref _pausedUntil, Environment.TickCount64 + BackoffMs);
-            if (answer is null && !slow) _failures++;
-            else if (answer is not null) { _failures = 0; _hasAnswered = true; }
+            if (slow) Interlocked.Exchange(ref _pausedUntil, Environment.TickCount64 + PauseMs);
+            if (answer is null && slow)
+            {
+                if (_timingOutSince == 0) _timingOutSince = Environment.TickCount64;
+                else if (Environment.TickCount64 - _timingOutSince >= GiveUpAfterMs) _failures = 3;
+            }
+            else if (answer is null) _failures++;
+            else { _failures = 0; _timingOutSince = 0; _hasAnswered = true; }
             if (_cache.Count >= MaxCache) _cache.Clear();
             // 使わないと決めた答えも覚える (打鍵のたびに聞き直さない)。失敗・遅いときは覚えない
             if (answer is not null && !slow) _cache[key] = text;
@@ -197,9 +206,20 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     internal static string Prompt(string hiragana, string? context)
     {
         var sb = new StringBuilder();
-        if (!string.IsNullOrEmpty(context)) sb.Append(ContextMark).Append(context);
-        return sb.Append(InputMark).Append(ToKatakana(hiragana)).Append(OutputMark).ToString();
+        if (!string.IsNullOrEmpty(context)) sb.Append(ContextMark).Append(ToHalfWidth(context));
+        return sb.Append(InputMark).Append(ToKatakana(ToHalfWidth(hiragana))).Append(OutputMark).ToString();
     }
+
+    /// <summary>
+    /// 全角の英数字・記号 (！〜～) を半角にする。zenz は全角の ＊ ＃ ％ Ａ などを読めず、読みに無い字を出す (＊にほんご＊ → ô日本語瑤: issue #2231) が、半角なら読める。
+    /// 読みの記号は全角になっている (ローマ字の * を ＊ にする) ので、zenz に渡す前に半角にする。答えの記号は、CompositionController が読みの記号に戻す。
+    /// </summary>
+    internal static string ToHalfWidth(string text) =>
+        string.Create(text.Length, text, static (span, source) =>
+        {
+            for (var i = 0; i < source.Length; i++)
+                span[i] = source[i] is >= '！' and <= '～' ? (char)(source[i] - 0xFEE0) : source[i];
+        });
 
     internal static string ToKatakana(string text) =>
         string.Create(text.Length, text, static (span, source) =>
@@ -230,7 +250,10 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
             if (!response.IsSuccessStatusCode) return null;
             using var reader = new StreamReader(response.Content.ReadAsStream(cts.Token), Encoding.UTF8);
             using var json = JsonDocument.Parse(reader.ReadToEnd());
-            var content = json.RootElement.TryGetProperty("content", out var c) ? c.GetString() : null;
+            // 形の違う答え (content が無い・文字列でない) は、答えなかったのと同じ (失敗として数え、続けば諦める)
+            var content = json.RootElement is { ValueKind: JsonValueKind.Object } root && root.TryGetProperty("content", out var c) && c.ValueKind == JsonValueKind.String
+                ? c.GetString()
+                : null;
             return Clean(content);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or OperationCanceledException or JsonException or IOException or ObjectDisposedException)
@@ -265,6 +288,15 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
         }
     }
 
+    /// <summary>
+    /// 答えの記号が、読みの記号 (打った 、。「」？ など) とすべて同じか。<see cref="IsPlausible"/> は漢字・英数字を読みの何文字にも当てるので、
+    /// 記号が消えた答え (りんごを、たべた → 林檎を食べた) も通す。
+    /// </summary>
+    internal static bool KeepsSymbols(string hiragana, string answer) =>
+        hiragana.Select(Normalize).Where(IsSymbol).SequenceEqual(answer.Select(Normalize).Where(IsSymbol));
+
+    private static bool IsSymbol(char c) => char.IsPunctuation(c) || char.IsSymbol(c) || char.IsWhiteSpace(c);
+
     /// <summary>答えを、読みと 1 文字ずつ比べる文字 (かな・記号) と、読みの 1 文字以上に当たる字 (漢字 1 文字・英数字の並び) に分ける。</summary>
     private static List<(string Text, bool Wildcard)> Tokens(string answer)
     {
@@ -282,7 +314,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
             }
             var length = char.IsSurrogatePair(answer, i) ? 2 : 1;
             var kana = c is >= 'ぁ' and <= 'ゖ' or 'ー' or 'ゝ' or 'ゞ';
-            tokens.Add((answer.Substring(i, length), !kana && !char.IsAsciiLetterOrDigit(c) && !char.IsPunctuation(c) && !char.IsSymbol(c) && !char.IsWhiteSpace(c)));
+            tokens.Add((answer.Substring(i, length), !kana && !char.IsAsciiLetterOrDigit(c) && !IsSymbol(c)));
             i += length;
         }
         return tokens;

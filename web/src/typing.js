@@ -5,7 +5,7 @@
 // ページは誰でも遊べ、打鍵は調査に同意した人のものだけを受け付ける。
 // 決まり: 受け付けるのはお手本の id と、それを打った打鍵 (keys) だけ (打った文字は打鍵から組み立てる。自由に書いた文章を送る欄は作らない)。
 // 決まり: IP はハッシュにして回数制限にだけ使い、調査のデータには入れない (rate_events は 1 日で消える)。
-import { accuracyOf, replay, suspicious } from "../public/assets/js/typing-check.js";
+import { TYPING_VERSION, accuracyOf, replay, suspicious } from "../public/assets/js/typing-check.js";
 import { CONSENT_VERSION } from "../public/assets/js/typing-consent.js";
 import { KINDS, SENTENCES, sentenceById } from "../public/assets/js/typing-sentences.js";
 import { error, json, now, randomToken, readJson, sha256Hex } from "./http.js";
@@ -115,16 +115,18 @@ export async function addTrial(request, env) {
   const keys = validKeys(body.keys, [...sentence.reading].length * KEYS_PER_CHAR);
   if (!keys) return error(400, "打鍵の記録の形式が正しくありません");
   if (!isInt(body.duration, 1, MAX_MS)) return error(400, "かかった時間の形式が正しくありません");
-  const typed = replay(keys);
+  // 前の版のページ (Backspace の消し方が違う) から送られた打鍵は、読み直してもらう
+  if (body.version !== TYPING_VERSION) return error(400, "ページが新しくなりました。読み込み直してから打ってください");
+  const typed = replay(keys, sentence.reading);
   // 名前など、お手本と関係ない入力が続く文は残さない (ページも送る前に同じ判定で止める)
   if (suspicious(sentence.reading, typed)) return error(422, "お手本と関係ない入力が続いたので、この文は受け付けません");
 
   const at = now();
   const inserted = await env.TYPING_DB.prepare(
-    "INSERT INTO typing_trials (session_id, sentence_id, keys, duration_ms, created_at) " +
-      "SELECT ?1, ?2, ?3, ?4, ?5 WHERE (SELECT COUNT(*) FROM typing_trials WHERE session_id = ?1 AND created_at > ?5 - 86400) < ?6 RETURNING id",
+    "INSERT INTO typing_trials (session_id, sentence_id, keys, duration_ms, version, created_at) " +
+      "SELECT ?1, ?2, ?3, ?4, ?7, ?5 WHERE (SELECT COUNT(*) FROM typing_trials WHERE session_id = ?1 AND created_at > ?5 - 86400) < ?6 RETURNING id",
   )
-    .bind(session.id, sentence.id, JSON.stringify(keys), body.duration, at, DAY_TRIALS)
+    .bind(session.id, sentence.id, JSON.stringify(keys), body.duration, at, DAY_TRIALS, TYPING_VERSION)
     .first();
   if (!inserted) return error(429, `送れるのは 1 日に ${DAY_TRIALS} 文までです。ありがとうございました！また明日お願いします`);
   return json({ id: inserted.id }, { status: 201 });
@@ -145,14 +147,15 @@ export async function sentenceCounts(env) {
 // 一致率が FLAG_ACCURACY 未満の文 (新しいものから FLAG_SCAN 件のうち)。sessionId を渡すと、その参加の文だけを見る
 async function flaggedTrials(env, sessionId = null) {
   const { results } = await env.TYPING_DB.prepare(
-    "SELECT id, session_id, sentence_id, keys, created_at FROM typing_trials WHERE ?1 IS NULL OR session_id = ?1 ORDER BY id DESC LIMIT ?2",
+    "SELECT id, session_id, sentence_id, keys, version, created_at FROM typing_trials WHERE ?1 IS NULL OR session_id = ?1 ORDER BY id DESC LIMIT ?2",
   )
     .bind(sessionId, FLAG_SCAN)
     .all();
   return results.flatMap((row) => {
     const sentence = sentenceById(row.sentence_id);
-    const typed = replay(JSON.parse(row.keys));
-    return sentence && accuracyOf(sentence.reading, typed) < FLAG_ACCURACY ? [{ ...row, typed }] : [];
+    if (!sentence) return [];
+    const typed = replay(JSON.parse(row.keys), sentence.reading, row.version);
+    return accuracyOf(sentence.reading, typed) < FLAG_ACCURACY ? [{ ...row, typed }] : [];
   });
 }
 
@@ -193,7 +196,7 @@ export async function exportTrials(env, url) {
   const after = Math.max(0, Number(url.searchParams.get("after")) || 0);
   const limit = Math.min(1000, Math.max(1, Number(url.searchParams.get("limit")) || 500));
   const { results } = await env.TYPING_DB.prepare(
-    "SELECT t.id, t.session_id, s.profile, t.sentence_id, t.keys, t.duration_ms, t.created_at " +
+    "SELECT t.id, t.session_id, s.profile, t.sentence_id, t.keys, t.duration_ms, t.version, t.created_at " +
       "FROM typing_trials t JOIN typing_sessions s ON s.id = t.session_id WHERE t.id > ? ORDER BY t.id LIMIT ?",
   )
     .bind(after, limit + 1)
@@ -211,6 +214,8 @@ export async function exportTrials(env, url) {
       reading: sentence ? sentence.reading : null,
       keys: JSON.parse(row.keys),
       duration_ms: row.duration_ms,
+      // 打った文字を組み立てるときの決まりの版 (public/assets/js/typing-check.js の TYPING_VERSION)
+      version: row.version,
       created_at: row.created_at,
     };
   });
