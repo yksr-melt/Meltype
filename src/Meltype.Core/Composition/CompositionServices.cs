@@ -9,7 +9,7 @@ using Meltype.Learning;
 namespace Meltype.Composition;
 
 /// <summary>CompositionController が使う辞書・学習データと、設定でない外の入力。設定は <see cref="Config.Settings"/> を別に渡す。</summary>
-public sealed record CompositionServices
+internal sealed record CompositionServices
 {
     /// <summary>同音異義語などの補助候補。</summary>
     public CandidateDictionary? Candidates { get; init; }

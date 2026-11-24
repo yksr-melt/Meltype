@@ -10,6 +10,12 @@ using Clause = Meltype.Composition.CompositionController.Clause;
 namespace Meltype.Composition;
 
 /// <summary>
+/// 確定した入力の文節 1 つ (<see cref="CompositionController.CommittedClauses"/>)。Engine は変換エンジンの答え (英語の文節など、変換エンジンに頼まなかった文節は null)。
+/// Text は確定した文字のうちこの文節の分 (F6〜F8 の形を当てた入力で、文節の読みをつなげたものが入力のかなと合わなければ null)。
+/// </summary>
+internal sealed record CommittedClause(string Reading, string? Engine, string? Text);
+
+/// <summary>
 /// 確定した入力を学習する (変換履歴・言語の学習・英訳の記録・予測変換の語句・変換エンジン)。
 /// 設定「ユーザー学習を使う」と入力欄が学習を求めないかは、呼ぶ側 (<see cref="CompositionController"/>) が見る。
 /// 学習しない候補は <see cref="Learnable"/> の 1 か所で決める。
@@ -55,9 +61,8 @@ internal sealed partial class CompositionLearning(CompositionServices services, 
         // ただし数字・記号の 1 文字 (1 → ①、( → （) は、かなの途中に巻き込まれないので覚える (issue #672)。
         foreach (var clause in clauses.Where(c => !c.IsEnglish && c.Changed && (c.Reading.Length >= 2 || c.Reading.Length == 1 && c.Reading[0] is < 'ぁ' or > 'ヿ' && !char.IsAsciiLetter(c.Reading[0]))))
         {
-            // かな・カタカナのまま確定したのは、その場限りのことが多いので覚えない。
             // 打ったままの英字を選んだのは、上で英語として覚えた。
-            if (clause.Text == clause.Reading || clause.Text == CompositionText.ToKatakana(clause.Reading) || clause.Text == clause.Raw) continue;
+            if (clause.Text == clause.Raw) continue;
             // 英訳は上で英訳の記録に入れた (ここで覚えると次から 1 番目に出てしまう)。
             if (clause.Translations.Contains(clause.Text)) continue;
             if (!Learnable(clause)) continue;

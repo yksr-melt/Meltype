@@ -32,11 +32,6 @@ internal sealed class CompositionTextState
 
     public (string Key, LanguageMemory? Memory, IReadOnlyList<CompositionSegment> Segments, List<Func<string>> Reasons)? SegmentsCache;
 
-    // ---- 保護範囲 (メンション・URL・メール・パス) ----
-    public string? ProtectedCacheRaw;
-
-    public IReadOnlyList<ProtectedSpan>? ProtectedCache;
-
     /// <summary>( ) を全角にするか (設定「カッコを全角で入力」)。</summary>
     public bool FullWidthParentheses;
 

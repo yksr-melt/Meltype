@@ -3,10 +3,10 @@
 
 // タイピング (/typing/)。誰でも遊べ、打った記録は調査に同意した人だけが送る。
 // 決まり: 同意するまでは打鍵をどこにも送らない (打った記録はこのページのメモリーにだけ置く)。
-// 決まり: 送るのは打鍵だけ。画面に出す打った文字も、打鍵から組み立てる (typing-check.js の replay)。
+// 決まり: 送るのは打鍵だけ。画面に出す打った文字も、打鍵から組み立てる (typing-check.js の replay。Backspace は Meltype と同じく日本語なら 1 音消す)。
 import { detectOs, escapeHtml, getJson, icon, initHeader } from "./common.js";
-import { align, finalKana, toKana, toRomaji } from "./romaji.js";
-import { compare, replay, suspicious } from "./typing-check.js";
+import { align, toRomaji } from "./romaji.js";
+import { TYPING_VERSION, compare, previewKana, replay, suspicious } from "./typing-check.js";
 import { CONSENT_VERSION } from "./typing-consent.js";
 import { KINDS, SENTENCES } from "./typing-sentences.js";
 
@@ -117,33 +117,10 @@ function loadSentence() {
   render();
 }
 
-// 打った字をかなにする。お手本の英単語と一致した部分は英語のまま出す。
-// 英単語は、それまでの入力をかなにし切った位置 (残りが無いか n だけ) でだけ探す。どこでも探すと、kaigi の ai のように日本語の中の字まで英語になるため。
-// ワークアラウンド: 打った字を Meltype のエンジンで組み立てるようにしたら消す
-function previewKana(typed, words) {
-  let kana = "";
-  let start = 0;
-  let i = 0;
-  while (i < typed.length) {
-    const { pending } = toKana(typed.slice(start, i));
-    const word = (pending === "" || pending === "n") && words.find((w) => typed.slice(i, i + w.length).toLowerCase() === w);
-    if (word) {
-      kana += finalKana(typed.slice(start, i)) + typed.slice(i, i + word.length);
-      i += word.length;
-      start = i;
-    } else {
-      i += 1;
-    }
-  }
-  const rest = toKana(typed.slice(start));
-  return { kana: kana + rest.kana, pending: rest.pending };
-}
-
 function render() {
-  const typed = replay(state.trial.keys);
-  // 長い単語を先に試す (app と apple が両方あれば apple を取る)
-  const words = (state.queue[state.index].reading.match(/[a-z]+/g) ?? []).sort((a, b) => b.length - a.length);
-  const { kana, pending } = previewKana(typed, words);
+  const sentence = state.queue[state.index];
+  const typed = replay(state.trial.keys, sentence.reading);
+  const { kana, pending } = previewKana(typed, sentence.reading);
   $("kana").textContent = kana;
   $("pending").textContent = pending;
   $("romaji").textContent = typed.toLowerCase();
@@ -206,7 +183,7 @@ board.addEventListener("blur", () => ($("focus-hint").hidden = false));
 function finishSentence() {
   const trial = state.trial;
   const sentence = state.queue[state.index];
-  if (trial.ime || !replay(trial.keys)) return;
+  if (trial.ime || !replay(trial.keys, sentence.reading)) return;
   const duration = Math.max(1, Math.round(performance.now() - trial.startedAt));
   state.round.push({ sentence, keys: trial.keys, duration });
   saved.done = [...new Set([...saved.done, sentence.id])];
@@ -234,7 +211,7 @@ function showScores() {
   let backspaces = 0;
   const misses = new Map();
   for (const entry of state.round) {
-    const typed = replay(entry.keys);
+    const typed = replay(entry.keys, entry.sentence.reading);
     const ops = compare(entry.sentence.reading, typed);
     chars += ops.filter((op) => op.want).length;
     wrong += ops.filter((op) => op.op !== "same").length;
@@ -370,10 +347,10 @@ async function sendRound() {
   setStatus("info", "送っています");
   let sent = 0;
   // お手本と関係ない入力が続いた文は送らない (サーバーも同じ判定で受け付けない)
-  const sendable = round.filter((entry) => !suspicious(entry.sentence.reading, replay(entry.keys)));
+  const sendable = round.filter((entry) => !suspicious(entry.sentence.reading, replay(entry.keys, entry.sentence.reading)));
   const skipped = round.length - sendable.length;
   for (const entry of sendable) {
-    const body = JSON.stringify({ sentence: entry.sentence.id, keys: entry.keys, duration: entry.duration });
+    const body = JSON.stringify({ sentence: entry.sentence.id, keys: entry.keys, duration: entry.duration, version: TYPING_VERSION });
     try {
       await getJson("/api/typing/trials", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${token}` }, body });
       sent += 1;

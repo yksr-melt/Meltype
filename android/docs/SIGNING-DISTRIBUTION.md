@@ -34,8 +34,6 @@ Gradle は未署名の release APK を作り、配布用 Actions の `apksigner`
 
 `main` 以外・署名情報の不足・鍵を開けない場合はビルド前に停止する。秘密鍵は確認と署名のときだけ一時ファイルに戻し、各ステップの終了時に削除する。成果物に秘密鍵を含めない。
 
-このワークフローではエミュレーターや実機での入力テストは実行しない。公開するコミットで [Android QA](https://github.com/yksr-melt/Meltype/actions/workflows/android-qa.yml) と [手動 QA](QA-TESTING.md) を別途実施する。
-
 **注**: 初回の `app.meltype.keyboard` 版は、過去の `.bilingualtest` や `.swipepreview` アプリと別アプリ。設定・辞書が自動移行されるわけではない。
 
 ## なぜAPKをGitに直接コミットしないか

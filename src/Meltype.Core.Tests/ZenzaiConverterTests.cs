@@ -85,6 +85,8 @@ internal static class ZenzaiConverterTests
         Assert.Equal("キョウ", ZenzaiConverter.Prompt("きょう", null), "文脈なし");
         Assert.Equal("この本はアツイ", ZenzaiConverter.Prompt("あつい", "この本は"), "v3 では文脈を前に置く");
         Assert.Equal("ー、。ABC", ZenzaiConverter.ToKatakana("ー、。ABC"), "かな以外はそのまま");
+        // #2231: zenz は全角の記号を読めず、＊にほんご＊ を ô日本語瑤 にする
+        Assert.Equal("10%#ハッシュハ*", ZenzaiConverter.Prompt("＃はっしゅは＊", "１０％"), "全角の英数字・記号は半角");
     }
 
     [Test]
@@ -560,8 +562,8 @@ internal static class ZenzaiConverterTests
     {
         // #973: 同梱の .NET に System.Net.Http が無く、Zenzai を作るたびに例外になった。例外が入力まで届き、日本語を打てなくなった
         using var mozc = MozcConverterTests.Fake();
-        var hybrid = new HybridConverter(mozc,
-            () => throw new FileNotFoundException("Could not load file or assembly 'System.Net.Http'"));
+        using var holder = new ZenzaiHolder((s, m, _) => throw new FileNotFoundException("Could not load file or assembly 'System.Net.Http'"));
+        var hybrid = new HybridConverter(mozc, () => holder.Get("server", "model"));
         Assert.True(hybrid.ConvertClauses("たんいをとる", null) is [{ Text: "単位を" }, { Text: "取る" }], "文節に分けた変換は、ほかの変換エンジンで");
         Assert.Equal("今日", hybrid.ConvertText("きょう", null) ?? "", "1 回の変換も、ほかの変換エンジンで");
         var k = new CompositionTests.Keyboard(converter: hybrid);
@@ -570,26 +572,36 @@ internal static class ZenzaiConverterTests
     }
 
     [Test]
-    public static void Hybrid_ZenzaiThatThrowsWhileConverting_IsNotAskedAgain()
+    public static void Holder_ZenzaiThatCannotBeCreatedForAnyReason_FallsBackAndWaits()
     {
-        // 答えの content が文字列でない: ZenzaiConverter が拾わない例外 (InvalidOperationException) になる
+        // 同梱の .NET のアセンブリが欠けている・合わないときの例外は型で列挙しきれない (MissingMethodException・BadImageFormatException など)
+        foreach (var failure in new Exception[] { new MissingMethodException("System.Net.Http"), new BadImageFormatException("System.Net.Http") })
+        {
+            var created = 0;
+            using var holder = new ZenzaiHolder((s, m, _) => { created++; throw failure; });
+            using var mozc = MozcConverterTests.Fake();
+            var hybrid = new HybridConverter(mozc, () => holder.Get("server", "model"));
+            Assert.True(hybrid.ConvertClauses("たんいをとる", null) is [{ Text: "単位を" }, { Text: "取る" }], $"{failure.GetType().Name}: ほかの変換エンジンで変換する");
+            hybrid.ConvertClauses("たんいをとる", null);
+            Assert.Equal(1, created, $"{failure.GetType().Name}: 打つたびに作り直さない (しばらく待つ)");
+        }
+    }
+
+    [Test]
+    public static void Hybrid_ZenzaiWithMalformedAnswers_FallsBackAndGivesUp()
+    {
+        // 答えの content が文字列でない: 答えなかったのと同じに数え、続いたら Zenzai を諦める。そのあいだもほかの変換エンジンで変換する
         using var server = new FakeServer { RawBody = "{\"content\":1}" };
         using var zenzai = new ZenzaiConverter(server.Endpoint, timeoutMs: 5000);
-        var reported = new List<ZenzaiConverter>();
         using var mozc = MozcConverterTests.Fake();
-        var hybrid = new HybridConverter(mozc, () => zenzai, reported.Add);
-        Assert.True(hybrid.ConvertClauses("たんいをとる", null) is [{ Text: "単位を" }, { Text: "取る" }], "例外になっても、ほかの変換エンジンで変換する");
+        var hybrid = new HybridConverter(mozc, () => zenzai);
+        for (var i = 0; i < 3; i++)
+            Assert.True(hybrid.ConvertClauses("たんいをとる", null) is [{ Text: "単位を" }, { Text: "取る" }], $"{i + 1} 回目も、ほかの変換エンジンで変換する (失敗した答えは覚えないので、毎回聞き直す)");
+        Assert.True(zenzai.GaveUp, "形の違う答えが続いたら諦める");
         int asked;
         lock (server.Prompts) asked = server.Prompts.Count;
-        Assert.Equal(1, asked, "1 回目は Zenzai に頼んだ");
-        Assert.True(hybrid.ConvertClauses("たんいをとる", null) is [{ Text: "単位を" }, { Text: "取る" }], "2 回目も、ほかの変換エンジンで変換する");
-        lock (server.Prompts) asked = server.Prompts.Count;
-        Assert.Equal(1, asked, "例外になった Zenzai には、もう頼まない (打つたびに例外にしない)");
-        Assert.True(reported.Count == 1 && ReferenceEquals(reported[0], zenzai), "例外になった Zenzai を、持ち主に 1 回知らせる");
-        // 止めるのは持ち主 (ZenzaiHolder)。HybridConverter は止めない (持ち主がほかで使っていても壊さない)
-        server.RawBody = null;
-        server.Answer = _ => "湖に架かる橋";
-        Assert.Equal("湖に架かる橋", Joined(zenzai.ConvertClauses("みずうみにかかるはし", null)).Split('→')[^1], "HybridConverter は Zenzai を止めない");
+        hybrid.ConvertClauses("たんいをとる", null);
+        lock (server.Prompts) Assert.Equal(asked, server.Prompts.Count, "諦めた Zenzai には、もう頼まない");
     }
 
     [Test]
@@ -690,24 +702,15 @@ internal static class ZenzaiConverterTests
     }
 
     [Test]
-    public static void Holder_FailedZenzai_IsStoppedAndRecreatedAfterAWhile()
+    public static void Holder_SamePlaceReusesZenzai_AndOffStopsIt()
     {
         using var server = new FakeServer { Answer = p => ReadingIn(p) == "はし" ? "橋" : "箸" };
-        var now = 0L;
         var created = new List<ZenzaiConverter>();
-        using var holder = new ZenzaiHolder((s, m, _) => { var z = new ZenzaiConverter(server.Endpoint, timeoutMs: 5000); created.Add(z); return z; }, () => now);
+        using var holder = new ZenzaiHolder((s, m, _) => { var z = new ZenzaiConverter(server.Endpoint, timeoutMs: 5000); created.Add(z); return z; });
         var first = holder.Get("server", "model");
-        Assert.True(first is not null && ReferenceEquals(holder.Get("server", "model"), first), "同じ場所なら同じものを使う");
-        using (var other = new ZenzaiConverter(server.Endpoint)) holder.Failed(other);
-        Assert.True(ReferenceEquals(holder.Get("server", "model"), first), "持っていないものを知らされても、今のものは止めない");
-        holder.Failed(first!);
-        Assert.True(first!.ConvertClauses("はし", null) is null, "例外になった Zenzai は止める (llama-server を残さない)");
-        Assert.True(holder.Get("server", "model") is null, "止めたあと、しばらくは使わない");
-        now += (long)holder.RetryAfter.TotalMilliseconds;
-        var second = holder.Get("server", "model");
-        Assert.True(second is not null && !ReferenceEquals(second, first) && created.Count == 2, "しばらくたったら作り直す (一時的な失敗で止めたままにしない)");
-        Assert.Equal("橋", Joined(second!.ConvertClauses("はし", null)).Split('→')[^1], "作り直したものは使える");
-        Assert.True(holder.Get("", "") is null && second!.ConvertClauses("はしを", null) is null, "OFF にしたら止める");
+        Assert.True(first is not null && ReferenceEquals(holder.Get("server", "model"), first) && created.Count == 1, "同じ場所なら同じものを使う");
+        Assert.Equal("橋", Joined(first!.ConvertClauses("はし", null)).Split('→')[^1], "使える");
+        Assert.True(holder.Get("", "") is null && first!.ConvertClauses("はしを", null) is null, "OFF にしたら止める (llama-server を残さない)");
     }
 
     /// <summary>zenz に渡した文 (U+EE00 + カタカナの読み + …) の読みを、ひらがなにして返す。</summary>
@@ -746,6 +749,9 @@ internal static class ZenzaiConverterTests
         // 文脈の無い きょう は、何も渡すと モデルが迷って 強 になる。「。」を文脈にして 今日 にする
         Assert.Equal("今日", zenzai.ConvertClauses("きょう", null) is [var bare] ? bare.Text : "", "文脈なしでも きょう は 今日 (「。」を文脈にする: 何も渡さないと 強)");
         Assert.Equal("今日", zenzai.ConvertClauses("きょう", "あしたは") is [var today] ? today.Text : "", "文脈 (あしたは) で 今日");
+        // #2231: 読みの全角の記号 (ローマ字の * は ＊ になる) の位置に、読みに無い字を出さない (記号は半角で答える)
+        Assert.Equal("*日本語*", zenzai.ConvertClauses("＊にほんご＊", null) is [var star] ? star.Text : "", "＊にほんご＊");
+        Assert.Equal("図書館***", zenzai.ConvertClauses("としょかん＊＊＊", null) is [var stars] ? stars.Text : "", "としょかん＊＊＊");
     }
 
     [Test]
