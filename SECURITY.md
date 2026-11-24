@@ -42,9 +42,12 @@ Meltype はキーボードの入力を扱うソフトです。安心して使っ
 受け取ったら 1 週間以内に返事をし、直すまでの見通しをお知らせします。直した版を出すまでは、内容を公開しないでください。
 直した版の公開後、希望があれば報告してくれた方のお名前をリリースノートに載せます。
 
+<a name="報告してくださった方々"></a>
+<img src="docs/images/headings/security/s01.svg" alt="報告してくださった方々" height="40">
+
 脆弱性を報告してくださった方々です。ありがとうございます。
 
-- sahen (@sahenjp)
+- [sahen (@sahenjp)](https://github.com/sahenjp)
 
 <br>
 
