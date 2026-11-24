@@ -2129,6 +2129,29 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void DirectMode_CorrectsTheEndOfAnAmbiguousHyphenWord()
+    {
+        foreach (var (keys, committed, direct) in new[]
+        {
+            ("tore-nind\bngu", "とれーにんぐ", false),
+            ("tore-nif\birete", "とれーにいれて", false),
+            ("bare-bok\bnes", "bare-bones\n", true),
+            ("tore-\b-do", "とれーど", false),
+        })
+        {
+            var k = new Keyboard(direct: true);
+            k.Type(keys + "\n");
+            Assert.Equal(committed, k.Host.Document, keys);
+            Assert.Equal(direct, k.Direct, keys);
+        }
+
+        var readOnlyContext = new Keyboard(direct: true);
+        readOnlyContext.Host.CanDeleteBackward = false;
+        readOnlyContext.Type("tore-nind\b");
+        Assert.Equal("tore-nin", readOnlyContext.Host.Document, "周りの文字を直せない入力欄では、BackSpace がアプリに届く");
+    }
+
+    [Test]
     public static void DirectMode_LongVowelDashSwitchesToJapanese()
     {
         // 英数状態で ro-maji と打つと、- の時点で英語として出してしまっていた (ローマ字 が打てない)。

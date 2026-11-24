@@ -531,11 +531,12 @@ internal static class ImeSession
         var detects = settings.DirectModeAutoDetect && settings.AutoDetection && !game;
         if (!direct || detects) keys.Add(new ImeShortcut(VirtualKeys.Space, (int)ShortcutModifiers.Shift));
         if (!direct && settings.SpaceWidth == SpaceWidth.FullWidth) keys.Add(new ImeShortcut(VirtualKeys.Space, 0));
-        // 入力欄には英字を先に送っているので、長音かもしれない保留を変換・確定するキーを明示して受け取る。
+        // 先に英字を送っている間も、長音かもしれない保留を変換・確定・訂正するキーは受け取る。
         if (direct && detects && pendingLongVowel)
         {
             keys.Add(new ImeShortcut(VirtualKeys.Space, 0));
             keys.Add(new ImeShortcut(VirtualKeys.Return, 0));
+            keys.Add(new ImeShortcut(VirtualKeys.Back, 0));
         }
         keys.AddRange(snippetKeys.Select(key => new ImeShortcut(key, 0)));
         return new ImeCapture

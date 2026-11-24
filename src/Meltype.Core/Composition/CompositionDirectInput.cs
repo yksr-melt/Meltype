@@ -46,6 +46,18 @@ internal static class CompositionDirectInput
         state.HeldSent.Append(e.Scan is > 0 and < 0x10000 ? (char)e.Scan : '\0');
     }
 
+    /// <summary>長音の判定中に先に送った末尾の1文字だけを消し、残りの打鍵は判定に使う。</summary>
+    internal static bool BackspaceHeld(CompositionState state, CompositionEnv env, long nowMs)
+    {
+        // 読めない・消せない入力欄では実際に消えたか分からないため、BackSpace はアプリに通す。
+        if (!env.CanDeleteBackward || env.Before is not { Length: > 0 } before || before[^1] != state.HeldSent[^1]) return false;
+        CompositionOutput.DeleteHeld(state.Out, before[^1].ToString());
+        state.HeldLetters.Length--;
+        state.HeldSent.Length--;
+        state.HeldLastKeyTime = nowMs;
+        return true;
+    }
+
     /// <summary>判定中の英字の、最後の - より後ろ (e-ma → ma)。- が無ければ全体。</summary>
     internal static string LastHyphenPart(CompositionState state)
     {

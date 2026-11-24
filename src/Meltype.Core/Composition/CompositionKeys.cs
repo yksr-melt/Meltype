@@ -103,10 +103,13 @@ internal static class CompositionKeys
                     return;
                 }
             }
+            var pendingLongVowel = CompositionDirectInput.HasPendingLongVowel(state);
+            if (pendingLongVowel && vk == VirtualKeys.Back && !state.Shift && !state.Modifier &&
+                CompositionDirectInput.BackspaceHeld(state, env, e.TimeMs)) return;
             // Space・Enter や句読点で区切ったら、助詞などが続く長音 (tore-ni) まで含めて判定する。
             var endsWord = !state.Shift && vk is (VirtualKeys.Space or VirtualKeys.Return) ||
                 e.Scan is > ' ' and <= '~' && !CompositionDirectInput.EnglishWordCharacters.Contains((char)e.Scan);
-            if (!state.Modifier && endsWord && CompositionDirectInput.HasPendingLongVowel(state))
+            if (pendingLongVowel && endsWord && !state.Modifier)
                 CompositionDirectInput.DecideHeld(state, env, final: true);
             else
             {
