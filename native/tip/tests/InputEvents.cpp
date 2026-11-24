@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 cet-t
 
-// 実際の TSF コンパートメントと入力欄を使う。パイプだけを記録用に置き換え、
+// 実際の TSF コンパートメントと入力欄で、自動開閉・明示的な切り替え・タスクバーのメニューへのキーの受け渡しを確かめる。
+// タスクバーはテストのプロセスに同じクラス名のウィンドウを作って再現する。パイプだけを記録用に置き換え、
 // 通常のユーザーの Meltype・辞書・設定には接続しない。
 #include "TextService.h"
 #include <cstdio>
@@ -33,9 +34,10 @@ bool PipeClient::Transact(const std::string& request, std::string& response, DWO
     if (toggle) ++toggleRequests;
     const bool open = (request.find("\"imeOpen\":true") != std::string::npos) != toggle;
     const char* shown = open ? "true" : "false";
-    response = std::string("{\"version\":1,\"state\":{\"handlesInput\":true,\"imeOpen\":") + shown + ",\"japanese\":" + shown +
+    response = std::string("{\"version\":1,\"state\":{\"handlesInput\":true,\"imeOpen\":") + shown +
+               ",\"languageMode\":\"" + (open ? "Japanese" : "Alphanumeric") + "\"" +
                ",\"modeIndicatorMs\":" + (toggle ? "1200" : "0") +
-               ",\"capture\":{\"printableAscii\":true,\"printableAsciiExcept\":\"\",\"shortcuts\":[]},\"revision\":" +
+               ",\"capture\":{\"printableAscii\":true,\"printableAsciiExcept\":\"\",\"shortcuts\":[{\"vk\":32,\"modifiers\":0}]},\"revision\":" +
                std::to_string(++revision) + "},\"result\":{\"consumed\":true,\"commits\":[],\"view\":null}}";
     return true;
 }
@@ -54,7 +56,7 @@ int main() {
     using namespace meltype;
     if (FAILED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED))) return 1;
     g_module = GetModuleHandleW(nullptr);
-    HWND window = CreateWindowExW(WS_EX_TOPMOST, L"STATIC", L"Meltype IME mode event test", WS_OVERLAPPEDWINDOW | WS_VISIBLE,
+    HWND window = CreateWindowExW(WS_EX_TOPMOST, L"STATIC", L"Meltype IME input event test", WS_OVERLAPPEDWINDOW | WS_VISIBLE,
                                   100, 100, 420, 180, nullptr, nullptr, g_module, nullptr);
     HWND normal = CreateWindowExW(0, L"EDIT", L"", WS_CHILD | WS_VISIBLE | WS_BORDER, 20, 20, 360, 30, window, nullptr, g_module, nullptr);
     HWND password = CreateWindowExW(0, L"EDIT", L"", WS_CHILD | WS_VISIBLE | WS_BORDER | ES_PASSWORD, 20, 70, 360, 30, window, nullptr, g_module, nullptr);
@@ -101,6 +103,48 @@ int main() {
         SetFocus(normal);
         automatic(true);
         check(toggleRequests == 0, "password-field exit and automatic open are not explicit toggles");
+
+        ComPtr<ITfDocumentMgr> document;
+        ComPtr<ITfContext> context;
+        TfEditCookie edit = TF_INVALID_EDIT_COOKIE;
+        if (FAILED(manager->CreateDocumentMgr(&document)) ||
+            FAILED(document->CreateContext(client, 0, nullptr, &context, &edit)) || FAILED(document->Push(context.Get()))) return 1;
+        auto takesKey = [&](UINT vk) {
+            BOOL eaten = FALSE;
+            check(SUCCEEDED(service->OnTestKeyDown(context.Get(), vk, 1, &eaten)), "TSF key test succeeds");
+            return eaten != FALSE;
+        };
+        check(takesKey('U'), "ordinary input receives U");
+        check(takesKey(VK_SPACE), "ordinary input captures Space as an input-mode shortcut");
+        // Win+X のメニューと Windows 10 のアドレス ツールバーの代わり。クラス名はテストのプロセスの中だけで使われる
+        WNDCLASSW taskbarClass = {};
+        taskbarClass.lpfnWndProc = DefWindowProcW;
+        taskbarClass.hInstance = g_module;
+        taskbarClass.lpszClassName = L"Shell_TrayWnd";
+        if (!RegisterClassW(&taskbarClass)) return 1;
+        HWND taskbar = CreateWindowExW(WS_EX_TOPMOST, L"Shell_TrayWnd", L"", WS_POPUP | WS_VISIBLE, 100, 300, 420, 48, nullptr, nullptr, g_module, nullptr);
+        HWND menu = CreateWindowExW(0, L"STATIC", L"", WS_CHILD | WS_VISIBLE, 0, 0, 200, 48, taskbar, nullptr, g_module, nullptr);
+        HWND address = CreateWindowExW(0, L"EDIT", L"", WS_CHILD | WS_VISIBLE, 200, 0, 220, 48, taskbar, nullptr, g_module, nullptr);
+        if (!taskbar || !menu || !address) return 1;
+        SetForegroundWindow(taskbar);
+        SetFocus(menu);
+        // 通知を待たないので、フォーカスが移った直後の 1 打目からメニューへ渡る
+        check(!takesKey('U'), "the first letter after the taskbar menu takes focus goes to the menu");
+        check(!takesKey('U'), "the next submenu access key also goes to the menu");
+        check(!takesKey('1'), "a digit goes to the taskbar menu");
+        check(!takesKey(VK_SPACE), "Space goes to the taskbar menu even when configured as a shortcut");
+        BOOL eaten = TRUE;
+        service->OnKeyDown(context.Get(), VK_SPACE, 1, &eaten);
+        check(!eaten && toggleRequests == 0, "the actual Space key does not toggle the input mode in a menu");
+        SetFocus(address);
+        check(takesKey('U'), "the address toolbar of the taskbar receives U as an input field");
+        SetForegroundWindow(window);
+        SetFocus(normal);
+        check(takesKey('U'), "ordinary input receives U again after leaving the taskbar");
+        check(takesKey(VK_SPACE), "ordinary input captures Space again after leaving the taskbar");
+        DestroyWindow(taskbar);
+        document->Pop(TF_POPF_ALL);
+
         for (int i = 1; i <= 5; ++i) {
             const bool wasOpen = service->IsOpen();
             service->ToggleInputMode(nullptr);
