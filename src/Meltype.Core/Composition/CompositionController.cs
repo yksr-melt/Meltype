@@ -114,9 +114,12 @@ internal static partial class CompositionController
 
         /// <summary>
         /// 日本語の文節の、文の中での変換結果 (変換エンジンの答え・ユーザー辞書の語)。<see cref="AddCandidates"/> が、その読みだけの変換などの候補をこの後ろに並べる。
-        /// 候補を足し終えた文節と、変換エンジンに頼まない文節 (英語・記号) は null。
+        /// 変換エンジンに頼まない文節 (英語・記号) は null。
         /// </summary>
-        public string? Engine { get; set; }
+        public string? Engine { get; init; }
+
+        /// <summary><see cref="AddCandidates"/> が候補を足し終えたか。</summary>
+        public bool EngineCandidatesAdded { get; set; }
 
         /// <summary>外部変換エンジンの候補追加が完了したか。<see cref="Fixed"/> の文節では追加せずに完了扱いにする。</summary>
         public bool Expanded { get; set; }
@@ -408,7 +411,7 @@ internal static partial class CompositionController
             !CompositionText.IsEmpty(state.Text) && CompositionText.Raw(state.Text).All(char.IsAsciiLetter))
         {
             state.Correctable.Clear();
-            CommitText(state, env, CompositionText.Raw(state.Text), english: true, preserveText: true, rule: "英字にアクセント記号が続くので打ったまま");
+            CommitText(state, env, ComposedText.English(CompositionText.Raw(state.Text)), english: true, preserveText: true, rule: "英字にアクセント記号が続くので打ったまま");
         }
         else CommitIfAny(state, env, preserveText);
         UpdateView(state, env);
@@ -420,6 +423,7 @@ internal static partial class CompositionController
         state.Reconversion = null;
         CompositionText.Clear(state.Text);
         state.Conversion = null;
+        state.LeftConversion = null;
     }
 
     /// <summary>パスワード欄に移ったとき、未確定入力と前の欄の文脈を確定せずに捨てる。</summary>
