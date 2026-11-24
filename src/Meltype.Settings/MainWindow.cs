@@ -53,8 +53,13 @@ internal sealed class MainWindow : Window
         sidebar.Children.Add(_navigation);
         var root = new DockPanel();
         root.Children.Add(Dock(new Border { Classes = { "sidebar" }, Child = sidebar }, Avalonia.Controls.Dock.Left));
-        root.Children.Add(Dock(Preview(), Avalonia.Controls.Dock.Bottom));
-        root.Children.Add(_content);
+        // Tab で、ページの項目からプレビューの順に移る (DockPanel の Bottom にすると、プレビューが先になる)
+        var right = new Grid { RowDefinitions = new RowDefinitions("*,Auto") };
+        right.Children.Add(_content);
+        var preview = Preview();
+        Grid.SetRow(preview, 1);
+        right.Children.Add(preview);
+        root.Children.Add(right);
         Content = root;
 
         // --add-word [語 [読み]]: ユーザー辞書のページを、登録欄に語と読みを入れて開く (Windows の単語の登録のホットキー)
@@ -78,11 +83,8 @@ internal sealed class MainWindow : Window
         var text = new TextBox { AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, Height = 72, PlaceholderText = "Meltype でここに打つと、今の設定を試せます (変えた設定は 1 秒ほどで反映します)" };
         AutomationProperties.SetName(text, "入力プレビュー");
         var header = new DockPanel();
-        var clear = SettingEditors.Button("入力をクリア", () =>
-        {
-            text.Clear();
-            text.Focus();
-        });
+        // 入力欄にフォーカスを戻さない: 戻すと、fcitx5 では変換中の文字が、消した後の入力欄に確定する
+        var clear = SettingEditors.Button("入力をクリア", text.Clear);
         header.Children.Add(Dock(clear, Avalonia.Controls.Dock.Right));
         var heading = Pages.Heading("入力プレビュー");
         heading.VerticalAlignment = VerticalAlignment.Center;
