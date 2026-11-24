@@ -135,7 +135,7 @@ kyouhagoogledekensaku  →  今日はgoogleで検索
 - **月配列・花配列**: <kbd>D</kbd> か <kbd>K</kbd> を押してから次のキーを押すと、2 段目 (月配列は 3 段目も) の文字になります。
 - **NICOLA・TRON 配列**: 左の親指キーは <kbd>無変換</kbd>、右は <kbd>変換</kbd> です。親指キーを押したまま文字キーを押すか、文字キーの直後に親指キーを押します。親指キーだけを押して離すと、ふつうの変換・無変換になります。
 - **中指NICOLA**: NICOLA に加えて、<kbd>K</kbd> を押したまま左手のキーを押して先に離すと左シフト、<kbd>D</kbd> を押したまま右手のキーを押して先に離すと右シフトになります。
-- かな入力で <kbd>Shift</kbd> を押したキーは、ふつうの英字・記号になります。
+- 月配列・花配列・NICOLA・中指NICOLA・TRON 配列で <kbd>Shift</kbd> を押したキーは、ふつうの英字・記号になります (JIS かなでは、ふつうの JIS かなと同じく Shift で ぃ・っ などになります)。
 
 **ローマ字の表**: `%LOCALAPPDATA%\Meltype\dictionaries\romaji.txt` (Mac・Linux はデータフォルダーの `dictionaries/romaji.txt`) に、1 行に `綴り<Tab>かな` を書くと、その綴りで打てます。組み込みの綴りより優先され、Meltype を起動し直すと効きます。AZIK の一部を書いた見本が [romaji-azik-sample.txt](romaji-azik-sample.txt) にあります。
 
