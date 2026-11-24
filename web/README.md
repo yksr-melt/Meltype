@@ -143,3 +143,11 @@ npm run playground
 ```
 
 作り方と中身は [web-ime/README.md](../web-ime/README.md) にあります。WebAssembly を動かすため、`public/_headers` の CSP の `script-src` に `'wasm-unsafe-eval'` を入れています。
+
+## Web エンジン (`/web-engine/`)
+
+ほかのサイトに Meltype を組み込むエンジン ([web-engine/](../web-engine/README.md)) の紹介とデモです。デモのエンジン (`public/web-engine/engine/`) は作ったものなのでコミットせず、デプロイの前に作ります。`/playground/` とは別のもので、互いに使いません。
+
+```bash
+npm run web-engine
+```

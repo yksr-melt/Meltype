@@ -1,49 +1,38 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 hisiragi
-//
-// 紹介ページの動き: インストールのタブ・コピー・デモ。
-// デモのエンジン (engine/) は 20MB ほどあるので、開いただけでは読まず、「デモを読み込む」を押したときに読む。
 
-// ---- インストールのタブ (左右の矢印キーでも移れる) ----
+// /web-engine/: Web エンジンの紹介とデモ。
+// デモのエンジン (web-engine/dist/) は npm run web-engine が public/web-engine/engine/ に写す (コミットしない)。
+// 20 MB ほどあるので、開いただけでは読まず、「デモを読み込む」を押したときに読む。
+
+import { initCopyButtons, initHeader } from "./common.js";
+
+initHeader();
+initCopyButtons();
+
+// ---- インストールのタブ (矢印キーでも移れる) ----
 const tabs = [...document.querySelectorAll("[data-tabs] [role=tab]")];
-const select = (tab) => {
+const select = (tab, focus) => {
   for (const other of tabs) {
-    const selected = other === tab;
-    other.setAttribute("aria-selected", String(selected));
-    other.tabIndex = selected ? 0 : -1;
-    document.getElementById(other.getAttribute("aria-controls")).hidden = !selected;
+    const on = other === tab;
+    other.setAttribute("aria-selected", String(on));
+    other.tabIndex = on ? 0 : -1;
+    document.getElementById(other.getAttribute("aria-controls")).hidden = !on;
   }
-  tab.focus();
+  if (focus) tab.focus();
 };
-for (const tab of tabs) {
-  tab.addEventListener("click", () => select(tab));
-  tab.addEventListener("keydown", (e) => {
-    const step = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
-    if (step) select(tabs[(tabs.indexOf(tab) + step + tabs.length) % tabs.length]);
+tabs.forEach((tab, index) => {
+  tab.addEventListener("click", () => select(tab, false));
+  tab.addEventListener("keydown", (event) => {
+    const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
+    if (!step) return;
+    event.preventDefault();
+    select(tabs[(index + step + tabs.length) % tabs.length], true);
   });
-}
-
-// ---- コピー ----
-for (const button of document.querySelectorAll("[data-copy]")) {
-  button.addEventListener("click", async () => {
-    const text = button.previousElementSibling.textContent;
-    try {
-      await navigator.clipboard.writeText(text);
-      button.textContent = "コピーしました";
-      button.classList.add("is-done");
-      setTimeout(() => {
-        button.textContent = "コピー";
-        button.classList.remove("is-done");
-      }, 1600);
-    } catch {
-      // クリップボードに書けないときは、コードを選んで自分でコピーしてもらう
-      getSelection().selectAllChildren(button.previousElementSibling);
-    }
-  });
-}
+});
 
 // ---- デモ ----
-const field = document.getElementById("demo-text");
+const field = document.getElementById("engine-text");
 const start = document.querySelector("[data-demo-start]");
 const status = document.querySelector("[data-status]");
 const hint = document.querySelector("[data-demo-hint]");
@@ -83,13 +72,14 @@ start.addEventListener("click", async () => {
   progress.hidden = false;
   status.textContent = "Meltype を読み込み中…";
   try {
-    const { load } = await import(new URL("engine/index.mjs", import.meta.url).href);
-    const engine = await load({
+    // .mjs を JavaScript として配らないサーバーもあるので、<script> 向けの meltype.js を読む (globalThis.Meltype になる)
+    await import("/web-engine/engine/meltype.js");
+    const engine = await globalThis.Meltype.load({
+      baseUrl: "/web-engine/engine/",
       onProgress: ({ phase, loaded, total }) => {
-        if (phase === "dictionary" && total) {
-          bar.style.width = `${Math.round(loaded / total * 100)}%`;
-          status.textContent = `漢字変換の辞書を読み込み中… ${(loaded / 1e6).toFixed(1)} / ${(total / 1e6).toFixed(1)} MB`;
-        }
+        if (phase !== "dictionary" || !total) return;
+        bar.style.width = `${Math.round(loaded / total * 100)}%`;
+        status.textContent = `漢字変換の辞書を読み込み中… ${(loaded / 1e6).toFixed(1)} / ${(total / 1e6).toFixed(1)} MB`;
       },
     });
     engine.attach(field);
@@ -98,13 +88,14 @@ start.addEventListener("click", async () => {
     progress.hidden = true;
     start.hidden = true;
     hint.textContent = "IME をオフ (半角英数) にして、ローマ字のまま打ってください。";
-    status.textContent = engine.mozc ? `準備できました (Meltype ${engine.version})` : "準備できました (漢字変換の辞書を読めなかったので、かなのまま確定します)";
+    status.textContent = engine.mozc ? "準備できました。" : "準備できました (漢字変換の辞書を読めなかったので、かなのまま確定します)。";
     status.classList.add("is-ready");
     field.focus();
   } catch (error) {
     start.disabled = false;
     progress.hidden = true;
     status.textContent = "読み込めませんでした。もう一度押してください。";
-    console.error(error);
+    status.classList.add("is-error");
+    throw error;
   }
 });
