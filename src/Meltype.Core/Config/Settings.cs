@@ -11,7 +11,7 @@ namespace Meltype.Config;
 
 /// <summary>Meltype の OS。<see cref="PlatformsAttribute"/> で組にする。</summary>
 [Flags]
-public enum Platform
+internal enum Platform
 {
     Windows = 1,
     Mac = 2,
@@ -23,7 +23,7 @@ public enum Platform
 /// config.schema.json の説明の先頭に「Windows・Mac のみ。」のように出し、x-platforms に OS の名前を出す。
 /// </summary>
 [AttributeUsage(AttributeTargets.Property)]
-public sealed class PlatformsAttribute(Platform platforms) : Attribute
+internal sealed class PlatformsAttribute(Platform platforms) : Attribute
 {
     public Platform Platforms { get; } = platforms;
 }
@@ -74,6 +74,8 @@ public enum CompositionTheme
     [Description("ライト")] Light,
     /// <summary>Windows の「既定のアプリ モード」(ライト / ダーク) に合わせる。</summary>
     [Description("Windows の設定に合わせる")] System,
+    /// <summary>利用者が決めた背景と文字の色 (<see cref="Settings.CompositionCustomBackColor"/>・<see cref="Settings.CompositionCustomTextColor"/>)。</summary>
+    [Description("カスタム")] Custom,
 }
 
 /// <summary>変換ボックスの不透明度。</summary>
@@ -299,10 +301,6 @@ public sealed class Settings
      Description("日本語入力のときの Space (何も打っていないとき) と Shift + Space で入れるスペースです。標準は Microsoft IME と同じです。英数状態では、どちらも半角スペースです。")]
     public SpaceWidth SpaceWidth { get; set; } = SpaceWidth.Standard;
 
-    [Category("5. 変換"), DisplayName("Enter は見えているとおりに確定"),
-     Description("Enter で確定するとき、打ち間違いの自動修正をせず、変換ボックスに見えているとおりに確定します (Space で変換するときの修正は今までどおりです)。")]
-    public bool EnterCommitsAsShown { get; set; }
-
     [Category("8. キー操作"), DisplayName("F9 / F10 の 1 回目は打ったまま"),
      Description("入力中の表示が英字でも、F10 (Ctrl+O) の 1 回目は常に打ったまま (小文字) の英字にして、2 回目以降で すべて大文字 → 先頭だけ大文字 と切り替えます (Microsoft IME・Google 日本語入力と同じ)。OFF のときは、英字で見えている語の 1 回目の F10 で すべて大文字になります。")]
     public bool AlphanumericKeyStartsAsTyped { get; set; }
@@ -330,6 +328,11 @@ public sealed class Settings
     [Category("8. キー操作"), DisplayName("Shift + Enter で選んだ文節までを確定"),
      Description("文節に分けて変換しているとき、Shift + Enter で、選んでいる文節までを確定し、残りの文節は未確定のまま (ひらがなに戻して) 続けて編集できるようにします。")]
     public bool PartialCommit { get; set; }
+
+    // ワークアラウンド: 変換を始めたときに選ぶ文節を、Mozc の区切りと変換の uncertainty から決められるようになったら (#2105) 消す。
+    [Category("8. キー操作"), DisplayName("変換を始めたら最後の文節を選ぶ"),
+     Description("Space・Shift + Space・Tab・変換・↑ ↓ で変換を始めたとき、最後の文節を選びます (OFF のときは先頭の文節)。変換前の ← は最後の文節、→ は先頭の文節を選びます。")]
+    public bool ConversionStartsAtLastClause { get; set; }
 
     [Category("8. キー操作"), DisplayName("Control キーの割り当て"),
      Description("入力中の Control + 英字の割り当てです。標準: Ctrl + U / I / O / P で F6 / F7 / F10 / F9、Ctrl + H で BackSpace。ATOK 風: 標準に加えて、変換中の Ctrl + K で選んでいる文節を縮め、Ctrl + L で伸ばします (Shift + ← → と同じ)。macOS 風: Control + J / K / L をひらがな / カタカナ / 全角英字 (F6 / F7 / F9) に、Control + H / D を前 / 後ろの 1 文字を消す、N / P を次 / 前の候補、B / F / A / E をカーソル移動、O / I を変換中の文節を伸ばす / 縮める、にします (macOS 標準の日本語入力と同じ)。")]
@@ -517,12 +520,21 @@ public sealed class Settings
     public string CompositionFont { get; set; } = "";
 
     [Category("9. 表示"), DisplayName("変換ボックスの色"), Platforms(Platform.Windows),
-     Description("ダーク: 黒っぽい背景に白い文字 (今までの見た目)。ライト: 白っぽい背景に黒い文字。Windows の設定に合わせる: Windows の「既定のアプリ モード」(設定の 個人用設定 > 色) に合わせます。")]
+     Description("ダーク: 黒っぽい背景に白い文字 (今までの見た目)。ライト: 白っぽい背景に黒い文字。Windows の設定に合わせる: Windows の「既定のアプリ モード」(設定の 個人用設定 > 色) に合わせます。カスタム: 「変換ボックスのカスタムの色」の背景と文字の色で出します (Meltype キーボードだけ。Meltype IME の候補の一覧は Windows の色のまま)。")]
     public CompositionTheme CompositionTheme { get; set; } = CompositionTheme.Dark;
+
+    [Category("9. 表示"), DisplayName("変換ボックスのカスタムの色: 背景"), Platforms(Platform.Windows),
+     Description("「変換ボックスの色」が「カスタム」のときの背景色を #RRGGBB で書きます。背景と文字のどちらかが空なら、既定のダーク配色で表示します。")]
+    public string CompositionCustomBackColor { get; set; } = "#202228";
+
+    [Category("9. 表示"), DisplayName("変換ボックスのカスタムの色: 文字"), Platforms(Platform.Windows),
+     Description("「変換ボックスの色」が「カスタム」のときの文字の色を #RRGGBB で書きます。案内の文字・選んでいる候補の目印・下線もこの色で描きます。背景と文字のどちらかが空なら、既定のダーク配色で表示します。")]
+    public string CompositionCustomTextColor { get; set; } = "#FFFFFF";
 
     [Category("9. 表示"), DisplayName("変換ボックスの不透明度"), Platforms(Platform.Windows),
      Description("変換ボックスを少し透かして、後ろの文字を見えるようにします。100% は透けません。")]
     public CompositionOpacity CompositionOpacity { get; set; } = CompositionOpacity.Opaque;
+
 
     /// <summary>変換ボックスをライトの色で出すか。windowsLight は Windows のアプリ モードがライトか (分からなければ null = ダーク)。</summary>
     public bool CompositionIsLight(bool? windowsLight) => CompositionTheme switch
@@ -531,6 +543,20 @@ public sealed class Settings
         CompositionTheme.System => windowsLight ?? false,
         _ => false,
     };
+
+    /// <summary>カスタムの変換ボックスの背景と文字の色 (読めない値なら null で、ライト / ダークの色のまま)。</summary>
+    public ((int R, int G, int B) Back, (int R, int G, int B) Text)? CompositionCustomColors() =>
+        CompositionTheme == CompositionTheme.Custom && ParseColor(CompositionCustomBackColor) is { } back && ParseColor(CompositionCustomTextColor) is { } text
+            ? (back, text) : null;
+
+    /// <summary>
+    /// 決めた色で文字が読みにくくなるなら、利用者に見せる警告。保存を止めるかは利用者が決める。
+    /// カスタムでは文字・案内・目印・下線をすべて文字の色で描くので、文字と背景の 1 組だけを確かめれば足りる。
+    /// </summary>
+    public string? ColorWarning() =>
+        CompositionCustomColors() is var (back, text)
+            ? ColorContrast.Warning("変換ボックスのカスタムの色: 文字", text, "変換ボックスのカスタムの色: 背景", back)
+            : null;
 
     /// <summary>変換ボックスの不透明度 (0.7〜1)。</summary>
     [Browsable(false), JsonIgnore]
@@ -553,6 +579,10 @@ public sealed class Settings
     [Category("13. 更新"), DisplayName("プレリリース版も自動で更新する"), Platforms(Platform.Windows),
      Description("ON にすると、正式版の前に公開するプレリリース版 (1.3.1-pre.4 など) も自動更新の対象にします。新しい機能や修正を早く試せますが、不具合や動作の不安定さが含まれることがあります。OFF (標準) では正式版だけを対象にします。")]
     public bool UpdatePrerelease { get; set; }
+
+    [Category("13. 更新"), DisplayName("更新後にリリースノートを表示する"), Platforms(Platform.Windows),
+     Description("新しい版に更新したあとの最初の起動で、その版のリリースノートを表示します。OFF にすると自動では表示しません (インストール版では、トレイの「更新」→「リリースノート...」からいつでも見られます)。リリースノートの画面の「今後表示しない」でも変えられます。全プロファイル共通です。")]
+    public bool ShowReleaseNotesAfterUpdate { get; set; } = true;
 
     [Category("2. 入力方式"), DisplayName("入力方式"), Description("ローマ字入力 / かな入力 (JIS、α版: 試験中)。Meltype キーボードでは、かな入力を選ぶと JIS かな配列で入力し (Shift+E = ぃ, Shift+Z = っ, Shift+ね = 、)、打ったキーの英字が英単語なら英字で見せます。")]
     [JsonConverter(typeof(InputStyleJsonConverter))]
@@ -594,7 +624,7 @@ public sealed class Settings
     private static readonly HashSet<string> SharedKeys =
     [
         SchemaKey, nameof(Profiles), nameof(ActiveProfile), nameof(SettingsVersion),
-        nameof(Enabled), nameof(JapaneseKeyboardOnly), nameof(AllowInjectedInput), nameof(FileLog), nameof(LogTypedText), nameof(AutoUpdate), nameof(UpdatePrerelease),
+        nameof(Enabled), nameof(JapaneseKeyboardOnly), nameof(AllowInjectedInput), nameof(FileLog), nameof(LogTypedText), nameof(AutoUpdate), nameof(UpdatePrerelease), nameof(ShowReleaseNotesAfterUpdate),
         // 入力の方式 (Windows の IME として入力するか) は PC 全体の選び方なので、プロファイルで変えない
         nameof(Mode),
     ];
@@ -730,59 +760,6 @@ public sealed class Settings
         current.Profiles.Add(new SettingsProfile { Name = unique, Values = values });
         return current.SwitchProfile(unique);
     }
-
-    /// <summary>
-    /// 設定画面で変えた項目だけを今の設定 (current) に重ねた設定を返す。opened は画面を開いた時点の画面の値、edited は閉じる時点の画面の値。
-    /// 画面を開いている間にトレイなどで変えた項目 (一時停止・動作モード・自動判定・プロファイルなど) は、画面で変えていなければ current のまま。
-    /// プロファイルごとの値はプロファイルの名前ごとに比べる。トレイでプロファイルを切り替えても、画面で変えた値は画面で選んでいたプロファイルに入る。
-    /// 使っているプロファイルは、画面で切り替えたときだけ画面のものにする。プロファイルの一覧 (足す・名前を変える・消す) は画面のもの (トレイでは切り替えるだけ)。
-    /// </summary>
-    public static Settings MergeEdits(Settings opened, Settings edited, Settings current)
-    {
-        if (edited.ToJson() == opened.ToJson()) return current.Clone().Normalize();
-        var openedJson = JsonSerializer.SerializeToNode(opened, JsonType)!.AsObject();
-        var editedJson = JsonSerializer.SerializeToNode(edited, JsonType)!.AsObject();
-        var merged = JsonSerializer.SerializeToNode(current, JsonType)!.AsObject();
-        foreach (var key in SharedKeys)
-        {
-            if (key is nameof(Profiles) or nameof(ActiveProfile)) continue;
-            if (!JsonNode.DeepEquals(openedJson[key], editedJson[key])) merged[key] = editedJson[key]?.DeepClone();
-        }
-        var active = edited.ActiveProfile != opened.ActiveProfile || edited.Profiles.All(p => p.Name != current.ActiveProfile) ? edited.ActiveProfile : current.ActiveProfile;
-        var profiles = new List<SettingsProfile>();
-        foreach (var name in edited.ProfileNames)
-        {
-            var values = MergeValues(opened.ValuesOf(name), edited.ValuesOf(name)!, current.ValuesOf(name));
-            if (name == active)
-            {
-                foreach (var (key, value) in values)
-                {
-                    if (!SharedKeys.Contains(key)) merged[key] = value?.DeepClone();
-                }
-            }
-            profiles.Add(new SettingsProfile { Name = name, Values = values });
-        }
-        var next = merged.Deserialize(JsonType) ?? current.Clone();
-        next.Profiles = profiles;
-        next.ActiveProfile = active;
-        return next.Normalize();
-
-        // 画面で足した (名前を変えた・読み込んだ) プロファイルは、画面の値のまま
-        static JsonObject MergeValues(JsonObject? opened, JsonObject edited, JsonObject? current)
-        {
-            if (opened is null || current is null) return edited.DeepClone().AsObject();
-            var values = current.DeepClone().AsObject();
-            foreach (var (key, value) in edited)
-            {
-                if (!JsonNode.DeepEquals(opened[key], value)) values[key] = value?.DeepClone();
-            }
-            return values;
-        }
-    }
-
-    /// <summary>プロファイルの値。使っているプロファイルは今の値。そのプロファイルが無ければ null。</summary>
-    private JsonObject? ValuesOf(string name) =>
-        name == ActiveProfile ? ProfileValues() : Profiles.FirstOrDefault(p => p.Name == name) is { } profile ? profile.Values ?? [] : null;
 
     /// <summary>旧プロファイルの追加キーを移行する。未設定と明示的な空の一覧は区別する。</summary>
     private static void InitializeToggleShortcuts(JsonObject? values, string profile = DefaultProfileName, bool report = true)
@@ -1190,9 +1167,10 @@ public sealed class Settings
         catch (Exception ex)
         {
             // 壊れた設定で起動不能にしない。元ファイルは退避して既定値で動く。
+            // 手で書いた値の型が違うと、移行の処理 (MigrateToV8 の GetValue<string> など) が InvalidOperationException を投げるので、型で絞らない (DataFile)
             try { File.Copy(path, path + ".broken", overwrite: true); }
-            catch (Exception copyEx) { Diagnostics.Log.Warn($"{Path.GetFileName(path)} を .broken に残せませんでした: {copyEx.Message}"); }
-            Diagnostics.Log.Warn($"config.json を読み込めなかったため既定値を使います: {ex.Message}");
+            catch (Exception copyEx) when (DataFile.IsFileError(copyEx)) { Diagnostics.Log.Warn($"{Path.GetFileName(path)} を .broken に残せませんでした: {copyEx.Message}"); }
+            DataFile.ReportUnreadable("config.json (既定値を使います) ", ex);
             return new Settings();
         }
     }
@@ -1240,7 +1218,7 @@ public sealed class Settings
         {
             // 保存できなくても、読み込んだ設定は使う (既定値に戻すと、次の保存でユーザーの設定が消える)。
             try { settings.Save(path); }
-            catch (Exception ex) { Diagnostics.Log.Warn($"移行した config.json を保存できませんでした: {ex.Message}"); }
+            catch (Exception ex) when (DataFile.IsFileError(ex)) { Diagnostics.Log.Warn($"移行した config.json を保存できませんでした: {ex.Message}"); }
         }
         return settings;
     }

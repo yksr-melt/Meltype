@@ -15,7 +15,7 @@ namespace Meltype.Input;
 /// フックのスレッドから Count を呼び、ファイル (keycount.json) には Save でまとめて書く。
 /// 打った文字は残さない (どのキーを何回押したかだけ)。
 /// </summary>
-internal sealed partial class KeyCounter
+public sealed partial class KeyCounter
 {
     public sealed class Data
     {
@@ -187,7 +187,7 @@ internal sealed partial class KeyCounter
             _dirty = false;
         }
         try { DataFile.Write(_path, temp => File.WriteAllText(temp, json)); }
-        catch (Exception ex)
+        catch (Exception ex) when (Config.DataFile.IsFileError(ex))
         {
             lock (_lock) _dirty = true;
             Diagnostics.Log.Warn($"打鍵数を保存できませんでした: {ex.Message}");

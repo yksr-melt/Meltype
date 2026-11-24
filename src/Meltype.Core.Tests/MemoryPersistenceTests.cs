@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 0924haruto12
 
-using Meltype.Composition;
+using Meltype.Detection;
+using Meltype.Dictionary;
+using Meltype.Learning;
 
 namespace Meltype.Tests;
 

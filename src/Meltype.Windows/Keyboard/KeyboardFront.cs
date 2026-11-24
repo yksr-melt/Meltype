@@ -4,6 +4,7 @@
 using Meltype.Composition;
 using Meltype.Config;
 using Meltype.Diagnostics;
+using Meltype.Dictionary;
 using Meltype.Ime;
 using Meltype.Input;
 
@@ -29,6 +30,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
     private readonly ForegroundTracker _foreground = new();
     private readonly KeyInjector _injector = new();
     private readonly ImeHost _host;
+    private readonly Func<string?> _otherTipVersion;
     private readonly System.Threading.Timer _pollTimer;
     private readonly object _gate = new();
     private readonly Queue<Input> _queue = new();
@@ -67,10 +69,12 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
     }
 
     /// <param name="createHost">入力の本体を作る (設定は本体に渡す。フロントは読まない)。</param>
-    public KeyboardFront(Control invoker, CompositionService composition, Func<IImeEnvironment, ImeHost> createHost)
+    /// <param name="otherTipVersion">登録済みの、別のビルドの Meltype IME の版 (<see cref="IImeEnvironment.OtherTipVersion"/>)。</param>
+    public KeyboardFront(Control invoker, CompositionService composition, Func<IImeEnvironment, ImeHost> createHost, Func<string?> otherTipVersion)
     {
         _invoker = invoker;
         _composition = composition;
+        _otherTipVersion = otherTipVersion;
         _host = createHost(this);
         _state = new ImeState { Capture = new ImeCapture() };
         composition.Focus.TreatsWindowAsTextInput = () => WindowInputApps.Contains(_foreground.Current.ProcessName);
@@ -106,6 +110,8 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
     public SnippetStore Snippets => _composition.Snippets;
 
     public string? ClipboardText => CompositionService.ClipboardText;
+
+    public string? OtherTipVersion => _otherTipVersion();
 
 
     // ---- フックのスレッド ----
@@ -322,7 +328,10 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
             lock (_gate) _releaseFollows.Add(e.PhysicalId);
         }
         var output = Send(ImeEventType.KeyPressed, key);
-        if (!output.Result.Consumed)
+        // Shift・Ctrl は、本体が使った押下もアプリに通す。止めた押下は GetAsyncKeyState に表れないので、通さないと
+        // 押したまま打った後のキー (変換中の Shift + ←) が修飾キーなしになる (#2118)。
+        // Alt・Win は押して離すだけでメニューやスタートを開くので通さない (Shift・Ctrl の単独押しは下で防ぐ)
+        if (!output.Result.Consumed || GenericModifier(e.Vk) is VirtualKeys.Shift or VirtualKeys.Control || e.Vk is VirtualKeys.Shift or VirtualKeys.Control)
         {
             _composition.Replay(e);
             return;
@@ -331,8 +340,10 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         // (変換ボックスを出す前から押していた Shift など) を本体が使うと、離したことを止めたときアプリと OS では押したままになり、
         // 打つ文字もクリックもすべて Shift 付きになる。押していないキーを離しても何も起きない
         if (!VirtualKeys.IsModifier(e.Vk)) lock (_gate) _consumed.Add(e.PhysicalId);
-        // Alt・Win と一緒に押したキー (US 配列の Alt + ` など) を使うと、アプリには修飾キーだけを押したように見えてメニューに移るので、何もしないキーを送る
-        if (key.Alt || key.Command) KeyInjector.SendKey(0xE8);
+        // 修飾キーと一緒に押したキーを使うと、アプリには修飾キーだけを押して離したように見える。Alt・Win ではメニューに移り
+        // (US 配列の Alt + ` など)、Shift・Ctrl では単独押しに割り当てた機能が動く (JetBrains の IDE の Shift 2 回で Search Everywhere、
+        // 変換中の Shift + ← を 2 回など) ので、何もしないキー (0xE8、割り当てなし) を送る
+        if (key.Alt || key.Command || key.Shift || key.Ctrl) KeyInjector.SendKey(0xE8);
     }
 
     /// <summary>出来事を送り、返ってきた確定・表示・入力モードを反映する。</summary>

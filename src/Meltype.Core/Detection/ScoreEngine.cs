@@ -1,4 +1,5 @@
 using Meltype.Config;
+using Meltype.Libraries.Lexicon;
 
 namespace Meltype.Detection;
 
@@ -9,7 +10,7 @@ namespace Meltype.Detection;
 ///   JapaneseScore >= 閾値  かつ  JapaneseScore - EnglishScore >= 閾値
 /// のときだけ。英語の根拠があるときは、日本語スコアが「多少高い」程度では切り替えない。
 /// </summary>
-public sealed class ScoreEngine
+internal sealed class ScoreEngine
 {
     /// <summary>判定のために保留する文字数の上限。超えたら判定不能 (Unknown) にする。</summary>
     internal const int MaxPendingKeys = 6;

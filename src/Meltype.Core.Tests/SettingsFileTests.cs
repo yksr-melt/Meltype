@@ -8,6 +8,26 @@ namespace Meltype.Tests;
 internal static class SettingsFileTests
 {
     [Test]
+    public static void Settings_WithAValueOfTheWrongType_LoadsDefaults()
+    {
+        // 手で書いた値の型が違う (Process が数) と、古い版の設定の読み替えが InvalidOperationException を投げる。起動できなくせず、既定値で動く
+        var directory = Path.Combine(Path.GetTempPath(), "meltype-settings-type-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var path = Path.Combine(directory, "config.json");
+            File.WriteAllText(path, """{"SettingsVersion":7,"TextInputApps":"a.exe","AppRules":[{"Process":1}]}""");
+            var settings = Settings.Load(path);
+            Assert.Equal(new Settings().LiveConversion, settings.LiveConversion, "既定値");
+            Assert.True(File.Exists(path + ".broken"), "読めなかったファイルは .broken に残す");
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Test]
     public static void SettingsFile_ChecksWriteTimeOncePerInterval()
     {
         var directory = Path.Combine(Path.GetTempPath(), "meltype-settings-file-" + Guid.NewGuid().ToString("N"));
@@ -58,6 +78,33 @@ internal static class SettingsFileTests
             Write("FullWidthCommaPeriod", 4);
             now += SettingsFile.CheckIntervalMs;
             Assert.Equal(PunctuationStyle.FullWidthCommaPeriod, file.Current.Punctuation, "書かれたら読み直す");
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
+
+    /// <summary>設定アプリで 1 項目を変えて保存しても、直前にほかのプロセス (トレイ) が書いた値を、間隔の間の古い設定で戻さない。</summary>
+    [Test]
+    public static void SettingsFile_EditReadsLatestFileBeforeSaving()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "meltype-settings-file-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var path = Path.Combine(directory, "config.json");
+            var file = new SettingsFile(path, timeMs: () => 0);
+            Assert.True(file.Current.Enabled, "最初は有効");
+            // 間隔が経つ前に、ほかのプロセスが一時停止する
+            var paused = new Settings { Enabled = false };
+            paused.Save(path);
+            File.SetLastWriteTimeUtc(path, new DateTime(2026, 1, 1, 0, 0, 1, DateTimeKind.Utc));
+            var saved = file.Edit(settings =>
+            {
+                var next = settings.Clone();
+                next.Punctuation = PunctuationStyle.FullWidthCommaPeriod;
+                return next;
+            })!;
+            Assert.True(!saved.Enabled && saved.Punctuation == PunctuationStyle.FullWidthCommaPeriod, "一時停止のまま、変えた項目だけを重ねる");
+            Assert.True(!Settings.Load(path).Enabled, "保存したファイルも一時停止のまま");
         }
         finally { Directory.Delete(directory, recursive: true); }
     }

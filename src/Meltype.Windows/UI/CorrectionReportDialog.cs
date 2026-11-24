@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Yukishiro
 
 using System.Diagnostics;
-using Meltype.Composition;
+using Meltype.Diagnostics;
 
 namespace Meltype.UI;
 

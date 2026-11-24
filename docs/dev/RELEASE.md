@@ -3,14 +3,15 @@
 ## 版を出す
 
 1. 版を上げる
-   - `src/Meltype.Windows/Meltype.Windows.csproj`・`src/Meltype.Core/Meltype.Core.csproj` の `<Version>`
+   - `src/Directory.Build.props` の `<Version>`
    - `mac/Resources/Info.plist` の `CFBundleShortVersionString` と `CFBundleVersion` (Mac 版の表示の版は Info.plist から読みます)
    - 通貨の換算に使うレートを作り直す: `node tools/make-exchange-rates.mjs` (欧州中央銀行の参照レートを `dictionaries/exchange-rates.txt` に書く。100どる → 約1.6万円 の候補で使う)
    - `docs/release-notes/<版>.md` にリリースノートを書く (例: `docs/release-notes/1.4.0.md`)。配布物に同梱し、更新したあとの初めての起動で Meltype (Windows) が見せる。GitHub のリリースの本文にも同じものを使う。タグのビルドでは、このファイルが無ければ Windows 版のビルドが止まる
 2. コミットして main に入れ、タグを付けて push する: `git tag v1.1.1 && git push origin v1.1.1`
-3. タグの push で `.github/workflows/release.yml` が動き、Windows (windows.yml)・Mac (mac.yml)・Linux (linux.yml) の配布物を作って、全部できたらリリースに付ける。どれかが失敗したら、どの配布物も付けず、下の Homebrew・apt・dnf にも出さない
+3. タグの push で `.github/workflows/release.yml` が動き、Windows (windows.yml)・Mac (mac.yml)・Linux (linux.yml)・端末版 (tui.yml) の配布物を作って、全部できたらリリースに付ける。どれかが失敗したら、どの配布物も付けず、下の Homebrew・apt・dnf にも出さない
    - Windows: `Meltype-<版>-setup.exe` (インストーラー。自動更新もこれを使う)、`Meltype-<版>-windows-portable.zip`、`Meltype-<版>-windows.zip` (1.6.0 以前の Meltype の自動更新用。中身はインストーラーと、それを実行する `install.ps1`)
    - Mac: `Meltype-<版>-mac.zip`、Linux: `Meltype-<版>-linux.zip` と `meltype_<版>_amd64.deb`、ARM64 の `Meltype-<版>-linux-arm64.zip` と `meltype_<版>_arm64.deb`、Fedora・RHEL 9 系向けの `meltype-<版>-1.x86_64.rpm` と `meltype-<版>-1.aarch64.rpm`、fcitx5 のアドオンの `meltype-fcitx5-<版>-1.x86_64.rpm` と `meltype-fcitx5-<版>-1.aarch64.rpm` (どれもプレビュー版。.deb と .rpm の版は `1.2.2-pre.2` なら `1.2.2~pre.2`)
+   - 端末版: `Meltype-<版>-tty-linux.zip`、ARM64 の `Meltype-<版>-tty-linux-arm64.zip`
    - リリースに付けたあと、Homebrew Cask の更新 PR を作ります。PR を main に入れると、このリポジトリの `Casks/meltype.rb` が更新されます
    - リリースに付けたあと、apt・dnf のリポジトリを GitHub Pages に公開します (下の「パッケージマネージャー」の署名鍵があるときだけ)
 4. リリースのページの本文が `docs/release-notes/<版>.md` と同じか確かめる (bot を使うと、そのファイルを本文にした下書きまで自動で作ります。下の「bot でリリースする」)。リリースのページだけ書き直すと、アプリで見せる本文と食い違うので、直すときはファイルも直す
@@ -23,13 +24,17 @@ Windows の [Code signing policy](CODE-SIGNING.md) と [SignPath テスト署名
 版を上げて main に入れたあと、Issue か Pull Request のコメントの 1 行目に、管理者 (admin / maintain) が次のように書きます。
 
 - `/release 1.2.3` … 通常の版
-- `/pre-release 1.2.3-pre.1` … プレリリース
+- `/pre-release 1.2.3-pre.1`・`/pre-release 1.2.3-rc.1` … プレリリース (リリース候補は `rc`)
 
-bot は、main の `Meltype.Windows.csproj`・`Meltype.Core.csproj`・`Info.plist` の版が書いた版と合っているかを確かめ (版の上げ忘れを防ぐため、合っていなければ止めます)、`docs/release-notes/<版>.md` があるかを確かめ (無ければ止めます)、タグ `v1.2.3` とリリースの下書き (本文はそのファイル) を作って、そのタグで release.yml を始めます。ビルドが終わると、release.yml が下書きに配布物を付けて公開します。
+bot は、main の `src/Directory.Build.props`・`Info.plist` の版が書いた版と合っているかを確かめ (版の上げ忘れを防ぐため、合っていなければ止めます)、`docs/release-notes/<版>.md` があるかを確かめ (無ければ止めます)、タグ `v1.2.3` とリリースの下書き (本文はそのファイル) を作って、そのタグで release.yml を始めます。ビルドが終わると、release.yml が下書きに配布物を付けて公開します。
 
 ### テスト版の配布物を作る
 
 Actions の画面で release.yml をブランチに対して手で実行 (Run workflow) すると、3 つの OS のテスト版の配布物を実行結果の Artifacts に置きます (リリースには付けません)。1 つの OS だけなら、windows.yml・mac.yml・linux.yml を手で実行します。
+
+### Android のプレビューを出す
+
+[Android preview release](https://github.com/yksr-melt/Meltype/actions/workflows/android-release.yml) を `main` で手動実行し、版を `0.1.0-preview.1` の形式で指定します。署名付きの `Meltype.apk` を `android-v<版>` の Pre-release に公開します。署名用の Secrets と更新時の注意点は [Android の署名・配布手順](../../android/docs/SIGNING-DISTRIBUTION.md) を参照してください。
 
 ## 同梱の .NET の更新
 

@@ -374,10 +374,11 @@ internal static class DetectionTests
         try
         {
             File.WriteAllText(Path.Combine(dir, "romaji.txt"), "kz\tかん\n");
-            var detector = Composition.CompositionDetector.CreateDefault(dir);
-            var text = new Composition.CompositionText(detector);
-            foreach (var c in "kzji") text.Append(c);
-            Assert.Equal("かんじ", text.Display(final: true));
+            var detector = Detection.CompositionDetector.CreateDefault(dir);
+            var text = new Composition.CompositionTextState();
+            var env = TestSupport.Env(detector);
+            foreach (var c in "kzji") Composition.CompositionText.Append(text, env, c);
+            Assert.Equal("かんじ", Composition.CompositionText.Display(text, env, final: true));
         }
         finally { Directory.Delete(dir, recursive: true); }
     }

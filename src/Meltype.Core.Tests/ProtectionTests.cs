@@ -3,7 +3,11 @@
 
 using Meltype.Composition;
 using Meltype.Config;
+using Meltype.Detection;
+using Meltype.Dictionary;
+using Meltype.Ime;
 using Meltype.Input;
+using Meltype.Learning;
 
 namespace Meltype.Tests;
 
@@ -264,17 +268,18 @@ internal static class ProtectionTests
     {
         foreach (var token in new[] { "@kuraido", "https://example.com/nihongo", "taro@example.com", "./shumire-shon", @"C:\Users\taro" })
         {
-            var text = new CompositionText(CompositionTests.Detector);
-            foreach (var c in "kyouha「" + token + "」ashita") text.Append(c);
+            var text = new Composition.CompositionTextState();
+            var env = TestSupport.Env(CompositionTests.Detector);
+            foreach (var c in "kyouha「" + token + "」ashita") CompositionText.Append(text, env, c);
             var calls = new List<string>();
-            var shown = text.Display(final: true, convert: (kana, _) =>
+            var shown = CompositionText.Display(text, env, final: true, convert: (kana, _, _) =>
             {
                 calls.Add(kana);
                 return kana.Replace("きょうは", "今日は").Replace("あした", "明日");
             });
             Assert.Equal("今日は「" + token + "」明日", shown, token);
             Assert.True(calls.All(kana => !kana.Contains(token)), "保護原文を漢字変換へ渡さない");
-            Assert.Equal(token, text.ConversionSegments().Single(s => s.IsProtected).Raw);
+            Assert.Equal(token, CompositionText.ConversionSegments(text, env).Single(s => s.IsProtected).Raw);
         }
     }
 

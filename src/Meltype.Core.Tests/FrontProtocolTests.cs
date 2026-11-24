@@ -2,7 +2,6 @@
 // Copyright (C) 2026 aster-void
 
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using Meltype.Composition;
 using Meltype.Ime;
 
@@ -14,29 +13,42 @@ namespace Meltype.Tests;
 /// </summary>
 internal static class FrontProtocolTests
 {
-    /// <param name="Reads">ソースから、JSON の項目を読んでいる所の名前を取り出す。</param>
+    /// <summary>
+    /// JSON の項目を読む書き方。ソースを字句に分けてから当てはめるので、コメントと文字列の中身・空白・改行の違いに左右されない。
+    /// </summary>
+    /// <param name="Calls">最初の引数の文字列が項目名になる関数 (<c>get("x")</c>)。</param>
+    /// <param name="Index">添字の文字列が項目名になる (<c>o["x"]</c>)。リストの字句 (<c>["x"]</c>) は添字でないので数えない。</param>
+    /// <param name="Fields">型の宣言のフィールド名が項目名になる (Swift の <c>Decodable</c>: <c>let x:</c>)。</param>
+    private sealed record Reader(string[] Calls, bool Index = false, bool Fields = false);
+
     /// <param name="Unused">本体が出すが、このフロントが使わない項目。</param>
     /// <param name="Others">ソースから取り出せてしまう、本体の応答でない名前。</param>
-    private sealed record FrontSource(string Name, string Path, Func<string, string> Region, Regex Reads, string[] Unused, string[] Others);
+    private sealed record FrontSource(string Name, string Path, Func<string, string> Region, Reader Reads, string[] Unused, string[] Others);
 
     private static readonly FrontSource[] Fronts =
     [
-        new("Meltype IME (DLL)", "native/tip/TextService.cpp", source => source, new(@"\[L""(\w+)""\]"),
+        new("Meltype IME (DLL)", "native/tip/TextService.cpp", source => source, new([], Index: true),
             // 入力モードと、左右の Alt (フックで見る) は Meltype.exe (TipServer) が使う
             Unused: ["version", "modeIndicatorMs", "insertByPaste", "keyReleases", "altKeys"],
             // Meltype.exe (TipServer) の応答: 背景の変換の結果の待ち合わせと、別ビルドの impl への応答
             Others: ["generation", "stale"]),
-        new("fcitx5", "linux/fcitx5/meltype.cpp", source => source, new(@"\b(?:get|str|flag|integer|strings)\(""(\w+)"""),
+        new("fcitx5", "linux/fcitx5/meltype.cpp", source => source, new(["get", "str", "flag", "integer", "strings"]),
             Unused: ["version", "handlesInput", "imeOpen", "printableAscii", "printableAsciiExcept", "shortcuts", "vk", "modifiers",
                 "ctrlKeysWhileComposing", "revision", "currentWord", "insertByPaste", "keyReleases"],
             Others: []),
-        new("IBus", "linux/ibus-engine-meltype", source => source, new(@"\[""(\w+)""\]|\.get\(""(\w+)"""),
+        new("IBus", "linux/ibus-engine-meltype", source => source, new(["get"], Index: true),
             Unused: ["version", "handlesInput", "imeOpen", "printableAscii", "printableAsciiExcept", "shortcuts", "vk", "modifiers",
                 "ctrlKeysWhileComposing", "revision", "currentWord", "insertByPaste", "keyReleases"],
             // 送る入力欄の事実
-            Others: ["app", "selection", "NonText"]),
-        new("Android", "android/app/src/main/kotlin/io/github/ninjin0802/keyboard/app/core/ImeJson.kt", source => source,
-            new(@"\b(?:get|opt)(?:String|Int|Boolean|JSONObject|JSONArray)\(""(\w+)""|\bisNull\(""(\w+)"""),
+            Others: ["app", "selection"]),
+        new("端末", "tui/meltype-tty", source => source, new([], Index: true),
+            // 端末はキーをすべて送り (capture を見ない)、canRemove: false なので removeBefore は来ない。案内 (hint) は端末に届かないキーも書くので出さない
+            Unused: ["version", "state", "handlesInput", "imeOpen", "languageMode", "modeIndicatorMs", "capture", "printableAscii", "printableAsciiExcept",
+                "shortcuts", "vk", "modifiers", "ctrlKeysWhileComposing", "altKeys", "keyReleases", "revision", "currentWord", "insertByPaste",
+                "removeBefore", "hint", "notes", "selectedMeaning", "meaningDelayMs"],
+            Others: []),
+        new("Android", "android/app/src/main/kotlin/app/meltype/keyboard/core/ImeJson.kt", source => source,
+            new(["getString", "getInt", "getBoolean", "getJSONObject", "getJSONArray", "optString", "optInt", "optBoolean", "optJSONObject", "optJSONArray", "isNull"]),
             // Android reports field facts to Core, and handles text edits, candidate choices and the language mode from its output.
             Unused: ["version", "handlesInput", "imeOpen", "modeIndicatorMs", "capture", "printableAscii",
                 "printableAsciiExcept", "shortcuts", "vk", "modifiers", "ctrlKeysWhileComposing", "revision", "currentWord", "insertByPaste",
@@ -44,10 +56,10 @@ internal static class FrontProtocolTests
                 "selectedMeaning", "meaningDelayMs"],
             Others: []),
         new("macOS", "mac/Sources/MeltypeIME/NativeCore.swift", source => source[source.IndexOf("struct ImeOutput", StringComparison.Ordinal)..source.IndexOf("/// libMeltypeNative", StringComparison.Ordinal)],
-            new(@"\blet (\w+):"),
-            // IMK は候補ウィンドウの番号を消せない・IME からアプリのキャレットを動かせない
+            new([], Fields: true),
+            // Input Method Kit では IME からアプリのキャレットを動かせない。
             Unused: ["version", "handlesInput", "imeOpen", "capture", "printableAscii", "printableAsciiExcept", "shortcuts", "vk", "modifiers",
-                "ctrlKeysWhileComposing", "revision", "currentWord", "moveCaretBack", "insertByPaste", "numbered", "keyReleases", "altKeys"],
+                "ctrlKeysWhileComposing", "revision", "currentWord", "moveCaretBack", "insertByPaste", "keyReleases", "altKeys"],
             Others: []),
     ];
 
@@ -58,15 +70,43 @@ internal static class FrontProtocolTests
         var root = RepositoryRoot();
         foreach (var front in Fronts)
         {
-            var source = front.Region(File.ReadAllText(Path.Combine(root, front.Path)));
-            var read = front.Reads.Matches(source).SelectMany(m => m.Groups.Values.Skip(1)).Where(g => g.Success).Select(g => g.Value).ToHashSet();
+            var tokens = SourceLexer.Tokenize(front.Region(File.ReadAllText(Path.Combine(root, front.Path))));
+            var read = ReadNames(tokens, front.Reads);
             var missing = sent.Except(read).Except(front.Unused).Order().ToList();
             Assert.True(missing.Count == 0, $"{front.Name} ({front.Path}) が読まない項目。読むか Unused に入れる: {string.Join(", ", missing)}");
             var unknown = read.Except(sent).Except(front.Others).Order().ToList();
             Assert.True(unknown.Count == 0, $"{front.Name} ({front.Path}) が読む、本体が出さない名前: {string.Join(", ", unknown)}");
             var stale = front.Unused.Where(name => !sent.Contains(name) || read.Contains(name)).ToList();
             Assert.True(stale.Count == 0, $"{front.Name} の Unused に、本体が出さないか読んでいる名前がある: {string.Join(", ", stale)}");
+            var staleOthers = front.Others.Where(name => sent.Contains(name) || !read.Contains(name)).ToList();
+            Assert.True(staleOthers.Count == 0, $"{front.Name} の Others に、本体が出すか読んでいない名前がある: {string.Join(", ", staleOthers)}");
         }
+    }
+
+    [Test]
+    public static void SourceLexer_SkipsCommentsAndTellsIndexFromListLiteral()
+    {
+        var tokens = SourceLexer.Tokenize("""
+            a["x"] # b["y"]
+            f(["z"]) // g("w")
+            /* get("v") */ get( "u" ) s = "q\"r"
+            """);
+        Assert.Equal("u,x", string.Join(",", ReadNames(tokens, new(["get"], Index: true)).Order()));
+    }
+
+    private static HashSet<string> ReadNames(List<SourceToken> tokens, Reader reader)
+    {
+        var names = new HashSet<string>();
+        for (var i = 0; i + 2 < tokens.Count; i++)
+        {
+            var (a, b, c) = (tokens[i], tokens[i + 1], tokens[i + 2]);
+            if (reader.Calls.Length > 0 && a.Kind == SourceTokenKind.Word && reader.Calls.Contains(a.Text) && b.Text == "(" && c.Kind == SourceTokenKind.String) names.Add(c.Text);
+            // 添字: 名前・閉じ括弧の直後の [ "x" ]
+            if (reader.Index && b.Text == "[" && c.Kind == SourceTokenKind.String && (a.Kind == SourceTokenKind.Word || a.Text is "]" or ")")
+                && i + 3 < tokens.Count && tokens[i + 3].Text == "]") names.Add(c.Text);
+            if (reader.Fields && a.Text == "let" && b.Kind == SourceTokenKind.Word && c.Text == ":") names.Add(b.Text);
+        }
+        return names;
     }
 
     /// <summary>本体の応答に出る名前すべて。項目は値が無くても出すので、一覧と候補のある応答 1 つで揃う。</summary>

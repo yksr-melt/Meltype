@@ -17,7 +17,7 @@ public enum Verdict
 /// 判定対象。Letters は打鍵を英小文字に直したもの (英字以外のキーは '#')、
 /// Keys は仮想キーコード列 (かな入力判定用)。
 /// </summary>
-public sealed record DetectionInput(string Letters, IReadOnlyList<int> Keys, bool IsFinal);
+internal sealed record DetectionInput(string Letters, IReadOnlyList<int> Keys, bool IsFinal);
 
 /// <summary>各 Detector の加点。1 つの判定器が直接 Japanese/English を決めることはない (設計書 §12)。</summary>
 public readonly record struct Contribution(string Source, int Japanese, int English, string Reason)

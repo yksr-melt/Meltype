@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 aster-void
 
-using Meltype.Composition;
+using Meltype.Engine;
 
 namespace Meltype.Tests;
 
@@ -10,15 +10,13 @@ namespace Meltype.Tests;
 /// </summary>
 /// <param name="clauses">(読み, 文脈) → 文節。変換できなければ null。</param>
 /// <param name="candidates">読み → 候補の一覧。</param>
-/// <param name="convert">読み全体の変換。null なら文節をつなげる。</param>
-/// <param name="budget">ほかの変換エンジンと 1 回の入力の待ち時間を共有するときに渡す。</param>
+/// <param name="convert">文節に区切れないときの、読み全体の変換。null なら区切れなければ答えない。</param>
 /// <param name="start">ワーカーを動かすスレッドを選ぶ (COM の STA など)。null なら thread pool。</param>
 internal sealed class BackgroundCallbackConverter(
     Func<string, string?, IReadOnlyList<ConversionClause>?> clauses,
     Func<string, IReadOnlyList<string>> candidates,
     Func<string, string?>? convert = null,
-    ConversionBudget? budget = null,
-    Action<Action>? start = null) : IKanjiConverter, IBackgroundConverter, IDisposable
+    Action<Action>? start = null) : IKanjiConverter, IDisposable
 {
     // 1 回の表示で要る要求より少ないと、答えが届くたびに作り直しても控えが足りず、再描画が終わらない
     private const int MaxCache = 256;
@@ -27,24 +25,19 @@ internal sealed class BackgroundCallbackConverter(
     private readonly Dictionary<Request, Answer> _answers = [];
     private LatestRequestWorker<Request>? _worker;
 
-    private enum Kind { Clauses, Convert, Candidates }
+    private enum Kind { Clauses, Candidates }
 
     private readonly record struct Request(Kind Kind, string Reading, string? Context);
 
-    private readonly record struct Answer(IReadOnlyList<ConversionClause>? Clauses, string? Text, IReadOnlyList<string>? Candidates);
-
-    public ConversionBudget Budget { get; } = budget ?? new();
+    private readonly record struct Answer(IReadOnlyList<ConversionClause>? Clauses, IReadOnlyList<string>? Candidates);
 
     public event Action? ResultReady;
 
-    public string? Convert(string hiragana) =>
-        Ask(new Request(Kind.Convert, hiragana, null))?.Text;
+    public IReadOnlyList<ConversionClause>? Convert(ConversionRequest request) =>
+        Ask(new Request(Kind.Clauses, request.Hiragana, request.Before), ConversionRequest.RemainingMs(request.Deadline))?.Clauses;
 
-    public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) =>
-        Ask(new Request(Kind.Clauses, hiragana, context))?.Clauses;
-
-    public IReadOnlyList<string> Candidates(string reading) =>
-        Ask(new Request(Kind.Candidates, reading, null))?.Candidates ?? [];
+    public IReadOnlyList<string> Candidates(string reading, long deadline) =>
+        Ask(new Request(Kind.Candidates, reading, null), ConversionRequest.RemainingMs(deadline))?.Candidates ?? [];
 
     /// <summary>最初の変換の準備 (辞書の読み込み) をワーカーで済ませておく。</summary>
     public void WarmUp() => Worker().Submit(new Request(Kind.Clauses, "にほんご", null));
@@ -54,16 +47,15 @@ internal sealed class BackgroundCallbackConverter(
         lock (_gate) _worker?.Dispose();
     }
 
-    private string? ConvertNow(string hiragana) =>
-        convert is not null ? convert(hiragana)
-            : clauses(hiragana, null) is { Count: > 0 } parts ? string.Concat(parts.Select(c => c.Text)) : null;
+    private IReadOnlyList<ConversionClause>? ConvertNow(string hiragana, string? context) =>
+        clauses(hiragana, context) ?? (convert?.Invoke(hiragana) is { } text ? [new ConversionClause(hiragana, text)] : null);
 
     private LatestRequestWorker<Request> Worker()
     {
         lock (_gate) return _worker ??= new LatestRequestWorker<Request>(Process, start: start);
     }
 
-    private Answer? Ask(Request request)
+    private Answer? Ask(Request request, int waitMs)
     {
         var worker = Worker();
         lock (_gate)
@@ -77,7 +69,7 @@ internal sealed class BackgroundCallbackConverter(
             }
         }
         worker.Submit(request);
-        if (!worker.Wait(request, Budget.RemainingMs)) return null;
+        if (!worker.Wait(request, waitMs)) return null;
         lock (_gate) return _answers.TryGetValue(request, out var answered) ? answered : null;
     }
 
@@ -85,13 +77,12 @@ internal sealed class BackgroundCallbackConverter(
     {
         var answer = request.Kind switch
         {
-            Kind.Clauses => new Answer(clauses(request.Reading, request.Context), null, null),
-            Kind.Convert => new Answer(null, ConvertNow(request.Reading), null),
-            Kind.Candidates => new Answer(null, null, candidates(request.Reading)),
+            Kind.Clauses => new Answer(ConvertNow(request.Reading, request.Context), null),
+            Kind.Candidates => new Answer(null, candidates(request.Reading)),
             _ => throw new InvalidOperationException($"不明な要求: {request.Kind}"),
         };
         // 答えが無いのは準備前・一時的な失敗・時間切れかもしれないので、覚えずに次もまた聞く
-        if (answer.Clauses is null && answer.Text is null && answer.Candidates is null or { Count: 0 }) return;
+        if (answer.Clauses is null && answer.Candidates is null or { Count: 0 }) return;
         lock (_gate)
         {
             // 同じ答えを知らせると、再描画が聞き直しを呼び、終わらない
@@ -103,7 +94,6 @@ internal sealed class BackgroundCallbackConverter(
     }
 
     private static bool SameAnswer(Answer a, Answer b) =>
-        a.Text == b.Text &&
         (a.Clauses ?? []).SequenceEqual(b.Clauses ?? []) &&
         (a.Candidates ?? []).SequenceEqual(b.Candidates ?? []);
 }
