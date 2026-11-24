@@ -37,7 +37,4 @@ internal sealed class CompositionTextState
 
     /// <summary>[ ] を「」ではなく［］にするか (設定)。</summary>
     public bool SquareBrackets;
-
-    /// <summary>1 つのかなの音の後ろの w を笑いにするか (設定)。</summary>
-    public bool LaughterAfterKana;
 }
