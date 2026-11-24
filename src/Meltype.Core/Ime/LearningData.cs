@@ -88,8 +88,10 @@ public sealed class LearningData(string dataDirectory)
     /// <summary>
     /// ほかのプロセスが書き換えたファイルを読み直す (入力する Meltype が 1 秒ごとに呼ぶ)。
     /// 消す操作の前にも呼ぶ。読み直す前に消すと、保存のときに書き換えに気づいて読み直し、消したことが無くなる。
+    /// ブラウザー版 (src/Meltype.Web) は、ほかのタブの学習データをファイルに書いたらすぐ呼ぶ。読み直す前に確定すると、
+    /// 保存のときに書き換えに気づいて読み直し、確定して覚えたことが無くなる。
     /// </summary>
-    internal void Refresh()
+    public void Refresh()
     {
         History.Refresh();
         LanguageMemory.Refresh();

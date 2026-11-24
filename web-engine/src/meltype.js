@@ -46,8 +46,6 @@
   const REPEAT_DELAY_MS = 400;
   const REPEAT_INTERVAL_MS = 60;
 
-  // 学習データを IndexedDB に写すまでの間 (Core はファイルを少し遅れて書くので、確定のたびには写さない)
-  const SAVE_DELAY_MS = 3000;
   const DB_NAME = "meltype-web-engine";
   const DB_STORE = "data";
 
@@ -120,15 +118,13 @@
     if (saved) core.ImportData(saved);
     core.Init(mozc !== null);
 
-    let saveTimer = 0;
     const save = () => {
-      clearTimeout(saveTimer);
-      saveTimer = 0;
       store?.set(core.ExportData()).catch((error) => console.warn("Meltype: 学習データを残せませんでした", error));
     };
-    // ほかのタブ (と拡張機能のポップアップ) が保存した・消した学習データを、この Core のファイルに書く。
-    // Core は、ほかのプロセスがファイルを書き換えたときと同じく、1 秒ごとの確かめで読み直す。
-    // 保存の前に書き換えに気づいたら、上書きせずに読み直す (デスクトップ版で、入力と設定画面が学習データを共有するのと同じ)
+    // ほかのタブ (と拡張機能のポップアップ) が保存した・消した学習データを、この Core のファイルに書いて読み直させる
+    // (デスクトップ版で、入力と設定画面が学習データを共有するのと同じ)。
+    // このタブが覚えたことは確定したときに保存し終えている (handle) ので、読み直しても無くならない。
+    // 無くなるのは、2 つのタブでほぼ同時に (保存が届くまでの間に) 確定したときだけ
     store?.onChange?.((json) => {
       if (json) core.ImportData(json);
       else {
@@ -137,9 +133,6 @@
         save();
       }
     });
-    // ページを閉じる・隠すときは待たずに写す
-    addEventListener("pagehide", () => saveTimer && save());
-    document.addEventListener("visibilitychange", () => document.hidden && saveTimer && save());
 
     progress({ phase: "ready" });
     return {
@@ -149,8 +142,9 @@
       destroy: (host) => core.ImeDestroy(host),
       handle(host, json) {
         const output = core.ImeHandle(host, json);
-        // 確定したら学習データを写す (Core はファイルを少し遅れて書くので、確定のたびではなく間を空けて)
-        if (store && !saveTimer && !output.includes('"commits":[]')) saveTimer = setTimeout(save, SAVE_DELAY_MS);
+        // 確定したら、すぐに学習データを写す (Core は確定の処理の中で学習データのファイルを書く)。
+        // 遅らせると、その間にほかのタブの保存を読み直して、覚えたことが無くなる
+        if (!output.includes('"commits":[]')) save();
         return output;
       },
       onReady(listener) {
@@ -160,8 +154,6 @@
       /** 学習データをすべて消し、すぐに保存する (ほかのタブも、保存されたものを読み直して消える) */
       async clearLearning() {
         core.ResetLearning();
-        clearTimeout(saveTimer);
-        saveTimer = 0;
         await store?.set(core.ExportData());
       },
     };
