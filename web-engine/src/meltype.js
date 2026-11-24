@@ -285,15 +285,16 @@
 
     /** 出来事を送る。Core がこのページにあれば受け取ったか (consumed) を、ほかの場所にあればそれを返す Promise を返す */
     const send = (type, extra = {}) => {
-      const event = {
+      // 入力欄の様子は、前の出来事への答えを入力欄に書いてから読む (ほかの場所の Core なら、順番が来たときに読む)。
+      // 押したときに読むと、速く打ったときに、まだ書いていない答えの前の様子を送り、Core が変換中の文字を捨てる
+      const json = () => JSON.stringify({
         version: IME_VERSION, type, instance: "web",
         field: { ...field.context(), composing: view !== null, app: location.hostname || null, title: document.title || null },
         ...extra,
-      };
-      const json = JSON.stringify(event);
-      if (!remote) return finish(type, core.handle(host, json));
+      });
+      if (!remote) return finish(type, core.handle(host, json()));
       pending++;
-      const answer = queue.then(() => core.handle(host, json)).then((output) => {
+      const answer = queue.then(() => core.handle(host, json())).then((output) => {
         pending--;
         return finish(type, output);
       }, (error) => {
