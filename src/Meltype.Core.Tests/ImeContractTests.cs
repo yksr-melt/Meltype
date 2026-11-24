@@ -851,7 +851,7 @@ internal static class ImeContractTests
         private readonly CompositionTests.FakeConverter _converter = new();
         public override string? Convert(string hiragana, string? before) => _converter.Convert(hiragana, before);
         public override IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) => _converter.ConvertClauses(hiragana, before);
-        }
+    }
 
     [Test]
     public static void PrivateAndLearningOff_ConvertButDoNotLearn()

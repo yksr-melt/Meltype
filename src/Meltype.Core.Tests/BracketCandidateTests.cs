@@ -249,7 +249,7 @@ internal static class BracketCandidateTests
             Calls++;
             return [new(reading, reading)];
         }
-        }
+    }
 
     [Test]
     public static void Brackets_DoNotCallConvertersOrReadOrWriteLearning()
