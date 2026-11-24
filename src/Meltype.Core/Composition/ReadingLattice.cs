@@ -32,7 +32,7 @@ public sealed partial class CompositionDetector
     // 英単語への切り替え (関連|duke = 1 + 1 + 1) より軽く、よく使う語どうしの区切りを割らない重みにする。
     // 1.5 では きょうはい|まげ が きょうは|image より軽くなり、3 では 関連づけ が 関連|duke と同じ重みになる
     private const double RareWordCost = 2.5;
-    // 新しく入れる短い読み・活用形は英単語の一部に重なりやすい (ぜん|ぶち|めにする)。
+    // readings-rare.txt の 4 文字以下の読み (活用形も含む) は、英単語の一部に重なりやすい (ぜん|ぶち|めにする)。
     // 日本語の前後に打った英単語 (ぜんぶ|time|にする) より軽くせず、未知音 + 英語 (うち|dome = 3) よりは軽くする。
     private const double ShortRareWordCost = 2.9;
     // 語にならないかな 1 音、日本語の中に残る読めない英字 1 文字
