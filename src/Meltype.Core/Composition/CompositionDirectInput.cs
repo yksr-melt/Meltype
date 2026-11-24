@@ -14,6 +14,9 @@ internal static class CompositionDirectInput
     /// <summary>英数状態でふつうの語の判定を打ち切る無入力時間。</summary>
     private const long DirectHoldIdleMs = 700;
 
+    /// <summary>英語の語の続きとして、英数のままアプリに通す文字。</summary>
+    internal const string EnglishWordCharacters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@_";
+
     /// <summary>英数状態で一定時間打鍵が止まったら、続きがないものとして判定する。</summary>
     internal static void Tick(CompositionState state, CompositionEnv env, long nowMs)
     {

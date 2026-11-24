@@ -541,16 +541,13 @@ internal static class ImeSession
         return new ImeCapture
         {
             PrintableAscii = !direct || detects,
-            PrintableAsciiExcept = direct && directEnglishWord ? EnglishWordCharacters : "",
+            PrintableAsciiExcept = direct && directEnglishWord ? CompositionDirectInput.EnglishWordCharacters : "",
             Shortcuts = keys.Distinct().ToList(),
             CtrlKeysWhileComposing = composingControlKeys.Select(key => new ImeShortcut(key, (int)ShortcutModifiers.Control)).ToList(),
             KeyReleases = settings.InputStyle == InputStyle.Kana && settings.KanaLayout is KanaLayout.Nicola or KanaLayout.NakayubiNicola or KanaLayout.Tron,
             AltKeys = settings.AltKeysSwitchKeyboard,
         };
     }
-
-    /// <summary>英語の語の続きとして、英数のままアプリに通す文字。</summary>
-    private const string EnglishWordCharacters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@_";
 
     /// <summary>設定によらず受け取る、モードを切り替えるキー (半角/全角 の 3 つのキーコード・英数・かな・変換・無変換)。</summary>
     private static readonly int[] ModeKeys =
@@ -706,9 +703,9 @@ internal static class ImeSession
         var modifier = control || alt || command;
         var settings = env.App;
         var wordBoundary = vk is VirtualKeys.Space or VirtualKeys.Return ||
-            ch is { } typed && !EnglishWordCharacters.Contains(typed);
+            ch is { } typed && !CompositionDirectInput.EnglishWordCharacters.Contains(typed);
         if (Direct(state) && state.Composition.DirectEnglishWord &&
-            (wordBoundary || before is [.., var previous] && !EnglishWordCharacters.Contains(previous)))
+            (wordBoundary || before is [.., var previous] && !CompositionDirectInput.EnglishWordCharacters.Contains(previous)))
             state.Composition.DirectEnglishWord = false;
         if ((Direct(state) && (!settings.DirectModeAutoDetect || state.Composition.DirectEnglishWord)) || !settings.Enabled)
         {

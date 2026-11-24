@@ -104,9 +104,9 @@ internal static class CompositionKeys
                 }
             }
             // Space・Enter や句読点で区切ったら、助詞などが続く長音 (tore-ni) まで含めて判定する。
-            var endsWord = vk is VirtualKeys.Space or VirtualKeys.Return ||
-                e.Scan is > ' ' and <= '~' && !char.IsAsciiLetterOrDigit((char)e.Scan);
-            if (!state.Shift && !state.Modifier && endsWord && CompositionDirectInput.HasPendingLongVowel(state))
+            var endsWord = !state.Shift && vk is (VirtualKeys.Space or VirtualKeys.Return) ||
+                e.Scan is > ' ' and <= '~' && !CompositionDirectInput.EnglishWordCharacters.Contains((char)e.Scan);
+            if (!state.Modifier && endsWord && CompositionDirectInput.HasPendingLongVowel(state))
                 CompositionDirectInput.DecideHeld(state, env, final: true);
             else
             {

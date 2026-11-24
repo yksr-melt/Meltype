@@ -2016,6 +2016,7 @@ internal static class CompositionTests
             "template", "memorial", "memories", "matches", "baggage", "bachelor", "authority", "bedding", "biggest", "bending",
             "home-made", "data-driven", "use-case", "meta-analysis", "name-based", "time-zone",
             "bare-bones", "bare-bone", "bare-metal", "bare-minimum", "meme-based", "meme-themed",
+            "bare-bones?", "bare-bones!", "pure-demo@example.com", "bare-no@example.com", "pure-demo_config",
         })
         {
             var k = new Keyboard(direct: true);
@@ -2117,6 +2118,8 @@ internal static class CompositionTests
             ("tore-demo ", "とれーでも"),
             ("tore-,", "とれー、"),
             ("tore-ni,", "とれーに、"),
+            ("tore-ni?", "とれーに？"),
+            ("tore-ni!", "とれーに！"),
         })
         {
             var k = new Keyboard(direct: true);
