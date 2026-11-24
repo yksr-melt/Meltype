@@ -122,32 +122,34 @@ void MaskSystemModifier() {
 }
 
 // ワークアラウンド: Tk (Python の IDLE など) は、IME が確定した文字のコードを仮想キーとしても引き、p〜~ (0x70〜0x7E) を
-// F1〜F15 のキーにする (IDLE では p でヘルプが開く。issue #1463)。WM_CHAR の文字は正しく扱うので、
-// Tk の入力欄では確定した文字を WM_CHAR でポストする。SendInput でなくポストにするのは、ポストしたメッセージは入力のメッセージより
-// 先に取り出されるため (SendInput だと、すでに打った次のキーより後に届いて順番が入れ替わる)。キーイベントにならないので、
-// TIP のキーの処理も通らない。Tk が直っても、直る前の Tk を同梱した Python が使われる間は消せない (永続)
+// F1〜F15 のキーにする (IDLE では p でヘルプが開く。issue #1463)。そのため Tk の入力欄には、確定した文字をメッセージで送る。
+// Tk が直っても、直る前の Tk を同梱した Python が使われる間は消せない (永続)
 bool IsTkWindow(HWND window) {
-    wchar_t name[16] = {};
-    return window != nullptr && GetClassNameW(window, name, 16) > 0 && lstrcmpW(name, L"TkChild") == 0;
+    return ClassIs(window, L"TkChild");
 }
 
-// フォーカス移動で前の変換を確定するときも、確定元の TSF コンテキストの窓へ送る (#1463)。
-// GetFocus() は既に移動先の窓なので、送り先には使えない。
+// フォーカスが移ったときの確定では、GetFocus() はもう移った先なので、確定元の TSF コンテキストの窓を見る
 HWND ContextWindow(ITfContext* context) {
     Microsoft::WRL::ComPtr<ITfContextView> view;
     HWND window = nullptr;
-    if (context != nullptr && SUCCEEDED(context->GetActiveView(&view))) view->GetWnd(&window);
+    if (SUCCEEDED(context->GetActiveView(&view))) view->GetWnd(&window);
     return window;
 }
 
-bool PostText(HWND window, const std::wstring& text) {
-    for (const wchar_t ch : text) {
-        if (!PostMessageW(window, WM_CHAR, ch, 1)) {
-            TipLog(L"確定した文字をアプリに送れません: %lu", GetLastError());
-            return false;
+// - ASCII は WM_CHAR で送る (WM_UNICHAR だと、IME の確定と同じく仮想キーとしても引かれる)。
+//   それ以外は WM_UNICHAR で送る (WM_CHAR だと、U+0080〜U+00FF を今のコード ページのバイトとして読み、× が ﾗ になる)
+// - SendMessage にするのは、Tk がその場で自分の列に積むため。ポストすると、キーを処理する Tk に ANSI で取り出されて文字が欠けることがあり、
+//   フォーカスの移動より後に処理されると移った先に入る (Tk は文字を、届いた窓でなくそのときのフォーカスに入れる)。
+//   SendInput だと、すでに打った次のキーより後に届く
+void SendTextToTk(HWND window, const std::wstring& text) {
+    for (size_t i = 0; i < text.size(); ++i) {
+        UINT32 code = text[i];
+        if (i + 1 < text.size() && IS_SURROGATE_PAIR(text[i], text[i + 1])) {
+            ++i;
+            code = 0x10000 + ((code - 0xD800) << 10) + (text[i] - 0xDC00);
         }
+        SendMessageW(window, code < 0x80 ? WM_CHAR : WM_UNICHAR, code, 1);
     }
-    return true;
 }
 
 // そのキーで入力される文字 (無ければ 0)
@@ -1686,7 +1688,7 @@ void TextService::MoveCaretAfterCommit(TfEditCookie ec, ITfContext* context, ITf
 }
 
 bool TextService::ExtendOverPrevious(TfEditCookie ec, ITfRange* range, LONG count, const JsonValue& expect) {
-    // Tk には文字を書き込まずにポストするので (IsTkWindow)、前に確定した文字を消せない。確定し直さない
+    // Tk には文字をメッセージで送るので (SendTextToTk)、前に確定した文字を消せない。確定し直さない
     Microsoft::WRL::ComPtr<ITfContext> context;
     if (SUCCEEDED(range->GetContext(&context)) && IsTkWindow(ContextWindow(context.Get()))) return false;
     Microsoft::WRL::ComPtr<ITfRange> previous;
@@ -1737,7 +1739,7 @@ void TextService::RewriteBeforeCaret(ITfContext* context, ITfRange* end, LONG co
 }
 
 bool TextService::WriteCommit(TfEditCookie ec, ITfContext* context, ITfRange* range, const std::wstring& text, int caretBack, ITfRange** movedCaret) {
-    // Tk には、変換中の文字を消して確定してから、文字をポストする (上の IsTkWindow のワークアラウンド)
+    // Tk には、変換中の文字を消して変換を終えてから、文字を送る (上の IsTkWindow のワークアラウンド)
     if (const HWND window = ContextWindow(context); IsTkWindow(window)) {
         if (composition_ != nullptr) {
             ITfRange* composing = nullptr;
@@ -1747,7 +1749,8 @@ bool TextService::WriteCommit(TfEditCookie ec, ITfContext* context, ITfRange* ra
             }
             EndComposition(ec);
         }
-        return PostText(window, text);
+        SendTextToTk(window, text);
+        return true;
     }
     if (composition_ == nullptr) {
         ITfContextComposition* contextComposition = nullptr;
