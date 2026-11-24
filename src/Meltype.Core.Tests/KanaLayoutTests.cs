@@ -200,6 +200,33 @@ internal static class KanaLayoutTests
     }
 
     [Test]
+    public static void KanaLayout_HeldLetterRepeats()
+    {
+        foreach (var (layout, expected) in new[]
+        {
+            (KanaLayout.Nicola, "かかか"),
+            (KanaLayout.NakayubiNicola, "かかか"),
+            (KanaLayout.Tron, "るるる"),
+        })
+        {
+            var k = Layout(layout);
+            k.Key(0x57);
+            k.Key(0x57);
+            k.Key(0x57);
+            k.Key(0x57, up: true);
+            Assert.Equal(expected, k.Showing);
+        }
+        var shifted = Layout(KanaLayout.Nicola);
+        shifted.Key(Convert);
+        shifted.Key(0x57);
+        shifted.Key(0x57);
+        shifted.Key(0x57);
+        shifted.Key(0x57, up: true);
+        shifted.Key(Convert, up: true);
+        Assert.Equal("ががが", shifted.Showing);
+    }
+
+    [Test]
     public static void KanaLayout_Tron_ThumbShift()
     {
         // TRON: Q = ら、右親指 + Q = び、左親指 + F = よ

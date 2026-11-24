@@ -179,8 +179,16 @@ internal sealed class KanaLayoutEngine(KanaLayout layout)
     {
         // 表の段のキーと親指キーのほか (BackSpace・Enter・Esc・Space など) は、ふつうのキー
         if (_table is null || shift || Array.IndexOf(Keys, vk) < 0 && !IsThumb(vk)) return KanaStroke.NotHandled;
-        // 押したままのキーのリピートは無視する (打った文字を増やさない。親指キーを文字に使ったかも変えない)
-        if (_held.Any(key => key.Vk == vk)) return KanaStroke.Consumed;
+        if (_held.FirstOrDefault(key => key.Vk == vk) is { } repeated)
+        {
+            // シフト自身のリピートは止める。文字の長押しは押したままの親指の面で繰り返す。
+            if (IsThumb(vk) || repeated.Shifting || layout == KanaLayout.NakayubiNicola && vk is 0x44 or 0x4B) return KanaStroke.Consumed;
+            foreach (var key in _held) key.OnRelease = null;
+            var thumb = _held.FirstOrDefault(key => IsThumb(key.Vk));
+            var kana = thumb is not null ? _table.Chords.GetValueOrDefault(($"{thumb.Vk}", vk)) : _table.Sequences.GetValueOrDefault($"{vk}");
+            _lastOutput = repeated;
+            return kana is null ? KanaStroke.Consumed : new KanaStroke(true, 0, kana);
+        }
         return _table.Chords.Count > 0 ? Chord(vk, time) : Sequence(vk);
     }
 
