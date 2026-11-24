@@ -228,7 +228,7 @@ internal static partial class CompositionText
         {
             if (!Openers.TryGetValue(state.Units[i].Raw, out var closer)) continue;
             if (state.FullWidthParentheses && state.Units[i].Raw == "(") continue; // 設定「カッコを全角で入力」: 英語のそばでも全角のまま
-            var closing = Enumerable.Range(i + 1, state.Units.Count - i - 1).FirstOrDefault(k => state.Units[k].Raw == closer, -1);
+            var closing = Closing(state.Units, i, closer);
             // 開きと閉じは同じ幅にする。開きが半角 (英語の区間で打った printf(') なら、中が日本語でも閉じを半角にする
             // (printf('こんにちは') の閉じの ' だけ全角 ’ になり、コードの文字列が閉じなくなっていた #2221)
             if (IsHalf(i))
@@ -257,6 +257,21 @@ internal static partial class CompositionText
             for (var k = afterEnglish + 1; afterEnglish >= 0 && k <= closing; k++) adjusted[k] = state.Units[k] with { Kana = state.Units[k].Raw };
         }
         return adjusted;
+    }
+
+    /// <summary>
+    /// i の開きの記号と対になる閉じの記号の位置。無ければ -1。開きと閉じが違う記号 ({ }) は入れ子を数え、内側の閉じと組にしない
+    /// ({a{にほん}b} の外側の { が内側の } と組になり、外側の } だけ全角 ｝ になっていた #2296)。" ' ` は開きと閉じが同じ記号なので、次の同じ記号が閉じ。
+    /// </summary>
+    private static int Closing(List<CompositionUnit> units, int i, string closer)
+    {
+        var opener = units[i].Raw;
+        for (int k = i + 1, depth = 0; k < units.Count; k++)
+        {
+            if (units[k].Raw == closer && depth-- == 0) return k;
+            if (units[k].Raw == opener) depth++;
+        }
+        return -1;
     }
 
     /// <summary>自動判定を使わないとき、自動判定なら英字にする部分 (提案)。無ければ null。</summary>

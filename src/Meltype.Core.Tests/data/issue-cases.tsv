@@ -247,3 +247,4 @@ deha,korehadoudesyou?	では、これはどうでしょう？
 *toshokan*	*図書館*
 printf('konnichiha')	printf('こんいちは')
 printf("konnichiha")	printf("こんいちは")
+{a{nihon}b}	{a{にほん}b}

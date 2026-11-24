@@ -1158,6 +1158,8 @@ internal static class LanguageLearningTests
             // Issue #2221: 開きを半角で打った引用符・括弧は、中が日本語でも閉じも半角。日本語だけの中の引用符は両方全角のまま
             ("printf('konnichiha')", "printf('こんいちは')"), ("printf(\"konnichiha\")", "printf(\"こんいちは\")"),
             ("kare'konnichiha'toitta", "かれ’こんいちは’といった"),
+            // Issue #2296: 入れ子の括弧は、外側の開きを外側の閉じと組にする。日本語だけの中の括弧は全角のまま
+            ("{a{nihon}b}", "{a{にほん}b}"), ("{nihon{a}b}", "{にほん{a}b}"), ("{{nihon}a}", "｛｛にほん｝あ｝"),
             ("1. Ah! Ah!", "1. Ah! Ah!"), ("ahoka", "あほか"),
             ("Swingin'", "Swingin'"), ("rockin' and rollin'", "rockin' and rollin'"),
             ("A fool a fool a, for u", "A fool a fool a, for u"), ("how r u", "how r u"), ("kyouhau", "きょうはう"),
