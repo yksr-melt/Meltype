@@ -1833,6 +1833,36 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void VoiceCharacterCandidates_AllowSelectingTheFullName()
+    {
+        var converter = new SplitConverter(new()
+        {
+            ["しこくめたん"] = [new("しこく", "四国"), new("めたん", "メタン")],
+        });
+        var k = new Keyboard(converter: converter);
+        k.Type("shikokumetan ");
+
+        var candidates = k.Host.View!.Candidates;
+        var index = candidates.ToList().IndexOf("四国めたん");
+        Assert.True(index >= 0, "四国めたんが候補に出る: " + string.Join(", ", candidates));
+        k.SelectCandidate(index);
+        k.Type("\n");
+        Assert.Equal("四国めたん", k.Host.Document);
+    }
+
+    [Test]
+    public static void VoiceCharacterCandidates_KeepTheOrdinaryWordFirst()
+    {
+        var converter = new SplitConverter(new() { ["せかい"] = [new("せかい", "世界")] });
+        var k = new Keyboard(converter: converter);
+        k.Type("sekai ");
+
+        var candidates = k.Host.View!.Candidates;
+        Assert.Equal("世界", candidates[0]);
+        Assert.True(candidates.Contains("星界"), "星界が候補に出る: " + string.Join(", ", candidates));
+    }
+
+    [Test]
     public static void CorpusContextRules_PreferChatFormsWhenCued()
     {
         var rules = ContextRules.Load(null);
