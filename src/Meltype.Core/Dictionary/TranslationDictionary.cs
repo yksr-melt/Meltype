@@ -130,18 +130,19 @@ internal sealed class TranslationHistory
         _saver = new DeferredSaver(Write);
         _path = path;
         _stamp = new FileStamp(path);
-        _counts = Load(path);
+        _counts = new(StringComparer.Ordinal);
+        Reload();
     }
 
-    private static Dictionary<string, Dictionary<string, int>> Load(string? path)
+    private static Dictionary<string, Dictionary<string, int>>? Load(string? path)
     {
         var counts = new Dictionary<string, Dictionary<string, int>>(StringComparer.Ordinal);
-        Config.DataFile.Load(path, "英訳の学習データ", content =>
+        var read = Config.DataFile.Load(path, "英訳の学習データ", content =>
         {
             var loaded = JsonSerializer.Deserialize(content, Config.LearningJsonContext.Default.Translations);
             if (loaded is not null) foreach (var (key, value) in loaded) counts[key] = value;
         });
-        return counts;
+        return read ? counts : null;
     }
 
     /// <summary>ほかのプロセス (設定アプリ) が translations.json を書き換えていたら読み直す (<see cref="FileStamp"/>)。</summary>
@@ -157,7 +158,12 @@ internal sealed class TranslationHistory
     private void Reload()
     {
         _stamp.Synced();
-        var counts = Load(_path);
+        // 読めなかったら前の中身のまま (Config.DataFile.Load)
+        if (Load(_path) is not { } counts)
+        {
+            _stamp.Forget();
+            return;
+        }
         lock (_gate) _counts = counts;
     }
 

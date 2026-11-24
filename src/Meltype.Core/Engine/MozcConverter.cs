@@ -23,6 +23,11 @@ internal sealed class MozcConverter : IKanjiConverter, IDisposable
     private readonly Dictionary<string, List<(string Reading, IReadOnlyList<string> Candidates)>?> _conversions = new(StringComparer.Ordinal);
     private readonly LatestRequestWorker<(string, string)> _worker;
     private volatile int _failures;
+    // 諦めてから、もう一度ヘルパーを使ってみる時刻 (Environment.TickCount64)
+    private long _retryAt;
+    // 一時的に答えない (重い・ウイルス対策ソフトが調べている) だけで、再起動までかなのままにしない (issue #2269)。
+    // 変換は Mozc が頼りなので、Zenzai (ZenzaiHolder.RetryAfter の 5 分) より早く試し直す。試して失敗したら、また 1 分待つ
+    private const long RetryAfterMs = 60_000;
     // 送りたいユーザー辞書の要求 (D) と、それを受け取ったヘルパーの起動の回数 (受け取っていなければ -1)。_gate の中で読み書きする
     private string? _dictionary;
     private int _dictionaryLaunch = -1;
@@ -52,8 +57,8 @@ internal sealed class MozcConverter : IKanjiConverter, IDisposable
     /// <summary>ヘルパーがあるか (起動できるかは使ってみるまで分からない)。</summary>
     public bool IsInstalled => _helper.IsInstalled;
 
-    /// <summary>使えるか。何度も失敗したら諦める。</summary>
-    public bool IsAvailable => IsInstalled && _failures < 3;
+    /// <summary>使えるか。何度も失敗したら、しばらく諦める。</summary>
+    public bool IsAvailable => IsInstalled && (_failures < 3 || Environment.TickCount64 >= Interlocked.Read(ref _retryAt));
 
     public IReadOnlyList<ConversionClause>? Convert(ConversionRequest request) => ConvertWithCandidates(request)?.Select(s => s.Clause).ToList();
 
@@ -357,7 +362,7 @@ internal sealed class MozcConverter : IKanjiConverter, IDisposable
 
     private void Fail()
     {
-        _failures++;
+        if (++_failures >= 3) Interlocked.Exchange(ref _retryAt, Environment.TickCount64 + RetryAfterMs);
         _helper.Reset();
     }
 

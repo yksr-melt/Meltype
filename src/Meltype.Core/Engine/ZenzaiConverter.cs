@@ -177,8 +177,9 @@ internal sealed class ZenzaiConverter : IKanjiConverter, IDisposable
         lock (_gate)
         {
             if (slow) Interlocked.Exchange(ref _pausedUntil, Environment.TickCount64 + BackoffMs);
-            if (answer is null && !slow) _failures++;
-            else if (answer is not null) { _failures = 0; _hasAnswered = true; }
+            // 答えが無いのは、遅くても失敗に数える (llama-server が接続だけ受けて答えなくなると、休むのを繰り返して作り直されない: issue #2270)
+            if (answer is null) _failures++;
+            else { _failures = 0; _hasAnswered = true; }
             if (_cache.Count >= MaxCache) _cache.Clear();
             // 使わないと決めた答えも覚える (打鍵のたびに聞き直さない)。失敗・遅いときは覚えない
             if (answer is not null && !slow) _cache[key] = text;

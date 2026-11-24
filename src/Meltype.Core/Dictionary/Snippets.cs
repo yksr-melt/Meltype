@@ -23,17 +23,18 @@ public sealed class SnippetStore
     {
         _path = path;
         _stamp = new Config.FileStamp(path);
-        _snippets = Load(path);
+        _snippets = new(StringComparer.Ordinal);
+        Reload();
     }
 
-    private static Dictionary<string, string> Load(string? path)
+    private static Dictionary<string, string>? Load(string? path)
     {
         var snippets = new Dictionary<string, string>(StringComparer.Ordinal);
-        Config.DataFile.Load(path, "定型文", content =>
+        var read = Config.DataFile.Load(path, "定型文", content =>
         {
             foreach (var (name, text) in Parse(content)) snippets[name] = text;
         });
-        return snippets;
+        return read ? snippets : null;
     }
 
     /// <summary>
@@ -42,10 +43,19 @@ public sealed class SnippetStore
     /// </summary>
     public void Refresh()
     {
-        if (!_stamp.Changed) return;
+        if (_stamp.Changed) Reload();
+    }
+
+    private void Reload()
+    {
         // 読む前に更新時刻を覚える (読んでいる間に書かれても、次にまた読み直す)。展開 (Get) を待たせないように、読むのは lock の外
         _stamp.Synced();
-        var snippets = Load(_path);
+        // 読めなかったら前の中身のまま (Config.DataFile.Load)
+        if (Load(_path) is not { } snippets)
+        {
+            _stamp.Forget();
+            return;
+        }
         lock (_gate) _snippets = snippets;
     }
 

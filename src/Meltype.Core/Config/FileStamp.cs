@@ -18,6 +18,9 @@ internal sealed class FileStamp(string? path)
 
     public void Synced() => _known = Read(path);
 
+    /// <summary>Synced の後で読めなかったときに呼ぶ (次の <see cref="Changed"/> で読み直す)。</summary>
+    public void Forget() => _known = null;
+
     // 無いファイルは 1601 年になるので、消されたことも書き換えとして見分けられる
     private static DateTime? Read(string? path)
     {
