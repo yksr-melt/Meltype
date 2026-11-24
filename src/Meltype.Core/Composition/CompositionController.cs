@@ -6,6 +6,7 @@ using System.Text;
 using Meltype.Composition.Utility;
 using Meltype.Config;
 using Meltype.Detection;
+using Meltype.Dictionary;
 using Meltype.Input;
 
 namespace Meltype.Composition;
@@ -45,13 +46,13 @@ public sealed record CompositionView(
     bool Numbered = false);
 
 /// <summary>キーを 1 つ押した。Ch は入力する文字 (キーボード配列は OS 側で解決済み。文字を生まないキーなら null)。</summary>
-public readonly record struct KeyPress(int Vk, char? Ch, bool Shift, bool Control, bool Alt, bool Command, long TimeMs)
+internal readonly record struct KeyPress(int Vk, char? Ch, bool Shift, bool Control, bool Alt, bool Command, long TimeMs)
 {
     public bool Modifier => Control || Alt || Command;
 }
 
 /// <summary>選択中の確定済みの文字と、その読み (再変換)。</summary>
-public sealed record ReconversionSelection(string Text, string Reading);
+internal sealed record ReconversionSelection(string Text, string Reading);
 
 /// <summary>
 /// 入力欄 1 つ分の変換ボックス (未確定文字列) の処理 (どのフロントも <see cref="Ime.ImeSession"/> から使う)。状態は <see cref="CompositionState"/> に置き、
@@ -108,14 +109,17 @@ internal static partial class CompositionController
         /// <summary>ユーザーが候補を選び直したか (確定時に学習する)。</summary>
         public bool Changed { get; set; }
 
-        /// <summary>変換エンジンが返したときの Zenzai の答え (Zenzai の答えでなければ null)。今の文字列がこれと同じなら「Zenzai」と出す。</summary>
+        /// <summary>変換エンジンが返したときの Zenzai の答え (Zenzai の答えでなければ null)。今の文字列がこれと同じなら説明に「Zenzai」と出し、候補の一覧ではこの候補に注記を付ける。</summary>
         public string? ZenzaiText { get; set; }
 
         /// <summary>
         /// 日本語の文節の、文の中での変換結果 (変換エンジンの答え・ユーザー辞書の語)。<see cref="AddCandidates"/> が、その読みだけの変換などの候補をこの後ろに並べる。
-        /// 候補を足し終えた文節と、変換エンジンに頼まない文節 (英語・記号) は null。
+        /// 変換エンジンに頼まない文節 (英語・記号) は null。
         /// </summary>
-        public string? Engine { get; set; }
+        public string? Engine { get; init; }
+
+        /// <summary><see cref="AddCandidates"/> が候補を足し終えたか。</summary>
+        public bool EngineCandidatesAdded { get; set; }
 
         /// <summary>外部変換エンジンの候補追加が完了したか。<see cref="Fixed"/> の文節では追加せずに完了扱いにする。</summary>
         public bool Expanded { get; set; }
@@ -280,7 +284,7 @@ internal static partial class CompositionController
         state.LiveCache.Clear();
         if (CompositionText.IsEmpty(state.Text) || IsConverting(state) && !RefreshOpenConversion(state, env)) return false;
         // 文節が分かると最後の文節の予測が出せる。予測を選んでいる間は、選んでいる候補を置き換えない
-        if (state.PredictionIndex < 0) state.PredictionKey = "\u0000";
+        if (state.Predictions is not { Index: >= 0 }) state.Predictions = null;
         UpdateView(state, env);
         return true;
     }
@@ -294,16 +298,14 @@ internal static partial class CompositionController
     /// </summary>
     private static bool RefreshOpenConversion(CompositionState state, CompositionEnv env)
     {
-        if (state.ClausesEdited || state.Reconversion is not null || state.Clauses.Count == 0 || state.Clauses is [{ Alternatives: not null, Changed: true }]) return false;
-        var (old, selected, tabStarted) = (state.Clauses, state.SelectedClause, state.TabStartedConversion);
-        StartConversion(state, WithoutWaiting(env), state.ConversionPrefersJapanese);
-        state.TabStartedConversion = tabStarted;
+        if (state.Conversion is not { Edited: false } open || state.Reconversion is not null || state.Clauses is [{ Alternatives: not null, Changed: true }]) return false;
+        var (old, selected) = (open.Clauses, open.Selected);
+        StartConversion(state, WithoutWaiting(env), open.StartedBy, open.PreferJapanese);
         var sameClauses = state.Clauses.Count == old.Count && state.Clauses.Zip(old).All(p => p.First.Reading == p.Second.Reading);
         var nothingNew = sameClauses && state.Clauses.Zip(old).All(p => p.First.Text == p.Second.Text && p.First.Candidates.All(p.Second.Candidates.Contains));
         if (nothingNew || !sameClauses && (selected != InitialClause(env, old.Count) || old.Any(c => c.Changed)))
         {
-            state.Clauses = old;
-            state.SelectedClause = selected;
+            state.Conversion = open;
             return false;
         }
         if (sameClauses)
@@ -318,7 +320,7 @@ internal static partial class CompositionController
                 fresh.NotLearned.UnionWith(previous.NotLearned);
             }
         }
-        state.SelectedClause = sameClauses ? selected : InitialClause(env, state.Clauses.Count);
+        if (state.Conversion is { } refreshed) refreshed.Selected = sameClauses ? selected : InitialClause(env, refreshed.Clauses.Count);
         return true;
     }
 
@@ -364,8 +366,7 @@ internal static partial class CompositionController
         if (!IsConverting(state) && TypingCandidates(state, env) is { } typing)
         {
             if (index < 0 || index >= typing.Count) return;
-            state.Clauses = [new Clause(CompositionText.AllKana(state.Text, env, final: false), false, typing) { Raw = CompositionText.Raw(state.Text), Expanded = true }];
-            state.SelectedClause = 0;
+            state.Conversion = new Conversion([new Clause(CompositionText.AllKana(state.Text, env, final: false), false, typing) { Raw = CompositionText.Raw(state.Text), Expanded = true }], ConversionTrigger.Other, preferJapanese: false);
         }
         if (!IsConverting(state) || state.Clauses.Count == 0) return;
         var clause = state.Clauses[state.SelectedClause];
@@ -410,7 +411,7 @@ internal static partial class CompositionController
             !CompositionText.IsEmpty(state.Text) && CompositionText.Raw(state.Text).All(char.IsAsciiLetter))
         {
             state.Correctable.Clear();
-            CommitText(state, env, CompositionText.Raw(state.Text), english: true, preserveText: true, rule: "英字にアクセント記号が続くので打ったまま");
+            CommitText(state, env, ComposedText.English(CompositionText.Raw(state.Text)), english: true, preserveText: true, rule: "英字にアクセント記号が続くので打ったまま");
         }
         else CommitIfAny(state, env, preserveText);
         UpdateView(state, env);
@@ -421,9 +422,8 @@ internal static partial class CompositionController
     {
         state.Reconversion = null;
         CompositionText.Clear(state.Text);
-        state.Clauses = [];
-        state.SpaceStartedConversion = false;
-        state.TabStartedConversion = false;
+        state.Conversion = null;
+        state.LeftConversion = null;
     }
 
     /// <summary>パスワード欄に移ったとき、未確定入力と前の欄の文脈を確定せずに捨てる。</summary>
@@ -436,9 +436,7 @@ internal static partial class CompositionController
         state.PrivateComposition = false;
         state.KeptChoices.Clear();
         state.LiveCache.Clear();
-        state.Predictions = [];
-        state.PredictionKey = "";
-        state.PredictionIndex = -1;
+        state.Predictions = null;
         state.Pressed.Clear();
         state.KanaLayout.Reset();
         CompositionOutput.Begin(state.Out);
@@ -448,8 +446,7 @@ internal static partial class CompositionController
     /// <summary>フォーカスが変わったときなど。前の入力欄の文脈を持ち越さない。</summary>
     public static void ResetContext(CompositionState state)
     {
-        state.LastCommitEnglish = null;
-        state.LastCommitText = null;
+        state.Last = null;
         state.Correctable.Clear();
     }
 }

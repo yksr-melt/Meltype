@@ -3,6 +3,7 @@
 
 using Meltype.Composition;
 using Meltype.Config;
+using Meltype.Detection;
 using Meltype.Input;
 
 namespace Meltype.Tests;

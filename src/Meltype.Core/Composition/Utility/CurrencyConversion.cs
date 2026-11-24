@@ -23,8 +23,6 @@ internal sealed partial class CurrencyConversion : IUtilityConversion
         ("げん", "CNY", "元"), ("えん", "JPY", "円"),
     ];
 
-    private static readonly string Names = string.Join("|", Currencies.Select(c => c.Reading));
-
     [GeneratedRegex(@"^(?<n>[0-9０-９]{1,12}(?:[.．][0-9０-９]{1,4})?)(?<man>まん|おく)?(?<from>[ぁ-んー]+?)(?:を(?<to>[ぁ-んー]+?)(?:に)?)?$")]
     private static partial Regex AmountReading();
 

@@ -3,10 +3,10 @@
 
 using System.Globalization;
 using System.Text;
-using Meltype.Composition.Utility;
 using Meltype.Config;
-using Meltype.Detection;
-using Meltype.Input;
+using Meltype.Dictionary;
+using Meltype.Learning;
+using Meltype.Libraries.Chars;
 
 namespace Meltype.Composition;
 
@@ -18,7 +18,7 @@ internal static partial class CompositionController
         env.Services.Meanings?.Lookup(clause.Text, clause.IsEnglish ? null : clause.Reading) ?? env.Services.Translations?.Meaning(clause.Text);
 
     /// <summary>
-    /// 候補の右に小さく出す注記: 英訳 (complex)、半角 / 全角 (同じ記号・英数字の半角と全角が両方候補にあるとき。# と ＃ は見分けにくい)。
+    /// 候補の右に小さく出す注記: Zenzai の答え、英訳 (complex)、半角 / 全角 (同じ記号・英数字の半角と全角が両方候補にあるとき。# と ＃ は見分けにくい)。
     /// 注記が 1 つも無ければ null。
     /// </summary>
     private static List<CandidateNote>? CandidateNotes(Clause clause)
@@ -27,6 +27,7 @@ internal static partial class CompositionController
         if (clause.Notes is { } fixedNotes) return [.. fixedNotes];
         var notes = clause.Candidates.Select(c =>
         {
+            if (c == clause.ZenzaiText) return CandidateNote.Zenzai;
             if (clause.Translations.Contains(c)) return CandidateNote.Translation;
             var half = ToHalfWidth(c);
             if (half != c && clause.Candidates.Contains(half)) return CandidateNote.FullWidth;
@@ -56,19 +57,20 @@ internal static partial class CompositionController
             if (!selected.Expanded) Expand(state, env, selected);
             // 出している文節に Zenzai の答えがあれば、説明の頭に「Zenzai」と出す (学習・選び直しで変わった文節は数えない。issue #1152)
             var zenzai = state.Clauses.Any(c => c.ZenzaiText is { } z && c.Text == z);
-            CompositionOutput.Show(state.Out, env, new CompositionView(
-                string.Concat(state.Clauses.Select(c => c.Text)),
-                selected.Candidates,
+            var clauses = state.Clauses.Select(c => Composed([c])).ToList();
+            CompositionOutput.Show(state.Out, env, new ComposedView(
+                ComposedText.Concat(clauses),
+                [.. selected.Candidates.Select(c => Candidate(selected, c))],
                 selected.Index,
                 true,
                 (zenzai ? "Zenzai · " : "") + "←→ 文節　Space/↓ 候補　1〜9 選択　Shift+←→ 区切り　Enter 確定　Esc 戻る",
-                state.Clauses.Select(c => c.Text).ToList(),
+                clauses,
                 state.SelectedClause,
                 CandidateNotes(selected),
                 env.Settings.ShowCandidateMeanings ? CandidateMeaning(state, env, selected) : null,
-                MisspellingSuggestion(state, env),
+                Suggestion(MisspellingSuggestion(state, env)),
                 Typed: TypedKeys(state, env),
-                Committed: string.Concat(state.Clauses.Select(c => c.Text)), ContextHint: zenzai ? "Zenzai" : null));
+                Committed: ComposedText.Concat(clauses), ContextHint: zenzai ? "Zenzai" : null));
         }
         else
         {
@@ -77,24 +79,34 @@ internal static partial class CompositionController
             // 手動の英字提案・訂正提案がある間は予測を出さないため、contextHint の両方の案内は同時に出ない。
             UpdatePredictions(state, env, blocked: misspelling is not null || suggestion is not null);
             // 書き間違いの修正・英字の提案・予測の候補があれば、Tab はそちらに使う (HandleKey の Tab の順)
-            var tabConverts = env.Settings.TabConversion && misspelling is null && suggestion is null && state.Predictions.Count == 0;
+            var predictions = state.Predictions?.Items ?? [];
+            var predictionIndex = state.Predictions?.Index ?? -1;
+            var tabConverts = env.Settings.TabConversion && misspelling is null && suggestion is null && predictions.Count == 0;
             var hint = CompositionText.IsAlphanumeric(state.Text, env) ? "Enter 確定　Space 確定+空白　Shift+Space 日本語で変換　半角/全角 日本語に" : (tabConverts ? "Space/Tab 変換" : "Space 変換") + "　←→ 文節　Enter 確定　F7 カタカナ　F10 英字";
             var contextHint = suggestion is null ? null : $"Tab → {suggestion} (英字に)";
             if (contextHint is not null) hint = contextHint + "　" + hint;
-            if (state.Predictions.Count > 0)
+            if (predictions.Count > 0)
             {
                 contextHint = "Tab 予測の候補を選ぶ";
                 hint = contextHint + "　" + hint;
             }
-            var selected = state.PredictionIndex >= 0 ? state.Predictions[state.PredictionIndex].Before + state.Predictions[state.PredictionIndex].Text : null;
-            var display = selected ?? CurrentDisplay(state, env, final: false);
+            var selected = predictionIndex >= 0 ? PredictionText(predictions[predictionIndex]) : null;
+            var display = selected ?? CurrentComposed(state, env, final: false);
             // 設定「入力中も変換候補をいくつか表示」: Space の前から候補を出す (issue #666)
             var preview = selected is null && misspelling is null ? TypingCandidates(state, env) : null;
-            CompositionOutput.Show(state.Out, env, new CompositionView(display, preview ?? [], preview?.IndexOf(display) ?? -1, false, hint, Suggestion: misspelling,
-                Predictions: state.Predictions.Count > 0 ? state.Predictions.Select(p => p.Text).ToList() : null, SelectedPrediction: state.PredictionIndex, Typed: TypedKeys(state, env),
-                Committed: selected ?? CurrentDisplay(state, env, final: true), ContextHint: contextHint));
+            CompositionOutput.Show(state.Out, env, new ComposedView(display, [.. (preview ?? []).Select(c => ComposedText.Of(SpanKind.Japanese, c))], preview?.IndexOf(display.Text) ?? -1, false, hint,
+                Suggestion: Suggestion(misspelling),
+                Predictions: predictions.Count > 0 ? predictions.Select(p => ComposedText.Of(SpanKind.Japanese, p.Text)).ToList() : null, SelectedPrediction: predictionIndex, Typed: TypedKeys(state, env),
+                Committed: selected ?? CurrentComposed(state, env, final: true), ContextHint: contextHint));
         }
     }
+
+    /// <summary>文節 clause の候補 candidate の文字。</summary>
+    private static ComposedText Candidate(Clause clause, string candidate) =>
+        clause.IsEnglish ? ComposedText.English(candidate) : ComposedText.Converted(clause.Reading, candidate);
+
+    /// <summary>書き間違いの修正の案内 (もしかして)。</summary>
+    private static ComposedText? Suggestion(string? suggestion) => suggestion is null ? null : ComposedText.Of(SpanKind.Japanese, suggestion);
 
     /// <summary>設定「入力中も変換候補をいくつか表示」: 今打っているひらがなの変換候補 (5 件まで)。出さないときは null。</summary>
     private static List<string>? TypingCandidates(CompositionState state, CompositionEnv env)
@@ -116,17 +128,18 @@ internal static partial class CompositionController
     private static void UpdatePredictions(CompositionState state, CompositionEnv env, bool blocked)
     {
         var key = PredictionKey(state);
-        if (key == state.PredictionKey && !blocked) return;
+        if (state.Predictions?.Key == key && !blocked) return;
         // 出さないときは覚えない (同じ打ちかけのまま出せるようになったら、作り直す)
-        state.PredictionKey = blocked ? "" : key;
-        state.PredictionIndex = -1;
-        state.Predictions = [];
-        if (blocked || env.Services.Predictor is not { } predictor || !env.Settings.PredictiveCandidates || state.Text.Mode != DisplayMode.Auto) return;
+        state.Predictions = blocked ? null : new PredictionList(key, BuildPredictions(state, env));
+    }
+
+    private static List<Prediction> BuildPredictions(CompositionState state, CompositionEnv env)
+    {
+        if (env.Services.Predictor is not { } predictor || !env.Settings.PredictiveCandidates || state.Text.Mode != DisplayMode.Auto) return [];
         if (CompositionText.IsAlphanumeric(state.Text, env))
         {
             // 英単語 1 語の打ちかけ (decis → decisions)
-            if (CompositionText.Raw(state.Text).All(char.IsAsciiLetter)) state.Predictions = predictor.PredictEnglish(CompositionText.Raw(state.Text)).Select(w => new Prediction(w, "", CompositionText.Raw(state.Text))).ToList();
-            return;
+            return CompositionText.Raw(state.Text).All(char.IsAsciiLetter) ? predictor.PredictEnglish(CompositionText.Raw(state.Text)).Select(w => new Prediction(w, "", CompositionText.Raw(state.Text))).ToList() : [];
         }
         var kana = CompositionText.AllKana(state.Text, env, final: false);
         var predictions = new List<Prediction>();
@@ -151,7 +164,7 @@ internal static partial class CompositionController
         }
         // 長い英単語は、打ち終わるまでローマ字として見えていることがある (decis → でしs)。英字だけを 4 文字以上打っていれば英単語の続きも出す
         if (CompositionText.Raw(state.Text).Length >= 4 && CompositionText.Raw(state.Text).All(char.IsAsciiLetter)) Add(predictor.PredictEnglish(CompositionText.Raw(state.Text)), "", CompositionText.Raw(state.Text));
-        state.Predictions = predictions;
+        return predictions;
     }
 
     /// <summary>
@@ -182,10 +195,10 @@ internal static partial class CompositionController
     private static List<Prediction> CurrentPredictions(CompositionState state, CompositionEnv env)
     {
         UpdatePredictions(state, env, blocked: false);
-        return state.Predictions;
+        return state.Predictions?.Items ?? [];
     }
 
     /// <summary>Tab で選んでいる予測の候補 (打った内容が選んだときのままのときだけ)。</summary>
     private static Prediction? SelectedPrediction(CompositionState state) =>
-        state.PredictionIndex >= 0 && state.PredictionIndex < state.Predictions.Count && state.PredictionKey == PredictionKey(state) ? state.Predictions[state.PredictionIndex] : null;
+        state.Predictions is { Index: >= 0 } p && p.Index < p.Items.Count && p.Key == PredictionKey(state) ? p.Items[p.Index] : null;
 }

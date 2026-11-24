@@ -3,6 +3,9 @@
 
 using Meltype.Composition;
 using Meltype.Config;
+using Meltype.Detection;
+using Meltype.Dictionary;
+using Meltype.Engine;
 using Meltype.Ime;
 
 namespace Meltype.Tests;

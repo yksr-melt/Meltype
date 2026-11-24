@@ -2,6 +2,7 @@
 // Copyright (C) 2026 lnkiai
 //
 // 変換の候補の一覧 (Windows 11 の Microsoft IME に近い見た目)。アプリのプロセスの中に出す、フォーカスを奪わないウィンドウ。
+// 候補を自分で描くアプリ (UILess。ゲームなど) には、TSF の UI Element (ITfCandidateListUIElement) として候補を渡し、窓は出さない。
 
 #pragma once
 
@@ -29,12 +30,14 @@ class CandidateWindow {
 public:
     using SelectHandler = std::function<void(int index)>;
 
-    explicit CandidateWindow(SelectHandler onSelect);
+    // threadMgr: UI Element を出すスレッドの ITfThreadMgr
+    CandidateWindow(ITfThreadMgr* threadMgr, SelectHandler onSelect);
     ~CandidateWindow();
     CandidateWindow(const CandidateWindow&) = delete;
     CandidateWindow& operator=(const CandidateWindow&) = delete;
 
     // anchor は選んでいる文節の画面上の四角形。その左下に出す (画面からはみ出すなら上)。
+    // アプリが候補を自分で描くなら (BeginUIElement の show が FALSE)、窓は出さずに UI Element の更新だけを知らせる
     void Show(const CandidateView& view, const RECT& anchor);
     void Hide();
     bool Visible() const;
