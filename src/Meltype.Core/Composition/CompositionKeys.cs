@@ -79,24 +79,22 @@ internal static class CompositionKeys
                 CompositionDirectInput.Hold(state, env, e);
                 return;
             }
-            // 母音の後の - は長音 (ro-maji → ろーまじ、de-ta → でーた)。英語の接頭辞 (e-mail、co-op) なら - の後ろで判定する。
-            // 完結した英単語の後ろでは home-made のように - を通す。長音まで含めた読み (とれー) が
-            // 辞書にあれば、英単語 (tore) にも一致していても日本語に戻す (#2219)。
+            // 母音の後の - は長音 (ro-maji → ろーまじ)。英語の接頭辞 (e-mail、co-op) や、bare- のように
+            // 英単語の後ろのハイフンと日本語の長音 (ばれー) の両方に読めるときは、- の続きを見て決める (#2219)。
             var part = CompositionDirectInput.LastHyphenPart(state);
             if (vk == VirtualKeys.OemMinus && !state.Shift && !state.Modifier && part.Length > 0 &&
                 env.Detector.Romaji.AnalyzeFragment(part) is { IsValid: true, Partial: "" } romaji)
             {
                 var firstPart = state.HeldLetters.Length == part.Length;
                 var prefix = firstPart && CompositionDetector.IsHyphenPrefix(part);
-                var finishedEnglishWord = firstPart && !prefix &&
+                var englishWord = firstPart && !prefix &&
                     env.Detector.IsListedEnglishWord(CompositionText.LearningContext(state.Text, env), part) &&
-                    env.ClassifyDirect!(part, true) == Verdict.English &&
-                    !CommonReadings.Words.Contains(romaji.Kana + 'ー');
-                if (!finishedEnglishWord)
+                    env.ClassifyDirect!(part, true) == Verdict.English;
+                if (!englishWord || CommonReadings.Words.Contains(romaji.Kana + 'ー'))
                 {
                     state.HeldLetters.Append('-');
                     state.HeldLastKeyTime = e.TimeMs;
-                    if (prefix)
+                    if (prefix || englishWord)
                     {
                         CompositionDirectInput.SendHeld(state, e);
                         return;
@@ -106,9 +104,15 @@ internal static class CompositionKeys
                     return;
                 }
             }
-            // 英字以外のキー・Shift・Ctrl で判定を打ち切り、英語として出してから、そのキーを普通に処理する。
-            Diagnostics.Log.Info($"英数状態の判定を打ち切り: キー 0x{vk:X2} (Shift {state.Shift})");
-            CompositionDirectInput.ReleaseHeldAsEnglish(state, env);
+            // 長音で終わる語も、Space・Enter で打ち終わったと分かれば、そのキーで変換・確定できる。
+            if (part.Length == 0 && vk is VirtualKeys.Space or VirtualKeys.Return && !state.Shift && !state.Modifier)
+                CompositionDirectInput.DecideHeld(state, env, final: true);
+            else
+            {
+                // 英字以外のキー・Shift・Ctrl で判定を打ち切り、英語として出してから、そのキーを普通に処理する。
+                Diagnostics.Log.Info($"英数状態の判定を打ち切り: キー 0x{vk:X2} (Shift {state.Shift})");
+                CompositionDirectInput.ReleaseHeldAsEnglish(state, env);
+            }
         }
 
         // 大文字・文節の区切りの変更に使う Shift は、ほかのキーと一緒に届く。Shift だけでは何もしない。

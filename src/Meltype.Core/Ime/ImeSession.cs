@@ -160,7 +160,8 @@ internal static class ImeSession
             ImeOpen = !Direct(state),
             LanguageMode = active && japanese ? ImeLanguageMode.Japanese : ImeLanguageMode.Alphanumeric,
             ModeIndicatorMs = active && indicate && result.View is null ? ModeIndicatorMs : 0,
-            Capture = Capture(active, Direct(state), DirectEnglishWord(state), settings, game, ComposingControlKeys(state, env), snippetKeys),
+            Capture = Capture(active, Direct(state), DirectEnglishWord(state), settings, game, ComposingControlKeys(state, env),
+                snippetKeys, CompositionDirectInput.HasPendingLongVowel(state.Composition)),
             Revision = rev,
         }, result);
     }
@@ -517,7 +518,7 @@ internal static class ImeSession
         (key.Alt ? ShortcutModifiers.Alt : 0) | (key.Command ? ShortcutModifiers.Win : 0);
 
     private static ImeCapture Capture(bool active, bool direct, bool directEnglishWord, Settings settings, bool game, IEnumerable<int> composingControlKeys,
-        IReadOnlyList<int> snippetKeys)
+        IReadOnlyList<int> snippetKeys, bool pendingLongVowel = false)
     {
         if (!active) return new ImeCapture();
         // 修飾キー単独の割り当ては使えない (設定の読み込みで外す)。左右の Alt の単独押しは AltKeys
@@ -530,6 +531,12 @@ internal static class ImeSession
         var detects = settings.DirectModeAutoDetect && settings.AutoDetection && !game;
         if (!direct || detects) keys.Add(new ImeShortcut(VirtualKeys.Space, (int)ShortcutModifiers.Shift));
         if (!direct && settings.SpaceWidth == SpaceWidth.FullWidth) keys.Add(new ImeShortcut(VirtualKeys.Space, 0));
+        // 入力欄には英字を先に送っているので、保留末尾の長音を変換・確定するキーを明示して受け取る。
+        if (direct && detects && pendingLongVowel)
+        {
+            keys.Add(new ImeShortcut(VirtualKeys.Space, 0));
+            keys.Add(new ImeShortcut(VirtualKeys.Return, 0));
+        }
         keys.AddRange(snippetKeys.Select(key => new ImeShortcut(key, 0)));
         return new ImeCapture
         {

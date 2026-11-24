@@ -2015,6 +2015,7 @@ internal static class CompositionTests
         {
             "template", "memorial", "memories", "matches", "baggage", "bachelor", "authority", "bedding", "biggest", "bending",
             "home-made", "data-driven", "use-case", "meta-analysis", "name-based", "time-zone",
+            "bare-bones", "bare-metal", "bare-minimum",
         })
         {
             var k = new Keyboard(direct: true);
@@ -2068,11 +2069,13 @@ internal static class CompositionTests
     {
         foreach (var (keys, expected) in new[]
         {
+            ("tore-", "とれー"),
             ("tore-ninngu", "とれーにんぐ"),
             ("tore-na-", "とれーなー"),
             ("tore-do", "とれーど"),
             ("tore-sa-", "とれーさー"),
             ("tore-ra-", "とれーらー"),
+            ("bare-bo-ru", "ばれーぼーる"),
         })
         {
             var k = new Keyboard(direct: true);
