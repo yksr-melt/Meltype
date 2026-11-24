@@ -123,6 +123,25 @@ internal static class ZenzaiConverterTests
     }
 
     [Test]
+    public static void Answers_ThatLoseTypedSymbols_AreNotUsed()
+    {
+        // 漢字・英字を読みの何文字にも当てて比べるので、打った記号が消えた答えを使っていた
+        foreach (var (reading, answer) in new[] { ("わたしは、りんごを、たべた。", "私は、林檎を食べた。"), ("これは、ほん。", "これは、本"), ("わたしは「ほん」をよむ", "私は本を読む"), ("ぐーぐる、でけんさく", "Googleで検索") })
+        {
+            Assert.True(ZenzaiConverter.IsPlausible(reading, answer), answer + ": かなは読みと合う");
+            Assert.True(!ZenzaiConverter.KeepsSymbols(reading, answer), answer + ": 記号が消えている");
+        }
+        foreach (var (reading, answer) in new[] { ("わたしは、りんごを、たべた。", "私は、林檎を、食べた。"), ("わたしは「ほん」をよむ!", "私は「本」を読む！"), ("すごーい～", "すごーい～"), ("さんかげつ", "三ヶ月") })
+            Assert.True(ZenzaiConverter.KeepsSymbols(reading, answer), answer);
+
+        IReadOnlyList<(ConversionClause, IReadOnlyList<string>)> mozc = [(new("りんごを", "林檎を"), ["林檎を"]), (new("、", "、"), ["、", "，"]), (new("たべた", "食べた"), ["食べた"])];
+        Assert.Equal("林檎を|、|食べた", Joined("林檎を食べた"), "記号が消えた答えでなく Mozc の答え");
+        Assert.Equal("リンゴを、喰べた", Joined("リンゴを、喰べた"), "記号が残っていれば Zenzai の答え");
+
+        string Joined(string answer) => string.Join("|", HybridConverter.Choose("りんごを、たべた", mozc, [new("りんごを、たべた", answer)])!.Select(c => c.Text));
+    }
+
+    [Test]
     public static void LearnedHallucinations_AreForgottenWithMozcCandidates()
     {
         // 前の版が学習した Zenzai の壊れた答えは消し、表記が読みと違う Mozc の候補・ユーザー辞書の語は残す (issue #1779)。
