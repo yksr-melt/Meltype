@@ -279,6 +279,8 @@
     let focused = false;
     // 答えを待っている出来事の数と、その順番 (ほかの場所の Core に、送った順に答えさせる)
     let pending = 0;
+    // 変換中に入力欄を押したときの、押す前のキャレット (field.selection())。押して確定し終わるまで、確定した文字はここに書く
+    let anchor = null;
     // 受け取ったキー (KeyboardEvent.code)。離したとき (keyup) もページに届けない
     const consumedKeys = new Set();
     let queue = remote ? created.then((h) => { host = h; }) : null;
@@ -334,7 +336,8 @@
 
     const apply = (result) => {
       for (const commit of result.commits) {
-        field.insert(commit.text, commit.removeBefore ?? "", commit.moveCaretBack);
+        if (anchor) anchor = field.insertAt(anchor, commit.text, commit.removeBefore ?? "");
+        else field.insert(commit.text, commit.removeBefore ?? "", commit.moveCaretBack);
         options.onCommit?.(commit.text);
       }
       view = result.view;
@@ -406,6 +409,19 @@
         setTimeout(() => send("CaretMoved", { caret: { moved: true, passedKey: key.vk, ctrl: key.ctrl } }));
       }
     };
+    /**
+     * 変換中に入力欄を押したら、選択が動く前の位置に確定する (TSF 版と同じ)。押した後に確定すると、確定した文字が押した場所に入り、範囲を選ぶとその範囲を置き換える。
+     * ほかの場所の Core の答えは選択が動いた後に届くので、押す前の位置を覚えて書く。押して選んだ位置・範囲は動かさない
+     */
+    const onPointerDown = () => {
+      if (!view && pending === 0) return;
+      anchor = field.selection();
+      const done = () => { anchor = null; };
+      const committed = send("CommitRequested", { caret: { moved: true, passedKey: 0 } });
+      if (remote) committed.then(done, done);
+      else done();
+    };
+    // 押して動いたキャレットを知らせる (確定より後に届く)
     const onPointerUp = () => send("CaretMoved", { caret: { moved: true, passedKey: 0 } });
     const onFocus = () => {
       focused = true;
@@ -435,6 +451,7 @@
     addEventListener("keydown", onKeyDown, true);
     addEventListener("keypress", onKeyPress, true);
     addEventListener("keyup", onKeyUp, true);
+    element.addEventListener("pointerdown", onPointerDown);
     element.addEventListener("pointerup", onPointerUp);
     element.addEventListener("focus", onFocus);
     element.addEventListener("blur", onBlur);
@@ -451,6 +468,7 @@
         removeEventListener("keydown", onKeyDown, true);
         removeEventListener("keypress", onKeyPress, true);
         removeEventListener("keyup", onKeyUp, true);
+        element.removeEventListener("pointerdown", onPointerDown);
         element.removeEventListener("pointerup", onPointerUp);
         element.removeEventListener("focus", onFocus);
         element.removeEventListener("blur", onBlur);
@@ -489,6 +507,20 @@
         const caret = element.selectionStart - caretBack;
         element.setSelectionRange(caret, caret);
         element.dispatchEvent(new Event("input", { bubbles: true }));
+      },
+      selection: () => ({ start: element.selectionStart, end: element.selectionEnd }),
+      /**
+       * selection() で覚えた位置に書き、書いた後の位置を返す。今の選択は、書いた所より後ろなら書いた分だけずらす。
+       * 書いた所と同じ位置 (変換していた所を押した) なら、書いた文字の後ろにする ("preserve" は前に残すので自分でずらす)
+       */
+      insertAt(at, text, removeBefore) {
+        const start = at.start - removeBefore.length;
+        const { selectionStart, selectionEnd, selectionDirection } = element;
+        const shift = (i) => (i >= at.end ? i + text.length - (at.end - start) : Math.min(i, start));
+        element.setRangeText(text, start, at.end);
+        element.setSelectionRange(shift(selectionStart), shift(selectionEnd), selectionDirection);
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+        return { start: start + text.length, end: start + text.length };
       },
       /**
        * ブラウザーの代わりにキーの動きを入力欄に書く。合成したキー (画面のキーボード) と、ほかの場所の Core が通したキー (止めた後なので、ブラウザーは何もしない) のため。
@@ -561,6 +593,22 @@
         if (removeBefore) moveCaret("backward", [...removeBefore].length, "extend");
         document.execCommand("insertText", false, text);
         moveCaret("backward", caretBack);
+      },
+      selection: () => range()?.cloneRange() ?? null,
+      /**
+       * selection() で覚えた位置 (Range) に書き、書いた後の位置を返す。今の選択は書いた後に戻す
+       * (Range は DOM の書き換えに合わせて動くので、書いた分だけずれる)
+       */
+      insertAt(at, text, removeBefore) {
+        const selection = getSelection();
+        const current = selection.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
+        selection.removeAllRanges();
+        if (at) selection.addRange(at);
+        this.insert(text, removeBefore, 0);
+        const next = selection.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
+        selection.removeAllRanges();
+        if (current) selection.addRange(current);
+        return next;
       },
       passKey(key, shift = false) {
         if (key === "Tab") moveFocus(element, shift);
