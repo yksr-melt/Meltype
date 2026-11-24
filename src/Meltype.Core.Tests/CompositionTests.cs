@@ -2016,7 +2016,8 @@ internal static class CompositionTests
             "template", "memorial", "memories", "matches", "baggage", "bachelor", "authority", "bedding", "biggest", "bending",
             "home-made", "data-driven", "use-case", "meta-analysis", "name-based", "time-zone",
             "bare-bones", "bare-bone", "bare-metal", "bare-minimum", "meme-based", "meme-themed",
-            "bare-bones?", "bare-bones!", "pure-demo@example.com", "bare-no@example.com", "pure-demo_config",
+            "bare-bones?", "bare-bones!", "pure-data", "pure-demo@example.com", "bare-no@example.com", "pure-demo_config",
+            "domesticates", "forbearance", "prohibitions",
         })
         {
             var k = new Keyboard(direct: true);
@@ -2076,6 +2077,8 @@ internal static class CompositionTests
             ("tore-do", "とれーど"),
             ("tore-sa-", "とれーさー"),
             ("tore-ra-", "とれーらー"),
+            // ぐらにゅらー と読めるが、今まで変換に入っていた にゅ まで英字に残さない。
+            ("guranyura-", "guraにゅらー"),
         })
         {
             var k = new Keyboard(direct: true);

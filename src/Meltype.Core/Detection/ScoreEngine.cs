@@ -12,7 +12,7 @@ namespace Meltype.Detection;
 /// </summary>
 internal sealed class ScoreEngine
 {
-    /// <summary>判定を保留する通常の上限。ここまでで決められなければ、英単語の続きもあり得る場合だけ保留を延ばす。</summary>
+    /// <summary>判定のために保留する文字数の上限。超えたら判定不能 (Unknown) にする。</summary>
     internal const int MaxPendingKeys = 6;
 
     /// <summary>日本語判定の閾値。JapaneseScore がこの値以上、かつ EnglishScore をこの値以上上回ったときだけ日本語にする。</summary>
@@ -79,12 +79,12 @@ internal sealed class ScoreEngine
             return Result(Verdict.English, letters, contributions, "明らかな英字キー");
         }
 
-        var analysis = useRomaji ? _romaji.Analyze(letters) : null;
-        var romajiValid = analysis?.IsValid == true;
+        var romajiValid = false;
         var japaneseDictionaryPrefix = false;
-        var pendingLimit = MaxPendingKeys;
-        if (analysis is not null)
+        if (useRomaji)
         {
+            var analysis = _romaji.Analyze(letters);
+            romajiValid = analysis.IsValid;
             if (!analysis.IsValid)
             {
                 contributions.Add(new Contribution("Romaji", 0, useKana ? 0 : 5, analysis.InvalidReason ?? "ローマ字として成立しない"));
@@ -101,15 +101,11 @@ internal sealed class ScoreEngine
 
                 _typo.Evaluate(letters, contributions);
 
-                // 6 打で読めても英単語の頭なら、次の子音と母音まで待つ (memori → memoriga / memorial、#2219)。
-                var complete = original.AsSpan(0, original.Length - analysis.Partial.Length);
-                var englishCanContinue = !input.IsFinal && complete.Length >= MaxPendingKeys && BuiltInWordChecker.Shared.HasPrefix(complete);
-                if (englishCanContinue) pendingLimit += 2;
-
                 // 5 文字以上が最後までローマ字として読めて、英単語 (の先頭) にも当たらない (fukare) なら日本語寄り。
-                if (letters.Length >= 5 && analysis.Partial.Length == 0 && !englishCanContinue && !_english.IsPrefix(original))
+                // 辞書にない英単語 (debate) は、英数状態の判定でよく使う英単語の一覧が止める (MeltypeRuntime.ClassifyDirect)。
+                if (letters.Length >= 5 && analysis.Partial.Length == 0 && !_english.IsPrefix(original))
                 {
-                    contributions.Add(new Contribution("Romaji", letters.Length >= MaxPendingKeys ? 4 : 3, 0, "5 文字以上がすべてローマ字として成立し、英単語にも当たらない"));
+                    contributions.Add(new Contribution("Romaji", letters.Length >= 6 ? 4 : 3, 0, "5 文字以上がすべてローマ字として成立し、英単語にも当たらない"));
                 }
             }
         }
@@ -131,29 +127,23 @@ internal sealed class ScoreEngine
             return Result(Verdict.English, letters, contributions, "日本語の入力として成立しない");
         }
 
-        // 日本語辞書に一致する語は今までどおり得点で判定する。ローマ字の綴りからの推測だけで、
-        // 英単語の打ちかけ (matche、bagga) を日本語に切り替えない。
-        if (japanese >= threshold && japanese - english >= threshold &&
-            (!romajiValid || japaneseDictionaryPrefix || !BuiltInWordChecker.Shared.HasPrefix(original)))
+        if (japanese >= threshold && japanese - english >= threshold)
         {
             return Result(Verdict.Japanese, letters, contributions, "日本語スコアが閾値を超えた");
         }
 
-        // tem や memo には既に読めるかながある。続きを見ないと手元やメモリの先頭を英語にしてしまう (#2219)。
-        var waitingForRomaji = !input.IsFinal && letters.Length < pendingLimit && analysis is { IsValid: true, Tokens.Count: > 0 } &&
-            (analysis.Partial.Length > 0 || CommonReadings.Words.Contains(analysis.Kana));
+        // 英語の語 (の先頭) と一致し、日本語の語の途中でもない → これ以上待っても日本語にはならない。
         // "as" (ashita) や "to" (tomodachi) のように日本語の語の先頭でもある間は待つ。
         // 助詞で始まり、助詞の後ろがまだ 3 文字以下の語 (not, nota = の + た…) は、助詞 + 次の語の打ちかけかもしれないので待つ
         // (4 文字になれば日本語の辞書で調べられる)。
         var particleThenMore = romajiValid && !input.IsFinal && DictionaryDetector.StartsWithParticle(letters) is { } particle &&
             letters.Length - particle.Length is > 0 and < 4;
-        if (english >= 3 && japanese < threshold && !waitingForRomaji && !japaneseDictionaryPrefix &&
-            !particleThenMore && !(useKana && kanaPlausible) && letters.Length >= 2)
+        if (english >= 3 && japanese < threshold && !japaneseDictionaryPrefix && !particleThenMore && !(useKana && kanaPlausible) && letters.Length >= 2)
         {
             return Result(Verdict.English, letters, contributions, "英語の語と一致");
         }
 
-        if (input.IsFinal || letters.Length >= pendingLimit)
+        if (input.IsFinal || letters.Length >= MaxPendingKeys)
         {
             return Result(Verdict.Unknown, letters, contributions, "判断できない");
         }

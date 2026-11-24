@@ -102,6 +102,7 @@ internal static class CompositionLifecycle
     {
         state.HeldLetters.Clear();
         state.HeldSent.Clear();
+        state.HeldResumeAt = 0;
     }
 
     /// <summary>今の未確定入力が、自動では変換してはいけない保護区間か (F9/F10 などの明示指定は除く)。</summary>

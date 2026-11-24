@@ -72,6 +72,7 @@ internal static class CompositionKeys
     private static void HandleKey(CompositionState state, CompositionEnv env, KeyEvent e)
     {
         var vk = e.Vk;
+        if (!VirtualKeys.IsLetter(vk) || state.Shift || state.Modifier) CompositionDirectInput.ResumeNormalHold(state);
         if (state.HeldLetters.Length > 0)
         {
             if (VirtualKeys.IsLetter(vk) && !state.Shift && !state.Modifier)
