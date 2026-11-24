@@ -27,7 +27,8 @@
     "meltype.css",
     "_framework/",
     "mozc/",
-    "LICENSE"
+    "LICENSE",
+    "THIRD-PARTY-NOTICES.md"
   ],
   "keywords": ["ime", "japanese", "romaji", "mozc", "webassembly"]
 }

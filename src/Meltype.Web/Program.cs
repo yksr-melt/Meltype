@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Yukishiro
+// Copyright (C) 2026 hisiragi
 
 using System.Runtime.InteropServices.JavaScript;
 using System.Runtime.Versioning;
@@ -11,9 +11,10 @@ using Meltype.Ime;
 namespace Meltype.Web;
 
 /// <summary>
-/// ブラウザーの入力欄 (web-ime/meltype-web.js・web-engine/src/meltype.js) から呼ぶ関数。出来事は <see cref="ImeEvent"/> の JSON、答えは <see cref="ImeOutput"/> の JSON。
+/// ブラウザーの入力欄 (web-engine/src/meltype.js) から呼ぶ関数。出来事は <see cref="ImeEvent"/> の JSON、答えは <see cref="ImeOutput"/> の JSON。
+/// 関数の名前と分け方は、Mac・Linux・Android 版の C の関数 (src/Meltype.Core.CApi/Exports.cs) に合わせる。
 /// 設定・学習データはブラウザーのメモリー上のファイル (<see cref="DataDirectory"/>) に置く。残すときはページの側が
-/// <see cref="ExportData"/> で取り出して IndexedDB に保存し、次に開いたときに <see cref="ImportData"/> で戻す。
+/// <see cref="ExportData"/> で取り出して保存し、次に開いたときと、ほかのタブが保存したときに <see cref="ImportData"/> で戻す。
 /// </summary>
 [SupportedOSPlatform("browser")]
 public static partial class WebExports
@@ -23,7 +24,10 @@ public static partial class WebExports
     }
 
     private static MeltypeRuntime? s_runtime;
-    private static readonly List<ImeHost> s_hosts = [];
+
+    // 入力欄の本体。番号はページが持つ (ImeDestroy で消す)
+    private static readonly Dictionary<int, ImeHost> s_hosts = [];
+    private static int s_nextHost;
 
     private const string DataDirectory = "/meltype";
 
@@ -33,7 +37,7 @@ public static partial class WebExports
     [JSImport("mozcRequest", "meltype")]
     private static partial string? MozcRequest(string line);
 
-    /// <summary>変換の結果が後から届いた (ページは入力欄に refresh の出来事を送る)。</summary>
+    /// <summary>変換の結果が後から届いた (ページは入力欄に ConversionFinished の出来事を送る)。</summary>
     [JSImport("conversionReady", "meltype")]
     private static partial void ConversionReady();
 
@@ -42,21 +46,26 @@ public static partial class WebExports
     public static void Init(bool mozc)
     {
         // 同梱のヘルパーも Zenzai も無い (appDirectory は無いフォルダー)。Mozc は JS の関数で答える
-        Runtime.StartConverter("/nonexistent", mozc ? new JsMozcHelper() : null);
+        Runtime.StartConverter("/nonexistent", mozc ? new CallbackMozcHelper() : null);
         Runtime.ConversionReady += ConversionReady;
     }
 
-    /// <summary>入力欄 1 つの本体を作り、番号を返す。</summary>
+    /// <summary>入力欄 1 つの本体を作り、番号を返す。ImeDestroy で消す。</summary>
     [JSExport]
-    public static int Create()
+    public static int ImeCreate()
     {
         // 変換の結果はいつも後から受け取る (ブラウザーは 1 つのスレッドで動くので、キーの処理で答えを待てない)
-        s_hosts.Add(Runtime.CreateHost(new WebEnvironment(), () => Runtime.Settings.Current, () => true));
-        return s_hosts.Count - 1;
+        var host = s_nextHost++;
+        s_hosts[host] = Runtime.CreateHost(new NativeEnvironment(), () => Runtime.Settings.Current, () => true);
+        return host;
     }
 
+    /// <summary>出来事 (<see cref="ImeEvent"/> の JSON) を処理して、<see cref="ImeOutput"/> の JSON を返す。</summary>
     [JSExport]
-    public static string Handle(int host, string json) => s_hosts[host].Handle(json);
+    public static string ImeHandle(int host, string json) => s_hosts[host].Handle(json);
+
+    [JSExport]
+    public static void ImeDestroy(int host) => s_hosts.Remove(host);
 
     [JSExport]
     public static string Version() => Config.ProjectInfo.CoreVersion;
@@ -80,22 +89,32 @@ public static partial class WebExports
         return JsonSerializer.Serialize(files, WebJsonContext.Default.DictionaryStringString);
     }
 
-    /// <summary><see cref="ExportData"/> で取り出したファイルを戻す。<see cref="Init"/> の前に呼ぶ (Core は作るときにファイルを読む)。</summary>
+    /// <summary>
+    /// <see cref="ExportData"/> で取り出したファイルを戻す。<see cref="Init"/> の前 (前に保存したもの) と、
+    /// ほかのタブが保存したときに呼ぶ。動いている Core は、ほかのプロセスがファイルを書き換えたときと同じく、
+    /// 1 秒ごとの確かめ (<see cref="MeltypeRuntime"/> の Learning.Refresh) で読み直す。
+    /// </summary>
     [JSExport]
     public static void ImportData(string json)
     {
-        if (s_runtime is not null) throw new InvalidOperationException("ImportData は Init の前に呼んでください");
         var root = Path.GetFullPath(DataDirectory) + Path.DirectorySeparatorChar;
         foreach (var (name, content) in JsonSerializer.Deserialize(json, WebJsonContext.Default.DictionaryStringString) ?? [])
         {
             var path = Path.GetFullPath(Path.Combine(DataDirectory, name));
             if (!path.StartsWith(root, StringComparison.Ordinal)) throw new ArgumentException($"保存先の外のファイルです: {name}");
+            // 同じ中身は書かない (書くと、ファイルが変わったとみなして読み直す)
+            if (File.Exists(path) && File.ReadAllText(path) == content) continue;
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             File.WriteAllText(path, content);
         }
     }
 
-    private sealed class WebEnvironment : IImeEnvironment
+    /// <summary>学習データをすべて消す (ユーザー辞書と設定は消さない)。</summary>
+    [JSExport]
+    public static void ResetLearning() => Runtime.Learning.Reset();
+
+    /// <summary>ブラウザーの環境。クリップボード・入力言語は読めない。</summary>
+    private sealed class NativeEnvironment : IImeEnvironment
     {
         public Config.InputMode? InputMethod => null;
 
@@ -106,8 +125,8 @@ public static partial class WebExports
         public string? OtherTipVersion => null;
     }
 
-    /// <summary>Mozc の WebAssembly。動かすのはページなので、Start・Reset・Dispose では何もしない。</summary>
-    private sealed class JsMozcHelper : IMozcHelper
+    /// <summary>Mozc の WebAssembly (Android 版と同じく、要求 1 行を関数で答える)。動かすのはページなので、Start・Reset・Dispose では何もしない。</summary>
+    private sealed class CallbackMozcHelper : IMozcHelper
     {
         public bool IsInstalled => true;
 
