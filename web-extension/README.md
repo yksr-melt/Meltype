@@ -34,7 +34,7 @@ web-extension/build.sh
 
 ## CSP の厳しいサイト
 
-サイトのセキュリティの設定 (CSP) の `script-src` に `'wasm-unsafe-eval'` が無いと、ブラウザーは拡張機能のスクリプト (`content.js`) の中の WebAssembly も止めます (GitHub・X など)。そのサイトでは、Core を拡張機能のページ (`frame.html`) で動かします。
+サイトのセキュリティの設定 (CSP) の `script-src` に `'wasm-unsafe-eval'` が無いと、Chrome・Edge は拡張機能のスクリプト (`content.js`) の中の WebAssembly も止めます (GitHub・X など)。そのサイトでは、Core を拡張機能のページ (`frame.html`) で動かします。Firefox はサイトの CSP を拡張機能のスクリプトにかけないので、どのサイトでもページの中で動きます (Firefox 160 で、GitHub でも確かめた)。
 
 - `frame.html` を、閉じた Shadow DOM の中の見えない iframe でページに置きます。拡張機能のページはサイトの CSP を受けません。
 - `content.js` と `frame.js` は `runtime.connect` でやり取りします。拡張機能の中からしかつなげないので、サイトのスクリプトは Core と覚えたことに触れません。

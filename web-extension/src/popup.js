@@ -75,7 +75,7 @@ $("[data-add]").addEventListener("submit", async (event) => {
 // ---- このサイト ----
 
 async function showCurrentSite() {
-  const [tab] = await api.tabs.query({ active: true, currentWindow: true });
+  const [tab] = await api.tabs?.query({ active: true, currentWindow: true }) ?? [];
   const url = URL.canParse?.(tab?.url ?? "") ? new URL(tab.url) : null;
   // 拡張機能はブラウザーの画面 (chrome:// など) やストアのページには入れない
   if (!url || !["http:", "https:", "file:"].includes(url.protocol) || !url.hostname) {
@@ -202,8 +202,13 @@ $("[data-clear]").addEventListener("click", async () => {
   showEnabled(paused);
   await showCurrentSite();
   showSites(disabledSites);
-  setUpShortcut();
-  await showShortcut();
+  // ショートカットキーの機能 (commands) が無いところ (拡張機能のページを iframe で開いたときなど) では、その欄を出さない
+  if (api.commands) {
+    setUpShortcut();
+    await showShortcut();
+  } else {
+    $("#shortcut-title").closest("section").hidden = true;
+  }
   // ショートカットキーで切り替えた・ほかの画面で変えたときも、出している内容を合わせる
   api.storage.onChanged.addListener((changes, area) => {
     if (area !== "local") return;

@@ -21,6 +21,8 @@
   --_keyboard-height: calc(5 * var(--_key-height) + 4 * 6px + 16px + env(safe-area-inset-bottom, 0px));
   /* ページの文字の設定を受け継がない */
   all: initial;
+  /* all: initial で消えるので、フォームの部品なども OS の明るさに合わせ直す */
+  color-scheme: light dark;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -86,6 +88,9 @@
   /* 9 件 (数字キーで選べる数) を見せ、残りはスクロールする */
   max-height: calc(9 * (1.5em + 4px));
   overflow-y: auto;
+  /* スクロールバーの色を箱に合わせる (color-scheme だけでは、ページによってダークでも白くなる) */
+  scrollbar-color: var(--_border) transparent;
+  scrollbar-width: thin;
 }
 
 .meltype-candidates li {
