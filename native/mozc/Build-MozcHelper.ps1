@@ -95,7 +95,7 @@ if (-not (Test-Path (Join-Path $MozcSource '.git'))) {
 $head = & git -C $MozcSource rev-parse -q --verify HEAD
 if ($head) {
     # 前に足したヘルパーの定義を消し、取ってきたときの BUILD.bazel に戻す (BUILD.fragment の変更を反映し、checkout が止まらないように)
-    Invoke-Native git @('-C', $MozcSource, 'checkout', '-q', 'HEAD', '--', 'src/converter/BUILD.bazel') 'BUILD.bazel を戻せませんでした。'
+    Invoke-Native git @('-C', $MozcSource, 'checkout', '-q', 'HEAD', '--', 'src/converter/BUILD.bazel', 'src/dictionary/BUILD.bazel') 'BUILD.bazel を戻せませんでした。'
     # 辞書の BUILD.bazel は利用者が書き換えていることがあるので、checkout せずに、足した dictionary_ut.txt の行だけを消す
     # (build-mozc-helper.sh は Mozc の版を変えないので、この処理が無い。版を合わせる処理を足すときは同じ手当てが要る)
     $dictionaryBuild = Join-Path $MozcSource 'src\data\dictionary_oss\BUILD.bazel'
@@ -143,6 +143,19 @@ if ($buildText -notmatch '"dictionary_ut\.txt"') {
 
 if ($UtDictionary) {
     Invoke-PythonUtf8 @($merge, '--mozc-src', $src, '--dictionary', $UtDictionary, '--report', $utPending) 'Mozc-UT の辞書を統合できませんでした。'
+}
+
+# ヘルパーは、ほかの日本語入力の品詞名を Mozc の品詞に読み替えるのに、Mozc の辞書の取り込み (user_dictionary_importer) を使う。
+# 取り込みは Mozc の設定画面だけに公開されているので、visibility に converter パッケージを足す (build-mozc-helper.sh と同じ書き換え)。
+$dictionaryRules = Join-Path $src 'dictionary\BUILD.bazel'
+$rulesText = [IO.File]::ReadAllText($dictionaryRules)
+$importerVisibility = '(?m)^( *)textual_hdrs = \[":pos_map"\],(\r?\n)( *)visibility = \[\r?\n'
+if ($rulesText -notmatch ($importerVisibility + ' *"//converter:__pkg__",')) {
+    $rulesText = $rulesText -replace $importerVisibility, "`$0`$3    `"//converter:__pkg__`",`$2"
+    if ($rulesText -notmatch ($importerVisibility + ' *"//converter:__pkg__",')) {
+        throw "$dictionaryRules の取り込みの visibility に converter を足せませんでした (Mozc の BUILD.bazel の形が変わった可能性があります)。"
+    }
+    [IO.File]::WriteAllText($dictionaryRules, $rulesText)
 }
 
 # ヘルパーのソースと BUILD の定義を Mozc の converter パッケージに入れる (エンジンを使えるのがこのパッケージのため)。
