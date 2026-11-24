@@ -18,15 +18,22 @@ public sealed record ToggleShortcut
     public const int Hankaku = 0x19;
     // バッククォートキー(`)
     public const int Grave = 0xC0;
+    public const int CapsLock = 0x14;
 
     // JIS の半角/全角キーは、単独押しと Alt との組み合わせで通知されるキーコードが異なる場合がある。
     // 確認した入力は、単独押しで 0xF3 の解放と 0xF4 の押下、Alt との組み合わせで 0x19 の押下。
     // US の Alt+バッククォートも 0x19 になるため、入力の識別には NormalizeShortcutKey で配列情報も使う。
-    public static int NormalizeHankakuKey(int vk) => vk is 0xF3 or 0xF4 ? Hankaku : vk;
+    // カタカナ/ひらがな キーは、Windows が VK_OEM_COPY (0xF2)、IBus・fcitx5・Mac のフロントが VK_KANA (0x15) で送るので、0x15 にそろえる。
+    public static int NormalizeKey(int vk) => vk switch
+    {
+        0xF3 or 0xF4 => Hankaku,
+        VirtualKeys.OemCopy => VirtualKeys.Kana,
+        _ => vk,
+    };
     /// <summary>US 配列のバッククォートが Alt により VK_KANJI に変わる場合だけ、配列上のキーへ戻す。</summary>
     public static int NormalizeShortcutKey(int vk, int scan, bool extended, int unmodifiedKey) =>
-        scan == 0x29 && !extended && unmodifiedKey == Grave && NormalizeHankakuKey(vk) == Hankaku
-            ? Grave : NormalizeHankakuKey(vk);
+        scan == 0x29 && !extended && unmodifiedKey == Grave && NormalizeKey(vk) == Hankaku
+            ? Grave : NormalizeKey(vk);
 
     public static bool IsModifier(int vk) => VirtualKeys.IsModifier(vk);
     public static ShortcutModifiers ModifierOf(int vk) => vk switch
@@ -39,7 +46,7 @@ public sealed record ToggleShortcut
     };
 
     public bool Matches(int vk, ShortcutModifiers mods) =>
-        !IsModifier(Key) && Modifiers == mods && NormalizeHankakuKey(vk) == NormalizeHankakuKey(Key);
+        !IsModifier(Key) && Modifiers == mods && NormalizeKey(vk) == NormalizeKey(Key);
 
     /// <summary>
     /// ショートカット割り当てとして有効かどうかの基本検証。
@@ -52,10 +59,41 @@ public sealed record ToggleShortcut
     public bool IsValid => Key is > 0 and < 256 && Key is not (0xE5 or 0xE7 or 0xE8 or 0xFF) &&
         ((int)Modifiers & ~15) == 0 &&
         !IsModifier(Key) &&
-        !(NormalizeHankakuKey(Key) == Hankaku && (Modifiers & ShortcutModifiers.Control) != 0);
+        !(NormalizeKey(Key) == Hankaku && (Modifiers & ShortcutModifiers.Control) != 0);
 
     public bool Overlaps(ToggleShortcut other) => Modifiers == other.Modifiers &&
         (Matches(other.Key, other.Modifiers) || other.Matches(Key, Modifiers));
+
+    /// <summary>画面・通知に出す名前 (Ctrl + Alt + F10 など)。</summary>
+    public string Describe()
+    {
+        var names = new List<string>();
+        foreach (var (flag, label) in new[] { (ShortcutModifiers.Control, "Ctrl"), (ShortcutModifiers.Alt, "Alt"), (ShortcutModifiers.Shift, "Shift"), (ShortcutModifiers.Win, OperatingSystem.IsMacOS() ? "Command" : "Win") })
+        {
+            if ((Modifiers & flag) != 0) names.Add(label);
+        }
+        names.Add(KeyName(Key));
+        return string.Join(" + ", names);
+    }
+
+    /// <summary>仮想キーコードの名前。</summary>
+    public static string KeyName(int key) => key switch
+    {
+        Hankaku => "半角/全角",
+        Grave => "` (バッククォート)",
+        CapsLock => "CapsLock",
+        VirtualKeys.Kana => "カタカナ/ひらがな",
+        0x1C => "変換",
+        0x1D => "無変換",
+        0x20 => "Space",
+        >= 0x30 and <= 0x39 or >= 0x41 and <= 0x5A => ((char)key).ToString(),
+        >= 0x70 and <= 0x87 => $"F{key - 0x6F}",
+        _ => $"キー 0x{key:X2}",
+    };
+
+    /// <summary>設定画面で選べるキー (上の名前を付けたもの)。</summary>
+    public static IReadOnlyList<int> SelectableKeys { get; } =
+        [Hankaku, Grave, CapsLock, VirtualKeys.Kana, 0x1C, 0x1D, 0x20, .. Enumerable.Range(0x41, 26), .. Enumerable.Range(0x30, 10), .. Enumerable.Range(0x70, 24)];
 
     // デフォルトの切り替えキー
     public static List<ToggleShortcut> Defaults() =>

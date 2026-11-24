@@ -15,7 +15,7 @@ namespace Meltype.Input;
 /// フックのスレッドから Count を呼び、ファイル (keycount.json) には Save でまとめて書く。
 /// 打った文字は残さない (どのキーを何回押したかだけ)。
 /// </summary>
-internal sealed partial class KeyCounter
+public sealed partial class KeyCounter
 {
     public sealed class Data
     {
@@ -39,20 +39,25 @@ internal sealed partial class KeyCounter
     private readonly HashSet<int> _held = [];
     private Data _data = new();
     private bool _dirty;
+    // keycount.json を読めたか (無い・壊れていたも含む)。読めないあいだは保存しない (0 から数えた打鍵数で上書きしない)
+    private bool _loaded;
 
     public KeyCounter(string? path)
     {
         _path = path;
-        DataFile.Load(path, "打鍵数", json =>
+        _loaded = Load();
+    }
+
+    private bool Load() =>
+        DataFile.Load(_path, "打鍵数", json =>
         {
             var data = JsonSerializer.Deserialize(json, KeyCountJsonContext.Default.Data) ?? new Data();
             data.Days ??= [];
             data.Keys ??= [];
             data.ImportedHashes ??= [];
             if (data.Hours is not { Length: 24 }) data.Hours = new long[24];
-            _data = data;
+            lock (_lock) _data = data;
         });
-    }
 
     public static string DayKey(DateTime day) => day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
@@ -179,6 +184,8 @@ internal sealed partial class KeyCounter
     public void Save()
     {
         if (_path is null) return;
+        // 起動したときに読めなかったら、読めるようになってから読み直す (読めなかったあいだの変更は捨てる)
+        if (!_loaded && !(_loaded = Load())) return;
         string json;
         lock (_lock)
         {
@@ -187,7 +194,7 @@ internal sealed partial class KeyCounter
             _dirty = false;
         }
         try { DataFile.Write(_path, temp => File.WriteAllText(temp, json)); }
-        catch (Exception ex)
+        catch (Exception ex) when (Config.DataFile.IsFileError(ex))
         {
             lock (_lock) _dirty = true;
             Diagnostics.Log.Warn($"打鍵数を保存できませんでした: {ex.Message}");

@@ -306,7 +306,7 @@ STDMETHODIMP TextService::ActivateEx(ITfThreadMgr* threadMgr, TfClientId clientI
     }
     open_ = !disabled_;
 
-    candidates_ = std::make_unique<CandidateWindow>([this](int index) { SelectCandidate(index); });
+    candidates_ = std::make_unique<CandidateWindow>(threadMgr_, [this](int index) { SelectCandidate(index); });
 
     if (!disabled_) {
         langBar_ = new LangBarButton(this);
@@ -1005,7 +1005,7 @@ STDMETHODIMP TextService::OnPreservedKey(ITfContext* context, REFGUID guid, BOOL
     *eaten = FALSE;
     for (const auto& binding : preservedKeys_) {
         if (!IsEqualGUID(binding.guid, guid)) continue;
-        const UINT scan = ToggleShortcut::NormalizeHankakuKey(binding.key.uVKey) == ToggleShortcut::Hankaku || binding.key.uVKey == ToggleShortcut::Grave
+        const UINT scan = ToggleShortcut::NormalizeKey(binding.key.uVKey) == ToggleShortcut::Hankaku || binding.key.uVKey == ToggleShortcut::Grave
             ? 0x29 : MapVirtualKeyExW(binding.key.uVKey, MAPVK_VK_TO_VSC, GetKeyboardLayout(0));
         const LPARAM keyParam = static_cast<LPARAM>(scan) << 16;
         const UINT slot = ShortcutSlot(binding.key.uVKey, keyParam);
@@ -1301,7 +1301,7 @@ void TextService::HandleKey(ITfContext* context, UINT vk, wchar_t ch, bool repea
     }
     // Meltype.exe につながらない (管理者として動くアプリなど) ときの 半角/全角・英数・かな: 開閉だけを切り替え、アプリには通さない
     // (アプリに通すと、PowerShell (PSReadLine) は文字の無いキーを @ として入れる)
-    const UINT key = ToggleShortcut::NormalizeHankakuKey(vk);
+    const UINT key = ToggleShortcut::NormalizeKey(vk);
     const bool modeKey = key == ToggleShortcut::Hankaku || key == ToggleShortcut::Grave || key == 0xF0 || key == 0x15;
     if (failed && modeKey && !repeat) pendingOpen_ = key == 0xF0 ? 0 : key == 0x15 ? 1 : open_ ? 0 : 1;
     FlushOpen();

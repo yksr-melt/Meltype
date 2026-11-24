@@ -55,7 +55,7 @@ BAZEL="$(command -v bazelisk)" native/mozc/build-mozc-helper.sh
 mac/build-cli.sh --setup --all
 ```
 
-`--all` は、本体のテスト → `mac/build/Meltype.app` のビルド → `~/Library/Input Methods/Meltype.app` へのインストールまでをまとめて行います。ビルドした CPU 向けのアプリができるので、Apple シリコン版と Intel 版は互換ではありません。
+`--all` は、本体のテスト → `mac/build/Meltype.app`・`mac/build/Meltype Settings.app` (設定アプリ) のビルド → `~/Library/Input Methods/Meltype.app`・`~/Applications/Meltype Settings.app` へのインストールまでをまとめて行います。ビルドした CPU 向けのアプリができるので、Apple シリコン版と Intel 版は互換ではありません。
 
 一部だけ行うときは、次のように分けて実行できます。`--build` はインストール・プロセスの停止・入力ソースの切り替えを行いません。
 

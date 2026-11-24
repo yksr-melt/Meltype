@@ -3,9 +3,12 @@
 
 using System.Globalization;
 using System.Text;
+using Meltype.Composition;
 using Meltype.Config;
 using Meltype.Detection;
-using Meltype.Input;
+using Meltype.Diagnostics;
+using Meltype.Dictionary;
+using Meltype.Engine;
 
 namespace Meltype.Composition;
 
@@ -169,9 +172,9 @@ public sealed record SessionResult(bool Consumed, IReadOnlyList<TextEdit> Commit
 
 /// <summary>
 /// 入力欄の本体 (<see cref="Ime.ImeSession"/>) を作る部品。プロセスで 1 つ作り、入力欄で共有する。
-/// 本物は <see cref="MeltypeRuntime.SessionParts"/> で作り、テストは偽の変換エンジン・学習データで作る。
+/// 本物は Ime の MeltypeRuntime.SessionParts で作り、テストは偽の変換エンジン・学習データで作る。
 /// </summary>
-public sealed record SessionParts(CompositionDetector Detector, IKanjiConverter Converter, CompositionServices Services)
+internal sealed record SessionParts(CompositionDetector Detector, IKanjiConverter Converter, CompositionServices Services)
 {
     /// <summary>英数状態で打ち始めた英字がローマ字 (日本語) かの判定 (打った英字, もう続きが無いか, 入力欄のアプリの設定)。null なら判定しない。</summary>
     public Func<string, bool, Settings, Verdict>? ClassifyDirect { get; init; }
@@ -187,4 +190,11 @@ public sealed record SessionParts(CompositionDetector Detector, IKanjiConverter 
 
     /// <summary>ユーザーが判定を直した (トレイの「直した誤判定を報告...」)。</summary>
     public Action<Correction>? Corrected { get; init; }
+
+    /// <summary>
+    /// 変換エンジンの答えを後から受け取れるフロントか (Converter の <see cref="IKanjiConverter.ResultReady"/> を受けて ConversionFinished を送る)。
+    /// true なら入力スレッドは答えを待たない (Space・確定のときだけ少し待つ)。false なら答えるまで待つ (--repro・--self-test)。
+    /// 出来事ごとに読む (フロントは入力欄を作った後に、答えを後から受け取ると知らせることがある: fcitx5)。
+    /// </summary>
+    public Func<bool> LateResults { get; init; } = () => false;
 }
