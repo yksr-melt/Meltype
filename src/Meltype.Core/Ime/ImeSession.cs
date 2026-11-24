@@ -582,6 +582,8 @@ internal static class ImeSession
             NowPlaying = env.Parts.NowPlaying,
             Corrected = env.Parts.Corrected,
             Before = LineBefore(state, state.Field),
+            // 推測した行は変換の文脈には使えるが、BackSpace で置き換える範囲の確認には使えない。
+            EditableBefore = state.Field is { CanRemove: true, Composing: false, Selection: null or "" } field ? field.Before : null,
             After = state.Field?.After,
             LateResults = lateResults,
             Deadline = lateResults ? 0 : long.MaxValue,

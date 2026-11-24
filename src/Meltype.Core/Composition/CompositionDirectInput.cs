@@ -49,8 +49,7 @@ internal static class CompositionDirectInput
     /// <summary>長音の判定中に先に送った末尾の1文字だけを消し、残りの打鍵は判定に使う。</summary>
     internal static bool BackspaceHeld(CompositionState state, CompositionEnv env, long nowMs)
     {
-        // 読めない・消せない入力欄では実際に消えたか分からないため、BackSpace はアプリに通す。
-        if (!env.CanDeleteBackward || env.Before is not { Length: > 0 } before || before[^1] != state.HeldSent[^1]) return false;
+        if (env.EditableBefore is not { Length: > 0 } before || before[^1] != state.HeldSent[^1]) return false;
         CompositionOutput.DeleteHeld(state.Out, before[^1].ToString());
         state.HeldLetters.Length--;
         state.HeldSent.Length--;
