@@ -245,5 +245,5 @@ kusawww	草www
 deha,korehadoudesyou?	では、これはどうでしょう？
 *nihongo*	*日本語*
 *toshokan*	*図書館*
-printf('konnichiha')	printf('こんいちは')
-printf("konnichiha")	printf("こんいちは")
+printf('konnichiha')	printf('こんにちは')
+printf("konnichiha")	printf("こんにちは")
