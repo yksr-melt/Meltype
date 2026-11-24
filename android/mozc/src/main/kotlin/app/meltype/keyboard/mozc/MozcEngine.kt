@@ -17,7 +17,10 @@ import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands
  *
  * Mozc の本体はプロセス全体で1つなので、[open] は何度呼んでも同じものを返す。
  */
-class MozcEngine private constructor() {
+class MozcEngine private constructor(profile: File) {
+    /** Mozc がユーザー辞書を読むファイル (プロファイルの user_dictionary.db)。 */
+    val userDictionaryFile = File(profile, "user_dictionary.db")
+
     /** 命令を1つ送る。失敗は null。どのスレッドから呼んでもよい（1つずつ順に処理する）。 */
     @Synchronized
     fun eval(input: ProtoCommands.Input): ProtoCommands.Output? {
@@ -51,7 +54,7 @@ class MozcEngine private constructor() {
                 // そのときの辞書の版は "0.0.0" になるので、それで見分ける。
                 val version = MozcJni.getDataVersion()
                 if (version.isEmpty() || version == NO_DICTIONARY_VERSION) return null
-                MozcEngine().also { opened = it }
+                MozcEngine(profile).also { opened = it }
             } catch (e: Exception) {
                 Log.w(TAG, "open: ${e.javaClass.simpleName}")
                 null

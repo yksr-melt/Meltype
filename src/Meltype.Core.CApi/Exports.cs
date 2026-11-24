@@ -194,6 +194,9 @@ public static unsafe class Exports
     {
         public bool IsInstalled => true;
 
+        // アプリの Mozc はユーザー辞書をファイルに保存している
+        public int Launches => 1;
+
         public long WorkingSet => 0;
 
         public bool Start() => true;

@@ -483,11 +483,8 @@ internal static partial class CompositionController
     }
 
     /// <summary>
-    /// ユーザーが登録した語の読みが、変換エンジンの文節の途中から始まるなら、その語では区切らない (issue #374)。
-    /// しの → 紫乃 を登録すると、わたしのことがすき の途中の しの で区切って ワタ紫乃ことが好き になっていた
-    /// (変換エンジンは わたしの|ことが|すき と区切るので、しの は文節の途中から始まる)。文節の頭から始まる語 (しのがきた の しの) は今までどおり。
-    /// 同梱の語句 (phrases.txt) は、変換エンジンが区切りを間違える語句を補うものなので、文節の途中から始まっても使う
-    /// (読みの頭に ^ を付けた語句は、ほかの語の一部になりやすいので、文節の頭から始まるときだけ使う)。
+    /// 同梱の語句 (phrases.txt) は、変換エンジンが区切りを間違える語句を補うものなので、変換エンジンの文節の途中から始まっても使う。
+    /// 読みの頭に ^ を付けた語句は、ほかの語の一部になりやすいので、文節の頭から始まるときだけ使う。
     ///
     /// 語の始まりが変換エンジンの文節の境目に合い、そこからの文節の文字が語で始まる (変換エンジンが文の中でその語にできている) なら、
     /// その語では区切らず、語から後ろは文全体を変換したときの変換エンジンの文節をそのまま使う (Engine)。
@@ -508,8 +505,8 @@ internal static partial class CompositionController
         for (var p = 0; p < pieces.Count; p++)
         {
             var (reading, word) = pieces[p];
-            var midStart = word is not null && (dictionary.IsUserReading(reading) || dictionary.IsHeadOnly(reading)) && !starts.Contains(position);
-            if (midStart) Diagnostics.Log.Info($"ユーザー辞書の語は、変換エンジンの文節の途中から始まるので使いません: {Diagnostics.Log.Text(reading)}");
+            var midStart = word is not null && dictionary.IsHeadOnly(reading) && !starts.Contains(position);
+            if (midStart) Diagnostics.Log.Info($"同梱の語句は、変換エンジンの文節の途中から始まるので使いません: {Diagnostics.Log.Text(reading)}");
             if (word is not null && !midStart && starts.Contains(position) && EngineStartsWith(position, word))
             {
                 // 次に文節の境目から始まる語の手前までを、変換エンジンの文節にする
@@ -575,8 +572,9 @@ internal static partial class CompositionController
             var others = string.Concat(clauses.Where((_, k) => k != i).Select(c => c.Text));
             var surrounding = (env.Context().PrecedingText ?? "") + EnglishInComposition(state, env) + others + (env.Context().FollowingText ?? "");
             var preferred = env.Services.ContextRules?.Choose(clauses[i].Reading, surrounding, clauses[i].Text, text => Standalone(env, text)) ?? env.Learning.LearnedConversion(clauses[i].Reading);
-            // 変換エンジンは、文節が「から」だけだと記号 (～) にしてしまう。記号だけの変換結果は、ひらがなの後ろに回す。
-            preferred ??= IsSymbolOnly(clauses[i].Text) && clauses[i].Reading.All(KanaChars.IsHiragana) ? clauses[i].Reading : null;
+            // 変換エンジンは、文節が「から」だけだと記号 (～) にしてしまう。記号だけの変換結果は、ひらがなの後ろに回す (ユーザー辞書の語 なかてん → ・ は除く)。
+            preferred ??= IsSymbolOnly(clauses[i].Text) && clauses[i].Reading.All(KanaChars.IsHiragana) &&
+                env.Services.UserDictionary?.Lookup(clauses[i].Reading).Contains(clauses[i].Text) != true ? clauses[i].Reading : null;
             // 英単語に挟まれて助詞だけの文節になると、変換エンジンは漢字にしてしまう (github + に + push → 二)。助詞はかなのまま。
             preferred ??= JapaneseParticles.IsParticle(clauses[i].Reading) && clauses[i].Text != clauses[i].Reading ? clauses[i].Reading : null;
             // カタカナの語の後ろの「っ」で始まる文節 (スパイダーマ + っ！) は、カタカナの「ッ」にする (スパイダーマッ！)。
@@ -710,11 +708,11 @@ internal static partial class CompositionController
     /// </summary>
     private static void AddCandidates(CompositionState state, CompositionEnv env, Clause clause)
     {
-        if (clause.Engine is not { } engine) return;
+        if (clause.Engine is not { } engine || clause.EngineCandidatesAdded) return;
         var (chosen, text) = (clause.Candidates, clause.Text);
         clause.Candidates = [.. chosen, .. JapaneseCandidates(state, env, clause.Reading, engine, null, zenzai: false).Where(c => !chosen.Contains(c))];
         clause.Index = clause.Candidates.IndexOf(text);
-        clause.Engine = null;
+        clause.EngineCandidatesAdded = true;
     }
 
     /// <summary>
@@ -980,11 +978,11 @@ internal static partial class CompositionController
     /// ライブ変換: Space を押したときと同じく、文脈・手がかり辞書・学習を使って文節ごとに変換した結果を見せる。
     /// 打つたびに呼ばれるので、かな・文脈・学習の状態が同じならキャッシュを使う。
     /// </summary>
-    private static string LiveConvert(CompositionState state, CompositionEnv env, string kana, bool afterEnglish, string before)
+    private static ComposedText LiveConvert(CompositionState state, CompositionEnv env, string kana, bool afterEnglish, string before)
     {
         // 記号 (～ ! ? …) は数えない。かなが短いうちに記号を足しただけで、的外れな漢字にしない (な～～～ が 名～～～ になっていた: issue #505)
-        if (!CountsAsLive(kana)) return kana;
-        return string.Concat(LiveClauses(state, env, kana, afterEnglish, before).Select(c => c.Text));
+        if (!CountsAsLive(kana)) return ComposedText.Kana(kana);
+        return ComposedText.Concat(LiveClauses(state, env, kana, afterEnglish, before).Select(c => ComposedText.Converted(c.Reading, c.Text)));
     }
 
     /// <summary>
@@ -994,12 +992,12 @@ internal static partial class CompositionController
     private static bool CountsAsLive(string kana) =>
         kana.Where((c, i) => IsKana(c) && !(i > 0 && KanaChars.IsSmallKana(c) && IsKana(kana[i - 1]))).Count() >= LiveConversionMinLength;
 
-    /// <summary>ライブ変換の文節 (読みと変換した文字)。予測変換で最後の文節を探すときも、同じ打鍵で変換した結果を使う。</summary>
-    private static List<(string Reading, string Text)> LiveClauses(CompositionState state, CompositionEnv env, string kana, bool afterEnglish, string before)
+    /// <summary>ライブ変換の文節 (読み・変換エンジンの答え・学習などで選び直した後の文字)。予測変換で最後の文節を探すときも、同じ打鍵で変換した結果を使う。</summary>
+    private static List<(string Reading, string? Engine, string Text)> LiveClauses(CompositionState state, CompositionEnv env, string kana, bool afterEnglish, string before)
     {
         var key = string.Join("\u0001", kana, afterEnglish, before, EnglishInComposition(state, env), env.Context().FollowingText, env.Services.History?.Version);
         if (state.LiveCache.TryGetValue(key, out var cached)) return cached;
-        var clauses = ConvertJapaneseSegment(state, WithoutWaiting(env), kana, afterEnglish, before, zenzai: true).Select(c => (c.Reading, c.Text)).ToList();
+        var clauses = ConvertJapaneseSegment(state, WithoutWaiting(env), kana, afterEnglish, before, zenzai: true).Select(c => (c.Reading, c.Engine, c.Text)).ToList();
         if (state.LiveCache.Count > 256) state.LiveCache.Clear();
         state.LiveCache[key] = clauses;
         return clauses;

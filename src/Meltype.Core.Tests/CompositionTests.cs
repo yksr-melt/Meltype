@@ -2442,8 +2442,8 @@ internal static class CompositionTests
     {
         var dictionary = new UserDictionary(null);
         Assert.True(dictionary.Add("お", "お父さん") is null, "1 文字の読みも登録できる");
-        Assert.Equal("お父さん", dictionary.Split("お")?.Single().Word, "その 1 文字だけを変換するときは登録した単語");
-        Assert.True(dictionary.Split("おかね") is null, "ほかの語の途中の 1 文字は巻き込まない");
+        Assert.True(dictionary.Add("", "記") is not null, "空の読みは登録できない");
+        Assert.Equal("お父さん", dictionary.EngineWords().Words.Single(w => w.Reading == "お").Word, "Mozc に渡す");
     }
 
     [Test]
@@ -5042,41 +5042,6 @@ internal static class CompositionTests
         Assert.Equal("たんいを=単位を|とる=取る", converter.Learned.SingleOrDefault() ?? "(なし)");
     }
 
-    /// <summary>わたしのことがすき・しのがきた を区切る変換エンジン (ユーザー辞書の語が文節の途中に入るテスト用)。</summary>
-    private sealed class WatashiConverter : TestConverter
-    {
-        public override string? Convert(string hiragana, string? before) => ConvertClauses(hiragana, before) is { } clauses ? string.Concat(clauses.Select(c => c.Text)) : null;
-        public override IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) => hiragana switch
-        {
-            "わたしのことがすき" => [new("わたしの", "私の"), new("ことが", "事が"), new("すき", "好き")],
-            "わた" => [new("わた", "綿")],
-            "ことがすき" => [new("ことが", "事が"), new("すき", "好き")],
-            "しのがきた" => [new("しの", "篠"), new("が", "が"), new("きた", "来た")],
-            "がきた" => [new("が", "が"), new("きた", "来た")],
-            _ => null,
-        };
-    }
-
-    [Test]
-    public static void UserDictionary_WordInsideAnEngineClause_IsNotSplitOut()
-    {
-        // #374: しの → 紫乃 を登録すると、わたしのことがすき が ワタ紫乃ことが好き になっていた。
-        // 変換エンジンの文節 (わたしの) の途中から始まる語では区切らない。文節の頭から始まるなら今までどおり使う
-        var dictionary = new UserDictionary(null, builtIn: false);
-        dictionary.Add("しの", "紫乃");
-        var k = new Keyboard(converter: new WatashiConverter(), userDictionary: dictionary);
-        k.Type("watashinokotogasuki ");
-        Assert.Equal("私の事が好き", string.Concat(k.Host.View!.Clauses!));
-
-        k = new Keyboard(converter: new WatashiConverter(), userDictionary: dictionary);
-        k.Type("shinogakita ");
-        Assert.Equal("紫乃", k.Host.View!.Clauses![0], "文節の頭から始まる登録した語は使う");
-
-        k = new Keyboard(live: true, converter: new WatashiConverter(), userDictionary: dictionary);
-        k.Type("watashinokotogasuki");
-        Assert.True(!k.Showing!.Contains("紫乃"), "ライブ変換でも割り込まない: " + k.Showing);
-    }
-
     private sealed class AgeashiConverter : TestConverter
     {
         public override string? Convert(string hiragana, string? before) => ConvertClauses(hiragana, before) is { } clauses ? string.Concat(clauses.Select(c => c.Text)) : null;
@@ -5118,24 +5083,6 @@ internal static class CompositionTests
         k = new Keyboard(converter: new AgeashiConverter(), userDictionary: new UserDictionary(null));
         k.Type("kyouhayanainodane ");
         Assert.Equal("今日はやないのだね", string.Concat(k.Host.View!.Clauses!));
-    }
-
-    [Test]
-    public static void UserDictionary_WinsOverEngine()
-    {
-        var dictionary = new UserDictionary(null);
-        Assert.True(dictionary.Add("きごうとう", "記号等") is null, "登録できる");
-        Assert.True(dictionary.Add("", "記") is not null, "空の読みは登録できない");
-
-        var k = new Keyboard(userDictionary: dictionary);
-        k.Host.PrecedingText = "文章を「記号等」含め、"; // 変換エンジンが き|ごうとう と区切ってしまう文脈
-        k.Type("kigoutoufukume ");
-        Assert.Equal("記号等", k.Host.View!.Clauses![0], "登録した読みの部分は、変換エンジンの区切りに関係なく登録した単語");
-        Assert.Equal(2, k.Host.View.Clauses.Count, "残り (ふくめ) は別の文節");
-
-        k = new Keyboard(live: true, userDictionary: dictionary);
-        k.Type("kigoutou");
-        Assert.Equal("記号等", k.Showing, "ライブ変換でも使う");
     }
 
     [Test]
