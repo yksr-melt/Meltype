@@ -626,6 +626,32 @@ internal static class ImeContractTests
     }
 
     [Test]
+    public static void DirectEnglish_KeyboardCaretMayArriveBeforeTheAppInsertsText()
+    {
+        foreach (var sends in new[] { "Document", null })
+        {
+            var front = new Front
+            {
+                InputMethod = InputMode.Keyboard,
+                Open = false,
+                Sends = sends,
+                ClassifyDirect = (letters, _, _) => letters switch
+                {
+                    "hel" => Verdict.English,
+                    "ka" => Verdict.Japanese,
+                    _ => Verdict.Undecided,
+                },
+            };
+            front.Type("hel");
+            // フックの通知を先に処理し、あとからアプリが o を挿入する。
+            front.Event("CaretMoved", extra: ",\"caret\":{\"moved\":true,\"passedKey\":79,\"passedChar\":111}");
+            front.Document += "o";
+            front.Type("ka");
+            Assert.Equal("heloka", front.Document, front.Trace);
+            Assert.True(!front.Open && front.Composition["t1"] is null, front.Trace);
+        }
+    }
+    [Test]
     public static void InputFieldTraits_DecideWhatCoreDoes()
     {
         var front = new Front();

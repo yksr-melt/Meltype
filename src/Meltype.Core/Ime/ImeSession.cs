@@ -116,7 +116,7 @@ internal static class ImeSession
         var lastSnippet = state.LastSnippet;
         if (e.Type == ImeEventType.KeyPressed || e.Caret?.Moved == true) state.LastSnippet = null;
         NoteAltInterruption(state, e);
-        ApplyFacts(state, e, settings);
+        ApplyFacts(state, e, settings, env.Environment.InputMethod);
         // ゲームに入ったら英数にする (IsGame)
         var game = IsGame(all, state.Field);
         if (game && !state.Game) CompositionController.SetDirect(state.Composition, true);
@@ -244,7 +244,7 @@ internal static class ImeSession
         };
     }
 
-    private static void ApplyFacts(ImeSessionState state, ImeEvent e, Settings settings)
+    private static void ApplyFacts(ImeSessionState state, ImeEvent e, Settings settings, InputMode? inputMethod)
     {
         // OS の IME の開閉が変わった (アプリ・Windows が変えた・ほかのフロントの操作): 本体のモードを合わせる
         if (e.ImeOpen is { } open && Direct(state) == open)
@@ -257,12 +257,12 @@ internal static class ImeSession
             if (caret.Moved)
             {
                 ForgetLastCommit(state);
-                // 確定済みの英語の続きを通したときは、同じ語の途中から判定し直さない。
-                // キーボードは続いた通知をまとめ、途中の通知では入力欄を省く。
+                // キーボードはアプリがキーを受け取る前に知らせるため、その文字がまだ前文になくても続きとみなす。
+                // TSF は編集の後で知らせるので、実際の前文と照合する。
                 if (DirectEnglishWord(state) &&
                     caret is { FocusLeft: false, FocusEntered: false, Ctrl: false, PassedKey: > 0, PassedChar: >= '!' and <= '~' and var passedChar } &&
                     EnglishWordCharacters.Contains((char)passedChar) &&
-                    (e.Field is null || e.Field is { Composing: false, Selection: null or "", Before: [.., var last] } && last == passedChar))
+                    (inputMethod == InputMode.Keyboard || e.Field is { Composing: false, Selection: null or "", Before: [.., var last] } && last == passedChar))
                     CompositionController.AbandonDirectHold(state.Composition);
                 else
                     ForgetDirectInput(state);
