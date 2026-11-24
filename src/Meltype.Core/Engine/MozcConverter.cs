@@ -26,8 +26,8 @@ internal sealed class MozcConverter : IKanjiConverter, IDisposable
     // 諦めてから、もう一度ヘルパーを使ってみる時刻 (Environment.TickCount64)
     private long _retryAt;
     // 一時的に答えない (重い・ウイルス対策ソフトが調べている) だけで、再起動までかなのままにしない (issue #2269)。
-    // 変換は Mozc が頼りなので、Zenzai (ZenzaiHolder.RetryAfter の 5 分) より早く試し直す。試して失敗したら、また 1 分待つ
-    private const long RetryAfterMs = 60_000;
+    // 変換は Mozc が頼りなので、Zenzai (ZenzaiHolder.RetryAfter の 5 分) より早く試し直す。試して失敗したら、また同じだけ待つ
+    private const int DefaultRetryAfterMs = 60_000;
     // 送りたいユーザー辞書の要求 (D) と、それを受け取ったヘルパーの起動の回数 (受け取っていなければ -1)。_gate の中で読み書きする
     private string? _dictionary;
     private int _dictionaryLaunch = -1;
@@ -53,6 +53,9 @@ internal sealed class MozcConverter : IKanjiConverter, IDisposable
     }
 
     public event Action? ResultReady;
+
+    /// <summary>何度も失敗して諦めてから、もう一度使ってみるまでの時間 (テストでは縮める)。</summary>
+    public int RetryAfterMs { get; init; } = DefaultRetryAfterMs;
 
     /// <summary>ヘルパーがあるか (起動できるかは使ってみるまで分からない)。</summary>
     public bool IsInstalled => _helper.IsInstalled;

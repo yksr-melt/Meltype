@@ -419,6 +419,20 @@ internal static class ZenzaiConverterTests
     }
 
     [Test]
+    public static void ServerThatNeverAnswers_IsGivenUp()
+    {
+        // 接続は受けるが答えない llama-server は、休むのを繰り返さずに諦める (ZenzaiHolder が作り直す)
+        using var server = new FakeServer { Answer = p => { Thread.Sleep(300); return "遅い"; } };
+        using var zenzai = new ZenzaiConverter(server.Endpoint, timeoutMs: 100) { PauseMs = 0 };
+        for (var i = 0; i < 50 && !zenzai.GaveUp; i++)
+        {
+            zenzai.ConvertClauses("あ" + new string('い', i), "前の文");
+            Thread.Sleep(100);
+        }
+        Assert.True(zenzai.GaveUp, "答えないのが続いたら諦める");
+    }
+
+    [Test]
     public static void Hybrid_PrefersZenzaiAndKeepsOtherClausesWhenSame()
     {
         using var server = new FakeServer { Answer = p => p.Contains("タンイヲトル") ? "単位を取る" : "丹位" };

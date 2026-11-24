@@ -178,6 +178,27 @@ internal static class UserDictionaryEngineTests
         finally { Directory.Delete(directory, recursive: true); }
     }
 
+    [Test]
+    public static void Mozc_ThatGaveUp_TriesAgainAfterAWhile()
+    {
+        // 一時的に答えなかっただけで、再起動までかなのままにしない
+        var helper = new FakeHelper("OK");
+        for (var i = 0; i < 3; i++) helper.Next.Enqueue(null);
+        using var mozc = new MozcConverter(helper) { RetryAfterMs = 200 };
+        for (var i = 0; i < 3; i++) mozc.Reading("漢字" + i);
+        Assert.True(!mozc.IsAvailable, "3 回答えなかったら、しばらく諦める");
+        Thread.Sleep(300);
+        Assert.True(mozc.IsAvailable, "しばらくしたら、もう一度使う");
+        helper.Next.Enqueue(null);
+        mozc.Reading("漢字");
+        Assert.True(!mozc.IsAvailable, "試して答えなければ、また待つ");
+        Thread.Sleep(300);
+        mozc.Reading("漢字");
+        Assert.True(mozc.IsAvailable, "答えたら元に戻る");
+        Thread.Sleep(300);
+        Assert.True(mozc.IsAvailable, "元に戻ったあとは、待った時間にかかわらず使える");
+    }
+
     private sealed class FakeHelper(string answer) : IMozcHelper
     {
         private readonly object _gate = new();

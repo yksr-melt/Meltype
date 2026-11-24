@@ -3,6 +3,7 @@
 
 using Meltype.Dictionary;
 using Meltype.Ime;
+using Meltype.Learning;
 
 namespace Meltype.Tests;
 
@@ -47,6 +48,46 @@ internal static class ExternalEditTests
             Assert.Equal(null, ime.History.Get("かき"), "リセットを読み直す");
             Assert.True(!ime.Phrases.StartingWith("きょ").Any(), "リセットを読み直す");
             Assert.True(ime.Translations.Get("すし").Count == 0, "リセットを読み直す");
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Test]
+    public static void FilesThatCannotBeReadForAWhile_KeepTheirContents()
+    {
+        // ほかのプロセスが開いていて一時的に読めないだけなら、中身を空にせず、.broken にも残さない。読めるようになったら読み直す。
+        var directory = Directory.CreateTempSubdirectory("meltype-external-").FullName;
+        try
+        {
+            var snippetsPath = Path.Combine(directory, "snippets.json");
+            var phrasesPath = Path.Combine(directory, "phrases.txt");
+            var snippets = new SnippetStore(snippetsPath);
+            snippets.Set("sig", "署名");
+            var phrases = new PhraseHistory(phrasesPath);
+            phrases.Remember("きょうは", "今日は");
+            Tick();
+
+            new SnippetStore(snippetsPath).Set("ty", "ありがとうございます");
+            var other = new PhraseHistory(phrasesPath);
+            other.Remember("あしたは", "明日は");
+            Tick();
+            using (new FileStream(snippetsPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+            using (new FileStream(phrasesPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+            {
+                snippets.Refresh();
+                phrases.Refresh();
+                Assert.Equal("署名", snippets.Get("sig"), "読めないあいだは前の定型文のまま");
+                Assert.Equal(null, snippets.Get("ty"), "読めないあいだは読み直さない");
+                Assert.Equal(1, phrases.Count, "読めないあいだは前の学習のまま");
+            }
+            Assert.True(!File.Exists(snippetsPath + ".broken") && !File.Exists(phrasesPath + ".broken"), "壊れていないので .broken に残さない");
+            snippets.Refresh();
+            phrases.Refresh();
+            Assert.Equal("ありがとうございます", snippets.Get("ty"), "読めるようになったら読み直す");
+            Assert.Equal(2, phrases.Count, "読めるようになったら読み直す");
         }
         finally
         {

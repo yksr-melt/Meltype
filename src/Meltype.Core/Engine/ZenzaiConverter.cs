@@ -62,8 +62,11 @@ internal sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     private const int SettleMs = 60;
 
     // 応答が遅かった (CPU の負荷が高いなど) ときは、しばらく使わず Mozc に任せる。
-    private const int BackoffMs = 5000;
+    private const int DefaultPauseMs = 5000;
     private long _pausedUntil;
+
+    /// <summary>応答が遅かったときに休む時間 (テストでは縮める)。</summary>
+    public int PauseMs { get; init; } = DefaultPauseMs;
 
     /// <param name="serverPath">llama-server の実行ファイル。</param>
     /// <param name="modelPath">zenz の GGUF ファイル。</param>
@@ -176,7 +179,7 @@ internal sealed class ZenzaiConverter : IKanjiConverter, IDisposable
         var slow = Environment.TickCount64 - started >= _timeoutMs;
         lock (_gate)
         {
-            if (slow) Interlocked.Exchange(ref _pausedUntil, Environment.TickCount64 + BackoffMs);
+            if (slow) Interlocked.Exchange(ref _pausedUntil, Environment.TickCount64 + PauseMs);
             // 答えが無いのは、遅くても失敗に数える (llama-server が接続だけ受けて答えなくなると、休むのを繰り返して作り直されない: issue #2270)
             if (answer is null) _failures++;
             else { _failures = 0; _hasAnswered = true; }
