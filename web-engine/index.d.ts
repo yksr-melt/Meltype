@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Yukishiro
+// Copyright (C) 2026 hisiragi
 
 export interface LoadOptions {
   /** 本体 (_framework/・mozc/) を置いた場所。npm・<script> で読んだときは、そのファイルの隣を使うので要らない */
@@ -16,7 +16,8 @@ export interface LoadOptions {
 export interface LearningStorage {
   get(): Promise<string | null | undefined>;
   set(json: string): Promise<void>;
-  clear(): Promise<void>;
+  /** ほかのタブなどが保存した (json)・消した (null) ときに呼んでもらう。無ければ、ほかのタブとは学習を合わせない */
+  onChange?(listener: (json: string | null) => void): void;
 }
 
 /** Core (判定・変換・学習) だけ。loadCore が返す。create・handle は、ほかの場所で動かすときは Promise を返してよい */
@@ -25,6 +26,8 @@ export interface Core {
   readonly mozc: boolean;
   /** 入力欄 1 つの本体を作り、番号を返す */
   create(): number | Promise<number>;
+  /** 入力欄の本体を消す */
+  destroy?(host: number): void;
   /** 出来事 (ImeEvent の JSON) を渡し、答え (ImeOutput の JSON) を返す */
   handle(host: number, json: string): string | Promise<string>;
   /** 変換の結果が後から届いたときに呼ぶ。返す関数で外す */

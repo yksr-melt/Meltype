@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Yukishiro
+// Copyright (C) 2026 hisiragi
 //
 // Meltype Web Engine: ウェブページの入力欄で Meltype を使う。
 //   <script src="https://…/meltype.js"></script>
@@ -30,6 +30,8 @@
   // 入力モードを切り替えるキー (半角/全角・英数・かな)。日本語のモードだけで使うので、Core に送らない
   const MODE_KEYS = new Set(["Hankaku", "Zenkaku", "ZenkakuHankaku", "Eisu", "KanaMode", "Alphanumeric", "Hiragana", "Katakana", "HiraganaKatakana", "Romaji", "Lang1", "Lang2"]);
   const MODIFIER_KEYS = new Set(["Shift", "Control", "Alt", "Meta", "CapsLock"]);
+  // 付ける <input> の種類 (文字を打つもの。キャレットを読めて、画面のキーボードのために readonly にしても困らない)
+  const TEXT_INPUT_TYPES = new Set(["text", "search", "url", "tel"]);
 
   // 画面のキーボードの並び。値は KeyboardEvent.key、[表示, key, 幅] は文字の無いキー
   const VKEY_ROWS = [
@@ -58,7 +60,8 @@
   /**
    * 本体 (Core と Mozc) を読み込み、入力欄に付けられるようにする。2 回目からは同じものを返す。
    * options.baseUrl: 本体を置いた場所。options.persist: 学習データを残すか (既定は true)。
-   * options.storage: 学習データの置き場 ({ get(): Promise<string | null>, set(json), clear() })。既定はそのページの IndexedDB。
+   * options.storage: 学習データの置き場 ({ get(): Promise<string | null>, set(json): Promise, onChange(listener(json | null))? })。
+   *   onChange はほかのタブなどが保存した・消した (null) ときに呼ぶ。既定はそのページの IndexedDB。
    * options.onProgress({ phase, loaded, total }): 読み込みの進み具合 (phase は "core"・"dictionary"・"ready")。
    * options.core: ほかの場所で動かしている Core (loadCore の返す物と同じ形で、create・handle が Promise を返す)。
    *   拡張機能 (web-extension/) が、ページの CSP が WebAssembly を止めているときに、拡張機能の中で動かす Core を渡す。
@@ -121,8 +124,19 @@
     const save = () => {
       clearTimeout(saveTimer);
       saveTimer = 0;
-      store?.set(core.ExportData())?.catch?.((error) => console.warn("Meltype: 学習データを残せませんでした", error));
+      store?.set(core.ExportData()).catch((error) => console.warn("Meltype: 学習データを残せませんでした", error));
     };
+    // ほかのタブ (と拡張機能のポップアップ) が保存した・消した学習データを、この Core のファイルに書く。
+    // Core は、ほかのプロセスがファイルを書き換えたときと同じく、1 秒ごとの確かめで読み直す。
+    // 保存の前に書き換えに気づいたら、上書きせずに読み直す (デスクトップ版で、入力と設定画面が学習データを共有するのと同じ)
+    store?.onChange?.((json) => {
+      if (json) core.ImportData(json);
+      else {
+        // 消された (拡張機能のポップアップの「覚えたことを消す」)
+        core.ResetLearning();
+        save();
+      }
+    });
     // ページを閉じる・隠すときは待たずに写す
     addEventListener("pagehide", () => saveTimer && save());
     document.addEventListener("visibilitychange", () => document.hidden && saveTimer && save());
@@ -131,9 +145,10 @@
     return {
       version: core.Version(),
       mozc: mozc !== null,
-      create: () => core.Create(),
+      create: () => core.ImeCreate(),
+      destroy: (host) => core.ImeDestroy(host),
       handle(host, json) {
-        const output = core.Handle(host, json);
+        const output = core.ImeHandle(host, json);
         // 確定したら学習データを写す (Core はファイルを少し遅れて書くので、確定のたびではなく間を空けて)
         if (store && !saveTimer && !output.includes('"commits":[]')) saveTimer = setTimeout(save, SAVE_DELAY_MS);
         return output;
@@ -142,10 +157,12 @@
         listeners.add(listener);
         return () => listeners.delete(listener);
       },
+      /** 学習データをすべて消し、すぐに保存する (ほかのタブも、保存されたものを読み直して消える) */
       async clearLearning() {
+        core.ResetLearning();
         clearTimeout(saveTimer);
         saveTimer = 0;
-        await store?.clear();
+        await store?.set(core.ExportData());
       },
     };
   }
@@ -203,7 +220,10 @@
     return bytes;
   }
 
-  /** 学習データの置き場 (IndexedDB)。開けなければ (プライベートブラウズなど) null で、残さずに動く。 */
+  /**
+   * 学習データの置き場 (IndexedDB)。開けなければ (プライベートブラウズなど) null で、残さずに動く。
+   * 同じサイトのほかのタブには、保存したことを BroadcastChannel で知らせる (onChange)。
+   */
   async function openStore() {
     try {
       const db = await new Promise((resolve, reject) => {
@@ -217,10 +237,16 @@
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
       });
+      const channel = new BroadcastChannel(DB_NAME);
       return {
         get: () => run("readonly", (s) => s.get("files")),
-        set: (json) => run("readwrite", (s) => s.put(json, "files")),
-        clear: () => run("readwrite", (s) => s.delete("files")),
+        async set(json) {
+          await run("readwrite", (s) => s.put(json, "files"));
+          channel.postMessage(json);
+        },
+        onChange(listener) {
+          channel.addEventListener("message", (event) => listener(event.data));
+        },
       };
     } catch (error) {
       console.warn("Meltype: 学習データの置き場を開けなかったので、ページを閉じると忘れます", error);
@@ -240,6 +266,9 @@
    * 外れたら (受け取ると決めたのに Core が通したら) 、そのキーの動きを代わりに入力欄に書く。
    */
   function attachTo(core, element, options = {}) {
+    // 文字の <input> 以外 (パスワード・メールアドレス・数字など) には付けない。
+    // パスワードに付けると、画面のキーボードのために readonly にして打てなくなり、メールアドレスなどはキャレットを読めない (setRangeText が例外を投げる)
+    if (element instanceof HTMLInputElement && !TEXT_INPUT_TYPES.has(element.type)) return { detach() {} };
     const field = element.isContentEditable ? editableField(element) : textField(element);
     const created = core.create();
     const remote = created instanceof Promise;
@@ -250,6 +279,8 @@
     let focused = false;
     // 答えを待っている出来事の数と、その順番 (ほかの場所の Core に、送った順に答えさせる)
     let pending = 0;
+    // 受け取ったキー (KeyboardEvent.code)。離したとき (keyup) もページに届けない
+    const consumedKeys = new Set();
     let queue = remote ? created.then((h) => { host = h; }) : null;
 
     /** 出来事を送る。Core がこのページにあれば受け取ったか (consumed) を、ほかの場所にあればそれを返す Promise を返す */
@@ -310,12 +341,31 @@
       keyboard?.drawCaret();
     };
 
+    /**
+     * 受け取ったキーを、ブラウザーの動き (文字を入れる・フォームを送る) からも、ページのほかのリスナーからも隠す。
+     * 確定の Enter で、Enter で送信するページが送信しないように。リスナーは window の capture で付けるので、ページのリスナーより先に動く
+     */
+    const consume = (e) => {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      consumedKeys.add(e.code || e.key);
+    };
+    const forThisField = (e) => e.composedPath().includes(element);
+    const onKeyUp = (e) => {
+      if (!forThisField(e) || !consumedKeys.delete(e.code || e.key)) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    };
+    const onKeyPress = (e) => {
+      if (forThisField(e) && consumedKeys.has(e.code || e.key)) consume(e);
+    };
     const onKeyDown = (e) => {
+      if (!forThisField(e)) return;
       // OS の IME で変換している間は、その IME に任せる
       if (e.isComposing || e.keyCode === 229) return;
       if (MODIFIER_KEYS.has(e.key)) return;
       if (MODE_KEYS.has(e.key)) {
-        e.preventDefault();
+        consume(e);
         return;
       }
       const printable = [...e.key].length === 1;
@@ -331,12 +381,15 @@
       }
       if (remote) {
         if (predictConsumed(e, key)) {
-          e.preventDefault();
-          send("KeyPressed", { key }).then((consumed) => {
-            if (consumed) return;
-            // 外れた: Core が通したキーを、ブラウザーの代わりに入力欄に書く
-            field.passKey(e.key);
+          consume(e);
+          // 外れた (Core が通した)・答えが来なかったら、ブラウザーの代わりにキーの動きを入力欄に書く (キーを失わないように)
+          const pass = () => {
+            field.passKey(e.key, e.shiftKey);
             if (key.vk) send("CaretMoved", { caret: { moved: true, passedKey: key.vk, ctrl: key.ctrl } });
+          };
+          send("KeyPressed", { key }).then((consumed) => consumed || pass(), (error) => {
+            console.warn("Meltype: 答えを受け取れなかったので、キーをそのまま入れます", error);
+            field.passKey(e.key, e.shiftKey);
           });
         } else {
           // 変換中に Ctrl などと一緒に押したキーは、変換中の文字を確定してから通す (確定はブラウザーが反映した後に届く)
@@ -346,7 +399,7 @@
         return;
       }
       if (send("KeyPressed", { key })) {
-        e.preventDefault();
+        consume(e);
       } else if (key.vk) {
         // Core が通したキー (Backspace・矢印など) で入力欄が変わったことを知らせる。ブラウザーが反映した後に送る
         setTimeout(() => send("CaretMoved", { caret: { moved: true, passedKey: key.vk, ctrl: key.ctrl } }));
@@ -360,6 +413,7 @@
     };
     const onBlur = () => {
       focused = false;
+      consumedKeys.clear();
       keyboard?.hide();
       if (view) send("CommitRequested", { caret: { moved: true, passedKey: 0 } });
       send("CaretMoved", { caret: { moved: true, passedKey: 0, focusLeft: true } });
@@ -377,7 +431,9 @@
     const useKeyboard = options.keyboard === "always" || (options.keyboard !== "never" && touchOnly());
     const keyboard = useKeyboard ? onScreenKeyboard(element, field) : null;
 
-    element.addEventListener("keydown", onKeyDown);
+    addEventListener("keydown", onKeyDown, true);
+    addEventListener("keypress", onKeyPress, true);
+    addEventListener("keyup", onKeyUp, true);
     element.addEventListener("pointerup", onPointerUp);
     element.addEventListener("focus", onFocus);
     element.addEventListener("blur", onBlur);
@@ -391,13 +447,18 @@
     return {
       detach() {
         if (view) send("CommitRequested", { caret: { moved: true, passedKey: 0 } });
-        element.removeEventListener("keydown", onKeyDown);
+        removeEventListener("keydown", onKeyDown, true);
+        removeEventListener("keypress", onKeyPress, true);
+        removeEventListener("keyup", onKeyUp, true);
         element.removeEventListener("pointerup", onPointerUp);
         element.removeEventListener("focus", onFocus);
         element.removeEventListener("blur", onBlur);
         offReady();
         keyboard?.remove();
         box.remove();
+        // 入力欄の本体を消す (送った出来事への答えを受け取ってから)
+        if (remote) queue.then(() => core.destroy?.(host));
+        else core.destroy?.(host);
       },
     };
   }
@@ -428,9 +489,21 @@
         element.setSelectionRange(caret, caret);
         element.dispatchEvent(new Event("input", { bubbles: true }));
       },
-      /** 合成したキーでブラウザーが何もしないので、画面のキーボードのキーを反映する */
-      passKey(key) {
+      /**
+       * ブラウザーの代わりにキーの動きを入力欄に書く。合成したキー (画面のキーボード) と、ほかの場所の Core が通したキー (止めた後なので、ブラウザーは何もしない) のため。
+       * 書けるのは文字・Backspace・Enter・Tab・← → だけ
+       */
+      passKey(key, shift = false) {
         const { selectionStart: start, selectionEnd: end, value } = element;
+        if (key === "Tab") {
+          moveFocus(element, shift);
+          return;
+        }
+        if (key === "Enter" && element instanceof HTMLInputElement) {
+          // 1 行の入力欄の Enter はフォームを送る (ブラウザーと同じ。送るボタンのないフォームでも送る)
+          element.form?.requestSubmit();
+          return;
+        }
         if ([...key].length === 1 || key === "Enter") {
           element.setRangeText(key === "Enter" ? "\n" : key, start, end, "end");
         } else if (key === "Backspace") {
@@ -488,8 +561,9 @@
         document.execCommand("insertText", false, text);
         moveCaret("backward", caretBack);
       },
-      passKey(key) {
-        if ([...key].length === 1) document.execCommand("insertText", false, key);
+      passKey(key, shift = false) {
+        if (key === "Tab") moveFocus(element, shift);
+        else if ([...key].length === 1) document.execCommand("insertText", false, key);
         else if (key === "Enter") document.execCommand("insertLineBreak");
         else if (key === "Backspace") document.execCommand("delete");
         else if (key === "ArrowLeft") moveCaret("backward", 1);
@@ -517,6 +591,14 @@
         return { drawsCaret: false, restore: () => { element.inputMode = inputMode; } };
       },
     };
+  }
+
+  /** Tab の代わりに、フォーカスを次 (shift なら前) の入力欄・ボタン・リンクに移す (tabindex の順は見ず、文書の順で) */
+  function moveFocus(element, backward) {
+    const focusable = [...document.querySelectorAll('input, textarea, select, button, a[href], [contenteditable=""], [contenteditable="true"], [tabindex]')]
+      .filter((e) => !e.disabled && e.tabIndex >= 0 && e.getClientRects().length > 0);
+    const index = focusable.indexOf(element);
+    focusable.at((index + (backward ? -1 : 1)) % focusable.length)?.focus();
   }
 
   /**
