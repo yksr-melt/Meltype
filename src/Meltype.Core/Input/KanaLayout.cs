@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
 
-using Meltype.Detection;
+using Meltype.Libraries.Lexicon;
 
 namespace Meltype.Input;
 
@@ -147,10 +147,12 @@ internal sealed class KanaLayoutEngine(KanaLayout layout)
         /// <summary>組み合わせの文字キーにした (シフトには使わない)。</summary>
         public bool Target { get; set; }
         /// <summary>中指NICOLA: D・K より先に離したら打ち直すかなと、そのシフトのキー。</summary>
-        public (string Kana, Held Shift)? OnRelease { get; set; }
+        public (string Kana, Held Shift, int RemoveLast)? OnRelease { get; set; }
     }
 
     private readonly List<Held> _held = [];
+    // 中指の打ち直しで、シフトキー自身の文字も消せるのは、その文字が直前の出力のときだけ。
+    private Held? _lastOutput;
     // 前置シフトの並びの打ちかけ (仮想キーを , でつないだもの)
     private string _sequence = "";
 
@@ -168,6 +170,7 @@ internal sealed class KanaLayoutEngine(KanaLayout layout)
     public void Reset()
     {
         _sequence = "";
+        _lastOutput = null;
         _held.RemoveAll(key => !IsThumb(key.Vk));
     }
 
@@ -226,9 +229,13 @@ internal sealed class KanaLayoutEngine(KanaLayout layout)
         // 中指NICOLA: D・K を押したままの文字キーは、ふつうの文字にしておき、先に離したら打ち直す
         if (layout == KanaLayout.NakayubiNicola)
         {
+            // 次の文字が入ったら、前の打ち直しはもう末尾ではない。古い削除数で別の文字を消さない。
+            foreach (var key in _held) key.OnRelease = null;
             var press = new Held(vk, time, plain?.Length ?? 0);
-            if (_held.LastOrDefault(key => !key.Target) is { } shift && table.Chords.TryGetValue(($"{shift.Vk}", vk), out var middle)) press.OnRelease = (middle, shift);
+            if (_held.LastOrDefault(key => !key.Target) is { } shift && table.Chords.TryGetValue(($"{shift.Vk}", vk), out var middle))
+                press.OnRelease = (middle, shift, press.Emitted + (ReferenceEquals(_lastOutput, shift) ? shift.Emitted : 0));
             _held.Add(press);
+            _lastOutput = press;
             return plain is null ? KanaStroke.NotHandled : new KanaStroke(true, 0, plain);
         }
         // 押したままのキーとの組み合わせ (後から押したキーが文字キー)。2 キーのシフトを先に見る
@@ -279,9 +286,8 @@ internal sealed class KanaLayoutEngine(KanaLayout layout)
         var held = _held[index];
         _held.RemoveAt(index);
         // 中指NICOLA: D・K を押したまま、文字キーを先に離した → シフト面で打ち直す (文字キーと、まだなら D・K の文字を消す)
-        if (held.OnRelease is ({ } kana, { } shift) && _held.Contains(shift))
+        if (held.OnRelease is ({ } kana, { } shift, var remove) && _held.Contains(shift))
         {
-            var remove = held.Emitted + shift.Emitted;
             shift.Emitted = 0;
             shift.Shifting = true;
             return new KanaKeyUp(false, new KanaStroke(true, remove, kana));
