@@ -61,7 +61,7 @@ internal sealed class ComposedText
     }
 
     /// <summary>
-    /// 読み reading の文節の文字 text。打った句読点は読みが句読点だけの文節になる (<see cref="CompositionController.SplitAtMarks"/>) ので、
+    /// 読み reading の文節の文字 text。打った句読点は読みが句読点だけの文節になる (<see cref="CompositionConversion.SplitAtMarks"/>) ので、
     /// 読みのままの文字なら読みの 、。 を句読点の区間にし、変換した文字の 、。 (モーニング娘。・顔文字) は語の文字のままにする。
     /// </summary>
     public static ComposedText Converted(string reading, string text) => text == reading ? Kana(text) : Of(SpanKind.Japanese, text);

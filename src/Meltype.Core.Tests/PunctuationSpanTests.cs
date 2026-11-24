@@ -107,7 +107,7 @@ internal static class PunctuationSpanTests
     public static void EngineAnswers_AreSplitAtTypedMarks()
     {
         static string Split(string reading, string text, bool userWord = false) =>
-            string.Join("|", Composition.CompositionController.SplitAtMarks(new ConversionClause(reading, text) { UserWord = userWord }).Select(c => c.Reading + ":" + c.Text));
+            string.Join("|", Composition.CompositionConversion.SplitAtMarks(new ConversionClause(reading, text) { UserWord = userWord }).Select(c => c.Reading + ":" + c.Text));
         Assert.Equal("わたしは:私は|、:、|りんご:林檎|。:。", Split("わたしは、りんご。", "私は、林檎。"));
         Assert.Equal("。。。:。。。", Split("。。。", "。。。"), "続いた句読点は 1 つの文節");
         Assert.Equal("むすめ:娘。", Split("むすめ", "娘。"), "読みに無い 。 は語の文字");
