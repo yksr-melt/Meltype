@@ -16,6 +16,7 @@ on:
       - 'tools/test-native-boundaries.py'
       - 'tools/test-mac-boundaries.*'
       - 'tools/test-mac-events.*'
+      - 'tests/test_mac_scripts.lisp'
       - '.github/workflows/mac.yml'
   push:
     branches: [main]
@@ -30,6 +31,7 @@ on:
       - 'tools/test-native-boundaries.py'
       - 'tools/test-mac-boundaries.*'
       - 'tools/test-mac-events.*'
+      - 'tests/test_mac_scripts.lisp'
       - '.github/workflows/mac.yml'
   workflow_dispatch:
   workflow_call:
@@ -47,6 +49,19 @@ defaults:
     shell: bash
 
 jobs:
+  # mac/ のスクリプトのテスト。Homebrew の sbcl は版を固定できないので、署名の証明書を読み込む app とは別の job で流す
+  scripts:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: SBCL
+        run: brew install sbcl
+      - name: Test
+        run: sbcl --script tests/test_mac_scripts.lisp
+
   app:
     runs-on: macos-15
     # Mozc のビルドは初回 30〜40 分かかる (2 回目からは Bazel のキャッシュを使う)
