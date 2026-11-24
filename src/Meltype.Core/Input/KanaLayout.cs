@@ -31,7 +31,7 @@ public enum RomajiLayout
 }
 
 /// <summary>SKY 配列: QWERTY の位置のキーを、ローマ字の綴りにする (issue #1415)。</summary>
-public static class SkyLayout
+internal static class SkyLayout
 {
     // 二重母音・撥音のキーは、そのまま読めるローマ字にする (ん は nn。un + a が う + な にならないように)
     private static readonly Dictionary<int, string> Keys = new()
@@ -52,7 +52,7 @@ public static class SkyLayout
 /// <param name="Handled">配列のキーとして扱った (false ならふつうのキーとして処理する)。</param>
 /// <param name="RemoveLast">先に入力中の文字から消す音の数 (後から押した親指キー・中指キーで、前の文字を打ち直すとき)。</param>
 /// <param name="Kana">入力するかな (空なら何も足さない。前置シフトのキーなど)。</param>
-public readonly record struct KanaStroke(bool Handled, int RemoveLast = 0, string Kana = "")
+internal readonly record struct KanaStroke(bool Handled, int RemoveLast = 0, string Kana = "")
 {
     public static KanaStroke NotHandled => default;
     public static KanaStroke Consumed => new(true);
@@ -61,7 +61,7 @@ public readonly record struct KanaStroke(bool Handled, int RemoveLast = 0, strin
 /// <summary>キーを離した結果。</summary>
 /// <param name="ThumbTap">親指キーを文字に使わずに離した (親指キーのもとの働き: 変換・無変換をする)。</param>
 /// <param name="Stroke">離したことで決まった打ち直し (中指NICOLA: シフトのキーを押したまま離した文字キーを、シフト面で打ち直す)。</param>
-public readonly record struct KanaKeyUp(bool ThumbTap, KanaStroke Stroke);
+internal readonly record struct KanaKeyUp(bool ThumbTap, KanaStroke Stroke);
 
 /// <summary>
 /// JIS かな以外のかな配列で、打鍵をかなにする (issue #1415)。表は dictionaries/kana-layouts.txt (配列ごとの「打つキー → かな」)。
@@ -75,7 +75,7 @@ public readonly record struct KanaKeyUp(bool ThumbTap, KanaStroke Stroke);
 /// 中指NICOLA の D・K のシフトだけは、時間でなく離した順で決める: 文字キーを D・K より先に離したときだけシフトにする
 /// (D・K を先に離したら、速く打って重なっただけ: て と は てと のまま)。
 /// </summary>
-public sealed class KanaLayoutEngine(KanaLayout layout)
+internal sealed class KanaLayoutEngine(KanaLayout layout)
 {
     /// <summary>同時打鍵とみなす時間 (ミリ秒)。</summary>
     public const int ChordWindowMs = 100;

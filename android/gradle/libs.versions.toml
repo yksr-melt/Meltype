@@ -4,15 +4,12 @@ agp = "8.13.0"
 junit = "4.13.2"
 protobuf = "4.36.2"
 protobuf-plugin = "0.10.0"
-androidx-test-runner = "1.7.0"
 
 [libraries]
 junit = { module = "junit:junit", version.ref = "junit" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 protobuf-javalite = { module = "com.google.protobuf:protobuf-javalite", version.ref = "protobuf" }
 protobuf-protoc = { module = "com.google.protobuf:protoc", version.ref = "protobuf" }
-androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidx-test-runner" }
-
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 android-library = { id = "com.android.library", version.ref = "agp" }

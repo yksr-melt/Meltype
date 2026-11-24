@@ -2,6 +2,7 @@
 // Copyright (C) 2026 aster-void
 
 using System.Globalization;
+using Meltype.Composition;
 
 namespace Meltype.Composition.Utility;
 
@@ -13,7 +14,7 @@ internal sealed class GitHubIssueConversion : IUtilityConversion
 {
     public UtilityCandidates? Convert(UtilityInput input)
     {
-        var raw = input.Text.Raw;
+        var raw = CompositionText.Raw(input.Text);
         if (input.Text.KanaInput || input.Text.Mode != DisplayMode.Auto || raw is not ['#', .. { Length: > 0 and <= 7 } digits] || !digits.All(char.IsAsciiDigit)) return null;
         var settings = input.Context.Settings;
         var repository = GitHubIssueTitles.Normalize(settings.GitHubRepository);

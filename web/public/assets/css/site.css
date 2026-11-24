@@ -496,6 +496,86 @@ kbd {
   letter-spacing: 0.02em;
 }
 
+/* 5 万ダウンロード記念の帯。ヘッダーの直下に全幅で出す。
+   白い文字が 4.5:1 以上で読めるように、背景はライト・ダークのどちらでも濃い色に固定する
+   (テーマの --pink などはダークで明るいパステルになり、白い文字が読めない) */
+.milestone {
+  background: linear-gradient(110deg, #c9346a 0%, #6c4fb4 50%, #1673b0 100%);
+  color: #fff;
+}
+
+.milestone-inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.milestone-text {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  column-gap: 12px;
+  row-gap: 4px;
+  margin: 0;
+  text-align: center;
+}
+
+.milestone-number {
+  font-family: var(--font-head);
+  font-weight: 900;
+  font-size: clamp(1.8rem, 5vw, 2.2rem);
+  line-height: 1.1;
+  letter-spacing: 0.02em;
+}
+
+.milestone-label {
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: clamp(1.1rem, 3vw, 1.35rem);
+}
+
+.milestone-thanks {
+  font-size: 0.95rem;
+}
+
+.milestone-spark {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  fill: currentColor;
+  animation: milestone-twinkle 1.8s ease-in-out infinite alternate;
+}
+
+.milestone-spark:last-child {
+  animation-delay: 0.9s;
+}
+
+@keyframes milestone-twinkle {
+  from {
+    transform: scale(0.75) rotate(0deg);
+    opacity: 0.7;
+  }
+
+  to {
+    transform: scale(1.1) rotate(20deg);
+    opacity: 1;
+  }
+}
+
+@media (max-width: 560px) {
+  .milestone-spark {
+    display: none;
+  }
+
+  .milestone-thanks {
+    flex-basis: 100%;
+  }
+}
+
 .hero {
   position: relative;
   overflow: hidden;
@@ -3236,6 +3316,10 @@ em {
     scroll-behavior: auto;
   }
 
+  .milestone-spark {
+    animation: none;
+  }
+
   .has-reveal [data-reveal] {
     opacity: 1;
     transform: none;
@@ -3360,7 +3444,6 @@ em {
   border: 2px solid var(--line);
   border-radius: var(--radius);
   padding: 28px 24px;
-  text-align: center;
   cursor: text;
   outline: none;
 }
@@ -3425,6 +3508,7 @@ em {
 .typing-focus-hint {
   position: absolute;
   inset: auto 0 8px;
+  text-align: center;
   font-size: 0.82rem;
   color: var(--muted);
 }

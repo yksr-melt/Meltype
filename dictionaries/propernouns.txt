@@ -90,3 +90,6 @@ Benin Bhutan Botswana Bulgaria Eswatini Czechia Dominica Ghana Grenada Haiti Lib
 
 # Issue #1651 (アーティスト名)
 picco nqrse
+
+# Issue #469 (VTuber グループ)
+holoX

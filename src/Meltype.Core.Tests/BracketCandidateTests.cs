@@ -4,7 +4,10 @@
 using System.Text.Json;
 using Meltype.Composition;
 using Meltype.Config;
+using Meltype.Dictionary;
+using Meltype.Engine;
 using Meltype.Input;
+using Meltype.Learning;
 
 namespace Meltype.Tests;
 
@@ -237,17 +240,17 @@ internal static class BracketCandidateTests
         Assert.Equal("【】", session.CommitPending().Commits.Single().Text);
     }
 
-    private sealed class CountingConverter : IKanjiConverter, ILearningConverter
+    private sealed class CountingConverter : TestConverter
     {
         public int Calls { get; private set; }
         public ManualResetEventSlim Learned { get; } = new();
-        public string? Convert(string reading) { Calls++; return reading; }
-        public IReadOnlyList<ConversionClause>? ConvertClauses(string reading, string? context = null)
+        public override string? Convert(string reading, string? before) { Calls++; return reading; }
+        public override IReadOnlyList<ConversionClause>? ConvertClauses(string reading, string? before)
         {
             Calls++;
             return [new(reading, reading)];
         }
-        public void Learn(string? context, IReadOnlyList<ConversionClause> clauses) => Learned.Set();
+        public override void Learn(string? context, IReadOnlyList<ConversionClause> clauses) => Learned.Set();
     }
 
     [Test]
