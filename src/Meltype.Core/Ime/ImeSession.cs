@@ -396,7 +396,8 @@ internal static class ImeSession
             return CommitCombiningForPassThrough(state, env, preserveLatinRaw: key.Ch is >= 0x0300 and <= 0x036F);
         // 補助面の文字 (絵文字など) は char に入らないので、未確定の内容を確定してからアプリに通す
         if (key.Ch >= 0x10000) return CommitForPassThrough(state, env);
-        var result = ComposeKey(state, env, vk, key.Ch > 0 ? (char)key.Ch : null, key.Shift, key.Ctrl, key.Alt, key.Command, key.ReleaseFollows);
+        var result = ComposeKey(state, env, vk, key.Ch > 0 ? (char)key.Ch : null,
+            key.Shift, key.Ctrl, key.Alt, key.Command, key.ReleaseFollows, keyField: field);
         // アプリに通したキーはキャレットを動かすかもしれない (Core が通すと決めたので、フロントからは送られてこない)
         if (!result.Consumed) CaretMoved(state, vk, key.Ctrl);
         return result;
@@ -563,11 +564,10 @@ internal static class ImeSession
     /// <summary>入力欄 (state.Field) のアプリの設定を入れた env。</summary>
     private static ImeEnv ForField(ImeSessionState state, ImeEnv env) => env with { App = env.Settings.ForApp(state.Field?.App) };
 
-    /// <summary>変換ボックスの処理に渡す、入力欄の状態でないもの (今の設定で作る)。</summary>
-    private static CompositionEnv Env(ImeSessionState state, ImeEnv env) => Env(state, env, env.App);
-
-    private static CompositionEnv Env(ImeSessionState state, ImeEnv env, Settings settings)
+    /// <summary>変換ボックスの処理に渡す、今の設定と入力欄の状態。</summary>
+    private static CompositionEnv Env(ImeSessionState state, ImeEnv env, ImeField? keyField = null)
     {
+        var settings = env.App;
         var lateResults = env.Parts.LateResults();
         CompositionEnv composition = null!;
         composition = new(env.Parts.Detector, env.Parts.Converter, env.Parts.Services, settings)
@@ -582,8 +582,8 @@ internal static class ImeSession
             NowPlaying = env.Parts.NowPlaying,
             Corrected = env.Parts.Corrected,
             Before = LineBefore(state, state.Field),
-            // 推測した行は変換の文脈には使えるが、BackSpace で置き換える範囲の確認には使えない。
-            EditableBefore = state.Field is { CanRemove: true, Composing: false, Selection: null or "" } field ? field.Before : null,
+            // BackSpace は今回の打鍵で読めた文字を照合してから使う。state.Field は前の出来事の値を引き継ぐことがある。
+            EditableBefore = keyField is { CanRemove: true, Composing: false, Selection: null or "" } field ? field.Before : null,
             After = state.Field?.After,
             LateResults = lateResults,
             Deadline = lateResults ? 0 : long.MaxValue,
@@ -688,7 +688,8 @@ internal static class ImeSession
     /// 入力モードを切り替えるキーの意味は ImeSession が決めるので、ここでは見ない。
     /// </summary>
     /// <param name="releaseFollows">ワークアラウンド (ImeEventType.KeyReleased): 離したことは <see cref="HandleKeyUp"/> で届く。false なら押した直後に離したとみなす。</param>
-    public static SessionResult ComposeKey(ImeSessionState state, ImeEnv env, int vk, char? ch, bool shift, bool control, bool alt, bool command, bool releaseFollows = false)
+    public static SessionResult ComposeKey(ImeSessionState state, ImeEnv env, int vk, char? ch, bool shift, bool control, bool alt, bool command,
+        bool releaseFollows = false, ImeField? keyField = null)
     {
         var before = LineBefore(state, state.Field);
         // 文字列を閉じる引用符は英数のままアプリに通す (打っている途中の日本語は確定する。空の文字列 "" を閉じるときも)。
@@ -735,7 +736,7 @@ internal static class ImeSession
             state.UserDictionaryCheckedMs = now;
             env.UserDictionary?.Refresh();
         }
-        var result = CompositionController.Press(state.Composition, Env(state, env), new KeyPress(vk, ch, shift, control, alt, command, now), releaseFollows);
+        var result = CompositionController.Press(state.Composition, Env(state, env, keyField), new KeyPress(vk, ch, shift, control, alt, command, now), releaseFollows);
         // アプリに渡したキー (変換していないときの BackSpace・矢印・Enter など) はキャレットを動かすかもしれない。
         // 前に確定した語を確定し直さない (消す位置がずれて関係ない文字を消さないように)
         if (!result.Consumed && !CompositionController.IsComposing(state.Composition))
