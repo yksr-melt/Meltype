@@ -331,8 +331,11 @@ internal sealed partial class CompositionDetector
                 if (domain > unit)
                     OfferEdge(node, state, new LatticeEdge(p, domain == units.Count ? length : prepared.RawOffsets[domain], true, "", false, false),
                         KnownEnglishCost + ReadableDomainLetterCost * (text.IndexOf('.', p) - p));
+                // 既知の英語の後ろ (hello-) はハイフンを保つ。かなで読める 2 文字以下 (he-) は長音としても読む。
+                var englishDash = trailingDash && node.Edge.English && IsLatticeEnglishWord(learning, text[node.Edge.Start..p].ToLowerInvariant()) &&
+                    (p - node.Edge.Start > 2 || _romaji.ConvertLenient(text[node.Edge.Start..p].ToLowerInvariant(), final: true).Any(char.IsAsciiLetter));
                 // 英文の中の記号 (, . ! ? -) は半角のまま
-                if (unit >= 0 && !kanaInput && !trailingDash && IsAsciiSymbol(units[unit]) && state.PreviousEnglish && state.AllEnglish &&
+                if (unit >= 0 && !kanaInput && (!trailingDash || englishDash) && IsAsciiSymbol(units[unit]) && state.PreviousEnglish && state.AllEnglish &&
                     KeepsPunctuationAfterEnglish(units, unit, pending, precedingEnglish))
                 {
                     OfferEdge(node, state, new LatticeEdge(p, p + 1, true, "", false, false), 0);

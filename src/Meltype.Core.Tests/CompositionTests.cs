@@ -2019,7 +2019,10 @@ internal static class CompositionTests
     {
         // えーmail、こーおp になっていた
         AssertCommitted(
-            ("e-mail", "e-mail"), ("co-op", "co-op"), ("bio-break", "bio-break"), ("e-maildeokuru", "e-mailでおくる"), ("x-ray", "x-ray"), ("lo-fi", "lo-fi"), ("Lo-fi", "Lo-fi"), ("sci-fi", "sci-fi"), ("lo-fiwokiku", "lo-fiをきく"), ("r-18", "r-18"), ("sub-6", "sub-6"), ("GPT-6.7", "GPT-6.7"), ("Blu-ray", "Blu-ray"),
+            ("e-mail", "e-mail"),
+            ("hello-", "hello-"),
+            ("world-", "world-"),
+            ("banana-", "banana-"), ("co-op", "co-op"), ("bio-break", "bio-break"), ("e-maildeokuru", "e-mailでおくる"), ("x-ray", "x-ray"), ("lo-fi", "lo-fi"), ("Lo-fi", "Lo-fi"), ("sci-fi", "sci-fi"), ("lo-fiwokiku", "lo-fiをきく"), ("r-18", "r-18"), ("sub-6", "sub-6"), ("GPT-6.7", "GPT-6.7"), ("Blu-ray", "Blu-ray"),
             ("e-to", "えーと"), ("su-pa-", "すーぱー"), ("o-bun", "おーぶん"));
     }
 
@@ -2337,6 +2340,9 @@ internal static class CompositionTests
             // 後ろに英字が続く - は英語の語をつなぐ記号のまま
             ("pre-release", "pre-release"),
             ("e-mail", "e-mail"),
+            ("hello-", "hello-"),
+            ("world-", "world-"),
+            ("banana-", "banana-"),
         })
         {
             var k = new Keyboard();
