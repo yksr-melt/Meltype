@@ -9,7 +9,7 @@ namespace Meltype.Dictionary;
 /// 組み込みの dictionaries/candidates.txt と %LOCALAPPDATA%\Meltype\dictionaries\candidates.txt を読む。
 /// </summary>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Naming", "CA1711:Identifiers should not have incorrect suffix", Justification = "日本語入力の辞書を表す既存の公開名。コレクション型を表すものではない。")]
-public sealed class CandidateDictionary
+internal sealed class CandidateDictionary
 {
     private readonly Dictionary<string, string[]> _entries = new(StringComparer.Ordinal);
 
@@ -19,6 +19,9 @@ public sealed class CandidateDictionary
     // 分野の辞書 (dictionaries/domain-*.txt。医療・駅名・人名など)。ふだん使わない人には誤った候補になりうるので、
     // ほかの候補と分けて持ち、ひらがな・カタカナの後ろに並べる (#1650)。
     private readonly Dictionary<string, string[]> _domain = new(StringComparer.Ordinal);
+
+    // 英単語のカタカナ表記 (dictionaries/katakana-spellings.txt。export → エクスポート)。英単語で引くので、読みで引くほかの候補と分けて持つ。
+    private readonly Dictionary<string, string[]> _katakana = new(StringComparer.Ordinal);
 
     public int Count => _entries.Count + _emoji.Keys.Count(k => !_entries.ContainsKey(k));
 
@@ -33,29 +36,15 @@ public sealed class CandidateDictionary
         dictionary.AddText(Libraries.Lexicon.DictionarySource.ReadEmbedded("loanwords.txt"));
         // JMdict に無い社名・サービス名 (しゃおみ → Xiaomi)。手で書いたもの
         dictionary.AddText(Libraries.Lexicon.DictionarySource.ReadEmbedded("brands.txt"));
+        foreach (var line in Libraries.Lexicon.DictionarySource.LinesWithoutComments(Libraries.Lexicon.DictionarySource.ReadEmbedded("katakana-spellings.txt")))
+        {
+            var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length >= 2) Add(dictionary._katakana, parts[0], parts.Skip(1));
+        }
         foreach (var name in Libraries.Lexicon.DictionarySource.EmbeddedNames("domain-"))
             dictionary.AddDomainText(Libraries.Lexicon.DictionarySource.ReadEmbedded(name));
-        if (userDirectory is not null)
-        {
-            var emoji = Path.Combine(userDirectory, "emoji.txt");
-            try
-            {
-                if (File.Exists(emoji)) dictionary.AddTabText(File.ReadAllText(emoji));
-            }
-            catch (Exception ex)
-            {
-                Diagnostics.Log.Warn($"ユーザーの絵文字辞書を読めませんでした: {ex.Message}");
-            }
-            var path = Path.Combine(userDirectory, "candidates.txt");
-            try
-            {
-                if (File.Exists(path)) dictionary.AddText(File.ReadAllText(path));
-            }
-            catch (Exception ex)
-            {
-                Diagnostics.Log.Warn($"ユーザーの候補辞書を読めませんでした: {ex.Message}");
-            }
-        }
+        Config.DataFile.LoadUserText(userDirectory, "emoji.txt", "ユーザーの絵文字辞書", dictionary.AddTabText);
+        Config.DataFile.LoadUserText(userDirectory, "candidates.txt", "ユーザーの候補辞書", dictionary.AddText);
         return dictionary;
     }
 
@@ -125,6 +114,9 @@ public sealed class CandidateDictionary
 
     /// <summary>分野の辞書の候補 (病名・駅名・人名など)。</summary>
     public IReadOnlyList<string> LookupDomain(string reading) => Lookup(_domain, reading);
+
+    /// <summary>英単語 (小文字) のカタカナ表記 (export → エクスポート)。無ければ空。</summary>
+    public IReadOnlyList<string> KatakanaSpellings(string word) => _katakana.GetValueOrDefault(word) ?? [];
 
     /// <summary>絵文字・顔文字の候補 (手で書いた emoji.txt の順 → CLDR の順)。</summary>
     public IReadOnlyList<string> LookupEmoji(string reading) => Lookup(_emoji, reading);

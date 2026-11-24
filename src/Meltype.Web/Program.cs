@@ -23,7 +23,6 @@ public static partial class WebExports
     }
 
     private static MeltypeRuntime? s_runtime;
-    private static HybridConverter? s_converter;
     private static readonly List<ImeHost> s_hosts = [];
 
     private const string DataDirectory = "/meltype";
@@ -42,17 +41,17 @@ public static partial class WebExports
     [JSExport]
     public static void Init(bool mozc)
     {
-        s_converter = mozc ? Runtime.CreateConverter(new JsMozcHelper()) : Runtime.CreateConverter("/nonexistent");
-        s_converter.ResultReady += ConversionReady;
+        // 同梱のヘルパーも Zenzai も無い (appDirectory は無いフォルダー)。Mozc は JS の関数で答える
+        Runtime.StartConverter("/nonexistent", mozc ? new JsMozcHelper() : null);
+        Runtime.ConversionReady += ConversionReady;
     }
 
     /// <summary>入力欄 1 つの本体を作り、番号を返す。</summary>
     [JSExport]
     public static int Create()
     {
-        var converter = s_converter ?? throw new InvalidOperationException("Init を先に呼んでください");
-        var parts = Runtime.SessionParts(converter, converter.Candidates, converter.Reading) with { LateResults = () => true };
-        s_hosts.Add(new ImeHost(new WebEnvironment(), parts, () => Runtime.Settings.Current));
+        // 変換の結果はいつも後から受け取る (ブラウザーは 1 つのスレッドで動くので、キーの処理で答えを待てない)
+        s_hosts.Add(Runtime.CreateHost(new WebEnvironment(), () => Runtime.Settings.Current, () => true));
         return s_hosts.Count - 1;
     }
 
@@ -112,11 +111,12 @@ public static partial class WebExports
     {
         public bool IsInstalled => true;
 
+        // Mozc の WebAssembly はページを閉じるまで動き続ける (起動し直さない)
+        public int Launches => 1;
+
         public long WorkingSet => 0;
 
-        public void Start()
-        {
-        }
+        public bool Start() => true;
 
         public string? Send(string line) => MozcRequest(line);
 

@@ -4,8 +4,13 @@
 
   リリース (GitHub Actions でタグから作るビルド) では、版にコミット ID (1.5.1+abc...) を付けない。
   タグの無い自己ビルドでは付けたままにし、「ばーじょん」の候補でどのコミットか分かるようにする (issue #1868)。
+
+  Meltype の版は、ここの Version の 1 か所に書く (Meltype.exe・Meltype.Core・設定アプリが同じ版になる)。/release (meltype-bot.mjs) はここを確かめる。
 -->
 <Project>
+  <PropertyGroup>
+    <Version>1.7.1</Version>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(GITHUB_REF_TYPE)' == 'tag'">
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>

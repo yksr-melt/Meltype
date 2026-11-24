@@ -176,6 +176,21 @@ internal static class LineContext
         return i + 1 == line.Length || line[i + 1] == ' ' || line[i + 1] == '\u00A0';
     }
 
+    /// <summary>
+    /// キャレットより前の文字列の最後の行が、パスワードを尋ねるプロンプトか。コロン (日本語・中国語の訳は全角) で終わり、次のどちらかに当たる。
+    /// sudo の訳 ([sudo] %p のパスワード: など 38 言語) は password の訳語がさまざまなので、先頭の「[sudo] 」(セルビア語は「[судо] 」) で見分ける。sudo-rs は「[sudo: authenticate] 」で始まる。
+    /// ssh・git (Password for 'https://…':)・PAM・鍵のパスフレーズは password・passphrase (日本語訳はパスワード・パスフレーズ) を含む。
+    /// </summary>
+    public static bool IsPasswordPrompt(string text)
+    {
+        var line = text[(text.LastIndexOfAny(['\r', '\n']) + 1)..].TrimEnd();
+        if (line.Length == 0 || line[^1] is not (':' or '：')) return false;
+        return line.StartsWith("[sudo] ", StringComparison.Ordinal) || line.StartsWith("[sudo: ", StringComparison.Ordinal) || line.StartsWith("[судо] ", StringComparison.Ordinal) ||
+            ContainsAny(line, PasswordWords);
+    }
+
+    private static readonly string[] PasswordWords = ["password", "passphrase", "パスワード", "パスフレーズ"];
+
     private static readonly string[] ChatWords =
         ["chat", "チャット", "copilot", "claude", "codex", "gemini", "prompt", "プロンプト", "message", "メッセージ", "ask ", "質問", "composer", "agent", "エージェント", "cascade", "assistant", "アシスタント"];
 

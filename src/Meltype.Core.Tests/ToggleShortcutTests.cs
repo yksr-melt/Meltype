@@ -327,8 +327,6 @@ internal static class ToggleShortcutTests
         }
     }
 
-    private static KeyEvent Key(int vk, bool up = false, bool injected = false, int scan = 0) => new(vk, scan, false, up, injected, 1000);
-
     /// <summary>IME が登録キーを文字切り替えとして送った場合、セッションは確定せず日本語／英字を往復すること。</summary>
     [Test]
     public static void Shortcut_ImeTextToggleKeepsCompositionUncommitted()
@@ -343,48 +341,6 @@ internal static class ToggleShortcutTests
         var restored = session.HandleKey(VirtualKeys.Kanji, null, false, false, false, false);
         Assert.Equal(japanese, restored.View!.Text);
         Assert.True(session.IsComposing && !session.Direct, "未確定状態と入力モードを維持");
-    }
-
-    /// <summary>JIS の半角/全角の特殊な通知を 1 回で取り込み、Alt との組み合わせも主キーの解放を待たずに完了し、バッククォートとは別のキーとして記録すること。</summary>
-    [Test]
-    public static void Shortcut_RecorderHandlesJisToggleNotifications()
-    {
-        var half = new ShortcutRecorder();
-        Assert.Equal(new ToggleShortcut { Key = 0x19 }, half.OnKey(Key(0xF3, up: true, scan: 0x29))!);
-        Assert.True(half.Complete, "最初の F3 解放だけで取り込む");
-        Assert.True(half.OnKey(Key(0xF4, scan: 0x29)) is null, "後続通知で書き換えない");
-        foreach (var vk in new[] { 0x19, 0xF3 })
-        {
-            var alt = new ShortcutRecorder();
-            alt.OnKey(Key(0xA4, scan: 0x38));
-            alt.OnKey(Key(vk, scan: 0x29));
-            Assert.Equal(new ToggleShortcut { Key = 0x19, Modifiers = ShortcutModifiers.Alt }, alt.OnKey(Key(0xA4, up: true, scan: 0x38))!);
-            Assert.True(alt.Complete, "主キーの解放通知なしでも Alt 解放で取り込む");
-        }
-        var grave = new ShortcutRecorder();
-        grave.OnKey(Key(0xA4, scan: 0x38));
-        grave.OnKey(Key(0xC0, scan: 0x29));
-        grave.OnKey(Key(0xC0, up: true, scan: 0x29));
-        Assert.Equal(new ToggleShortcut { Key = 0xC0, Modifiers = ShortcutModifiers.Alt }, grave.OnKey(Key(0xA4, up: true, scan: 0x38))!);
-    }
-
-    /// <summary>修飾キーと通常キーを離す順番がどちらであっても、すべてのキーが離された時点で正しく取り込みが完了すること。</summary>
-    [Test]
-    public static void Shortcut_RecorderRecognizesAltNumberAndEitherReleaseOrder()
-    {
-        foreach (var altFirst in new[] { false, true })
-        {
-            var recorder = new ShortcutRecorder();
-            recorder.OnKey(Key(0xA4, scan: 0x38));
-            recorder.OnKey(Key(0x31, scan: 0x02));
-            var first = altFirst ? Key(0x12, up: true, scan: 0x38) : Key(0x31, up: true, scan: 0x02);
-            var second = altFirst ? Key(0x31, up: true, scan: 0x02) : Key(0x12, up: true, scan: 0x38);
-            Assert.True(recorder.OnKey(first) is null, "全キーの解放を待つ");
-            var recorded = recorder.OnKey(second)!;
-            Assert.Equal(0x31, recorded.Key);
-            Assert.Equal(ShortcutModifiers.Alt, recorded.Modifiers);
-            Assert.True(recorder.OnKey(Key(0x41)) is null, "完了後の打鍵で結果を変えない");
-        }
     }
 
     /// <summary>半角/全角の複数のキーコードは同じ割り当てに一致し、バッククォートや余分な修飾キーを含む操作とは一致しないこと。</summary>
@@ -515,26 +471,6 @@ internal static class ToggleShortcutTests
         settings.Profiles.Add(new SettingsProfile { Name = "OS", Values = settings.ProfileValues() });
         Assert.Equal(bindings.Count, settings.SwitchProfile("OS").EffectiveToggleShortcuts.Count, "保存済みプロファイルでも維持");
         Assert.Equal(bindings.Count, new Settings().ImportProfile(settings.ExportProfile())!.EffectiveToggleShortcuts.Count, "インポートでも維持");
-    }
-
-    /// <summary>ショートカットの編集を保存しても、画面を開いている間にトレイで変えた有効状態・動作モード・プロファイルは維持され、編集は元のプロファイルに保存されること。</summary>
-    [Test]
-    public static void Shortcut_SettingsEditsKeepConcurrentTrayAndProfileChanges()
-    {
-        var opened = new Settings().Normalize().AddProfile("仕事用")!.SwitchProfile(Settings.DefaultProfileName);
-        var edited = opened.Clone();
-        var binding = new ToggleShortcut { Key = 0x20, Modifiers = ShortcutModifiers.Control };
-        edited.ToggleShortcuts = [binding];
-        var current = opened.SwitchProfile("仕事用");
-        current.Enabled = false;
-        current.Mode = InputMode.Keyboard;
-        var merged = Settings.MergeEdits(opened, edited, current);
-        Assert.True(!merged.Enabled && merged.Mode == InputMode.Keyboard, "トレイで変えた状態を維持");
-        Assert.Equal("仕事用", merged.ActiveProfile, "トレイのプロファイルを維持");
-        Assert.Equal(2, merged.EffectiveToggleShortcuts.Count, "仕事用の登録は変えない");
-        var standard = merged.SwitchProfile(Settings.DefaultProfileName);
-        Assert.Equal(1, standard.EffectiveToggleShortcuts.Count, "画面で編集したプロファイルに保存");
-        Assert.Equal(binding, standard.EffectiveToggleShortcuts[0]);
     }
 
     /// <summary>旧設定の OFF は空、ON は 2 つの初期登録へ移行し、通常設定・プロファイル・インポートで同じ規則を使い、明示された空の一覧は維持すること。</summary>

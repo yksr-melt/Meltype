@@ -10,8 +10,7 @@ namespace Meltype.Engine;
 /// Zenzai が使えればその答えを Mozc の文節に当てはめ、使えなければ Mozc で変換する。Mozc が使えなければ変換しない (かなのまま)。
 /// 組み立ては Ime の MeltypeRuntime.CreateConverter。
 /// </summary>
-/// <param name="zenzaiFailed">変換で例外になった Zenzai を、持ち主 (zenzai を渡した側) に知らせる。止めて作り直すのは持ち主が行う。</param>
-public sealed class HybridConverter(MozcConverter mozc, Func<ZenzaiConverter?>? zenzai = null, Action<ZenzaiConverter>? zenzaiFailed = null)
+internal sealed class HybridConverter(MozcConverter mozc, Func<ZenzaiConverter?>? zenzai = null)
     : IKanjiConverter
 {
     private ZenzaiConverter? _subscribedZenzai;
@@ -52,36 +51,15 @@ public sealed class HybridConverter(MozcConverter mozc, Func<ZenzaiConverter?>? 
     private void OnZenzaiReady() => _zenzaiReady?.Invoke();
 
     /// <summary>
-    /// 設定で Zenzai が使えるとき、その変換結果 (読み全体で 1 つの文節)。使えない・変換できなければ null。
-    /// Zenzai を作れない・変換で例外になったときも null (Mozc で変換する)。Zenzai の失敗で入力全体を止めないように
-    /// (#973: 同梱の .NET に System.Net.Http が無く、Zenzai を作るたびに例外になって、日本語を打てなくなった)。
-    /// 変換で例外になった Zenzai は、それからは使わず (打つたびに例外にしない)、持ち主に知らせる (zenzaiFailed)。
-    /// 止める (Dispose) のは持ち主で、ここでは止めない。持ち主が新しく作ったら、それは使う。
+    /// 設定で Zenzai が使えるとき、その変換結果 (読み全体で 1 つの文節)。使えない・変換できなければ null (Mozc で変換する)。
+    /// Zenzai の失敗 (作れない・答えない・壊れた答え) は例外にならない。続けて失敗した Zenzai は自分で諦め (GaveUp)、持ち主 (ZenzaiHolder) が止めて作り直す。
     /// </summary>
     private List<ConversionClause>? Zenzai(ConversionRequest request)
     {
-        ZenzaiConverter? z = null;
-        try
-        {
-            z = zenzai?.Invoke();
-            if (z is null || ReferenceEquals(z, _failedZenzai) || !z.IsAvailable) return null;
-            Subscribe(z);
-            return z.Convert(request)?.Select(c => c with { Zenzai = true }).ToList();
-        }
-        catch (Exception ex)
-        {
-            var failed = (object?)z ?? CouldNotCreate;
-            if (!ReferenceEquals(failed, _failedZenzai)) Diagnostics.Log.Error($"Zenzai で変換できないので、Mozc で変換します: {ex}");
-            _failedZenzai = failed;
-            if (z is not null) zenzaiFailed?.Invoke(z);
-            return null;
-        }
+        if (zenzai?.Invoke() is not { IsAvailable: true } z) return null;
+        Subscribe(z);
+        return z.Convert(request)?.Select(c => c with { Zenzai = true }).ToList();
     }
-
-    // 例外になった Zenzai (持ち主が同じものをまた渡しても使わない)。作るところで例外になったときは CouldNotCreate
-    // (このときはログを 1 回にするだけ。Windows 版では ZenzaiHolder が作れなかったことを覚えて待つので、ここまで例外は来ない)
-    private object? _failedZenzai;
-    private static readonly object CouldNotCreate = new();
 
     /// <summary>
     /// Zenzai の答え (answer) を、Mozc の文節ごとの候補を 1 つずつ選んでつなげて作れるか (前の文脈なし)。Mozc が答えなかったら null。
@@ -98,18 +76,31 @@ public sealed class HybridConverter(MozcConverter mozc, Func<ZenzaiConverter?>? 
     /// Mozc の文節で返した結果は、確定すると Mozc にも覚えさせる (Mozc の候補に無い 1 つの文節は、Mozc が覚えない)。
     /// Mozc の候補で作れない答えは、かなが読みと合うときだけ使う (<see cref="ZenzaiConverter.IsPlausible"/>)。
     /// 壊れた答え (はーどうぇ → ハードウェアウェア) は使わず、表記が読みと違う語 (きずく → 気づく、あんはさうぇい → アン・ハサウェイ) は Mozc の候補にあれば使う。
+    /// ユーザー辞書の語で始まる Mozc の文節 (しのが → 紫乃が) は、Zenzai の答えで置き換えない (Mozc のコストで選んだ登録語を優先する)。
+    /// その文節を Mozc の答えのままにして Zenzai の答えを作れなければ、Mozc の結果を使う。
     /// request.Zenzai が false なら Mozc だけで変換する。
     /// </summary>
     public IReadOnlyList<ConversionClause>? Convert(ConversionRequest request)
     {
-        var hiragana = request.Hiragana;
         var fromMozc = mozc.ConvertWithCandidates(request);
+        if (!request.Zenzai || Zenzai(request) is not { Count: > 0 } z) return fromMozc?.Select(s => s.Clause).ToList();
+        return Choose(request.Hiragana, fromMozc, z, mozc.StartsWithUserWord);
+    }
+
+    /// <summary><see cref="Convert"/> の、Zenzai の答え z と Mozc の結果 fromMozc から使う結果を選ぶところ。userWord はユーザー辞書の語で始まる文節か。</summary>
+    internal static IReadOnlyList<ConversionClause>? Choose(string hiragana, IReadOnlyList<(ConversionClause Clause, IReadOnlyList<string> Candidates)>? fromMozc,
+        IReadOnlyList<ConversionClause> z, Func<ConversionClause, bool> userWord)
+    {
         var other = fromMozc?.Select(s => s.Clause).ToList();
-        if (!request.Zenzai || Zenzai(request) is not { Count: > 0 } z) return other;
         // Zenzai の答えと同じなら、その文節も Zenzai の答えとして印を付ける
         if (other is not null && string.Concat(other.Select(c => c.Text)) == z[0].Text) return other.Select(c => c with { Zenzai = true }).ToList();
         // 候補は、この変換で文節と一緒に受け取ったものを使う (ヘルパーには聞き直さない)。
         // 文節の読みは Mozc が返したまま (全角の（ を ( にするなど、読み全体と少し違うことがある。Mozc だけで変換するときと同じ)
+        if (fromMozc is not null && fromMozc.Any(s => userWord(s.Clause)))
+        {
+            var kept = fromMozc.Select(s => userWord(s.Clause) ? (s.Clause, (IReadOnlyList<string>)[s.Clause.Text]) : s).ToList();
+            return Align(kept, z[0].Text)?.Select(c => c with { Zenzai = true }).ToList() ?? other;
+        }
         return (fromMozc is not null ? Align(fromMozc, z[0].Text)?.Select(c => c with { Zenzai = true }).ToList() : null)
             ?? (ZenzaiConverter.IsPlausible(hiragana, z[0].Text) ? z : other);
     }
@@ -156,6 +147,9 @@ public sealed class HybridConverter(MozcConverter mozc, Func<ZenzaiConverter?>? 
 
     /// <summary>確定した文節を Mozc に覚えさせる。</summary>
     public void Learn(string? before, IReadOnlyList<ConversionClause> clauses) => mozc.Learn(before, clauses);
+
+    /// <summary>Mozc のユーザー辞書を words で入れ替える (<see cref="MozcConverter.SetUserDictionary"/>)。</summary>
+    public bool SetUserDictionary(IReadOnlyList<(string Reading, string Word, string Pos)> words) => mozc.SetUserDictionary(words);
 
     /// <summary>読みの候補の一覧 (Mozc。deadline まで待つ)。</summary>
     public IReadOnlyList<string> Candidates(string reading, long deadline) => mozc.Candidates(reading, deadline);

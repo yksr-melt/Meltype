@@ -35,10 +35,10 @@ internal static partial class CompositionController
         // 自分が確定した直後は、アプリ側のテキストがまだ更新されていないかもしれないので自分の記録を信じる。
         var recentOwnCommit = env.NowMs - state.LastCommitTime < OwnCommitTrustMs;
         if (!recentOwnCommit && CompositionOutput.Before(state.Out, env) is { } before)
-            return new TextContext(before, LanguageOf(before) ?? state.LastCommitEnglish, IsEnglishSentence(before), IsEnglishNameContext(before), after, LanguageOfStart(after));
-        var english = state.LastCommitEnglish;
-        return new TextContext(english is null ? null : state.LastCommitText, english,
-            english == true && IsEnglishSentence(state.LastCommitText), english == true && IsEnglishNameContext(state.LastCommitText), after, LanguageOfStart(after));
+            return new TextContext(before, LanguageOf(before) ?? state.Last?.English, IsEnglishSentence(before), IsEnglishNameContext(before), after, LanguageOfStart(after));
+        var last = state.Last;
+        return new TextContext(last?.Text, last?.English,
+            last is { English: true } && IsEnglishSentence(last.Text), last is { English: true } && IsEnglishNameContext(last.Text), after, LanguageOfStart(after));
     }
 
     /// <summary>

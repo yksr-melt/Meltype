@@ -41,6 +41,8 @@ EMSCRIPTEN_KEEPALIVE const char* meltype_mozc_request(const char* line) {
     g_answer = g_helper->Learn(fields[1], fields[2]) ? "OK" : "NG";
   } else if (fields[0] == "R" && fields.size() >= 2) {
     g_answer = g_helper->Reverse(fields[1]);
+  } else if (fields[0] == "D" && fields.size() >= 2) {
+    g_answer = g_helper->SetDictionary(fields[1]) ? "OK" : "NG";
   } else if (fields[0] == "S") {
     g_answer = g_helper->Save() ? "OK" : "NG";
   } else {
