@@ -2036,6 +2036,30 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void Issue2219_DirectModeKeepsEnglishAfterAPause()
+    {
+        foreach (var (prefix, suffix) in new[] { ("acc", "ommodate"), ("mem", "orandum") })
+        {
+            var k = new Keyboard(direct: true);
+            k.Type(prefix);
+            k.Wait(950);
+            k.Type(suffix + "\n");
+            Assert.True(k.Direct, prefix + suffix);
+            Assert.Equal(prefix + suffix + "\n", k.Host.Document);
+        }
+    }
+
+    [Test]
+    public static void Issue2219_DirectModeAllowsExplicitSwitchAfterEnglishVerdict()
+    {
+        var k = new Keyboard(direct: true);
+        k.Type("temo");
+        k.Press(ToggleShortcut.Hankaku);
+        Assert.True(!k.Direct, "半角/全角 で日本語になる");
+        Assert.Equal("temo", k.Host.Document, "すでに入力した英字はそのまま");
+    }
+
+    [Test]
     public static void Issue2219_DirectModeDetectsJapaneseAfterPunctuation()
     {
         foreach (var prefix in new[] { "home-", "data,", "home.", "off-" })

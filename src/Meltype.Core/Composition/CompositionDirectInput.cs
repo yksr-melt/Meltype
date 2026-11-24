@@ -15,12 +15,14 @@ internal static class CompositionDirectInput
     /// <summary>英数状態の判定で、この時間打鍵が無ければ英語とみなして判定をやめる。</summary>
     private const long DirectHoldIdleMs = 700;
 
-    /// <summary>英数状態で判定中の語が、無入力のまま一定時間たったら英語とみなす。</summary>
-    internal static void Tick(CompositionState state, CompositionEnv env, long nowMs)
+    /// <summary>無入力で保留を終える。通常の英数判定で次の打鍵を通すはずだった位置なら true。</summary>
+    internal static bool Tick(CompositionState state, CompositionEnv env, long nowMs)
     {
-        if (state.HeldLetters.Length == 0 || nowMs - state.HeldLastKeyTime < DirectHoldIdleMs) return;
+        if (state.HeldLetters.Length == 0 || nowMs - state.HeldLastKeyTime < DirectHoldIdleMs) return false;
+        var passNext = state.HeldResumeAt > state.HeldLetters.Length;
         ResumeNormalHold(state);
         if (state.HeldLetters.Length > 0) DecideHeld(state, env, final: true);
+        return passNext;
     }
 
     // - を付けて使う英語の接頭辞 (e-mail、re-do、co-op、x-ray)

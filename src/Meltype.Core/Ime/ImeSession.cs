@@ -348,7 +348,6 @@ internal static class ImeSession
     private static SessionResult HandleKey(ImeSessionState state, ImeEnv env, ImeKey key, ImeField? field, string? before, Settings settings, (string Text, string Typed)? lastSnippet,
         ref bool explicitChange)
     {
-        var composing = IsComposing(state);
         var modifiers = Modifiers(key);
         var plain = modifiers == ShortcutModifiers.None;
         var vk = key.Vk != 0 ? ToggleShortcut.NormalizeKey(key.Vk) : VirtualKeyOf(key.Ch);
@@ -361,6 +360,9 @@ internal static class ImeSession
         var toggle = settings.EffectiveToggleShortcuts.Any(shortcut => shortcut.Matches(vk, modifiers));
         // 押しっぱなしで、入力モードを何度も切り替えない
         if (key.Repeat && (toggle || plain && vk is ToggleShortcut.Hankaku or VirtualKeys.OemAttn or VirtualKeys.Kana)) return Consumed;
+        // 明示的なモード切り替えでは、英数開始の読みを延長するためだけに残した打鍵を未確定扱いしない。
+        if (toggle || plain && ModeKeys.Contains(vk)) CompositionDirectInput.ResumeNormalHold(state.Composition);
+        var composing = IsComposing(state);
         if (toggle && !composing) return Switch(state, env, !ShowsJapanese(state, before), before, ref explicitChange, toggle: true);
         // 入力中は変換ボックスの英字表示の切り替え。変換中は変換ボックスのキーとして使う (Shift+Space は「前の候補へ」)
         if (toggle && !IsConverting(state)) return ComposeKey(state, env, VirtualKeys.Kanji, null, false, false, false, false);
