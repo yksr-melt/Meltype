@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
 
-using Meltype.Detection;
+using Meltype.Libraries.Lexicon;
 
 namespace Meltype.Input;
 
@@ -35,7 +35,7 @@ public enum RomajiLayout
 }
 
 /// <summary>SKY 配列: QWERTY の位置のキーを、ローマ字の綴りにする (issue #1415)。</summary>
-public static class SkyLayout
+internal static class SkyLayout
 {
     // 二重母音・撥音のキーは、そのまま読めるローマ字にする (ん は nn。un + a が う + な にならないように)
     private static readonly Dictionary<int, string> Keys = new()
@@ -56,7 +56,7 @@ public static class SkyLayout
 /// <param name="Handled">配列のキーとして扱った (false ならふつうのキーとして処理する)。</param>
 /// <param name="RemoveLast">先に入力中の文字から消す音の数 (後から押した親指キー・中指キーで、前の文字を打ち直すとき)。</param>
 /// <param name="Kana">入力するかな (空なら何も足さない。前置シフトのキーなど)。</param>
-public readonly record struct KanaStroke(bool Handled, int RemoveLast = 0, string Kana = "")
+internal readonly record struct KanaStroke(bool Handled, int RemoveLast = 0, string Kana = "")
 {
     public static KanaStroke NotHandled => default;
     public static KanaStroke Consumed => new(true);
@@ -65,7 +65,7 @@ public readonly record struct KanaStroke(bool Handled, int RemoveLast = 0, strin
 /// <summary>キーを離した結果。</summary>
 /// <param name="ThumbTap">親指キーを文字に使わずに離した (親指キーのもとの働き: 変換・無変換をする)。</param>
 /// <param name="Stroke">離したことで決まった打ち直し (中指NICOLA: シフトのキーを押したまま離した文字キーを、シフト面で打ち直す)。</param>
-public readonly record struct KanaKeyUp(bool ThumbTap, KanaStroke Stroke);
+internal readonly record struct KanaKeyUp(bool ThumbTap, KanaStroke Stroke);
 
 /// <summary>
 /// JIS かな以外のかな配列で、打鍵をかなにする (issue #1415)。表は dictionaries/kana-layouts.txt (配列ごとの「打つキー → かな」)。
@@ -79,7 +79,7 @@ public readonly record struct KanaKeyUp(bool ThumbTap, KanaStroke Stroke);
 /// 中指NICOLA の D・K のシフトだけは、時間でなく離した順で決める: 文字キーを D・K より先に離したときだけシフトにする
 /// (D・K を先に離したら、速く打って重なっただけ: て と は てと のまま)。
 /// </summary>
-public sealed class KanaLayoutEngine(KanaLayout layout)
+internal sealed class KanaLayoutEngine(KanaLayout layout)
 {
     /// <summary>同時打鍵とみなす時間 (ミリ秒)。</summary>
     public const int ChordWindowMs = 100;
@@ -154,10 +154,12 @@ public sealed class KanaLayoutEngine(KanaLayout layout)
         /// <summary>組み合わせの文字キーにした (シフトには使わない)。</summary>
         public bool Target { get; set; }
         /// <summary>中指NICOLA: D・K より先に離したら打ち直すかなと、そのシフトのキー。</summary>
-        public (string Kana, Held Shift)? OnRelease { get; set; }
+        public (string Kana, Held Shift, int RemoveLast)? OnRelease { get; set; }
     }
 
     private readonly List<Held> _held = [];
+    // 中指の打ち直しで、シフトキー自身の文字も消せるのは、その文字が直前の出力のときだけ。
+    private Held? _lastOutput;
     // 並びの打ちかけ (仮想キーを , でつないだもの)・その並びで仮に入れたかなの文字数・仮に入れた並びの次の入力
     private string _sequence = "";
     private int _shown;
@@ -179,6 +181,7 @@ public sealed class KanaLayoutEngine(KanaLayout layout)
         _sequence = "";
         _shown = 0;
         _next = "";
+        _lastOutput = null;
         _held.RemoveAll(key => !IsThumb(key.Vk));
     }
 
@@ -187,8 +190,16 @@ public sealed class KanaLayoutEngine(KanaLayout layout)
     {
         // 表の段のキーと親指キーのほか (BackSpace・Enter・Esc・Space など) は、ふつうのキー
         if (_table is null || shift || Array.IndexOf(Keys, vk) < 0 && !IsThumb(vk)) return KanaStroke.NotHandled;
-        // 押したままのキーのリピートは無視する (打った文字を増やさない。親指キーを文字に使ったかも変えない)
-        if (_held.Any(key => key.Vk == vk)) return KanaStroke.Consumed;
+        if (_held.FirstOrDefault(key => key.Vk == vk) is { } repeated)
+        {
+            // シフト自身のリピートは止める。文字の長押しは押したままの親指の面で繰り返す。
+            if (IsThumb(vk) || repeated.Shifting || layout == KanaLayout.NakayubiNicola && vk is 0x44 or 0x4B) return KanaStroke.Consumed;
+            foreach (var key in _held) key.OnRelease = null;
+            var thumb = _held.FirstOrDefault(key => IsThumb(key.Vk));
+            var kana = thumb is not null ? _table.Chords.GetValueOrDefault(($"{thumb.Vk}", vk)) : _table.Sequences.GetValueOrDefault($"{vk}").Kana;
+            _lastOutput = repeated;
+            return kana is null ? KanaStroke.Consumed : new KanaStroke(true, 0, kana);
+        }
         return _table.Chords.Count > 0 ? Chord(vk, time) : Sequence(vk);
     }
 
@@ -254,9 +265,13 @@ public sealed class KanaLayoutEngine(KanaLayout layout)
         // 中指NICOLA: D・K を押したままの文字キーは、ふつうの文字にしておき、先に離したら打ち直す
         if (layout == KanaLayout.NakayubiNicola)
         {
+            // 次の文字が入ったら、前の打ち直しはもう末尾ではない。古い削除数で別の文字を消さない。
+            foreach (var key in _held) key.OnRelease = null;
             var press = new Held(vk, time, plain?.Length ?? 0);
-            if (_held.LastOrDefault(key => !key.Target) is { } shift && table.Chords.TryGetValue(($"{shift.Vk}", vk), out var middle)) press.OnRelease = (middle, shift);
+            if (_held.LastOrDefault(key => !key.Target) is { } shift && table.Chords.TryGetValue(($"{shift.Vk}", vk), out var middle))
+                press.OnRelease = (middle, shift, press.Emitted + (ReferenceEquals(_lastOutput, shift) ? shift.Emitted : 0));
             _held.Add(press);
+            _lastOutput = press;
             return plain is null ? KanaStroke.NotHandled : new KanaStroke(true, 0, plain);
         }
         // 押したままのキーとの組み合わせ (後から押したキーが文字キー)。2 キーのシフトを先に見る
@@ -307,9 +322,8 @@ public sealed class KanaLayoutEngine(KanaLayout layout)
         var held = _held[index];
         _held.RemoveAt(index);
         // 中指NICOLA: D・K を押したまま、文字キーを先に離した → シフト面で打ち直す (文字キーと、まだなら D・K の文字を消す)
-        if (held.OnRelease is ({ } kana, { } shift) && _held.Contains(shift))
+        if (held.OnRelease is ({ } kana, { } shift, var remove) && _held.Contains(shift))
         {
-            var remove = held.Emitted + shift.Emitted;
             shift.Emitted = 0;
             shift.Shifting = true;
             return new KanaKeyUp(false, new KanaStroke(true, remove, kana));

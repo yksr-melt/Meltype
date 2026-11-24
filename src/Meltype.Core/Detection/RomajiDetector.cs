@@ -1,15 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
 
-using System.Collections.Concurrent;
 using System.Text;
 
 namespace Meltype.Detection;
 
-public readonly record struct RomajiToken(string Romaji, string Kana);
+internal readonly record struct RomajiToken(string Romaji, string Kana);
 
 /// <summary>ローマ字としての解析結果。入力途中 (prefix) を前提にしている。</summary>
-public sealed record RomajiAnalysis(
+internal sealed record RomajiAnalysis(
     bool IsValid,
     IReadOnlyList<RomajiToken> Tokens,
     string Partial,
@@ -27,7 +26,7 @@ public sealed record RomajiAnalysis(
 /// ここで分かるのは「ローマ字として成立するか」と日本語らしい特徴だけで、
 /// 成立しても英語の可能性は残る (kana, sushi, radio)。最終判断は ScoreEngine が行う。
 /// </summary>
-public sealed class RomajiDetector
+internal sealed class RomajiDetector
 {
     // かな → 綴り (先頭が標準の綴り)。l / x / v 系は英語と区別できないので意図的に含めない。
     private static readonly (string Kana, string[] Spellings)[] Table =
@@ -109,36 +108,16 @@ public sealed class RomajiDetector
         ("くぁ", ["kwa"]), ("ぐぁ", ["gwa"]), ("つぁ", ["tsa"]), ("つぃ", ["tsi"]), ("つぇ", ["tse"]), ("つぉ", ["tso"]),
     ];
 
-    private static readonly Dictionary<string, string> SpellingToKana = BuildSpellingMap(Table);
-    private static readonly Dictionary<string, string> CompositionSpellingToKana = BuildSpellingMap([.. Table, .. CompositionTable]);
-    private static readonly HashSet<string> CompositionPartials = BuildPartials(CompositionSpellingToKana);
+    private static readonly SpellingTrie Spellings = new(Pairs(Table));
+    // 同じ綴りは後の表が上書きする (CompositionTable を優先する)
+    private static readonly SpellingTrie CompositionSpellings = new(Pairs([.. Table, .. CompositionTable]));
     private static readonly Dictionary<string, string[]> KanaToSpellings = Table.ToDictionary(e => e.Kana, e => e.Spellings);
-    private static readonly HashSet<string> PartialSpellings = BuildPartials(SpellingToKana);
 
-    private static Dictionary<string, string> BuildSpellingMap((string Kana, string[] Spellings)[] table)
-    {
-        var map = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var (kana, spellings) in table)
-        {
-            foreach (var spelling in spellings) map[spelling] = kana;
-        }
-        return map;
-    }
-
-    private static HashSet<string> BuildPartials(Dictionary<string, string> spellings)
-    {
-        var set = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var spelling in spellings.Keys)
-        {
-            for (var i = 1; i < spelling.Length; i++) set.Add(spelling[..i]);
-        }
-        return set;
-    }
+    private static IEnumerable<KeyValuePair<string, string>> Pairs((string Kana, string[] Spellings)[] table) =>
+        table.SelectMany(e => e.Spellings.Select(spelling => KeyValuePair.Create(spelling, e.Kana)));
 
     // ユーザーのローマ字の表 (romaji.txt。AZIK などの拡張ローマ字: kz = かん、kq = かい)。組み込みの綴りより優先する。
-    private readonly Dictionary<string, string>? _custom;
-    private readonly HashSet<string> _customPartials = new(StringComparer.Ordinal);
-    private readonly int _customMaxLength;
+    private readonly SpellingTrie? _custom;
 
     public RomajiDetector() : this(null)
     {
@@ -147,13 +126,7 @@ public sealed class RomajiDetector
     /// <param name="custom">ユーザーの綴り → かな (英小文字だけの綴り)。null なら組み込みの表だけ。</param>
     public RomajiDetector(IReadOnlyDictionary<string, string>? custom)
     {
-        if (custom is not { Count: > 0 }) return;
-        _custom = new Dictionary<string, string>(custom, StringComparer.Ordinal);
-        foreach (var spelling in _custom.Keys)
-        {
-            _customMaxLength = Math.Max(_customMaxLength, spelling.Length);
-            for (var i = 1; i < spelling.Length; i++) _customPartials.Add(spelling[..i]);
-        }
+        if (custom is { Count: > 0 }) _custom = new SpellingTrie(custom);
     }
 
     /// <summary>ユーザー辞書のフォルダーの romaji.txt を読んで作る (無ければ組み込みの表だけ)。</summary>
@@ -165,17 +138,9 @@ public sealed class RomajiDetector
     /// </summary>
     public static Dictionary<string, string>? LoadCustomTable(string? userDictionaryDirectory)
     {
-        if (userDictionaryDirectory is null) return null;
-        var path = Path.Combine(userDictionaryDirectory, "romaji.txt");
-        try
-        {
-            return File.Exists(path) ? ParseCustomTable(File.ReadAllText(path)) : null;
-        }
-        catch (Exception ex)
-        {
-            Diagnostics.Log.Warn($"ローマ字の表 (romaji.txt) を読めませんでした: {ex.Message}");
-            return null;
-        }
+        Dictionary<string, string>? table = null;
+        Config.DataFile.LoadUserText(userDictionaryDirectory, "romaji.txt", "ローマ字の表 (romaji.txt) ", text => table = ParseCustomTable(text));
+        return table;
     }
 
     public static Dictionary<string, string> ParseCustomTable(string text)
@@ -197,7 +162,7 @@ public sealed class RomajiDetector
     private static bool IsVowel(char c) => c is 'a' or 'i' or 'u' or 'e' or 'o';
     private static bool IsConsonant(char c) => c is >= 'a' and <= 'z' && !IsVowel(c);
 
-    public RomajiAnalysis Analyze(string letters) => Analyze(letters, strictStart: true, composition: false);
+    internal RomajiAnalysis Analyze(string letters) => Analyze(letters, strictStart: true, composition: false);
 
     /// <summary>c 行 (ca / cu / co = か く こ) を k 行に読み替える (ch は そのまま)。英数状態の判定で、fucarete を fukarete として調べるのに使う。</summary>
     public static string ReadCRow(string letters)
@@ -215,24 +180,9 @@ public sealed class RomajiDetector
     /// 変換ボックス用。語の途中から解析し (語頭の「ん」「っ」も許す)、"nn" は Microsoft IME と同じく常に「ん」と読む
     /// (tanni → たんい。こんにちは は konnnichiha)。
     /// </summary>
-    public RomajiAnalysis AnalyzeFragment(string letters) => Analyze(letters, strictStart: false, composition: true);
+    internal RomajiAnalysis AnalyzeFragment(string letters) => Analyze(letters, strictStart: false, composition: true);
 
-    private RomajiAnalysis Analyze(string letters, bool strictStart, bool composition)
-    {
-        var cache = composition ? _compositionCache : strictStart ? _strictCache : _looseCache;
-        if (cache.TryGetValue(letters, out var cached)) return cached;
-        var result = AnalyzeCore(letters, strictStart, composition);
-        if (cache.Count >= CacheLimit) cache.Clear();
-        cache[letters] = result;
-        return result;
-    }
-
-    private const int CacheLimit = 50000;
-    private readonly ConcurrentDictionary<string, RomajiAnalysis> _strictCache = new(StringComparer.Ordinal);
-    private readonly ConcurrentDictionary<string, RomajiAnalysis> _looseCache = new(StringComparer.Ordinal);
-    private readonly ConcurrentDictionary<string, RomajiAnalysis> _compositionCache = new(StringComparer.Ordinal);
-
-    private RomajiAnalysis AnalyzeCore(string letters, bool strictStart, bool composition, bool allowCustomWait = true)
+    private RomajiAnalysis Analyze(string letters, bool strictStart, bool composition, bool allowCustomWait = true)
     {
         var tokens = new List<RomajiToken>();
         int strongYouon = 0, tsu = 0, sokuon = 0, longVowels = 0;
@@ -284,24 +234,21 @@ public sealed class RomajiDetector
                 continue;
             }
 
-            var matched = false;
-            var spellings = composition ? CompositionSpellingToKana : SpellingToKana;
-            for (var length = Math.Min(4, s.Length - i); length >= 1; length--)
+            var spellings = composition ? CompositionSpellings : Spellings;
+            var (length, kana) = spellings.Longest(s, i);
+            if (kana is not null)
             {
                 var piece = s.Substring(i, length);
-                if (!spellings.TryGetValue(piece, out var kana)) continue;
                 if (StrongYouonKana.Contains(kana)) strongYouon++;
                 if (piece == "tsu") tsu++;
                 if (kana == "う" && tokens.Count > 0 && EndsWithVowel(tokens[^1].Romaji, 'o', 'u')) longVowels++;
                 tokens.Add(new RomajiToken(piece, kana));
                 i += length;
-                matched = true;
-                break;
+                continue;
             }
-            if (matched) continue;
 
             var rest = s[i..];
-            if ((composition ? CompositionPartials : PartialSpellings).Contains(rest) || rest is "n" or "tc" || _customPartials.Contains(rest))
+            if (spellings.IsPrefix(s, i) || rest is "n" or "tc" || _custom?.IsPrefix(s, i) == true)
             {
                 return new RomajiAnalysis(true, tokens.ToArray(), rest, null, strongYouon, tsu, sokuon, longVowels);
             }
@@ -311,24 +258,16 @@ public sealed class RomajiDetector
         return new RomajiAnalysis(true, tokens.ToArray(), "", null, strongYouon, tsu, sokuon, longVowels);
     }
 
-    /// <summary>s の i から末尾までが、ユーザーの表の綴りの打ちかけ (厳密な前置詞で、それ自体は綴りでない) ならその部分。無ければ null。</summary>
-    private string? CustomPrefixTail(string s, int i)
-    {
-        var rest = s[i..];
-        return rest.Length < _customMaxLength && _customPartials.Contains(rest) && !_custom!.ContainsKey(rest) ? rest : null;
-    }
+    /// <summary>s の i から末尾までが、ユーザーの表の綴りの打ちかけ (それ自体は綴りでない) ならその部分。無ければ null。</summary>
+    private string? CustomPrefixTail(string s, int i) => _custom!.IsOnlyPrefix(s, i) ? s[i..] : null;
 
     /// <summary>s の i から始まる、ユーザーの表のいちばん長い綴り。無ければ null。</summary>
     private RomajiToken? MatchCustom(string s, int i)
     {
-        for (var length = Math.Min(_customMaxLength, s.Length - i); length >= 1; length--)
-        {
-            var piece = s.Substring(i, length);
-            // 表の綴りの頭で入力が終わっている (kz の k だけ) なら、続きを待つ (組み込みの綴りで読まない)
-            if (i + length == s.Length && length < _customMaxLength && _customPartials.Contains(piece) && !_custom!.ContainsKey(piece)) return null;
-            if (_custom!.TryGetValue(piece, out var kana)) return new RomajiToken(piece, kana);
-        }
-        return null;
+        // 表の綴りの頭で入力が終わっている (kz の k だけ) なら、続きを待つ (組み込みの綴りで読まない)
+        if (_custom!.IsOnlyPrefix(s, i)) return null;
+        var (length, kana) = _custom.Longest(s, i);
+        return kana is null ? null : new RomajiToken(s.Substring(i, length), kana);
     }
 
     private static bool EndsWithVowel(string romaji, char a, char b) =>
@@ -346,10 +285,9 @@ public sealed class RomajiDetector
             {
                 var partial = analysis.Partial;
                 // 確定のときは、ユーザーの表の綴りの打ちかけを待たずに組み込みの読みに戻す (ng → んg)
-                if (final && _custom is not null && partial.Length > 0
-                    && partial.Length < _customMaxLength && _customPartials.Contains(partial) && !_custom.ContainsKey(partial))
+                if (final && _custom is not null && partial.Length > 0 && _custom.IsOnlyPrefix(partial, 0))
                 {
-                    var settled = AnalyzeCore(partial, strictStart: false, composition: true, allowCustomWait: false);
+                    var settled = Analyze(partial, strictStart: false, composition: true, allowCustomWait: false);
                     builder.Append(settled.Kana);
                     if (settled.IsValid)
                     {
@@ -379,7 +317,7 @@ public sealed class RomajiDetector
         return analysis.IsValid ? analysis.Kana + analysis.Partial : letters;
     }
 
-    public RomajiAnalysis AnalyzeWord(string word)
+    internal RomajiAnalysis AnalyzeWord(string word)
     {
         var analysis = Analyze(word);
         return analysis.IsValid && analysis.Partial == "n" ? Analyze(word + "n") : analysis;

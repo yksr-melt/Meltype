@@ -10,6 +10,7 @@
 | `src/Meltype.Core/` | OS に依存しない部分 (Windows・Mac・Linux 共通)。英語 / 日本語の判定・ローマ字・変換ボックスの中身・辞書・学習・設定 |
 | `src/Meltype.Windows/` | Windows 版 (キーボードフック・変換ボックスの画面・IMM32 / TSF・UI Automation・トレイ) |
 | `src/Meltype.Core.CApi/` | Mac・Linux・Android 版の IME から呼ぶ C の関数 (Meltype.Core を NativeAOT で dylib・so にする) |
+| `src/Meltype.Settings/` | 設定アプリ (Windows・Mac・Linux 共通、Avalonia)。設定・ユーザー辞書・定型文・学習データ・バックアップ。各 OS のビルドが NativeAOT で同梱する |
 | `mac/` | Mac 版の IME (Swift、Input Method Kit) |
 | `linux/` | Linux 版 (IBus・fcitx5 のエンジン) |
 | `native/` | Meltype IME (Windows の TSF の DLL) と Mozc のヘルパー ([native/mozc/README.md](../../native/mozc/README.md)。Mozc-UT の辞書は [MOZC-UT.md](MOZC-UT.md)) |
@@ -21,7 +22,16 @@
 | `docs/` | 利用者向けの文書 (使い方・OS ごとの説明)。`docs/release-notes/` はリリースノート |
 | `docs/dev/` | 開発者向けの文書 (開発・設計・リリースの手順) |
 
-`src/Meltype.Core/` の中は、`Ime/` (`ImeSession`。入力の判断を受け持ち、各 OS のフロントはこれを呼ぶ)、`Composition/` (変換ボックスの中身: 英語の区間の判定・変換の流れ・候補・文脈・学習・ユーザー辞書・もしかして)、`Detection/` (ローマ字・英語・辞書・かな・打ち間違いの判定)、`Input/` (キーの表し方・コードの行の判定)、`NowPlaying/` (再生中の曲を OS から読む)、`Config/`・`Diagnostics/` (設定・ログ) に分かれています。
+`src/Meltype.Core/` の中は、次のように分かれています。参照の向きは AGENTS.md の「構成」のとおりです。
+
+- `Ime/`: `ImeHost`・`ImeSession` (入力の判断を受け持ち、各 OS のフロントはこれを呼ぶ)・部品の組み立て (`MeltypeRuntime`)・コードの行の判定
+- `Composition/`: 変換ボックスの中身 (変換の流れ・候補・文脈・確定・学習の呼び出し)。`Composition/Utility/` はユーティリティ変換 (計算・日付・再生中の曲など)
+- `Detection/`: ローマ字・英語・辞書・かな・打ち間違いの判定と、英語か日本語かの学習
+- `Learning/`: 変換の学習と予測変換
+- `Engine/`: 変換エンジン (Mozc・Zenzai)
+- `Dictionary/`: ユーザー辞書・補助辞書・英訳・意味・もしかしての辞書・スニペット
+- `Libraries/Chars/`・`Libraries/Lexicon/`: どこからでも使う文字の判定と、同梱の辞書の読み込み
+- `Input/`・`Config/`・`Diagnostics/`: キーの表し方・設定・ログと誤判定の報告
 
 ## Windows でビルドして試す
 
@@ -37,10 +47,29 @@ powershell -ExecutionPolicy Bypass -File .\Install-Meltype.ps1
 
 必要なもの:
 
-- Windows 10 / 11 (x64 / ARM64)
+- Windows 10 / 11 (x64)、Windows 11 (ARM64)
 - .NET 10 SDK
 - Inno Setup 6 (インストーラーを作ります。無ければ Chocolatey で入れます)
-- Meltype IME も入れるときは、Visual Studio Build Tools の「C++ によるデスクトップ開発」(MSVC と Windows SDK)。無ければ Meltype IME を入れずに続けます (ARM64 では入れません)
+- Visual Studio (Build Tools でもよい) の「C++ によるデスクトップ開発」(Meltype IME の DLL を作ります)
+
+Meltype IME の DLL と、それに要る Visual Studio Installer の「個別のコンポーネント」:
+
+| 作るもの | 作る DLL | 要るコンポーネント |
+| --- | --- | --- |
+| x64 の PC で `Install-Meltype.ps1` | x64・x86 | MSVC x64/x86 ビルド ツール (最新)・Windows 11 SDK |
+| ARM64 の PC で `Install-Meltype.ps1` | ARM64X・x86 | 上に加えて MSVC ARM64/ARM64EC ビルド ツール (最新) |
+| 配布用のパッケージ (`Build-Package.ps1`) | x64・ARM64X・x86 (1 つでも失敗したら止まる) | ARM64 の PC と同じ |
+| ポータブル版 (`Build-Package.ps1 -Portable`) | 作らない | 要らない |
+
+`Install-Meltype.ps1 -NoIme` も DLL を作って入れます (`-NoIme` は Meltype IME を新しく登録しないだけで、登録済みなら更新し、アンインストールで外すため)。
+
+`native\tip\build.ps1` は、ARM64 のビルドツールを `vswhere` でコンポーネント ID `Microsoft.VisualStudio.Component.VC.Tools.ARM64` から探します。
+これは「(最新)」の付いたコンポーネントで、版の付いた ARM64 ビルドツール (「v14.xx」など) だけを入れていると見つかりません。
+「Visual Studio の C++ ビルドツールが見つかりません」と出たら、次で確かめてください (何も出なければ、上のコンポーネントを入れる)。
+
+```powershell
+& "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.ARM64 -property installationPath
+```
 
 ## Mac・Linux でビルドする
 
@@ -66,6 +95,7 @@ dotnet run --project src/Meltype.Core.Tests                 # すべてのテス
 dotnet run --project src/Meltype.Core.Tests -- --eval       # 品質テスト
 dotnet run --project src/Meltype.Core.Tests -- --version    # 版 (Meltype.Core)
 dotnet run --project src/Meltype.Core.Tests -- --repro kyouhagoogle enter   # 打ったときの見え方と確定の結果
+dotnet run --project src/Meltype.Core.Tests -- --repro 26niti space --learn "niti → （日）"  # 先に niti を （日） と確定して学習させてから打つ (--learn は 5 つまで)
 dotnet run --project src/Meltype.Core.Tests -- --mixed-bench out.json       # 日本語の文の中の英単語が正しく分かれるか (約 550 例)
 dotnet run --project src/Meltype.Core.Tests -- --expect src/Meltype.Core.Tests/data/issue-cases.tsv out.json  # 報告された誤変換 (MELTYPE_MOZC が要る)
 dotnet run -c Release --project src/Meltype.Core.Tests -- --perf perf.json  # 変換エンジンの遅延 (p95 / p99)・候補の数・控え・メモリ・正解率 (MELTYPE_MOZC が要る)
@@ -114,6 +144,8 @@ powershell -ExecutionPolicy Bypass -File .\Build-Package.ps1
 新規インストール・アプリ内の自動更新・winget・`Install-Meltype.ps1` は、どれもこのインストーラーで入れます。
 あわせて作る `Meltype-<版>-windows.zip` は、1.6.0 以前の Meltype の自動更新用です (インストーラーと、それを実行するだけの `install.ps1` が入っています)。
 
+漢字変換も確かめるときは、先に Mozc の変換ヘルパーを `native\mozc\bin\` に作っておきます ([native/mozc/README.md](../../native/mozc/README.md))。無ければ、かなのまま確定するパッケージになります。
+
 - .NET のランタイムを `app\dotnet` に同梱しているので、使う人の PC に .NET は要りません (`Meltype.exe` がそこを使う: `AppHostDotNetSearch=AppRelative`)
 - 小さくする (30MB 未満) ために、ランタイムから Meltype が使わない部品を削ります
   1. Meltype.dll が使う型から参照をたどり、要らないアセンブリを削る (`Meltype.Tests -- --runtime-closure`)
@@ -121,6 +153,15 @@ powershell -ExecutionPolicy Bypass -File .\Build-Package.ps1
   3. もう一度自己診断を走らせ、削りすぎていないことを確かめる (失敗したらインストーラーを作らない)
 - 自己診断は、設定・判定・辞書・変換エンジン・Windows の候補 API・UI Automation・各画面・タスクトレイ・データの保存を、キーボードフックを掛けずに一通り動かします
 - インストール先は `%LOCALAPPDATA%\Programs\Meltype` で、管理者権限は要りません。配布用のファイルの元は [packaging/](../../packaging/) にあります
+
+インストーラーや Meltype IME の登録を変えたときは、実機で次を確かめます。
+
+- 新しく入れる: Meltype IME の登録 (UAC)、メモ帳などでの入力と変換、Win + Space で Meltype を選べること
+- 前の版 (リリースの setup.exe) からの上書き更新:
+  - 更新の前から開いていたアプリで打てるか、再起動の案内が出るか
+  - 再起動したあとに、入力・変換ができ、設定と学習した辞書が引き継がれているか
+- アンインストール: Meltype IME の登録が外れ、`C:\Program Files\Meltype` が消えるか (使われていた DLL は再起動のあと)
+- ARM64 の PC では、ARM64 のアプリ (メモ帳など)・x64 のアプリ・32 ビットのアプリのそれぞれで打てるか
 
 ポータブル版は次で作れます。
 
@@ -152,7 +193,7 @@ tools/Scan-WindowsPackage.ps1 -Path @('dist/Meltype', 'dist/Meltype-<version>-se
 物理キー ─▶ KeyboardMonitor ─▶ KeyboardFront (変換ボックスが開いている間は、キーとクリックをすべて順番どおりに保留)
                                    │
                                    ▼ (UI スレッド。出来事を ImeHost に送り、確定・表示を受け取る)
-                    ImeSession ─▶ MeltypeSession ─▶ CompositionController ◀─ CompositionDetector (英語の区間の判定)
+                    ImeSession ─▶ CompositionController ◀─ CompositionDetector (英語の区間の判定)
                                    │                  HybridConverter (Mozc と Zenzai)
                                    │                  ContextRules / ConversionHistory / CandidateDictionary
                                    │                  FocusInspector (UI Automation: 入力欄か・カーソルの前後の文字)

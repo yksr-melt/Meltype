@@ -28,10 +28,7 @@ internal static class Program
 
         // フックを二重に掛けると同じ打鍵を二重に保留・再入力してしまうので、多重起動させない。
         using var mutex = new Mutex(initiallyOwned: true, @"Local\Meltype.SingleInstance", out var createdNew);
-        // Meltype.exe --restore <バックアップ>: 動いている Meltype が終わるのを待ってから、バックアップを戻して起動する
-        // (動いている Meltype が終わるときに学習データを書き戻すので、戻すのはその後)。
-        var restore = args.FirstOrDefault() == "--restore" ? args.ElementAtOrDefault(1) : null;
-        if (!createdNew && (restore is null || !WaitForExit(mutex))) return 0;
+        if (!createdNew) return 0;
 
         ApplicationConfiguration.Initialize();
         Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
@@ -41,7 +38,7 @@ internal static class Program
             Log.Error($"未処理の例外: {e.ExceptionObject}");
             Log.FlushFile();
             WriteCrashLog(e.ExceptionObject);
-            Composition.LearningSaves.FlushAll();
+            Config.LearningSaves.FlushAll();
         };
 
         if (!AppPaths.IsPortable) AppPaths.MigrateFromOldName();
@@ -56,7 +53,6 @@ internal static class Program
                 "Meltype", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return 1;
         }
-        if (restore is not null) RestoreBackup(restore);
         var state = AppState.Load(AppPaths.StateFile, AppPaths.ConfigFile);
         var settings = Settings.Load(AppPaths.ConfigFile);
         if (!File.Exists(AppPaths.ConfigFile))
@@ -69,13 +65,13 @@ internal static class Program
 
         // 学習データは確定のたびに書かず、少し後にまとめて書く。終了・ログオフのときに残りを書く
         // (更新の確認は学習データを別に読み込んで書くので、それより後で切り替える)
-        Composition.LearningSaves.Deferred = true;
-        Microsoft.Win32.SystemEvents.SessionEnding += (_, _) => Composition.LearningSaves.FlushAll();
+        Config.LearningSaves.Deferred = true;
+        Microsoft.Win32.SystemEvents.SessionEnding += (_, _) => Config.LearningSaves.FlushAll();
 
         MeltypeEngine engine;
         try
         {
-            engine = new MeltypeEngine(Composition.MeltypeRuntime.OpenDefault());
+            engine = new MeltypeEngine(Ime.MeltypeRuntime.OpenDefault());
             engine.Start();
         }
         catch (Exception ex)
@@ -93,7 +89,7 @@ internal static class Program
             using var exitSignal = new ExitSignal();
             Application.Run(new TrayApplicationContext(engine, state));
         }
-        Composition.LearningSaves.FlushAll();
+        Config.LearningSaves.FlushAll();
         return 0;
     }
 
@@ -112,39 +108,6 @@ internal static class Program
         catch
         {
             // 書けなくても、元の例外の処理を続ける
-        }
-    }
-
-    /// <summary>前の Meltype が終わる (単一起動の印が空く) のを待つ。</summary>
-    private static bool WaitForExit(Mutex mutex)
-    {
-        try
-        {
-            return mutex.WaitOne(TimeSpan.FromSeconds(15));
-        }
-        catch (AbandonedMutexException)
-        {
-            // 前の Meltype が印を返さずに終わった: 取れたことになる
-            return true;
-        }
-    }
-
-    private static void RestoreBackup(string path)
-    {
-        try
-        {
-            var count = Backup.Restore(File.ReadAllBytes(path), AppPaths.DataDirectory);
-            Log.Info($"バックアップから {count} 個のファイルを戻しました。");
-            MessageBox.Show($"バックアップを戻しました ({count} 個のファイル)。\n今までのファイルは、データフォルダーに .before-restore として残しています。", "Meltype",
-                MessageBoxButtons.OK, MessageBoxIcon.Information);
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"バックアップを戻せませんでした。\n\n{ex.Message}", "Meltype", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-        }
-        finally
-        {
-            try { File.Delete(path); } catch { }
         }
     }
 }

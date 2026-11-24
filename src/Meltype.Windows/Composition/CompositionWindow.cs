@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Yukishiro
 
 using System.Drawing.Drawing2D;
+using Meltype.Dictionary;
 
 namespace Meltype.Composition;
 
@@ -28,10 +29,16 @@ internal sealed class CompositionWindow : PopupForm
             Color.FromArgb(240, 242, 246), Color.FromArgb(30, 30, 30));
     }
 
-    /// <summary>色 (ライト / ダーク) と不透明度。変わったときだけ描き直す。</summary>
-    public void SetAppearance(bool light, double opacity)
+    /// <summary>
+    /// 色 (ライト / ダーク) と不透明度。変わったときだけ描き直す。
+    /// custom は「カスタム」の背景と文字の色。文字・案内・目印・下線はすべて文字の色で描く
+    /// (テーマの色を残すと、中間の明るさの背景で目印や案内が背景と同じ明るさになって見えなくなるため)。
+    /// </summary>
+    public void SetAppearance(bool light, double opacity, (Color Back, Color Text)? custom = null)
     {
         var palette = light ? Palette.Light : Palette.Dark;
+        if (custom is var (back, text))
+            palette = new(back, text, text, text, text, text, text, text, back, text);
         opacity = Math.Clamp(opacity, 0.3, 1.0);
         if (Math.Abs(Opacity - opacity) > 0.001)
         {
@@ -44,6 +51,7 @@ internal sealed class CompositionWindow : PopupForm
         _meaningPopup?.SetPalette(palette);
         Invalidate();
     }
+
 
     /// <summary>
     /// Windows の「既定のアプリ モード」がライトか (HKCU\...\Themes\Personalize の AppsUseLightTheme)。読めなければ null。

@@ -234,6 +234,54 @@ internal static class KanaLayoutTests
     }
 
     [Test]
+    public static void KanaLayout_NakayubiNicola_DoesNotRewriteEarlierText()
+    {
+        var k = Layout(KanaLayout.NakayubiNicola);
+        k.Key(0x4B);
+        k.Key(0x41);
+        k.Key(0x48);
+        k.Key(0x48, up: true);
+        k.Key(0x41, up: true);
+        k.Key(0x4B, up: true);
+        Assert.Equal("きうは", k.Showing);
+
+        // 先の文字が離された後でも、末尾以外に残った K の文字を削除しない。
+        var next = Layout(KanaLayout.NakayubiNicola);
+        next.Key(0x4B);
+        next.TypeKanaKeys("h");
+        next.TypeKanaKeys("a");
+        next.Key(0x4B, up: true);
+        Assert.Equal("きはを", next.Showing);
+    }
+
+    [Test]
+    public static void KanaLayout_HeldLetterRepeats()
+    {
+        foreach (var (layout, expected) in new[]
+        {
+            (KanaLayout.Nicola, "かかか"),
+            (KanaLayout.NakayubiNicola, "かかか"),
+            (KanaLayout.Tron, "るるる"),
+        })
+        {
+            var k = Layout(layout);
+            k.Key(0x57);
+            k.Key(0x57);
+            k.Key(0x57);
+            k.Key(0x57, up: true);
+            Assert.Equal(expected, k.Showing);
+        }
+        var shifted = Layout(KanaLayout.Nicola);
+        shifted.Key(Convert);
+        shifted.Key(0x57);
+        shifted.Key(0x57);
+        shifted.Key(0x57);
+        shifted.Key(0x57, up: true);
+        shifted.Key(Convert, up: true);
+        Assert.Equal("ががが", shifted.Showing);
+    }
+
+    [Test]
     public static void KanaLayout_Tron_ThumbShift()
     {
         // TRON: Q = ら、右親指 + Q = び、左親指 + F = よ
