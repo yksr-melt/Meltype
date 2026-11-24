@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 hisiragi
+// Copyright (C) 2026 Yukishiro
 //
 // Meltype Web Engine: ウェブページの入力欄で Meltype を使う。
 //   <script src="https://…/meltype.js"></script>
@@ -361,11 +361,13 @@
       collapsed: () => element.selectionStart === element.selectionEnd,
       caretRect: () => textCaretRect(element),
       // ワークアラウンド: Android の Firefox は inputmode="none" でも端末のキーボードを出すことがあるので、readonly でも止める
-      // (readonly でも、スクリプトからは書き込める)。readonly の欄はカーソルを出さないブラウザーが多いので、自分で描く
+      // (readonly でも、スクリプトからは書き込める)。readonly の欄はカーソルを出さないブラウザーが多いので、自分で描く。
+      // 返す物の restore() で、外すときに元に戻す
       suppressSystemKeyboard() {
+        const { inputMode, readOnly } = element;
         element.inputMode = "none";
         element.readOnly = true;
-        return true;
+        return { drawsCaret: true, restore: () => Object.assign(element, { inputMode, readOnly }) };
       },
     };
   }
@@ -424,8 +426,9 @@
       },
       // contenteditable は readonly にできない。inputmode="none" が効かないブラウザー (Android の Firefox) では端末のキーボードも出る
       suppressSystemKeyboard() {
+        const { inputMode } = element;
         element.inputMode = "none";
-        return false;
+        return { drawsCaret: false, restore: () => { element.inputMode = inputMode; } };
       },
     };
   }
@@ -661,7 +664,8 @@
 
   /** 指で操作する端末で、端末のキーボード (の IME) の代わりに、入力欄にフォーカスがある間だけ画面のキーボードを出す。 */
   function onScreenKeyboard(element, field) {
-    const target = { element, field, drawsCaret: field.suppressSystemKeyboard() };
+    const suppressed = field.suppressSystemKeyboard();
+    const target = { element, field, drawsCaret: suppressed.drawsCaret };
     const keys = sharedKeyboard();
     const redraw = () => active === target && keys.drawCaret();
     element.addEventListener("input", redraw);
@@ -676,6 +680,7 @@
       hide: () => keys.hide(target),
       remove() {
         keys.hide(target);
+        suppressed.restore();
         element.removeEventListener("input", redraw);
         element.removeEventListener("scroll", redraw);
       },

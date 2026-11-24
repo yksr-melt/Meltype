@@ -1,5 +1,5 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
-<!-- Copyright (C) 2026 hisiragi -->
+<!-- Copyright (C) 2026 Yukishiro -->
 <!doctype html>
 <html lang="ja">
 <head>
@@ -12,17 +12,53 @@
   <header>
     <img src="icons/icon-32.png" alt="" width="24" height="24">
     <h1>Meltype</h1>
+    <label class="switch" title="一時的にオン・オフする">
+      <input type="checkbox" role="switch" data-enabled aria-describedby="enabled-note">
+      <span class="switch-track" aria-hidden="true"></span>
+      <span class="sr-only">Meltype を使う</span>
+    </label>
   </header>
-  <p class="lead">ローマ字のまま打つと、日本語と英語を分けて変換します。入力欄を選ぶと使えます。</p>
-  <label class="toggle" hidden data-site-row>
-    <input type="checkbox" data-site-toggle>
-    <span><b data-site-name></b> で使う</span>
-  </label>
-  <p class="note" hidden data-site-note>このページでは使えません。</p>
-  <p class="warn" hidden data-blocked-note>このサイトは、セキュリティの設定 (CSP) で拡張機能の中の WebAssembly も止めているので、Meltype を動かせません。</p>
-  <p class="note" hidden data-reload-note>使わないにすると、すぐに外れます。使うにすると、次に入力欄を選んだときから使えます。</p>
-  <button type="button" data-clear>覚えたことを消す</button>
-  <p class="note" hidden data-cleared>消しました。開いているタブは、読み込み直すまで前に覚えたことを使います。</p>
+  <p class="note" id="enabled-note" data-enabled-note></p>
+
+  <section aria-labelledby="site-title">
+    <h2 id="site-title">このサイト</h2>
+    <label class="row" hidden data-site-row>
+      <input type="checkbox" data-site-toggle>
+      <span><b data-site-name></b> で使う</span>
+    </label>
+    <p class="note" hidden data-site-note>このページでは使えません (ブラウザーの画面・ストアのページ)。</p>
+    <p class="warn" hidden data-blocked-note>このサイトは、セキュリティの設定 (CSP) で拡張機能の中の WebAssembly も止めているので、Meltype を動かせません。</p>
+  </section>
+
+  <section aria-labelledby="excluded-title">
+    <h2 id="excluded-title">除外サイト</h2>
+    <ul class="sites" data-sites></ul>
+    <p class="note" hidden data-sites-empty>ありません。</p>
+    <form class="add" data-add>
+      <input type="text" placeholder="example.com" aria-label="除外するサイト" autocomplete="off" spellcheck="false" data-add-input>
+      <button type="submit">追加</button>
+    </form>
+    <p class="warn" hidden data-add-error></p>
+  </section>
+
+  <section aria-labelledby="shortcut-title">
+    <h2 id="shortcut-title">ショートカットキー</h2>
+    <p class="row-plain">オン・オフ: <kbd data-shortcut>なし</kbd></p>
+    <div class="buttons">
+      <button type="button" hidden data-record>キーを押して変える</button>
+      <button type="button" hidden data-reset>元に戻す</button>
+      <button type="button" hidden data-open-shortcuts>ブラウザーの設定で変える</button>
+    </div>
+    <p class="note" hidden data-record-note>変えたいキーを押してください (Ctrl か Alt と一緒に。Esc でやめる)。</p>
+    <p class="warn" hidden data-shortcut-error></p>
+  </section>
+
+  <section aria-labelledby="learning-title">
+    <h2 id="learning-title">覚えたこと</h2>
+    <button type="button" data-clear>覚えたことを消す</button>
+    <p class="note" hidden data-cleared>消しました。開いているタブは、読み込み直すまで前に覚えたことを使います。</p>
+  </section>
+
   <p class="note">判定も変換もブラウザーの中で動き、打った文字はどこにも送りません。</p>
 </body>
 </html>

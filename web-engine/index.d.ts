@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 hisiragi
+// Copyright (C) 2026 Yukishiro
 
 export interface LoadOptions {
   /** 本体 (_framework/・mozc/) を置いた場所。npm・<script> で読んだときは、そのファイルの隣を使うので要らない */

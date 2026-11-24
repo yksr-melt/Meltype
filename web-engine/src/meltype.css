@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
-/* Copyright (C) 2026 hisiragi */
+/* Copyright (C) 2026 Yukishiro */
 /*
  * Meltype Web Engine の見た目。エンジンが Shadow DOM (meltype-ui) の中にだけ当てるので、ページの CSS とは混ざらない。
  * 色と字は、ページで --meltype-* の変数を決めれば変えられる (Shadow DOM の中にも受け継がれる)。

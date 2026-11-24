@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 hisiragi
+// Copyright (C) 2026 Yukishiro
 //
 // どのページにも入れる小さなスクリプト。入力欄に初めてフォーカスしたときだけ、拡張機能の中の Web エンジン (engine/) を読み、
 // その入力欄に付ける (重いので、入力欄を使わないページでは読まない)。
@@ -18,6 +18,8 @@
   let cleared = false;
   const attachments = new Map();
   let disabledSites = [];
+  // 一時的にオフ (ショートカットキー・ポップアップ。background.js がブラウザーの起動でオンに戻す)
+  let paused = false;
 
   const storage = {
     get: async () => (await api.storage.local.get("learning")).learning ?? null,
@@ -38,7 +40,7 @@
   });
   let blocked = false;
 
-  const siteEnabled = () => !disabledSites.includes(location.hostname);
+  const siteEnabled = () => !paused && !disabledSites.includes(location.hostname);
 
   /** Meltype を付ける要素。contenteditable は、編集できる範囲のいちばん外側 */
   function target(element) {
@@ -51,9 +53,20 @@
   }
 
   async function onFocusIn(event) {
-    if (!siteEnabled() || blocked) return;
     // Shadow DOM の中の入力欄もある
-    const element = target(event.composedPath()[0]);
+    await attachTo(event.composedPath()[0]);
+  }
+
+  /** フォーカスのある要素 (Shadow DOM の中まで) */
+  function focusedElement() {
+    let element = document.activeElement;
+    while (element?.shadowRoot?.activeElement) element = element.shadowRoot.activeElement;
+    return element;
+  }
+
+  async function attachTo(candidate) {
+    if (!siteEnabled() || blocked) return;
+    const element = target(candidate);
     if (!element || attachments.has(element)) return;
     attachments.set(element, null);
     try {
@@ -70,14 +83,18 @@
     attachments.clear();
   }
 
-  api.storage.local.get("disabledSites").then((value) => {
+  api.storage.local.get(["disabledSites", "paused"]).then((value) => {
     disabledSites = value.disabledSites ?? [];
+    paused = value.paused === true;
   });
   api.storage.onChanged.addListener((changes, area) => {
     if (area !== "local") return;
-    if (changes.disabledSites) {
-      disabledSites = changes.disabledSites.newValue ?? [];
-      if (!siteEnabled()) detachAll();
+    if (changes.disabledSites || changes.paused) {
+      if (changes.disabledSites) disabledSites = changes.disabledSites.newValue ?? [];
+      if (changes.paused) paused = changes.paused.newValue === true;
+      // オフにしたらすぐ外し、オンにしたら今選んでいる入力欄にすぐ付ける
+      if (siteEnabled()) attachTo(focusedElement());
+      else detachAll();
     }
     if (changes.learning && changes.learning.newValue === undefined) cleared = true;
   });

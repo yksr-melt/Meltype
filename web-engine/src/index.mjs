@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 hisiragi
+// Copyright (C) 2026 Yukishiro
 //
 // ES モジュールで読むとき (npm・<script type="module">) の入り口。中身は meltype.js と同じ。
 //   import { attach } from "meltype-web-engine";

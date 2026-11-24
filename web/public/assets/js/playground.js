@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 hisiragi
+// Copyright (C) 2026 Yukishiro
 
 // /playground/: ブラウザー版の Meltype (web-ime/) を入力欄に付ける。
 // 本体 (meltype-web.js・Core・Mozc) は npm run playground が public/playground/engine/ に作る (コミットしない)。

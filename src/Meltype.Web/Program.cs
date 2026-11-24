@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 hisiragi
+// Copyright (C) 2026 Yukishiro
 
 using System.Runtime.InteropServices.JavaScript;
 using System.Runtime.Versioning;

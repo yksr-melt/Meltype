@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 hisiragi
+// Copyright (C) 2026 Yukishiro
 //
 // ブラウザー版 (web-ime/) の Mozc。meltype_mozc_helper と同じ要求 1 行を、標準入出力ではなく関数で受けて答える。
 //   meltype_mozc_request("C\t前の文字列\t読み") → 答えの 1 行 (次の呼び出しまで有効)

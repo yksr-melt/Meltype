@@ -1,6 +1,6 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 hisiragi
+# Copyright (C) 2026 Yukishiro
 #
 # Meltype Web Engine を web-engine/dist/ に作る。dist/ がそのまま npm のパッケージで、<script> で読むときも dist/ を置けばよい。
 #   web-engine/build.sh

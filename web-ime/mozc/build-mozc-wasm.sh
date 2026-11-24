@@ -1,6 +1,6 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 hisiragi
+# Copyright (C) 2026 Yukishiro
 #
 # ブラウザー版 (web-ime/) の Mozc を WebAssembly にして、web-ime/mozc/out/ (mozc.js・mozc.wasm) に置く。
 #   web-ime/mozc/build-mozc-wasm.sh [Mozc を置く場所 (既定: ~/mozc-wasm)]

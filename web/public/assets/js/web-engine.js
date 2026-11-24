@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 hisiragi
+// Copyright (C) 2026 Yukishiro
 
 // /web-engine/: Web エンジンの紹介とデモ。
 // デモのエンジン (web-engine/dist/) は npm run web-engine が public/web-engine/engine/ に写す (コミットしない)。

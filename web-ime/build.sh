@@ -1,6 +1,6 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 hisiragi
+# Copyright (C) 2026 Yukishiro
 #
 # ブラウザー版を作る。出力先のフォルダーを静的なサイトに置き、meltype-web.js を読み込む。
 #   web-ime/build.sh [出力先 (既定: web-ime/dist)]
