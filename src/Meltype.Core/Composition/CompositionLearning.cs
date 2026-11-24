@@ -57,9 +57,7 @@ internal sealed partial class CompositionLearning(CompositionServices services, 
         }
         LearnConversion(clauses, before);
         if (services.History is not { } history) return;
-        // 1 文字の読み (き → 記) を覚えると、関係ない変換 (き + ごうとう) まで巻き込むので 2 文字以上だけ。
-        // ただし数字・記号の 1 文字 (1 → ①、( → （) は、かなの途中に巻き込まれないので覚える (issue #672)。
-        foreach (var clause in clauses.Where(c => !c.IsEnglish && c.Changed && (c.Reading.Length >= 2 || c.Reading.Length == 1 && c.Reading[0] is < 'ぁ' or > 'ヿ' && !char.IsAsciiLetter(c.Reading[0]))))
+        foreach (var clause in clauses.Where(c => !c.IsEnglish && c.Changed && ConversionHistory.IsLearnableReading(c.Reading)))
         {
             // 打ったままの英字を選んだのは、上で英語として覚えた。
             if (clause.Text == clause.Raw) continue;
