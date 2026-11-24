@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Yukishiro
+// Copyright (C) 2026 hisiragi
 //
 // どのページにも入れる小さなスクリプト。入力欄に初めてフォーカスしたときだけ、拡張機能の中の Web エンジン (engine/) を読み、
 // その入力欄に付ける (重いので、入力欄を使わないページでは読まない)。
@@ -12,8 +12,9 @@
   "use strict";
 
   const api = globalThis.browser ?? globalThis.chrome;
-  // 付ける <input> の種類。メールアドレス・数字・パスワードなどは Meltype の出番がない
-  const TEXT_INPUT_TYPES = new Set(["text", "search", ""]);
+  // 付ける <input> の種類 (Web エンジンが付ける種類と同じ。type が無いものは text)。
+  // エンジンも同じ種類にだけ付けるが、ほかの種類の入力欄ではエンジンを読み込まないように、ここでも分ける
+  const TEXT_INPUT_TYPES = new Set(["text", "search", "url", "tel"]);
 
   let enginePromise = null;
   const attachments = new Map();
@@ -74,9 +75,13 @@
       if (error) call?.reject(new Error(error));
       else call?.resolve(result);
     });
+    // 拡張機能を更新・再読み込みすると切れ、つなぎ直せない (このスクリプトも古いまま残る)。
+    // 入力欄から外し、このページを読み直すまでキーを受け取らない
     port.onDisconnect.addListener(() => {
       for (const call of calls.values()) call.reject(new Error("Meltype の本体とのつながりが切れました"));
       calls.clear();
+      blocked = true;
+      detachAll();
     });
     const call = (op, args = {}) => new Promise((resolve, reject) => {
       const id = nextId++;
@@ -88,12 +93,12 @@
       version,
       mozc,
       create: () => call("create"),
+      destroy: (host) => call("destroy", { host }),
       handle: (host, json) => call("handle", { host, json }),
       onReady(listener) {
         listeners.add(listener);
         return () => listeners.delete(listener);
       },
-      clearLearning: () => globalThis.meltypeLearningStorage.clear(),
     };
   }
 
@@ -102,7 +107,7 @@
   /** Meltype を付ける要素。contenteditable は、編集できる範囲のいちばん外側 */
   function target(element) {
     if (element instanceof HTMLTextAreaElement) return element.readOnly || element.disabled ? null : element;
-    if (element instanceof HTMLInputElement) return TEXT_INPUT_TYPES.has(element.getAttribute("type")?.toLowerCase() ?? "") && !element.readOnly && !element.disabled ? element : null;
+    if (element instanceof HTMLInputElement) return TEXT_INPUT_TYPES.has(element.type) && !element.readOnly && !element.disabled ? element : null;
     if (!element?.isContentEditable) return null;
     let host = element;
     while (host.parentElement?.isContentEditable) host = host.parentElement;

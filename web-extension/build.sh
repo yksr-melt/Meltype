@@ -1,6 +1,6 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 Yukishiro
+# Copyright (C) 2026 hisiragi
 #
 # ブラウザーの拡張機能 (Chrome・Edge・Firefox) を web-extension/dist/ に作り、web-extension/meltype-extension.zip にまとめる。
 #   web-extension/build.sh

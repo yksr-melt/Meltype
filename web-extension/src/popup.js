@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Yukishiro
+// Copyright (C) 2026 hisiragi
 //
 // ツールバーのボタンを押すと出る画面: 一時的なオン・オフ、このサイトで使うか、除外サイトの一覧、ショートカットキー、覚えたことを消す。
 // 設定は storage.local の paused (一時的にオフ) と disabledSites (使わないサイトのホスト名の一覧) にだけ置く。
@@ -190,6 +190,7 @@ function setUpShortcut() {
 
 // ---- 覚えたこと ----
 
+// 消したことは、Web エンジンを読み込んでいるタブに storage.onChanged で届き (storage.js)、それぞれが覚えたことを消す
 $("[data-clear]").addEventListener("click", async () => {
   await api.storage.local.remove("learning");
   $("[data-cleared]").hidden = false;

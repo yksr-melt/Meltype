@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Yukishiro
+// Copyright (C) 2026 hisiragi
 //
 // 拡張機能の裏のスクリプト。ショートカットキー (commands の toggle-meltype) で一時的にオン・オフし、オフの間はボタンに「OFF」と出す。
 // 一時的なオフ (storage.local の paused) は、ブラウザーを起動し直すとオンに戻す (戻し忘れて、ずっと使えないままにならないように)。
