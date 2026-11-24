@@ -257,3 +257,17 @@ exe
 
 # Issue #1365・#1391・#1426・#1377・#1158: 英語で打つことの多い語 (metadata・megatrends・pre・beep・eq)
 metadata mega pre beep eq
+# Issue #1607・#1557・#1556・#1487・#1625・#1389: 英字のまま打つ語 (colab・qwen・quickshare・alma・プリプロセッサ指令・inotify)
+colab
+qwen
+quickshare
+alma
+undef
+ifndef
+elifndef
+include
+pragma
+inotify
+# Issue #1390: stat・stats (statsuruno → statするの のように英字のまま打つ語)
+stat
+stats

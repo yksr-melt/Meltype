@@ -8,10 +8,11 @@ namespace Meltype.Tests;
 
 internal static class TestSupport
 {
-    /// <summary>英単語の判定に使うスペルチェッカー (Windows のテストランナーが Windows のものを入れる。無ければ同梱の辞書だけ)。</summary>
-    public static IWordChecker? WordChecker { get; set; }
-
     public static Settings DefaultSettings() => new Settings().Normalize();
+
+    /// <summary>入力中の文字列の処理 (<see cref="Composition.CompositionText"/>) に渡すもの。判定器 detector と、偽の変換エンジン・設定 (無ければ既定)。</summary>
+    public static Composition.CompositionEnv Env(Detection.CompositionDetector detector, Settings? settings = null) =>
+        new(detector, new CompositionTests.FakeConverter(), new Composition.CompositionServices(), settings ?? new Settings()) { Context = () => Composition.TextContext.None };
 
     public static ScoreEngine CreateEngine(Settings? settings = null)
     {

@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Meltype.Core を C の関数で呼べるようにするライブラリ。Mac・Linux・Android 版の IME が読み込む。
+    NativeAOT の共有ライブラリにする (mac/build.sh・native/build-core-linux.sh・android/tools/build-meltype-native.sh):
+      dotnet publish src/Meltype.Core.CApi -c Release -r osx-arm64 -p:PublishAot=true -p:NativeLib=Shared
+    PublishAot はここには書かない (書くと Windows でのふつうのビルドでも NuGet から AOT のコンパイラを取りに行くため)。
+    IsAotCompatible も同じ理由で書かない (NuGet から trim・AOT のアナライザーを取りに行く)。.github/workflows/lint.yml が付けてビルドする。
+  -->
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AssemblyName>MeltypeNative</AssemblyName>
+    <RootNamespace>Meltype.CApi</RootNamespace>
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Meltype.Core\Meltype.Core.csproj" />
+  </ItemGroup>
+  <!-- Linux-bionic .so needs a stable SONAME. macOS clang does not support
+       ELF-specific SONAME and hash-style linker flags. Do not affect osx-arm64. -->
+  <ItemGroup Condition="'$(RuntimeIdentifier)' == 'linux-bionic-arm64' Or '$(RuntimeIdentifier)' == 'linux-bionic-x64'">
+    <LinkerArg Include="-Wl,-soname,libMeltypeNative.so" />
+    <LinkerArg Include="-Wl,--hash-style=both" />
+  </ItemGroup>
+</Project>

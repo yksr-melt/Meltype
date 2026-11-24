@@ -1,0 +1,113 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Yukishiro
+
+using Meltype.Config;
+using Meltype.Diagnostics;
+using Meltype.UI;
+
+namespace Meltype;
+
+internal static class Program
+{
+    [STAThread]
+    private static int Main(string[] args)
+    {
+        // Meltype.exe --version: 版だけを出して終わる (フック・UI は起動しない)。
+        // WinExe はコンソールを持たないので、親ターミナル (cmd / PowerShell) に付け直してから書く。
+        if (args.FirstOrDefault() == "--version")
+        {
+            Native.AttachConsole(0xFFFFFFFF);
+            using var writer = new StreamWriter(Console.OpenStandardOutput()) { AutoFlush = true };
+            writer.WriteLine($"Meltype {AppInfo.Version}");
+            return 0;
+        }
+        // Meltype.exe --selftest [結果ファイル]: キーボードフックを掛けずに、主な機能が動くかだけを確かめる。
+        if (args.FirstOrDefault() == "--selftest") return SelfTest.Run(args.ElementAtOrDefault(1));
+        // Meltype.exe --exit: 動いている Meltype を終了させる (インストール・アンインストール用。管理者として動いていても止められる)。
+        if (args.FirstOrDefault() == "--exit") return ExitSignal.Send() ? 0 : 1;
+
+        // フックを二重に掛けると同じ打鍵を二重に保留・再入力してしまうので、多重起動させない。
+        using var mutex = new Mutex(initiallyOwned: true, @"Local\Meltype.SingleInstance", out var createdNew);
+        if (!createdNew) return 0;
+
+        ApplicationConfiguration.Initialize();
+        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+        Application.ThreadException += (_, e) => Log.Error($"UI で例外: {e.Exception}");
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+        {
+            Log.Error($"未処理の例外: {e.ExceptionObject}");
+            Log.FlushFile();
+            WriteCrashLog(e.ExceptionObject);
+            Config.LearningSaves.FlushAll();
+        };
+
+        if (!AppPaths.IsPortable) AppPaths.MigrateFromOldName();
+        try
+        {
+            Directory.CreateDirectory(AppPaths.DataDirectory);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"データ保存先を作成できませんでした。保存先に書き込めることを確認してください。\n\n{AppPaths.DataDirectory}\n\n{ex.Message}",
+                "Meltype", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return 1;
+        }
+        var state = AppState.Load(AppPaths.StateFile, AppPaths.ConfigFile);
+        var settings = Settings.Load(AppPaths.ConfigFile);
+        if (!File.Exists(AppPaths.ConfigFile))
+        {
+            try { settings.Save(AppPaths.ConfigFile); } catch { }
+        }
+
+        // ダウンロード済みの新しい版があれば、起動せずに更新する (インストーラーが新しい版を起動する)。
+        if (!AppPaths.IsPortable && Updater.ApplyStagedAtStartup(() => settings.AutoUpdate, settings.UpdatePrerelease)) return 0;
+
+        // 学習データは確定のたびに書かず、少し後にまとめて書く。終了・ログオフのときに残りを書く
+        // (更新の確認は学習データを別に読み込んで書くので、それより後で切り替える)
+        Config.LearningSaves.Deferred = true;
+        Microsoft.Win32.SystemEvents.SessionEnding += (_, _) => Config.LearningSaves.FlushAll();
+
+        MeltypeEngine engine;
+        try
+        {
+            engine = new MeltypeEngine(Ime.MeltypeRuntime.OpenDefault());
+            engine.Start();
+        }
+        catch (Exception ex)
+        {
+            WriteCrashLog(ex);
+            MessageBox.Show($"Meltype を開始できませんでした。\n\n{ex.Message}\n\n詳しい内容: {AppPaths.CrashLogFile}", "Meltype", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return 1;
+        }
+
+        // スタートアップのフォルダー・Run の登録 (サインインの後、遅れて起動する) を、すぐ起動するタスクに移す (#283)
+        if (!AppPaths.IsPortable) ThreadPool.QueueUserWorkItem(_ => Startup.MigrateToTask());
+
+        using (engine)
+        {
+            using var exitSignal = new ExitSignal();
+            Application.Run(new TrayApplicationContext(engine, state));
+        }
+        Config.LearningSaves.FlushAll();
+        return 0;
+    }
+
+    /// <summary>
+    /// 落ちたとき (起動できなかったとき) の例外を crash.log に書き足す。ファイルへのログ (設定) が OFF でも書く:
+    /// 起動直後に落ちる報告で、原因の手がかりが何も残っていなかった。打った文字は含まない (例外の種類と場所だけ)。
+    /// </summary>
+    private static void WriteCrashLog(object exception)
+    {
+        try
+        {
+            Directory.CreateDirectory(AppPaths.DataDirectory);
+            File.AppendAllText(AppPaths.CrashLogFile,
+                $"==== {DateTime.Now:yyyy-MM-dd HH:mm:ss} Meltype {AppInfo.Version} / {Environment.OSVersion} ====\n{exception}\n\n");
+        }
+        catch
+        {
+            // 書けなくても、元の例外の処理を続ける
+        }
+    }
+}

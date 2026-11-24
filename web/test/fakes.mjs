@@ -4,7 +4,6 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 
-const MIGRATIONS = new URL("../migrations/", import.meta.url);
 
 class Statement {
   constructor(db, sql, args = []) {
@@ -37,11 +36,13 @@ class Statement {
 }
 
 export class FakeD1 {
-  constructor() {
+  // dir はマイグレーションのフォルダー (報告は migrations、タイピング調査は migrations-typing)
+  constructor(dir = "migrations") {
+    const migrations = new URL(`../${dir}/`, import.meta.url);
     this.db = new DatabaseSync(":memory:");
     this.db.exec("PRAGMA foreign_keys = ON");
-    for (const name of readdirSync(MIGRATIONS).filter((n) => n.endsWith(".sql")).sort()) {
-      this.db.exec(readFileSync(new URL(name, MIGRATIONS), "utf8"));
+    for (const name of readdirSync(migrations).filter((n) => n.endsWith(".sql")).sort()) {
+      this.db.exec(readFileSync(new URL(name, migrations), "utf8"));
     }
   }
 

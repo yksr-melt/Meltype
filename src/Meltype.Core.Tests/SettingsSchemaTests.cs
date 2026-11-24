@@ -3,8 +3,8 @@
 
 using System.Reflection;
 using System.Text.Json.Nodes;
-using Meltype.Composition;
 using Meltype.Config;
+using Meltype.Ime;
 
 namespace Meltype.Tests;
 
@@ -21,18 +21,25 @@ internal static class SettingsSchemaTests
         Assert.Equal("句読点", properties["Punctuation"]!["title"]?.GetValue<string>(), "設定画面の名前を title に出す");
         Assert.True(properties["AutoDetection"]!["description"]?.GetValue<string>().Length > 0, "設定画面の説明を description に出す");
         Assert.Equal("Japanese", properties["Punctuation"]!["default"]?.GetValue<string>(), "既定値を default に出す");
-        Assert.Equal("3. 判定", properties["AutoDetection"]!["x-category"]?.GetValue<string>(), "設定画面の分類を x-category に出す");
+        Assert.Equal("4. 判定", properties["AutoDetection"]!["x-category"]?.GetValue<string>(), "設定画面の分類を x-category に出す");
         string Platforms(string key) => string.Join(",", properties[key]!["x-platforms"]!.AsArray().Select(n => n!.GetValue<string>()));
         Assert.Equal("Windows", Platforms("CompositionTheme"), "一部の OS でしか使わない項目に、使う OS を x-platforms に出す");
-        Assert.Equal("Windows,Mac", Platforms("UseZenzai"));
         Assert.True(properties["AutoDetection"]!["x-platforms"] is null, "どの OS でも使う項目には出さない");
         // 独自の JsonConverter を付けた列挙型も、選択肢が出る
         Assert.Equal("Keyboard,Tsf", string.Join(",", properties["Mode"]!["enum"]!.AsArray().Select(n => n!.GetValue<string>())));
         Assert.Equal("Romaji,Kana", string.Join(",", properties["InputStyle"]!["enum"]!.AsArray().Select(n => n!.GetValue<string>())));
         Assert.Equal("、。", properties["Punctuation"]!["enumDescriptions"]![0]?.GetValue<string>(), "選択肢の説明を出す");
         Assert.True(properties["CompositionFont"]!["description"]!.GetValue<string>().StartsWith("Windows のみ。", StringComparison.Ordinal), "一部の OS でしか使わない項目は、使う OS を説明の先頭に書く");
-        Assert.True(properties["UseZenzai"]!["description"]!.GetValue<string>().StartsWith("Windows・Mac のみ。", StringComparison.Ordinal), "OS が複数なら・でつなぐ");
         Assert.True(!properties["Punctuation"]!["description"]!.GetValue<string>().Contains("のみ。"), "どの OS でも使う項目には書かない");
+    }
+
+    [Test]
+    public static void PlatformNote_JoinsPlatforms()
+    {
+        // 今の Settings には OS が複数の項目が無いので、組を直接渡す
+        var platforms = SettingsSchema.PlatformNames(Platform.Windows | Platform.Mac);
+        Assert.Equal("Windows,Mac", string.Join(",", platforms), "x-platforms に使う OS をすべて出す");
+        Assert.Equal("Windows・Mac のみ。", SettingsSchema.PlatformNote(platforms), "OS が複数なら・でつなぐ");
     }
 
     [Test]
@@ -66,13 +73,13 @@ internal static class SettingsSchemaTests
     }
 
     [Test]
-    public static void MeltypeSession_WritesSchemaNextToConfig()
+    public static void Runtime_WritesSchemaNextToConfig()
     {
         var directory = Path.Combine(Path.GetTempPath(), "meltype-settings-schema-" + Guid.NewGuid().ToString("N"));
         try
         {
-            MeltypeSession.CreateDefault(directory, new CompositionTests.FakeConverter(), null, null);
-            Assert.Equal(SettingsSchema.Create(), File.ReadAllText(Path.Combine(directory, SettingsSchema.FileName)), "Mac・Linux 版は config.json の隣に schema を書く");
+            new MeltypeRuntime(directory).Dispose();
+            Assert.Equal(SettingsSchema.Create(), File.ReadAllText(Path.Combine(directory, SettingsSchema.FileName)), "config.json の隣に schema を書く");
         }
         finally { Directory.Delete(directory, recursive: true); }
     }

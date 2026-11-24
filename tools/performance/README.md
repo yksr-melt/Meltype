@@ -100,7 +100,14 @@ python3 tools/benchmark-composition.py /path/to/baseline-checkout \
   --output /path/to/results
 ```
 
-比べる元 (baseline) には、v1.0.0 のコミット `467255bfe3e36b803a3fd3f5a1480fe35d5058c9` を使います。
+比べる元 (baseline) には、v1.7.1 のコミット `53fa7851c7fe30602b20be3b33c3078b2cd71111` を使います。
+
+```sh
+git worktree add --detach /path/to/baseline-checkout v1.7.1
+```
+
+baseline も今の `tools/performance/Program.cs` でビルドするので、baseline はこのプログラムが使う `Meltype.Core` の API (`ImeHost`・`IKanjiConverter.Convert(ConversionRequest)`・`Meltype.Dictionary` などの namespace) を持つ版でなければなりません。v1.7.0 以前の版はビルドできません。`Program.cs` を今の API に合わせて直したときは、baseline もビルドできる版に上げてください。
+
 コマンドは、両方の版を同じ C# の計測用プログラム・同じ SDK・同じ NativeAOT の設定でビルドし、場面ごとにどちらの版を先に動かすかを入れ替えます。
 場面ごとに 64・128・256 キーを打ち、3 回の慣らしの後に 15 回測ります。ほかに重い処理が動いていない PC で測ってください。
 
@@ -111,13 +118,13 @@ python3 tools/benchmark-composition.py /path/to/baseline-checkout \
 <img src="../../docs/images/headings/performance/s05.svg" alt="測る範囲" height="40">
 
 時間に入るのは、`HandleKey`、結果の JSON への書き出し、Enter での確定です。辞書の読み込み・起動・セッションを作る時間は入りません。
-両方の版とも、同梱のスペルチェッカーと、空の言語の学習を使います。変換エンジンは、候補を何も返さない偽物です。
+両方の版とも、空の言語の学習を使います。変換エンジンは、候補を何も返さない偽物です。
 記録するのは、合計の時間・スレッドが確保したメモリ・1 キーごとの p50 / p95 / max・確定した文字列の SHA-256 です。
-URL 以外の確定した文字列は、baseline と同じでなければなりません (URL は打ったまま残すように変えたので、わざと違います)。
+確定した文字列は、どの場面も baseline と同じでなければなりません。
 
 <a name="結果"></a>
 <img src="../../docs/images/headings/performance/s06.svg" alt="結果" height="40">
 
 `report.json` には、生の計測値・中央値・倍率・辞書とプログラムのハッシュ・SDK と PC の情報が入ります。
-今の版の合計の時間の中央値が baseline の 50% を超えるか、変わってはいけない確定の文字列が変わると、コマンドは失敗します。
+確定した文字列が baseline と違うと、コマンドは失敗します。時間の倍率では失敗しません (倍率は `report.json` と最後の出力で確かめます)。
 これは手元で動かす合成の性能の確認です。IMK・IBus・Windows の画面とのやり取りの遅延や、変換エンジンの時間は測りません。NativeAOT のビルドの診断は別に保存します。

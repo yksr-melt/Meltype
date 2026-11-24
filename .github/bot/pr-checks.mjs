@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Yukishiro
 //
 // Pull Request のチェック (.github/workflows/core.yml・pr-expectations.yml) の補助。結果は GitHub の「Summary」に表で出す。
-//   node pr-checks.mjs cases <出力ファイル>        … Pull Request の「確かめること」から、確かめる例を集める
+//   node pr-checks.mjs cases <出力ファイル>        … Pull Request の「期待する打鍵と変換」から、確かめる例を集める
 //   node pr-checks.mjs expect <結果の JSON>        … 例の結果を表にし、外れがあれば失敗
 //   node pr-checks.mjs compare <main の JSON> <Pull Request の JSON>  … 品質テストを比べ、新しく外れた例があれば失敗
 //   node pr-checks.mjs impact <main の一覧> <Pull Request の一覧> [全件の出力]  … よく使う語の判定 (--judge-corpus) を比べ、変わった語を出す (失敗にはしない)
@@ -17,8 +17,10 @@ function cases(output) {
   const body = event.pull_request?.body ?? '';
   const list = [];
 
-  // 「## 確かめること」の下の「入力 → 期待」の行
-  const section = body.split(/^##\s*確かめること\s*$/m)[1]?.split(/^##\s/m)[0] ?? '';
+  // 「## 期待する打鍵と変換」の下の「入力 → 期待」の行
+  // 「## 確かめること」は改名前の見出し (#2165)。改名前に開いた PR の本文がこの見出しのままなので、
+  // 読まないと例が 0 個になり、確かめずに成功する。開いている PR の本文を書き換え終えたら消す
+  const section = body.split(/^##\s*(?:期待する打鍵と変換|確かめること)\s*$/m)[1]?.split(/^##\s/m)[0] ?? '';
   for (const line of section.split('\n')) {
     const match = line.replace(/^\s*[-*]\s*/, '').match(/^(.+?)\s*(?:→|->)\s*(.+)$/);
     if (!match || line.trim().startsWith('<!--')) continue;
@@ -33,10 +35,15 @@ function cases(output) {
 function expect(resultFile) {
   const results = JSON.parse(fs.readFileSync(resultFile, 'utf8'));
   const failed = results.filter(r => !r.ok).length;
-  summary(`## 確かめることの再現 ${failed === 0 ? '✅' : '❌'}\n`);
+  summary(`## 期待する打鍵と変換の再現 ${failed === 0 ? '✅' : '❌'}\n`);
   summary('| | 入力 | 期待 | Pull Request の結果 | 比べ方 |\n|---|---|---|---|---|');
   results.forEach(r => summary(`| ${r.ok ? '✅' : '❌'} | ${code(r.typed)} | ${cell(r.expected)} | ${cell(r.actual)} | ${cell(r.kind)} |`));
   if (failed > 0) {
+    // 本文由来の値を含むので、行頭を ❌ にして改行を消し、ワークフローコマンド (::…) として読まれないようにする
+    const line = text => String(text ?? '').replace(/\r\n|[\r\n]/g, ' ');
+    for (const r of results.filter(r => !r.ok)) {
+      console.error(line(`❌ ${r.typed} → 期待: ${r.expected} / 結果: ${r.actual} (${r.kind})`));
+    }
     console.error(`${failed} 個の例が期待どおりになりませんでした`);
     process.exitCode = 1;
   }
@@ -44,8 +51,9 @@ function expect(resultFile) {
 
 function compare(baseFile, prFile) {
   const pr = JSON.parse(fs.readFileSync(prFile, 'utf8'));
-  let base = null;
-  try { base = JSON.parse(fs.readFileSync(baseFile, 'utf8')); } catch { /* main に --eval-json がまだ無いか、main をビルドできない */ }
+  // ファイルが無いのは main をビルドできなかったときだけ (core.yml)。壊れた JSON などは失敗にする (#1842)
+  const baseText = readIfExists(baseFile);
+  const base = baseText === null ? null : JSON.parse(baseText);
   const baseCases = new Map((base?.cases ?? []).map(c => [c.key, c]));
   const broken = pr.cases.filter(c => !c.ok && baseCases.get(c.key)?.ok === true);
   const fixed = pr.cases.filter(c => c.ok && baseCases.get(c.key)?.ok === false);
@@ -72,10 +80,20 @@ function compare(baseFile, prFile) {
   }
 }
 
+/** ファイルを読む。無いときだけ null (ほかの読めない理由は例外のまま気付けるようにする)。 */
+function readIfExists(file) {
+  try {
+    return fs.readFileSync(file, 'utf8');
+  } catch (e) {
+    if (e.code === 'ENOENT') return null;
+    throw e;
+  }
+}
+
 /** 「語[Tab]見え方」の行を読む (無ければ null)。 */
 function readJudged(file) {
-  let text;
-  try { text = fs.readFileSync(file, 'utf8'); } catch { return null; }
+  const text = readIfExists(file);
+  if (text === null) return null;
   const map = new Map();
   for (const line of text.split('\n')) {
     const tab = line.indexOf('\t');
@@ -95,10 +113,12 @@ function judgedChanges(base, pr) {
 }
 
 function impact(baseFile, prFile, allFile) {
+  // Pull Request の一覧はいつも作るので、無ければ異常として失敗にする。無くてよいのは main の一覧だけ (main をビルドできないとき)
   const pr = readJudged(prFile), base = readJudged(baseFile);
+  if (!pr) throw new Error(`Pull Request の一覧がありません: ${prFile}`);
   summary('## よく使う語の判定の変化 (参考)\n');
-  if (!pr || !base) {
-    summary('main にまだこの仕組みが無いか、main をビルドできないため、比べられません。');
+  if (!base) {
+    summary('main をビルドできないため、比べられません。');
     return;
   }
   const changes = judgedChanges(base, pr);
@@ -123,3 +143,5 @@ if (mode === 'cases') cases(a);
 else if (mode === 'expect') expect(a);
 else if (mode === 'compare') compare(a, b);
 else if (mode === 'impact') impact(a, b, process.argv[5]);
+// 知らないモードを何もせずに成功にしない (#1842)
+else throw new Error(`知らないモードです: ${mode}`);

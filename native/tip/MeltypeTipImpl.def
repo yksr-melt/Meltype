@@ -1,0 +1,4 @@
+LIBRARY MeltypeTipImpl
+EXPORTS
+    MeltypeTipAbi
+    MeltypeTipCreate

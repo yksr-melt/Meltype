@@ -18,7 +18,7 @@ namespace Meltype.Config;
 /// Linux 版の設定画面 (linux/meltype-settings) も、この schema から画面を組み立てる。
 /// Settings の型と、設定画面に出す名前・説明・分類 (DisplayName・Description・Category) から、起動のたびに作る。
 /// </summary>
-public static class SettingsSchema
+internal static class SettingsSchema
 {
     public const string FileName = "config.schema.json";
 
@@ -46,14 +46,14 @@ public static class SettingsSchema
             if (File.Exists(path) && File.ReadAllText(path) == json) return;
             DataFile.Write(path, temp => File.WriteAllText(temp, json));
         }
-        catch (Exception ex)
+        catch (Exception ex) when (DataFile.IsFileError(ex))
         {
             Diagnostics.Log.Warn($"{FileName} を書けませんでした: {ex.Message}");
         }
     }
 
     // 選択肢の説明 (列挙型のフィールドの Description) は reflection で読む。Mac・Linux 版 (NativeAOT) では Meltype.Core の型を削らない
-    // (Meltype.Mac.Native.csproj の TrimmerRootAssembly) ので読める。削られても説明が空になるだけで、選択肢の名前は Enum.GetNames から入る。
+    // (Meltype.Core.CApi.csproj の TrimmerRootAssembly) ので読める。削られても説明が空になるだけで、選択肢の名前は Enum.GetNames から入る。
     [UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "Meltype.Core は TrimmerRootAssembly。読めなくても説明が空になるだけ")]
     private static JsonObject Transform(JsonSchemaExporterContext context, JsonNode node, JsonObject defaults)
     {
@@ -92,9 +92,9 @@ public static class SettingsSchema
                 schema["title"] = title.DisplayName;
             var description = property.AttributeProvider?.GetCustomAttributes(typeof(DescriptionAttribute), false).FirstOrDefault() is DescriptionAttribute d ? d.Description : "";
             var platforms = property.AttributeProvider?.GetCustomAttributes(typeof(PlatformsAttribute), false).FirstOrDefault() is PlatformsAttribute p
-                ? Enum.GetValues<Platform>().Where(platform => p.Platforms.HasFlag(platform)).Select(platform => platform.ToString()).ToArray()
+                ? PlatformNames(p.Platforms)
                 : null;
-            if (platforms is not null) description = $"{string.Join("・", platforms)} のみ。{description}";
+            if (platforms is not null) description = $"{PlatformNote(platforms)}{description}";
             if (description.Length > 0) schema["description"] = description;
             // x- で始まるのは JSON Schema の標準には無いキーワード (エディターは無視する)。Linux 版の設定画面が、分類ごとに並べ、使わない OS の項目を隠すのに使う
             if (property.AttributeProvider?.GetCustomAttributes(typeof(CategoryAttribute), false).FirstOrDefault() is CategoryAttribute { Category.Length: > 0 } category)
@@ -105,4 +105,10 @@ public static class SettingsSchema
         }
         return schema;
     }
+
+    internal static string[] PlatformNames(Platform platforms) =>
+        Enum.GetValues<Platform>().Where(platform => platforms.HasFlag(platform)).Select(platform => platform.ToString()).ToArray();
+
+    /// <summary>一部の OS でしか使わない項目の説明の先頭に書く文 (「Windows・Mac のみ。」)。</summary>
+    internal static string PlatformNote(string[] platforms) => $"{string.Join("・", platforms)} のみ。";
 }

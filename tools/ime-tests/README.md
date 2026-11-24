@@ -45,6 +45,7 @@ Linux上に、次の依存関係を用意します。CIでは、[linux workflow]
 ```bash
 # 1. 製品をビルドする(リポジトリのルートで実行)
 native/mozc/build-mozc-helper.sh
+native/zenzai/build-llama-server.sh
 linux/build.sh
 
 # 2. テストを実行する

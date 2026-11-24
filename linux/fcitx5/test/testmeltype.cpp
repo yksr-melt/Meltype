@@ -5,7 +5,10 @@
 // 本体 (libMeltypeNative.so) の場所を環境変数 MELTYPE_DIR で渡す (Mozc が無ければ、変換はひらがなのまま)。
 //   cmake -S linux/fcitx5 -B build -DBUILD_TESTING=ON && cmake --build build && MELTYPE_DIR=… ctest --test-dir build
 
+#include <cstdlib>
+#include <fstream>
 #include <testfrontend_public.h>
+#include <fcitx-utils/event.h>
 #include <fcitx-utils/eventdispatcher.h>
 #include <fcitx-utils/log.h>
 #include <fcitx-utils/stringutils.h>
@@ -54,6 +57,7 @@ void scheduleEvent(EventDispatcher *dispatcher, Instance *instance) {
         auto uuid = frontend->call<ITestFrontend::createInputContext>("testapp");
         auto *ic = instance->inputContextManager().findByUUID(uuid);
         FCITX_ASSERT(ic);
+        ic->focusIn();
         instance->setCurrentInputMethod(ic, "meltype", true);
         FCITX_ASSERT(instance->inputMethod(ic) == "meltype");
 
@@ -80,10 +84,70 @@ void scheduleEvent(EventDispatcher *dispatcher, Instance *instance) {
         typeKeys(frontend, uuid, "\n");
         FCITX_ASSERT(!ic->inputPanel().candidateList()) << "確定したら候補の一覧を閉じる";
 
-        dispatcher->schedule([dispatcher, instance]() {
-            dispatcher->detach();
-            instance->exit();
-        });
+        // 10 個目の候補を選んだら、一覧は 2 ページ目を出す
+        typeKeys(frontend, uuid, "kyou ");
+        auto *common = dynamic_cast<CommonCandidateList *>(ic->inputPanel().candidateList().get());
+        FCITX_ASSERT(common && common->totalSize() > 9) << "候補が 10 個ない";
+        typeKeys(frontend, uuid, "         ");
+        common = dynamic_cast<CommonCandidateList *>(ic->inputPanel().candidateList().get());
+        FCITX_ASSERT(common && common->globalCursorIndex() == 9 && common->currentPage() == 1)
+            << common->globalCursorIndex() << " " << common->currentPage();
+        frontend->call<ITestFrontend::pushCommitExpectation>(common->candidate(common->cursorIndex()).text().toString());
+        typeKeys(frontend, uuid, "\n");
+
+        // Sensitive の入力欄は、ロック画面ならパスワード欄として変換しない。ほかのアプリ (Chromium のシークレットなど) では変換する
+        for (const auto &[program, composes] : {std::pair{"kscreenlocker_greet", false}, std::pair{"chromium", true}}) {
+            auto sensitiveUuid = frontend->call<ITestFrontend::createInputContext>(program);
+            auto *sensitive = instance->inputContextManager().findByUUID(sensitiveUuid);
+            sensitive->setCapabilityFlags(CapabilityFlags{CapabilityFlag::Sensitive});
+            sensitive->focusIn();
+            instance->setCurrentInputMethod(sensitive, "meltype", true);
+            FCITX_ASSERT(frontend->call<ITestFrontend::sendKeyEvent>(sensitiveUuid, Key("n"), false) == composes) << program;
+            FCITX_ASSERT(sensitive->inputPanel().preedit().empty() != composes) << program;
+            if (composes) frontend->call<ITestFrontend::pushCommitExpectation>("ん");
+            sensitive->focusOut();
+        }
+        ic->focusIn();
+
+        // パネルの入力メソッドの表示は、本体の言語モード (英数・かなのキーで切り替える)
+        FCITX_ASSERT(instance->inputMethodLabel(ic) == "あ") << instance->inputMethodLabel(ic);
+        frontend->call<ITestFrontend::keyEvent>(uuid, Key("Eisu_toggle"), false);
+        frontend->call<ITestFrontend::keyEvent>(uuid, Key("Eisu_toggle"), true);
+        FCITX_ASSERT(instance->inputMethodLabel(ic) == "A") << instance->inputMethodLabel(ic);
+        frontend->call<ITestFrontend::keyEvent>(uuid, Key("Hiragana_Katakana"), false);
+        frontend->call<ITestFrontend::keyEvent>(uuid, Key("Hiragana_Katakana"), true);
+        FCITX_ASSERT(instance->inputMethodLabel(ic) == "あ") << instance->inputMethodLabel(ic);
+
+        // 入力欄に入ったときの入力モードの表示は、アプリがキャレットの位置を知らせるのを少し待ってから出す
+        // (入力メソッドを切り替えたときは fcitx5 が自分で情報を出すことがあるので、フォーカスを入れ直して見る)
+        ic->focusOut();
+        ic->inputPanel().reset();
+        ic->focusIn();
+        FCITX_ASSERT(ic->inputPanel().auxUp().empty()) << ic->inputPanel().auxUp().toString();
+        // fcitx5 activates the input method asynchronously, and Meltype waits 30ms
+        // after activation before showing the indicator. A fixed 100ms assertion
+        // can run before activation on a busy Fedora runner. Wait for the actual
+        // indicator, but still fail if it never appears.
+        const auto deadline = now(CLOCK_MONOTONIC) + 1000000;
+        static std::unique_ptr<EventSourceTime> later;
+        // The third addTimeEvent argument is timer accuracy, not a repeat
+        // interval. Rearm each poll as a one-shot with a new future deadline.
+        // Keeping an expired timer enabled can spin the event loop forever.
+        later = instance->eventLoop().addTimeEvent(CLOCK_MONOTONIC, now(CLOCK_MONOTONIC) + 20000, 0,
+            [dispatcher, instance, ic, deadline](EventSourceTime *timer, uint64_t) {
+                if (ic->inputPanel().auxUp().toString() == "あ") {
+                    dispatcher->schedule([dispatcher, instance]() {
+                        dispatcher->detach();
+                        instance->exit();
+                    });
+                    return false;
+                }
+                FCITX_ASSERT(now(CLOCK_MONOTONIC) < deadline)
+                    << "Input mode indicator did not appear: " << ic->inputPanel().auxUp().toString();
+                timer->setTime(now(CLOCK_MONOTONIC) + 20000);
+                timer->setOneShot();
+                return true;
+            });
     });
 }
 
@@ -91,6 +155,11 @@ void scheduleEvent(EventDispatcher *dispatcher, Instance *instance) {
 
 int main() {
     setupTestingEnvironment(FCITX5_MELTYPE_BINARY_DIR, {FCITX5_MELTYPE_BINARY_DIR, FCITX5_SYSTEM_ADDON_DIR}, {"test"});
+    // 入力欄に入ったときの入力モードの表示を確かめる (Linux の既定は切り替えたときだけ)
+    char data[] = "/tmp/meltype-test-XXXXXX";
+    FCITX_ASSERT(mkdtemp(data));
+    std::ofstream(std::string(data) + "/config.json") << R"({"ModeIndicator":"OnSwitchAndFocus","SettingsVersion":10})";
+    FCITX_ASSERT(setenv("MELTYPE_DATA_DIR", data, 1) == 0);
     char arg0[] = "testmeltype";
     char arg1[] = "--disable=all";
     char arg2[] = "--enable=testfrontend,testui,testim,keyboard,meltype";

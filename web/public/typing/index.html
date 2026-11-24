@@ -1,0 +1,211 @@
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Copyright (C) 2026 Yukishiro -->
+
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>タイピング | Meltype</title>
+  <meta name="description" content="日本語の文をローマ字で打つタイピングです。打った記録を、ローマ字入力の打ち間違いの調査に送ることもできます。">
+  <meta name="theme-color" content="#3aaee8">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Meltype">
+  <meta property="og:url" content="/typing/">
+  <meta property="og:title" content="タイピング | Meltype">
+  <meta property="og:description" content="10 文で 3 分ほどのタイピング。打った記録を、ローマ字入力の打ち間違いの調査に送ることもできます。">
+  <meta property="og:image" content="/og.png">
+  <meta property="og:locale" content="ja_JP">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="canonical" href="/typing/">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&display=swap">
+  <link rel="stylesheet" href="/assets/css/site.css">
+  <script type="module" src="/assets/js/typing.js"></script>
+</head>
+<body>
+  <a class="skip" href="#main">本文へ移動</a>
+
+  <header class="site-header" data-header>
+    <div class="header-inner">
+      <a class="brand" href="/" aria-label="Meltype のトップ">
+        <img src="/assets/img/logo-small.png" alt="" width="120" height="60">
+      </a>
+      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav" data-nav-toggle>
+        <svg class="ic"><use href="/assets/img/icons.svg#i-menu"/></svg>
+        <span class="sr-only">メニュー</span>
+      </button>
+      <nav class="site-nav" id="site-nav" aria-label="サイト内の移動" data-nav>
+        <a href="/#features">できること</a>
+        <a href="/#install">インストール</a>
+        <a href="/guide/">使い方ガイド</a>
+        <a class="is-current" href="/typing/" aria-current="page">タイピング</a>
+        <a class="nav-report" href="/report/">問題を報告する</a>
+        <a class="btn btn-small" href="https://github.com/yksr-melt/Meltype/releases/latest">
+          <svg class="ic"><use href="/assets/img/icons.svg#i-download"/></svg>ダウンロード
+        </a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="page-hero" aria-labelledby="typing-title">
+      <div class="wrap">
+        <h1 id="typing-title">タイピング</h1>
+        <p>お手本の日本語の文 (英語が混ざった文もあります) を、ローマ字で打ちます。打ち終わったら、打った記録を「どのキーが抜けやすいか」「どこで打ち間違えやすいか」の調査に送ることもできます (送らなくても遊べます)。日本語のローマ字入力では、こうした公開データがほとんどありません。</p>
+        <ul class="points">
+          <li><svg class="ic"><use href="/assets/img/icons.svg#i-clock"/></svg>10 文で 3 分ほど</li>
+          <li><svg class="ic"><use href="/assets/img/icons.svg#i-user"/></svg>名前・メールアドレスは要りません</li>
+          <li><svg class="ic"><use href="/assets/img/icons.svg#i-keyboard"/></svg>パソコンのキーボードで遊べます</li>
+        </ul>
+      </div>
+    </section>
+
+    <div class="typing wrap" data-typing>
+      <p class="callout is-warn" hidden data-mobile-note><svg class="ic"><use href="/assets/img/icons.svg#i-alert"/></svg><span>スマートフォン・タブレットの画面のキーボードでは打てません。パソコンのキーボードで開いてください。</span></p>
+
+      <!-- 1. はじめる -->
+      <form class="card typing-intro" novalidate data-intro>
+        <h2 class="step-title"><span class="step-no">1</span>はじめる</h2>
+        <div class="fields typing-profile">
+          <div class="field">
+            <label for="kind">文の種類</label>
+            <select class="select" id="kind" name="kind" data-kind></select>
+          </div>
+        </div>
+        <p class="hint">次の質問は、調査に送るときに使います。答えなくても遊べます。</p>
+        <div class="fields typing-profile">
+          <div class="field">
+            <label for="touch">タッチタイピング (キーを見ずに打つ)</label>
+            <select class="select" id="touch" name="touch">
+              <option value="unknown">答えない</option>
+              <option value="yes">できる</option>
+              <option value="partly">半分くらい見ずに打てる</option>
+              <option value="no">キーを見て打つ</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="layout">キーボードの配列</label>
+            <select class="select" id="layout" name="layout">
+              <option value="unknown">分からない・答えない</option>
+              <option value="jis">日本語 (JIS)</option>
+              <option value="us">英語 (US)</option>
+              <option value="other">そのほか</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn btn-pink btn-large" type="submit" data-start>
+          <svg class="ic"><use href="/assets/img/icons.svg#i-arrow"/></svg>はじめる
+        </button>
+      </form>
+
+      <!-- 2. 打つ -->
+      <section class="card typing-play" hidden data-play aria-labelledby="play-title">
+        <div class="typing-play-head">
+          <h2 class="step-title" id="play-title"><span class="step-no">2</span>お手本を打つ</h2>
+          <p class="typing-progress"><b data-count>1</b> / <span data-total>10</span></p>
+        </div>
+        <ol class="typing-howto">
+          <li>IME をオフ (半角英数) にしてください。日本語はローマ字で、英語はそのまま打ちます。「！？〜「」（）」は <kbd>!</kbd> <kbd>?</kbd> <kbd>~</kbd> <kbd>[</kbd> <kbd>]</kbd> <kbd>(</kbd> <kbd>)</kbd>、「…」は <kbd>.</kbd> を 3 回打ちます</li>
+          <li>間違えたら <kbd>Backspace</kbd> で直しても、そのまま進んでも大丈夫です。ふだん通りに打ってください</li>
+          <li>打ち終わったら <kbd>Enter</kbd> で次の文へ進みます</li>
+        </ol>
+        <div class="typing-board" tabindex="0" role="textbox" aria-label="ここをクリックしてから打つ" aria-describedby="typing-target" data-board>
+          <p class="typing-text" id="typing-target" data-text></p>
+          <p class="typing-reading" data-reading></p>
+          <p class="typing-romaji" data-reading-romaji></p>
+          <p class="typing-kana" aria-live="off"><span data-kana></span><span class="typing-pending" data-pending></span><span class="typing-caret" aria-hidden="true"></span></p>
+          <p class="typing-romaji" data-romaji></p>
+          <p class="typing-focus-hint" data-focus-hint>ここをクリックしてから打ってください</p>
+        </div>
+        <p class="callout is-danger" hidden data-ime-note><svg class="ic"><use href="/assets/img/icons.svg#i-alert"/></svg><span>IME がオンになっています。半角英数に切り替えてから、この文を打ち直してください。</span></p>
+        <div class="typing-actions">
+          <button class="btn btn-ghost btn-small" type="button" data-skip>この文を飛ばす</button>
+        </div>
+      </section>
+
+      <!-- 3. 結果 -->
+      <section class="card typing-result" hidden tabindex="-1" data-result aria-labelledby="result-title">
+        <svg class="ic done-icon" aria-hidden="true"><use href="/assets/img/icons.svg#i-check"/></svg>
+        <h2 id="result-title">おつかれさまでした！</h2>
+        <dl class="typing-scores">
+          <div><dt>速さ</dt><dd><b data-speed>-</b> かな/分</dd></div>
+          <div><dt>正確さ</dt><dd><b data-accuracy>-</b> %</dd></div>
+          <div><dt>Backspace</dt><dd><b data-backspaces>-</b> 回</dd></div>
+        </dl>
+        <div class="typing-misses" data-misses></div>
+
+        <!-- 調査に送る (同意した人だけ) -->
+        <form class="typing-send" novalidate data-send>
+          <h3>打った記録を調査に送る</h3>
+          <p>送ると、ローマ字入力の打ち間違いの調査に使われます。送らなくても、このまま続けて遊べます。</p>
+          <p>この調査は雪代 (Yukishiro) が Meltype のために行います。データの扱いについてのお問い合わせは、Meltype の <a href="https://discord.gg/y44wBbBgHt">Discord</a> か <a href="https://github.com/yksr-melt/Meltype/issues">GitHub の Issue</a> へどうぞ (データを消してほしいなど、人に見られたくないお問い合わせは Discord の DM で)。</p>
+          <div class="typing-terms">
+            <h4>送るもの</h4>
+            <ul>
+              <li>いま打った文ごとの、押したキー (キーの種類・押した時刻と離した時刻)</li>
+              <li>はじめに答えた質問の答えと、OS の種類</li>
+              <li>お手本と関係ない入力が続いた文は送りません</li>
+              <li>参加ごとのランダムな番号 (同じ人の打ち方をまとめて見るため)</li>
+            </ul>
+            <h4>送らないもの・使い方</h4>
+            <ul>
+              <li>名前・メールアドレス・アカウントは送りません。押したキーはそのまま残るので、お手本と関係ない文字は打たないでください</li>
+              <li>IP アドレスはハッシュにして、回数の制限にだけ使い、1 日で消します。調査のデータには入れません</li>
+              <li>Meltype の打ち間違いの直し方・変換を良くするために使います。研究用のデータとして <a href="https://creativecommons.org/licenses/by-sa/4.0/deed.ja">CC BY-SA 4.0</a> で公開することがあり、そのときも参加ごとのランダムな番号のほかに、人を特定するための手がかりは入れません</li>
+            </ul>
+            <p class="hint">18 歳未満の方は、おうちの人に話してから送ってください。</p>
+          </div>
+          <label class="typing-consent">
+            <input type="checkbox" data-consent>
+            <span>上の内容を読んで、調査に送ることに同意します</span>
+          </label>
+          <div class="submit-actions">
+            <div class="cf-turnstile" data-sitekey="" data-turnstile></div>
+            <button class="btn btn-pink" type="submit" disabled data-send-button>
+              <svg class="ic"><use href="/assets/img/icons.svg#i-upload"/></svg>この記録を送る
+            </button>
+          </div>
+        </form>
+        <label class="typing-consent typing-auto" hidden data-auto-wrap>
+          <input type="checkbox" checked data-auto>
+          <span>同意したので、これからの記録も続けて送る</span>
+        </label>
+        <div class="form-status" role="status" aria-live="polite" data-result-status></div>
+        <div class="actions">
+          <button class="btn btn-pink" type="button" data-again>
+            <svg class="ic"><use href="/assets/img/icons.svg#i-refresh"/></svg>もう 10 文打つ
+          </button>
+          <button class="btn btn-ghost" type="button" data-choose>文の種類を選び直す</button>
+          <a class="btn btn-ghost" href="/">トップへ戻る</a>
+        </div>
+      </section>
+
+      <div class="typing-foot">
+        <p>調査のデータの扱いは、Meltype の <a href="https://github.com/yksr-melt/Meltype/blob/main/web/README.md">web/README.md</a> にも書いてあります。</p>
+      </div>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap footer-inner">
+      <div class="footer-brand">
+        <img src="/assets/img/logo-small.png" alt="Meltype" width="120" height="60">
+        <p>雪解けのように、半角/全角の壁を溶かす日本語入力。</p>
+      </div>
+      <ul class="footer-links">
+        <li><a href="https://github.com/yksr-melt/Meltype">GitHub</a></li>
+        <li><a href="https://github.com/yksr-melt/Meltype/releases">Releases</a></li>
+        <li><a href="https://discord.gg/y44wBbBgHt">Discord</a></li>
+        <li><a href="https://github.com/sponsors/yksr-melt">応援する</a></li>
+        <li><a href="/typing/">タイピング</a></li>
+        <li><a href="/report/">問題を報告する</a></li>
+      </ul>
+      <p class="footer-copy">Copyright (C) 2026 雪代 / Yukishiro・GPL-3.0・Logo by <a href="https://github.com/Crysta1221">@Crysta1221</a></p>
+    </div>
+  </footer>
+</body>
+</html>

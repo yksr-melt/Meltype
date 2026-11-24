@@ -1,127 +1,95 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
 
-import AppKit
 import Foundation
 
-// libMeltypeNative.dylib (C# の Meltype.Core を NativeAOT にしたもの) の関数。src/Meltype.Mac.Native/Exports.cs と合わせる。
-typealias ClausesCallback = @convention(c) (UnsafePointer<CChar>?, UnsafePointer<CChar>?) -> UnsafeMutablePointer<CChar>?
-typealias CandidatesCallback = @convention(c) (UnsafePointer<CChar>?) -> UnsafeMutablePointer<CChar>?
-typealias IsWordCallback = @convention(c) (UnsafePointer<CChar>?) -> Int32
-
-private typealias InitFunction = @convention(c) (ClausesCallback, CandidatesCallback, IsWordCallback) -> Int32
+// libMeltypeNative.dylib (C# の Meltype.Core を NativeAOT にしたもの) の関数。src/Meltype.Core.CApi/Exports.cs と合わせる。
+private typealias InitFunction = @convention(c) (UnsafePointer<CChar>?) -> Int32
 private typealias CreateFunction = @convention(c) () -> UnsafeMutableRawPointer?
 private typealias DestroyFunction = @convention(c) (UnsafeMutableRawPointer?) -> Void
-private typealias HandleKeyFunction = @convention(c) (UnsafeMutableRawPointer?, Int32, Int32, Int32, UnsafePointer<CChar>?, UnsafePointer<CChar>?) -> UnsafeMutablePointer<CChar>?
-private typealias CommitFunction = @convention(c) (UnsafeMutableRawPointer?) -> UnsafeMutablePointer<CChar>?
-private typealias SelectFunction = @convention(c) (UnsafeMutableRawPointer?, Int32) -> UnsafeMutablePointer<CChar>?
-private typealias SetDirectFunction = @convention(c) (UnsafeMutableRawPointer?, Int32) -> Void
-private typealias TakeModeToggledFunction = @convention(c) (UnsafeMutableRawPointer?) -> Int32
-private typealias IsDirectFunction = @convention(c) (UnsafeMutableRawPointer?) -> Int32
+private typealias HandleFunction = @convention(c) (UnsafeMutableRawPointer?, UnsafePointer<CChar>?) -> UnsafeMutablePointer<CChar>?
 private typealias DataDirectoryFunction = @convention(c) () -> UnsafeMutablePointer<CChar>?
 private typealias ReportUrlFunction = @convention(c) (UnsafePointer<CChar>?) -> UnsafeMutablePointer<CChar>?
 private typealias FreeFunction = @convention(c) (UnsafeMutableRawPointer?) -> Void
+private typealias ConversionReadyCallback = @convention(c) () -> Void
+private typealias SetConversionReadyFunction = @convention(c) (ConversionReadyCallback) -> Void
+private typealias ShutdownFunction = @convention(c) () -> Void
 
-// ---- 本体から呼ばれる関数 (文字列は strdup したものを返し、本体が free する) ----
+// ---- 本体から呼ばれる関数 ----
 
-/// (ひらがな, 文脈) → 「読み\t変換結果」を改行でつないだもの (文節ごと)。
-private let clausesCallback: ClausesCallback = { hiragana, context in
-    guard let hiragana else { return nil }
-    let clauses = MeltypeConverter.shared.clauses(for: String(cString: hiragana), context: context.map { String(cString: $0) })
-    guard !clauses.isEmpty else { return nil }
-    return strdup(clauses.map { "\($0.reading)\t\($0.text)" }.joined(separator: "\n"))
+/// 背景の変換の結果が届いた (ワーカーのスレッドで呼ばれる)。
+private let conversionReadyCallback: ConversionReadyCallback = {
+    DispatchQueue.main.async { MeltypeInputController.active?.refreshConversion() }
 }
 
-/// 読み → 候補を改行でつないだもの。
-private let candidatesCallback: CandidatesCallback = { reading in
-    guard let reading else { return nil }
-    let candidates = MeltypeConverter.shared.candidates(for: String(cString: reading))
-    return strdup(candidates.joined(separator: "\n"))
+/// 本体の応答 (ImeOutput) のうち、Mac で使う項目。
+struct ImeOutput: Decodable {
+    let state: ImeState
+    let result: SessionResult
 }
 
-/// 英単語として正しい綴りか (macOS のスペルチェッカー、英語で調べる)。
-private let spellCacheLock = NSLock()
-nonisolated(unsafe) private var spellCache: [String: Bool] = [:]
-nonisolated(unsafe) private var spellCacheExpiration = Date.distantPast
-nonisolated(unsafe) private var spellChecks = 0
-private let isWordCallback: IsWordCallback = { word in
-    guard let word else { return 0 }
-    let text = String(cString: word)
-    let cached: Bool? = spellCacheLock.withLock {
-        if Date() >= spellCacheExpiration {
-            spellCache.removeAll(keepingCapacity: true)
-            spellCacheExpiration = Date().addingTimeInterval(300)
-        }
-        return spellCache[text]
-    }
-    if let cached { return cached ? 1 : 0 }
-    let misspelled = NSSpellChecker.shared.checkSpelling(of: text, startingAt: 0, language: "en", wrap: false, inSpellDocumentWithTag: 0, wordCount: nil)
-    let valid = misspelled.location == NSNotFound
-    spellCacheLock.withLock {
-        spellChecks += 1
-        if spellCache.count >= 4096 { spellCache.removeAll(keepingCapacity: true) }
-        spellCache[text] = valid
-    }
-    return valid ? 1 : 0
+/// 打ったら効く言語モード (表示する「あ / A」)
+enum LanguageMode: String, Decodable {
+    case japanese = "Japanese"
+    case alphanumeric = "Alphanumeric"
 }
 
-/// Swift 側で扱う結果 (本体の SessionResult.ToJson と同じ形)。
+struct ImeState: Decodable {
+    let languageMode: LanguageMode
+    /// 入力モードを表示する時間 (ミリ秒。0 なら出さない)
+    let modeIndicatorMs: Int
+}
+
 struct SessionResult: Decodable {
     let consumed: Bool
     let commits: [TextEdit]
     let view: CompositionView?
 }
 
+/// キャレットの前の removeBefore (本体が照合済み) を消してから text を入れる
 struct TextEdit: Decodable {
-    let deleteBefore: Int
     let text: String
-    let expect: String?
-    /// 確定し直すときに text の後ろに続けて入る、今確定した語。前の文字を消せないときは、これだけを入れる
-    let current: String?
-}
-
-// DeleteBefore uses UTF-16 units, matching .NET string lengths and AppKit ranges.
-func matchesExpectedText(_ actual: String?, expected: String?, deleteBefore: Int) -> Bool {
-    guard deleteBefore > 0,
-          let expected,
-          (expected as NSString).length == deleteBefore,
-          actual == expected else { return false }
-    return true
+    let removeBefore: String?
 }
 
 struct CompositionView: Decodable {
     let text: String
     let converting: Bool
-    let selectedIndex: Int
+    let clauses: [String]
     let selectedClause: Int
     let hint: String
-    let candidates: [String]
-    let clauses: [String]
-    /// 選んでいる候補の意味 (無ければ nil)。候補で少し止まったら注釈に出す。
-    let meaning: String?
-    let suggestion: String?
+    let spellingSuggestion: String?
+    /// 打ったキー (見えている文字と違うときだけ)
+    let typedKeys: String?
+    /// 一覧に出す候補 (出さないなら nil)
+    let candidates: CandidateList?
+}
+
+struct CandidateList: Decodable {
+    let items: [String]
+    /// 候補ごとの注記 (無ければ nil)
+    let notes: [String?]
+    let numbered: Bool
+    let selected: Int
+    /// 選んでいる候補の意味。候補で meaningDelayMs 止まったら注釈に出す
+    let selectedMeaning: String?
+    let meaningDelayMs: Int
 }
 
 /// libMeltypeNative.dylib を読み込んで呼ぶ。Meltype.app/Contents/Frameworks に置く (build.sh)。
 final class NativeCore {
     static let shared = NativeCore()
-    var spellCheckCount: Int { spellCacheLock.withLock { spellChecks } }
 
     private let library: UnsafeMutableRawPointer?
     private let initFunction: InitFunction?
     private let createFunction: CreateFunction?
     private let destroyFunction: DestroyFunction?
-    private let handleKeyFunction: HandleKeyFunction?
-    private let commitFunction: CommitFunction?
-    private let selectFunction: SelectFunction?
-    private let setDirectFunction: SetDirectFunction?
-    private let setCodeInputFunction: SetDirectFunction?
-    private let takeModeToggledFunction: TakeModeToggledFunction?
-    private let isDirectFunction: IsDirectFunction?
+    private let handleFunction: HandleFunction?
     private let dataDirectoryFunction: DataDirectoryFunction?
     private let reportUrlFunction: ReportUrlFunction?
-    private let zenzaiModelFunction: DataDirectoryFunction?
     private let freeFunction: FreeFunction?
+    private let setConversionReadyFunction: SetConversionReadyFunction?
+    private let shutdownFunction: ShutdownFunction?
 
     private init() {
         let path = (Bundle.main.privateFrameworksPath ?? "") + "/libMeltypeNative.dylib"
@@ -136,87 +104,53 @@ final class NativeCore {
             return unsafeBitCast(pointer, to: type)
         }
         initFunction = symbol("meltype_init", as: InitFunction.self)
-        createFunction = symbol("meltype_create", as: CreateFunction.self)
-        destroyFunction = symbol("meltype_destroy", as: DestroyFunction.self)
-        handleKeyFunction = symbol("meltype_handle_key", as: HandleKeyFunction.self)
-        commitFunction = symbol("meltype_commit", as: CommitFunction.self)
-        selectFunction = symbol("meltype_select_candidate", as: SelectFunction.self)
-        setDirectFunction = symbol("meltype_set_direct", as: SetDirectFunction.self)
-        setCodeInputFunction = symbol("meltype_set_code_input", as: SetDirectFunction.self)
-        takeModeToggledFunction = symbol("meltype_take_mode_toggled", as: TakeModeToggledFunction.self)
-        isDirectFunction = symbol("meltype_is_direct", as: IsDirectFunction.self)
+        createFunction = symbol("meltype_ime_create", as: CreateFunction.self)
+        destroyFunction = symbol("meltype_ime_destroy", as: DestroyFunction.self)
+        handleFunction = symbol("meltype_ime_handle", as: HandleFunction.self)
         dataDirectoryFunction = symbol("meltype_data_directory", as: DataDirectoryFunction.self)
         reportUrlFunction = symbol("meltype_report_url", as: ReportUrlFunction.self)
-        zenzaiModelFunction = symbol("meltype_zenzai_model", as: DataDirectoryFunction.self)
         freeFunction = symbol("meltype_free", as: FreeFunction.self)
+        setConversionReadyFunction = symbol("meltype_set_conversion_ready", as: SetConversionReadyFunction.self)
+        shutdownFunction = symbol("meltype_shutdown", as: ShutdownFunction.self)
     }
 
+    /// 変換エンジンを用意する。Mozc のヘルパー (mozc/) と Zenzai (zenzai/) は Contents/Resources に置く (build.sh)。
     func initialize() {
-        _ = initFunction?(clausesCallback, candidatesCallback, isWordCallback)
-    }
-
-    func createSession() -> UnsafeMutableRawPointer? { createFunction?() }
-
-    func destroySession(_ session: UnsafeMutableRawPointer?) { destroyFunction?(session) }
-
-    func handleKey(_ session: UnsafeMutableRawPointer?, vk: Int32, character: Int32, modifiers: Int32, before: String?, after: String?) -> SessionResult? {
-        guard let handleKeyFunction else { return nil }
-        return withOptionalCString(before) { beforePointer in
-            withOptionalCString(after) { afterPointer in
-                decode(handleKeyFunction(session, vk, character, modifiers, beforePointer, afterPointer))
-            }
+        guard let initFunction else { return }
+        let resources = Bundle.main.resourcePath ?? ""
+        if resources.withCString({ initFunction($0) }) == 0 {
+            NSLog("Meltype: Mozc を使えません (漢字変換はひらがなのままになります)")
         }
     }
 
-    func commit(_ session: UnsafeMutableRawPointer?) -> SessionResult? {
-        guard let commitFunction else { return nil }
-        return decode(commitFunction(session))
+    /// 終了する前に呼ぶ。変換エンジンを止める (Zenzai の llama-server を終わらせ、Mozc の学習を保存する)。
+    func shutdown() {
+        shutdownFunction?()
     }
 
-    /// 元の複数スカラーのイベントをアプリに渡す前に、未確定の内容だけ確定する。
-    /// 結合文字から始まるイベントは、1 スカラーの場合と同じく直前の文字との境界を保つ。
-    func commitBeforeExternalText(_ session: UnsafeMutableRawPointer?, text: String) -> SessionResult? {
-        if let first = text.unicodeScalars.first {
-            switch first.properties.generalCategory {
-            case .nonspacingMark, .spacingMark, .enclosingMark:
-                return handleKey(session, vk: 0x07, character: Int32(first.value), modifiers: 0, before: nil, after: nil)
-            default:
-                break
-            }
-        }
-        return commit(session)
+    /// 変換エンジンを入力のスレッドで待たないようにする (入力欄を作る前に呼ぶ)。呼ばなければ変換は同期のまま (--self-test)。
+    func startBackgroundConversion() {
+        setConversionReadyFunction?(conversionReadyCallback)
     }
 
-    func selectCandidate(_ session: UnsafeMutableRawPointer?, index: Int) -> SessionResult? {
-        guard let selectFunction else { return nil }
-        return decode(selectFunction(session, Int32(index)))
-    }
+    /// 入力欄 (Input Method Kit のクライアント) ごとの本体 (ImeHost)。
+    func createHost() -> UnsafeMutableRawPointer? { createFunction?() }
 
-    func setDirect(_ session: UnsafeMutableRawPointer?, _ direct: Bool) {
-        setDirectFunction?(session, direct ? 1 : 0)
-    }
+    func destroyHost(_ host: UnsafeMutableRawPointer?) { destroyFunction?(host) }
 
-    func setCodeInput(_ session: UnsafeMutableRawPointer?, _ enabled: Bool) {
-        setCodeInputFunction?(session, enabled ? 1 : 0)
-    }
-
-    /// Zenzai の設定 (issue #1130)。「Zenzai を使う」が OFF なら nil、ON なら設定のモデルの場所 (空なら同梱のモデル)。
-    var zenzaiModelSetting: String? {
-        guard let pointer = zenzaiModelFunction?() else { return nil }
+    /// 出来事 (ImeEvent) を送って応答を受け取る。本体が処理できなければ nil。
+    func send(_ host: UnsafeMutableRawPointer?, _ event: [String: Any]) -> ImeOutput? {
+        guard let handleFunction, let host,
+              let data = try? JSONSerialization.data(withJSONObject: event),
+              let json = String(data: data, encoding: .utf8) else { return nil }
+        guard let pointer = json.withCString({ handleFunction(host, $0) }) else { return nil }
         defer { freeFunction?(pointer) }
-        return String(cString: pointer)
-    }
-
-    /// 直前のキーで、設定「日本語 / 英数を切り替えるキーを追加」の切替をしたか (#1033)。読むと印が消える。
-    func takeModeToggled(_ session: UnsafeMutableRawPointer?) -> Bool {
-        guard let takeModeToggledFunction, let session else { return false }
-        return takeModeToggledFunction(session) != 0
-    }
-
-    /// 本体のモード (true = 英数 / 直接入力)。切替のあとに読んで、モード表示と入力メニューを合わせる (#1033)。
-    func isDirect(_ session: UnsafeMutableRawPointer?) -> Bool {
-        guard let isDirectFunction, let session else { return false }
-        return isDirectFunction(session) != 0
+        do {
+            return try JSONDecoder().decode(ImeOutput.self, from: Data(bytes: pointer, count: strlen(pointer)))
+        } catch {
+            NSLog("Meltype: 応答を読めませんでした: %@", String(describing: error))
+            return nil
+        }
     }
 
     /// 設定・学習データ・ユーザー辞書の保存場所。
@@ -231,22 +165,5 @@ final class NativeCore {
         guard let pointer = "Mac".withCString({ reportUrlFunction?($0) }) else { return nil }
         defer { freeFunction?(pointer) }
         return URL(string: String(cString: pointer))
-    }
-
-    private func decode(_ pointer: UnsafeMutablePointer<CChar>?) -> SessionResult? {
-        guard let pointer else { return nil }
-        defer { freeFunction?(pointer) }
-        let json = Data(bytes: pointer, count: strlen(pointer))
-        do {
-            return try JSONDecoder().decode(SessionResult.self, from: json)
-        } catch {
-            NSLog("Meltype: 結果を読めませんでした: %@", String(describing: error))
-            return nil
-        }
-    }
-
-    private func withOptionalCString<R>(_ text: String?, _ body: (UnsafePointer<CChar>?) -> R) -> R {
-        guard let text else { return body(nil) }
-        return text.withCString { body($0) }
     }
 }

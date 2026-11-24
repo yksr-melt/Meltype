@@ -1,0 +1,60 @@
+# フォーマット・静的解析と、ソースファイルの先頭の表記 (issue #1083)。ビルドとテストは windows.yml・core.yml、辞書・精度は core.yml、報告の再現は pr-expectations.yml、脆弱性は vulnerability.yml。
+#   csharp         … フォーマット: すべての .cs を dotnet format whitespace で調べ、違反があれば失敗
+#                    静的解析: Roslyn の解析 (AnalysisLevel=latest-recommended) の警告が 1 件でもあれば失敗。重要度は .editorconfig で変える。
+#                    SDK (10.0.x) が上がって新しいルールが増えると、main でも失敗する。
+#   license-header … Pull Request で足したソースファイルの先頭に、ライセンス・著作権の表記があるか (.github/bot/license-header.mjs)
+name: lint
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lint-${{ github.ref }}
+  cancel-in-progress: true
+
+# bash を明示すると -eo pipefail で動き、パイプの途中のコマンドの失敗も止まる (既定の bash -e では最後のコマンドしか見ない。#1842)
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  csharp:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: 10.0.x
+      - name: フォーマット
+        run: dotnet format whitespace --folder --verify-no-changes
+      - name: 静的解析
+        run: dotnet build Meltype.sln -c Release -p:AnalysisLevel=latest-recommended -p:TreatWarningsAsErrors=true
+      # NativeAOT で動かないコード (reflection など) を、trim・AOT のアナライザーで失敗にする
+      - name: NativeAOT
+        run: |
+          dotnet build src/Meltype.Core.CApi -c Release -p:IsAotCompatible=true -p:TreatWarningsAsErrors=true
+          dotnet build src/Meltype.Settings -c Release -p:IsAotCompatible=true -p:TreatWarningsAsErrors=true
+
+  license-header:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: node .github/bot/license-header.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

@@ -1,10 +1,11 @@
 # リリース。タグ (v*) の push と、bot の /release・/pre-release (タグで workflow_dispatch する) で動く。
-# windows.yml・mac.yml・linux.yml を呼んで配布物を作り、タグならリリースに添付する。
-#   publish             … 配布物をタグのリリースに添付する (bot が作った下書きがあれば、それに付ける)
+# windows.yml・mac.yml・linux.yml・tui.yml を呼んで配布物を作り、タグならリリースに添付する。
+#   publish             … 配布物をタグのリリースに添付して公開する (bot が作った下書きがあれば、それに付ける)
 #   homebrew            … Casks/meltype.rb の更新 PR を作る (main は PR 必須のため)
+#   winget              … winget-pkgs に新しい版の PR を出す (winget.yml。プレリリースは出さない)
 #   *-repositories      … apt と dnf のリポジトリを GitHub Pages に公開する
-# homebrew・*-repositories は publish のあと (どれかの OS が失敗したら、どこにも公開しない)。
-# タグでなく手動実行したときは、3 つの OS のテスト版の配布物を Artifacts に置くだけ。
+# homebrew・winget・*-repositories は publish のあと (どれかの配布物が失敗したら、どこにも公開しない)。
+# タグでなく手動実行したときは、テスト版の配布物を Artifacts に置くだけ。
 # 呼ぶワークフローには書き込みの権限を渡さない。書き込みはこのファイルのジョブだけがする。
 name: release
 
@@ -20,6 +21,11 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
+# bash を明示すると -eo pipefail で動き、パイプの途中のコマンドの失敗も止まる (既定の bash -e では最後のコマンドしか見ない。#1842)
+defaults:
+  run:
+    shell: bash
+
 jobs:
   windows:
     uses: ./.github/workflows/windows.yml
@@ -30,10 +36,13 @@ jobs:
   linux:
     uses: ./.github/workflows/linux.yml
     secrets: inherit
+  tui:
+    uses: ./.github/workflows/tui.yml
+    secrets: inherit
 
   publish:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [windows, mac, linux]
+    needs: [windows, mac, linux, tui]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -45,7 +54,7 @@ jobs:
           path: dist
           merge-multiple: true
       - run: ls -la dist
-      - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+      - uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           files: |
             dist/Meltype-*.zip
@@ -53,6 +62,14 @@ jobs:
             dist/meltype_*.deb
             dist/meltype-*.rpm
           fail_on_unmatched_files: true
+
+  winget:
+    if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-')
+    needs: publish
+    uses: ./.github/workflows/winget.yml
+    with:
+      tag: ${{ github.ref_name }}
+    secrets: inherit
 
   # Homebrew の cask をこのリリースの zip の SHA-256 で作る (#863)。同じリポジトリを tap として使い、Casks/ に更新する。
   homebrew:
@@ -181,37 +198,21 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: publish
     runs-on: ubuntu-24.04
-    outputs:
-      ready: ${{ steps.signing.outputs.ready }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Check apt signing key
-        id: signing
-        env:
-          APT_SIGNING_KEY_B64: ${{ secrets.APT_SIGNING_KEY_B64 }}
-        run: |
-          if [[ -z "$APT_SIGNING_KEY_B64" ]]; then
-            echo 'ready=false' >> "$GITHUB_OUTPUT"
-            echo '::notice::APT_SIGNING_KEY_B64 is not set; skipping apt and dnf repository publication.'
-          else
-            echo 'ready=true' >> "$GITHUB_OUTPUT"
-          fi
       - name: Download Linux packages
-        if: steps.signing.outputs.ready == 'true'
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: meltype-linux*
           path: ${{ runner.temp }}/meltype-artifacts
           merge-multiple: true
       - name: Install repository tools
-        if: steps.signing.outputs.ready == 'true'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y apt-utils gnupg rpm createrepo-c
+          sudo apt-get -o Acquire::Retries=3 update
+          sudo apt-get -o Acquire::Retries=3 install -y apt-utils gnupg rpm createrepo-c
       - name: Build signed apt repository
-        if: steps.signing.outputs.ready == 'true'
         env:
           APT_SIGNING_KEY_B64: ${{ secrets.APT_SIGNING_KEY_B64 }}
           APT_SIGNING_KEY_PASSPHRASE: ${{ secrets.APT_SIGNING_KEY_PASSPHRASE }}
@@ -223,7 +224,6 @@ jobs:
           fi
           bash linux/build-apt-repository.sh "${debs[@]}" "$RUNNER_TEMP/meltype-pages"
       - name: Build signed dnf repository
-        if: steps.signing.outputs.ready == 'true'
         env:
           APT_SIGNING_KEY_B64: ${{ secrets.APT_SIGNING_KEY_B64 }}
           APT_SIGNING_KEY_PASSPHRASE: ${{ secrets.APT_SIGNING_KEY_PASSPHRASE }}
@@ -231,13 +231,12 @@ jobs:
           mapfile -d '' -t rpms < <(find "$RUNNER_TEMP/meltype-artifacts" -type f -name 'meltype-*.rpm' -print0 | sort -z)
           bash linux/build-rpm-repository.sh "$RUNNER_TEMP/meltype-pages" "${rpms[@]}"
       - name: Upload apt and dnf repositories for GitHub Pages
-        if: steps.signing.outputs.ready == 'true'
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: ${{ runner.temp }}/meltype-pages
 
   publish-repositories:
-    if: startsWith(github.ref, 'refs/tags/v') && needs.build-repositories.outputs.ready == 'true'
+    if: startsWith(github.ref, 'refs/tags/v')
     needs: build-repositories
     runs-on: ubuntu-24.04
     concurrency:

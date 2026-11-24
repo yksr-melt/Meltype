@@ -1,22 +1,36 @@
-# Mac 版 (mac/) をビルドしてテストし、テスター向けの zip (Meltype.app + install.sh + 説明) を Artifacts (meltype-mac) に置く。
-# Mac 版・共通部分を変えた Pull Request と main、手動実行、release.yml (タグ) から呼ばれたとき。
+# Mac 版 (mac/) をビルドしてテストし、テスター向けの zip (Meltype.app・Meltype Settings.app + install.sh + 説明) を Artifacts (meltype-mac) に置く。
+# Mac 版・共通部分を変えた main、手動実行、release.yml (タグ) から呼ばれたとき。
+# Mac 版のコードを変えた Pull Request では、ビルドとテストだけを流す (署名と zip は作らない)。
 # リリースへの添付と Homebrew の cask の更新は release.yml。
 name: mac
 
 on:
+  # Core・辞書だけの変更は core.yml のテストと lint.yml の NativeAOT のアナライザーで見るので、ここでは流さない
   pull_request:
-    paths: &paths
+    paths:
       - 'mac/**'
-      - 'src/Meltype.Core/**'
-      - 'src/Meltype.Mac.Native/**'
-      - 'dictionaries/**'
+      - 'src/Meltype.Core.CApi/**'
+      - 'src/Meltype.Settings/**'
+      - 'native/mozc/**'
+      - 'native/zenzai/**'
       - 'tools/test-native-boundaries.py'
       - 'tools/test-mac-boundaries.*'
       - 'tools/test-mac-events.*'
       - '.github/workflows/mac.yml'
   push:
     branches: [main]
-    paths: *paths
+    paths:
+      - 'mac/**'
+      - 'src/Meltype.Core/**'
+      - 'src/Meltype.Core.CApi/**'
+      - 'src/Meltype.Settings/**'
+      - 'dictionaries/**'
+      - 'native/mozc/**'
+      - 'native/zenzai/**'
+      - 'tools/test-native-boundaries.py'
+      - 'tools/test-mac-boundaries.*'
+      - 'tools/test-mac-events.*'
+      - '.github/workflows/mac.yml'
   workflow_dispatch:
   workflow_call:
 
@@ -27,15 +41,21 @@ concurrency:
   group: mac-${{ github.ref }}
   cancel-in-progress: true
 
+# bash を明示すると -eo pipefail で動き、パイプの途中のコマンドの失敗も止まる (既定の bash -e では最後のコマンドしか見ない。#1842)
+defaults:
+  run:
+    shell: bash
+
 jobs:
   app:
     runs-on: macos-15
-    timeout-minutes: 60
+    # Mozc のビルドは初回 30〜40 分かかる (2 回目からは Bazel のキャッシュを使う)
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: 10.0.x
       - name: Tools
@@ -43,12 +63,25 @@ jobs:
           sw_vers
           swift --version
           dotnet --version
-      # azooKey の変換エンジンと辞書 (Swift Package) は大きいので、次からはキャッシュを使う。
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: mac/.build
-          key: mac-swiftpm-${{ hashFiles('mac/Package.swift', 'mac/Package.resolved') }}
-          restore-keys: mac-swiftpm-
+          path: |
+            ~/bazel-cache
+            ~/mozc/src/third_party_cache
+          key: mozc-macos-arm64-${{ hashFiles('native/mozc/MOZC_COMMIT') }}-${{ hashFiles('native/mozc/*.cc', 'native/mozc/BUILD.fragment') }}
+          restore-keys: |
+            mozc-macos-arm64-${{ hashFiles('native/mozc/MOZC_COMMIT') }}-
+      # Bazelisk は版を固定し、ダウンロードしたものが公開されているものと同じか (SHA-256) を確かめる (linux.yml と同じ)
+      - name: Bazelisk
+        run: |
+          mkdir -p "$HOME/tools"
+          if ! curl -fsSL --retry 3 --connect-timeout 15 --max-time 120 -o "$HOME/tools/bazelisk" https://github.com/bazelbuild/bazelisk/releases/download/v1.29.0/bazelisk-darwin-arm64; then
+            curl -fsSL --retry 3 --connect-timeout 15 --max-time 120 -H 'Accept: application/octet-stream' -o "$HOME/tools/bazelisk" https://api.github.com/repos/bazelbuild/bazelisk/releases/assets/406879037
+          fi
+          echo "cee851f726789227d5561004e9904a52be45c3efb56f8b38b6993d6adbaa0409  $HOME/tools/bazelisk" | shasum -a 256 -c -
+          chmod +x "$HOME/tools/bazelisk"
+      - name: Build Mozc helper
+        run: BAZEL="$HOME/tools/bazelisk" native/mozc/build-mozc-helper.sh "$HOME/mozc" "$HOME/bazel-cache"
       # 配布用の署名 (Apple Developer Program の Developer ID の証明書があるときだけ。公証に時間がかかるので Pull Request ではしない)。秘密:
       #   MAC_CERT_P12_BASE64 (証明書の .p12 を Base64 にしたもの)、MAC_CERT_PASSWORD、MAC_IDENTITY ("Developer ID Application: 名前 (チームID)")
       - name: Signing certificate
@@ -67,7 +100,11 @@ jobs:
           echo "$MAC_CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
           security import "$RUNNER_TEMP/cert.p12" -k "$keychain" -P "$MAC_CERT_PASSWORD" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain"
-          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          # 既にある keychain も検索の対象に残す (1 行に 1 つ、"…" で囲まれて出る)
+          # macOS の bash 3.2 には mapfile が無いので read で読む
+          keychains=()
+          while IFS= read -r line; do keychains+=("$line"); done < <(security list-keychains -d user | sed -E 's/^[[:space:]]*"(.*)"$/\1/')
+          security list-keychains -d user -s "$keychain" "${keychains[@]}"
           rm "$RUNNER_TEMP/cert.p12"
           echo "MELTYPE_MAC_IDENTITY=$MAC_IDENTITY" >> "$GITHUB_ENV"
       - name: Build
@@ -86,16 +123,20 @@ jobs:
           NOTARY_TEAM_ID: ${{ secrets.NOTARY_TEAM_ID }}
           NOTARY_PASSWORD: ${{ secrets.NOTARY_PASSWORD }}
         run: |
-          ditto -c -k --keepParent mac/build/Meltype.app "$RUNNER_TEMP/notarize.zip"
-          xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" --apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" --password "$NOTARY_PASSWORD" --wait
-          xcrun stapler staple mac/build/Meltype.app
+          for app in Meltype "Meltype Settings"; do
+            ditto -c -k --keepParent "mac/build/$app.app" "$RUNNER_TEMP/notarize.zip"
+            xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" --apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" --password "$NOTARY_PASSWORD" --wait
+            xcrun stapler staple "mac/build/$app.app"
+          done
       - name: Package
+        if: github.event_name != 'pull_request'
         run: |
           # タグ (v1.0.0) なら Meltype-1.0.0-mac.zip、それ以外はテスト版の名前
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then name="Meltype-${GITHUB_REF_NAME#v}-mac.zip"; else name="Meltype-mac-test-$(date +%Y%m%d-%H%M).zip"; fi
           bash mac/package.sh "$name"
           ls -la dist
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: meltype-mac
           path: dist/Meltype-*.zip

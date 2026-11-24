@@ -3,7 +3,7 @@
 
 using System.Diagnostics;
 using System.Text;
-using Meltype.Composition;
+using Meltype.Engine;
 
 namespace Meltype.Tests;
 
@@ -27,17 +27,43 @@ internal static class MozcConverterTests
             {
                 case "C" when fields[2] == "おちる":
                     return 1;
+                // 応答が遅い読み (ヘルパーの応答を待っている間も、キャッシュの答えを読めるかのテスト)
+                case "C" when fields[2] == "おそい":
+                    Thread.Sleep(1000);
+                    output.WriteLine(fields[2] + '\x1f' + fields[2]);
+                    break;
                 // 2 つの文節に分けて、文節ごとの候補も返す (Zenzai の結果を Mozc の文節に当てはめるテスト: ZenzaiConverterTests)
                 case "C" when fields[2] == "きしゃがきた":
                     output.WriteLine("きしゃが\x1f記者が\x1f汽車が\x1f帰社が" + '\x1e' + "きた\x1f来た\x1f着た\x1f北");
+                    break;
+                // 読みと表記が違う候補 (ず の読みの 気づく) がある (Zenzai の答えを Mozc の候補で確かめるテスト: ZenzaiConverterTests)
+                case "C" when fields[2] == "きずくのがはやい":
+                    output.WriteLine("きずくのが\x1f築くのが\x1f気づくのが" + '\x1e' + "はやい\x1f早い\x1f速い");
                     break;
                 // 助詞だけの文節 (に) の候補に数字がある (Zenzai の 荷物を2階に運ぶ を当てはめると、に を 2 にしてしまう)
                 case "C" when fields[2] == "にもつをにかいにはこぶ":
                     // (\x1f の後ろに 2 を続けて書くと \x1f2 という 1 文字になるので、区切りは別の文字として足す)
                     output.WriteLine("にもつを\x1f荷物を" + '\x1e' + "に\x1fに" + '\x1f' + "2" + '\x1f' + "二" + '\x1e' + "かいに\x1f階に\x1f回に" + '\x1e' + "はこぶ\x1f運ぶ");
                     break;
+                // CompositionTests.FakeConverter と同じ答え (Zenzai を組み合わせるテスト: ZenzaiConverterTests)
+                case "C" when fields[2] == "たんいをとる":
+                    output.WriteLine("たんいを\x1f単位を" + '\x1e' + "とる\x1f取る");
+                    break;
+                case "C" when fields[2] == "にほんごをかく":
+                    output.WriteLine("にほんごを\x1f日本語を" + '\x1e' + "かく\x1f書く");
+                    break;
+                case "C" when fields[2] == "たんい":
+                    output.WriteLine("たんい\x1f単位");
+                    break;
+                case "C" when fields[2] == "きょう":
+                    output.WriteLine("きょう\x1f今日");
+                    break;
                 case "C":
                     output.WriteLine(fields[2] + '\x1f' + fields[2]);
+                    break;
+                // 逆変換は 漢字 だけ読める
+                case "R":
+                    output.WriteLine(fields[1] == "漢字" ? "かんじ" : "");
                     break;
                 case "Q":
                     return 0;
@@ -49,26 +75,89 @@ internal static class MozcConverterTests
         return 0;
     }
 
+    /// <summary>偽のヘルパーで動く Mozc (最初の変換は起動を待つ)。</summary>
+    public static MozcConverter Fake() => new(new MozcHelperProcess(Environment.ProcessPath!, Path.Combine(Path.GetTempPath(), FakeHelperProfile)));
+
     [Test]
     public static void Mozc_StartsInBackground_AndDoesNotWaitForIt()
     {
         var profile = Path.Combine(Path.GetTempPath(), FakeHelperProfile);
-        using var mozc = new MozcConverter(Environment.ProcessPath!, profile);
+        using var mozc = new MozcConverter(new MozcHelperProcess(Environment.ProcessPath!, profile));
 
-        // 起動しているあいだ (READY を待っているあいだ) の変換は、待たずに null を返す (呼び出し側が Microsoft IME で変換する)
+        // 起動しているあいだ (READY を待っているあいだ) の変換は、待たずに null を返す (呼び出し側はかなのまま見せる)
         mozc.WarmUp();
         var watch = Stopwatch.StartNew();
-        Assert.True(mozc.ConvertClauses("あ") is null, "起動を待たない");
+        Assert.True(mozc.ConvertClauses("あ", null, deadline: 0) is null, "起動を待たない");
         Assert.True(watch.ElapsedMilliseconds < 500, $"起動を待たない ({watch.ElapsedMilliseconds}ms)");
         Assert.True(WaitConverted(mozc, "い"), "起動したら変換する");
 
         // ヘルパーが落ちたら、起動し直しを待たずに null を返し、起動し直したらまた変換する
-        Assert.True(mozc.ConvertClauses("おちる") is null, "落ちた");
+        Assert.True(mozc.ConvertClauses("おちる", null, deadline: Environment.TickCount64 + 5000) is null, "落ちた");
         watch.Restart();
-        Assert.True(mozc.ConvertClauses("う") is null, "起動し直しを待たない");
+        Assert.True(mozc.ConvertClauses("う", null, deadline: 0) is null, "起動し直しを待たない");
         Assert.True(watch.ElapsedMilliseconds < 500, $"起動し直しを待たない ({watch.ElapsedMilliseconds}ms)");
         Assert.True(WaitConverted(mozc, "え"), "起動し直したら変換する");
         Assert.True(mozc.IsAvailable, "起動し直せたので使える");
+    }
+
+    [Test]
+    public static void Mozc_Reading_AsksTheHelper()
+    {
+        var profile = Path.Combine(Path.GetTempPath(), FakeHelperProfile);
+        using var mozc = new MozcConverter(new MozcHelperProcess(Environment.ProcessPath!, profile));
+        Assert.Equal("かんじ", mozc.Reading("漢字"));
+        Assert.True(mozc.Reading("読めない") is null, "逆変換できなければ null");
+        Assert.True(mozc.IsAvailable, "逆変換できなくても使える");
+        // かなだけの文字列はヘルパーに聞かずにひらがなにする
+        var hybrid = new HybridConverter(mozc);
+        Assert.Equal("めるたいぷ", hybrid.Reading("メルタイプ"));
+        Assert.Equal("かんじ", hybrid.Reading("漢字"));
+    }
+
+    /// <summary>同じプロセスで答えるヘルパー。受け取った要求を Requests に残す。</summary>
+    private sealed class AnsweringHelper(Func<string, string, string?> convert) : IMozcHelper
+    {
+        public List<string> Requests { get; } = [];
+        public bool IsInstalled => true;
+        public int Launches => 1;
+        public bool Start() => true;
+
+        public string? Send(string request)
+        {
+            Requests.Add(request);
+            var fields = request.Split('\t');
+            return fields[0] == "C" ? convert(fields[1], fields[2]) : "OK";
+        }
+
+        public void Reset() { }
+        public long WorkingSet => 0;
+        public void Dispose() { }
+    }
+
+    [Test]
+    public static void Mozc_Context_DoesNotChangeClauseBoundaries()
+    {
+        // 報告: 記号等 がどうしても 機強盗 になる (前に「記号等」があると Mozc が き|ごうとう と区切る)。文脈で区切りが変わるなら文脈なしの結果を使う
+        var helper = new AnsweringHelper((context, reading) => context.Contains("記号等") ? "き\x1f気\x1eごうとう\x1f強盗" : "きごう\x1f記号\x1eとう\x1f等");
+        using var mozc = new MozcConverter(helper);
+        Assert.Equal("記号|等", string.Join("|", mozc.ConvertClauses("きごうとう", "文章を「記号等」含め、")!.Select(c => c.Text)));
+        // 区切りが同じなら、文脈付きの結果 (漢字の選び方だけが文脈で変わる)
+        var same = new AnsweringHelper((context, reading) => context.Length > 0 ? "あつい\x1f厚い" : "あつい\x1f暑い");
+        using var book = new MozcConverter(same);
+        Assert.Equal("厚い", book.ConvertClauses("あつい", "この本は")![0].Text);
+    }
+
+    [Test]
+    public static void Mozc_GetsTheSentenceAsContext()
+    {
+        var helper = new AnsweringHelper((_, reading) => reading + '\x1f' + reading);
+        using var mozc = new MozcConverter(helper);
+        mozc.ConvertClauses("になってしまう", "〇〇");
+        Assert.True(helper.Requests.Contains("C\t〇〇\tになってしまう"), "○ などの記号も日本語の文脈として渡す: " + string.Join(" / ", helper.Requests));
+        mozc.ConvertClauses("になってしまう", "Hello, ");
+        Assert.Equal("C\t\tになってしまう", helper.Requests[^1], "英語の後ろは文脈なし");
+        mozc.ConvertClauses("になってしまう", null);
+        Assert.Equal("C\t\tになってしまう", helper.Requests[^1], "前の文脈が無ければ文脈なし");
     }
 
     private static bool WaitConverted(MozcConverter mozc, string reading)
@@ -76,7 +165,7 @@ internal static class MozcConverterTests
         var watch = Stopwatch.StartNew();
         while (watch.ElapsedMilliseconds < 10000)
         {
-            if (mozc.ConvertClauses(reading) is { Count: 1 } clauses && clauses[0].Text == reading) return true;
+            if (mozc.ConvertClauses(reading, null) is { Count: 1 } clauses && clauses[0].Text == reading) return true;
             Thread.Sleep(50);
         }
         return false;

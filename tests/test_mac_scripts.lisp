@@ -41,14 +41,59 @@
     (unwind-protect (funcall test work)
       (uiop:delete-directory-tree work :validate t))))
 
-(defun test-build-only (work)
-  (write-file (merge-pathnames "build-cli.sh" work)
+(defun prepare-build-cli (work)
+  ;; リポジトリと同じ配置にし、ヘルパーも各テストの一時ディレクトリに閉じ込める。
+  (write-file (merge-pathnames "mac/build-cli.sh" work)
               (uiop:read-file-string (merge-pathnames "mac/build-cli.sh" *root*)))
-  (fake-tool work "build.sh" "echo \"$*\" >> \"$MELTYPE_TEST_LOG\"")
-  (dolist (name '("dotnet" "swift")) (fake-tool work name "exit 0"))
-  (run-script work "build-cli.sh" "--build")
-  (assert (equal '("--no-install")
+  (fake-tool work "mac/build.sh" "echo build:$* >> \"$MELTYPE_TEST_LOG\"")
+  (dolist (name '("dotnet" "swift"))
+    (fake-tool work name (format nil "echo ~A >> \"$MELTYPE_TEST_LOG\"" name))))
+
+(defun test-build-only (work)
+  (prepare-build-cli work)
+  (fake-tool work "native/mozc/bin/mac/meltype_mozc_helper" "exit 0")
+  (run-script work "mac/build-cli.sh" "--build")
+  (assert (equal '("build:--no-install")
                  (uiop:read-file-lines (merge-pathnames "calls" work)))))
+
+(defun test-build-cli-missing-mozc (work)
+  (prepare-build-cli work)
+  ;; 既定・--all・update.sh が使う組み合わせも、テストやビルドの実行前に止める。
+  (dolist (arguments '(nil ("--build") ("--install") ("--all")
+                       ("--test" "--build") ("--test" "--install")
+                       ("--setup" "--all")))
+    (dolist (not-executable '(nil t))
+      (let ((helper (merge-pathnames "native/mozc/bin/mac/meltype_mozc_helper" work)))
+        (if not-executable
+            (write-file helper "not executable")
+            (when (probe-file helper) (delete-file helper))))
+      (let ((output (make-string-output-stream)) (status nil))
+        (let ((*standard-output* output) (*error-output* output))
+          (handler-case (run-script work "mac/build-cli.sh" arguments)
+            (uiop:subprocess-error (condition)
+              (setf status (uiop:subprocess-error-code condition)))))
+        (assert (eql 1 status))
+        (assert (search "mac/README.md" (get-output-stream-string output))))
+      (assert (not (probe-file (merge-pathnames "calls" work)))))))
+
+(defun test-build-cli-without-build (work)
+  (prepare-build-cli work)
+  (run-script work "mac/build-cli.sh" "--test")
+  (assert (equal '("dotnet" "swift")
+                 (uiop:read-file-lines (merge-pathnames "calls" work))))
+  (write-file (merge-pathnames "calls" work) "")
+  (run-script work "mac/build-cli.sh" "--help")
+  (assert (null (uiop:read-file-lines (merge-pathnames "calls" work)))))
+
+(defun test-build-cli-install (work)
+  (prepare-build-cli work)
+  (fake-tool work "native/mozc/bin/mac/meltype_mozc_helper" "exit 0")
+  (dolist (arguments '(nil ("--all") ("--test" "--install") ("--install")))
+    (write-file (merge-pathnames "calls" work) "")
+    (run-script work "mac/build-cli.sh" arguments)
+    (assert (equal (if (equal arguments '("--install"))
+                       '("build:") '("dotnet" "swift" "build:"))
+                   (uiop:read-file-lines (merge-pathnames "calls" work))))))
 
 (defun test-update (work)
   (let* ((source (uiop:read-file-string (merge-pathnames "mac/update.sh" *root*)))
@@ -91,17 +136,19 @@
     (write-file (merge-pathnames "calls" work) "")
     (fake-tool work "build-cli.sh" (if (equal failure "build") "exit 23" "exit 0"))
     (fake-tool work "Meltype.app/Contents/MacOS/Meltype"
-               (if (equal failure "check")
-                   (format nil "if [[ \"$1\" == --check-inputs ]]; then exit 23; fi~%echo \"app:$*\" >> \"$MELTYPE_TEST_LOG\"")
-                   "echo \"app:$*\" >> \"$MELTYPE_TEST_LOG\""))
+               (format nil "echo \"app:$*\" >> \"$MELTYPE_TEST_LOG\"~%exit ~D"
+                       (if (equal failure "check") 23 0)))
     (let ((status nil))
       (handler-case (run-script work "update.sh" nil)
         (uiop:subprocess-error (condition)
           (setf status (uiop:subprocess-error-code condition))))
       (assert (eql 23 status)))
     (let ((lines (uiop:read-file-lines (merge-pathnames "calls" work))))
-      (dolist (unexpected '("app:" "app:--register-input-source" "select" "UNEXPECTED_START"))
-        (assert (not (member unexpected lines :test #'equal)))))))
+      (if (equal failure "build")
+          (assert (null lines))
+          (progn
+            (assert (= 1 (length lines)))
+            (assert (uiop:string-prefix-p "app:--check-inputs " (first lines))))))))
 
 (defun test-os-startup-failure (work)
   (test-os-startup work)
@@ -218,9 +265,10 @@
 (defun test-main-registration-keeps-input-menu (work)
   ;; 本体の登録コマンドをそのままコンパイルし、登録APIとkillallだけをスタブ化する。
   (let* ((source (uiop:read-file-string (merge-pathnames "mac/Sources/MeltypeIME/main.swift" *root*)))
-         (end (search "// Input Method Kit のサーバーを起動する。" source))
+         (end (search "func runIsolatedChecks(" source))
          (binary (merge-pathnames "main-registrar" work))
          (called (merge-pathnames "menu-restart-called" work)))
+    (assert end)
     (setf source (replace-text (subseq source 0 end) "/usr/bin/killall"
                               (namestring (merge-pathnames "killall" work))))
     (write-file (merge-pathnames "main-registrar.swift" work)
@@ -736,8 +784,35 @@
                          (namestring (merge-pathnames "source.app" work))))
   (uiop:run-program (list "/usr/bin/xattr" "-w" "com.example.meltype-test" "keep"
                          (namestring (merge-pathnames "source.app" work))))
+  ;; Distribution resources can be read-only with or without quarantine.
+  ;; The executable helper must also remain runnable after preparation.
+  (dolist (name '("plain" "quarantined"))
+    (let ((resource (merge-pathnames (format nil "source.app/Contents/Resources/~A" name) work)))
+      (write-file resource name)
+      (when (equal name "quarantined")
+        (uiop:run-program (list "/usr/bin/xattr" "-w" "com.apple.quarantine" "0083;12345678;Fixture;"
+                               (namestring resource))))
+      (uiop:run-program (list "chmod" "444" (namestring resource)))))
+  (uiop:run-program (list "chmod" "555"
+                         (namestring (merge-pathnames "source.app/Contents/MacOS/MeltypeInstallSupport" work))))
   (run-script work "install-app.sh" (list (namestring (merge-pathnames "source.app" work))
-                                         (namestring (merge-pathnames "installed.app" work)))))
+                                         (namestring (merge-pathnames "installed.app" work))))
+  (dolist (name '("plain" "quarantined"))
+    (let ((source (merge-pathnames (format nil "source.app/Contents/Resources/~A" name) work))
+          (installed (merge-pathnames (format nil "installed.app/Contents/Resources/~A" name) work)))
+      (assert (equal name (uiop:read-file-string installed)))
+      (assert (equal "444" (string-trim '(#\Newline #\Return)
+                                       (uiop:run-program (list "stat" "-f" "%Lp" (namestring source)) :output :string))))
+      (assert (not (search "com.apple.quarantine"
+                           (uiop:run-program (list "/usr/bin/xattr" (namestring installed)) :output :string))))))
+  (assert (search "com.apple.quarantine"
+                  (uiop:run-program (list "/usr/bin/xattr"
+                                         (namestring (merge-pathnames "source.app/Contents/Resources/quarantined" work)))
+                                    :output :string)))
+  (assert (equal "keep" (string-trim '(#\Newline #\Return)
+                                    (uiop:run-program (list "/usr/bin/xattr" "-p" "com.example.meltype-test"
+                                                           (namestring (merge-pathnames "installed.app" work)))
+                                                      :output :string)))))
 
 (defun test-refused-helper-preserved (work)
   (copy-install-script work)
@@ -884,6 +959,12 @@
                            "-o" (namestring *install-tool*)))
     (call-with-work-directory #'test-build-only)
     (format t "PASS build-only routing~%")
+    (call-with-work-directory #'test-build-cli-missing-mozc)
+    (format t "PASS missing/non-executable Mozc stops before tests and setup~%")
+    (call-with-work-directory #'test-build-cli-without-build)
+    (format t "PASS test/help do not require Mozc~%")
+    (call-with-work-directory #'test-build-cli-install)
+    (format t "PASS prepared Mozc keeps default/all/install routing~%")
     (call-with-work-directory #'test-update)
     (format t "PASS update routing~%")
     (call-with-work-directory #'test-os-startup)
@@ -937,7 +1018,7 @@
 
 
     (call-with-work-directory #'test-quarantine-before-helper)
-    (format t "PASS quarantined payload prepared before first helper invocation~%")
+    (format t "PASS read-only payload prepared before helper invocation without changing source~%")
     (call-with-work-directory #'test-refused-helper-preserved)
     (format t "PASS refused helper retained without replacing app~%")
     (call-with-work-directory #'test-register-without-menu-agent)
@@ -945,7 +1026,7 @@
     (call-with-work-directory #'test-pending-activation-keeps-app)
     (format t "PASS pending activation keeps first install/update/Homebrew/source app~%")
     (call-with-work-directory #'test-selection-failure-keeps-update)
-    (format t "PASS selection-only failure retains the installed update~%31/31 passed~%")))
+    (format t "PASS selection-only failure retains the installed update~%34/34 passed~%")))
 
 (handler-case (call-with-work-directory #'run-tests)
   (error (condition)

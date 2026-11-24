@@ -1,7 +1,6 @@
 # ビルド結果
 bin/
 obj/
-app-build/
 dist/
 build-check/
 revised-build*/
@@ -26,10 +25,11 @@ mac/build/
 
 # Mozc の変換ヘルパー (native/mozc/Build-MozcHelper.ps1 で作る)
 native/mozc/bin/
-# Zenzai の llama-server とモデル (native/zenzai/Get-Zenzai.ps1 で取ってくる)
+# Zenzai の llama-server とモデル (native/zenzai/Get-Zenzai.ps1 で取ってくる・native/zenzai/build-llama-server.sh でビルドする)
 native/zenzai/bin/
 native/zenzai/cache/
 linux/build/
+tui/build/
 tools/data/
 native/tip/bin/
 native/tip/obj/
@@ -37,3 +37,9 @@ native/tip/obj/
 # Python のキャッシュ (tools/*.py を動かすと作られる)
 __pycache__/
 llama.log
+# Android signing keys and private credentials (NEVER commit)
+*.p12
+*.jks
+*.keystore
+*.pfx
+*signing-setup.txt

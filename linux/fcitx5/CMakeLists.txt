@@ -25,10 +25,6 @@ target_link_libraries(meltype PRIVATE Fcitx5::Core Fcitx5::Utils ${CMAKE_DL_LIBS
 # Native は Mozc ヘルパーを置かないテスト専用ディレクトリに libMeltypeNative.so として用意する。
 #   cmake -S linux/fcitx5 -B build -DBUILD_TESTING=ON -DMELTYPE_DIR=/absolute/path/to/current-native
 #   cmake --build build && cmake -E chdir build ctest --output-on-failure
-# contextHint 未対応の旧 Native は別のディレクトリに用意し、明示指定した場合だけ互換テストを追加する。
-#   cmake -S linux/fcitx5 -B build -DMELTYPE_LEGACY_NATIVE_DIR=/absolute/path/to/legacy-native
-#   cmake -E chdir build ctest -R '^testpopup-legacy$' --output-on-failure
-# 通常のテストの Native は変更しない。追加したテストを外す場合は、同じビルドに -DMELTYPE_LEGACY_NATIVE_DIR= を指定する。
 option(BUILD_TESTING "テストをビルドする" OFF)
 if(BUILD_TESTING)
     enable_testing()
@@ -59,16 +55,6 @@ if(BUILD_TESTING)
     add_test(NAME testpopup-guide-default COMMAND testpopup guide-default)
     add_test(NAME testpopup-guide-on COMMAND testpopup guide-on)
 
-    set(MELTYPE_LEGACY_NATIVE_DIR "" CACHE PATH "旧 Native の互換テスト用ディレクトリ（未指定なら登録しない）")
-    if(NOT "${MELTYPE_LEGACY_NATIVE_DIR}" STREQUAL "")
-        get_filename_component(MELTYPE_LEGACY_NATIVE_PATH "${MELTYPE_LEGACY_NATIVE_DIR}" ABSOLUTE)
-        if(NOT EXISTS "${MELTYPE_LEGACY_NATIVE_PATH}/libMeltypeNative.so")
-            message(FATAL_ERROR "MELTYPE_LEGACY_NATIVE_DIR に libMeltypeNative.so がありません: ${MELTYPE_LEGACY_NATIVE_PATH}")
-        endif()
-        add_test(NAME testpopup-legacy COMMAND testpopup legacy)
-        set_tests_properties(testpopup-legacy PROPERTIES
-            ENVIRONMENT "MELTYPE_DIR=${MELTYPE_LEGACY_NATIVE_PATH}")
-    endif()
 
     add_executable(testmeltype test/testmeltype.cpp)
     set_target_properties(testmeltype PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)

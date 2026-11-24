@@ -21,6 +21,19 @@ public static class ProjectInfo
     public static string CoreVersion =>
         typeof(ProjectInfo).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0] ?? "?";
 
+    /// <summary>
+    /// タグの無い自己ビルドのコミット ID (先頭 7 文字)。リリースのビルドは版にコミット ID を付けない (src/Directory.Build.props) ので null。
+    /// </summary>
+    public static string? BuildCommit =>
+        typeof(ProjectInfo).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+') is [_, var commit, ..] ? commit[..Math.Min(7, commit.Length)] : null;
+
+    /// <summary>.NET SDK が付けた版 (1.5.1+<コミット ID 全体>) のコミット ID を、先頭 7 文字にする (1.5.1+abc1234)。コミット ID が無ければそのまま。</summary>
+    public static string ShortCommit(string version) =>
+        version.Split('+') is [var number, var commit, ..] ? $"{number}+{commit[..Math.Min(7, commit.Length)]}" : version;
+
+    /// <summary>版にタグの無い自己ビルドのコミット ID を付けたもの (1.5.1+abc1234)。不具合の報告と「ばーじょん」の候補で同じ版の文字列にする (issue #1868)。</summary>
+    public static string WithCommit(string version) => BuildCommit is { } commit ? $"{version}+{commit}" : version;
+
     /// <summary>公開した版 (1.0.0 以降。1.3.1-pre.3 などのプレリリースも) か。それまではリポジトリが非公開なので、GitHub で報告する道は出さない。</summary>
     public static bool IsPublicRelease(string version) => Version.TryParse(version.Split('-', 2)[0], out var parsed) && parsed.Major >= 1;
 
@@ -60,10 +73,10 @@ public static class ProjectInfo
 
     /// <summary>
     /// 更新したあとの初めての起動で、リリースノートを見せるか (issue #1207)。最後に見せた版と今の版が違えば見せる。
-    /// 初めて起動したとき (新しく入れたとき) は、更新ではないので見せない。
+    /// 初めて起動したとき (新しく入れたとき) は、更新ではないので見せない。autoShow が OFF なら見せない。
     /// </summary>
-    public static bool ShouldShowReleaseNotes(string? shownVersion, string currentVersion, bool firstRun) =>
-        !firstRun && currentVersion != "?" && shownVersion != currentVersion;
+    public static bool ShouldShowReleaseNotes(string? shownVersion, string currentVersion, bool firstRun, bool autoShow = true) =>
+        autoShow && !firstRun && currentVersion != "?" && shownVersion != currentVersion;
 
     /// <summary>不具合報告のフォーム (ReportForm) があるか。無ければ GitHub の Issue の画面で報告してもらう。</summary>
     public static bool HasReportForm => ReportForm.Length > 0;
@@ -92,13 +105,12 @@ public static class ProjectInfo
 
     /// <summary>
     /// 自分で直した誤判定を、「変換・判定の間違い」のひな形 (2-misdetection.yml) に入れた状態で開く URL (issue #284)。
-    /// 欄の id (kind・typed・actual・expected・key・zenzai・context) は、ひな形と合わせる。
+    /// 欄の id (typed・actual・expected・key・zenzai・context) は、ひな形と合わせる。
     /// Zenzai の欄は、直したときの「Zenzai を使う」の設定 (Correction.Zenzai) で入れる。分からなければ空のまま (issue #1197)。
     /// </summary>
-    public static string MisdetectionReportUrl(Composition.Correction correction, string os, string version, string environment) =>
+    public static string MisdetectionReportUrl(Meltype.Diagnostics.Correction correction, string os, string version, string environment) =>
         GitHubReportUrl("2-misdetection.yml", os, version, environment) +
         $"&title={Uri.EscapeDataString("[誤判定] " + correction.Typed)}" +
-        $"&kind={Uri.EscapeDataString(correction.Kind)}" +
         $"&typed={Uri.EscapeDataString(correction.Typed)}" +
         $"&actual={Uri.EscapeDataString(correction.Shown)}" +
         $"&expected={Uri.EscapeDataString(correction.Corrected)}" +
@@ -106,12 +118,17 @@ public static class ProjectInfo
         (correction.Zenzai is { } on ? $"&zenzai={Uri.EscapeDataString(on ? "使っている" : "使っていない")}" : "") +
         $"&context={Uri.EscapeDataString(correction.Before)}";
 
-    /// <summary>Mac 版・Linux 版の実行環境 (不具合報告に入れる。入力した文字は入れない)。</summary>
-    public static string Environment(Settings settings, string platform) => string.Join("\n",
+    /// <summary>
+    /// 実行環境 (不具合報告に入れる。1 行ずつ「項目: 値」。入力した文字は入れない)。version は「Meltype:」の値、os は「OS:」の値。
+    /// osLines は、その OS でだけ分かる項目 (Windows の動作モード・画面など)。
+    /// </summary>
+    public static string Environment(Settings settings, string version, string os, IEnumerable<string>? osLines = null) => string.Join("\n",
     [
-        $"Meltype: {CoreVersion} ({platform}、プレビュー版)",
-        $"OS: {RuntimeInformation.OSDescription} ({RuntimeInformation.OSArchitecture})",
+        $"Meltype: {version}",
+        $"OS: {os}",
         $".NET: {System.Environment.Version}",
+        .. osLines ?? [],
+        $"Zenzai: {(settings.UseZenzai ? "ON" : "OFF")}",
         $"自動判定: {(settings.AutoDetection ? "ON" : "OFF")}",
         $"入力方式: {settings.InputStyle}",
         $"ライブ変換: {(settings.LiveConversion ? "ON" : "OFF")}",

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
 
-using Meltype.Composition;
 using Meltype.Config;
+using Meltype.Detection;
 using Meltype.Input;
 
 namespace Meltype.Tests;
@@ -15,19 +15,18 @@ internal static class ScoredSegmentationTests
     private static CompositionDetector CreateDetector()
     {
         var detector = CompositionDetector.CreateDefault();
-        detector.SpellChecker = Detection.BuiltInWordChecker.Shared;
         return detector;
     }
 
     /// <summary>打って Enter で確定した文字列 (変換エンジンは使わないので、日本語はかなのまま)。</summary>
     private static string Type(string typed)
     {
-        var session = new MeltypeSession(Detector, new CompositionTests.FakeConverter(), new CompositionOptions(), () => new Settings());
+        var session = new TestSession(() => new Settings { LiveConversion = false }, detector: Detector);
         var output = "";
         foreach (var character in typed + "\n")
         {
             var vk = character == '\n' ? VirtualKeys.Return : char.ToUpperInvariant(character);
-            var result = session.HandleKey(vk, character == '\n' ? null : character, char.IsAsciiLetterUpper(character), false, false, false);
+            var result = session.HandleKey(vk, character == '\n' ? null : character, char.IsAsciiLetterUpper(character), false, false, false, output);
             foreach (var edit in result.Commits)
             {
                 if (edit.DeleteBefore > 0) output = output[..(output.Length - Math.Min(edit.DeleteBefore, output.Length))];
@@ -88,6 +87,17 @@ internal static class ScoredSegmentationTests
     {
         // 子音を重ねて打った っ は、前後をかなに挟まれているときだけ (excelとっpt・pythonとっfmpeg にしない)
         foreach (var (typed, expected) in new[] { ("exceltoppt", "excelとppt"), ("pythontoffmpeg", "pythonとffmpeg"), ("mottekita", "もってきた") })
+            Assert.Equal(expected, Type(typed), typed);
+    }
+
+    [Test]
+    public static void ShortEnglishWord_IsNotCutOutOfJapanese()
+    {
+        // 2 文字の英単語 (be・pa・ma・on・ve・he・go) をローマ字の途中から切り出していた (#2141・#2016・#1908・#1588・#1699・#1377・#1760)。
+        // 大文字の略語・付属語を挟んだ英単語 (Xのpost・Goでrewrite) は英語のまま
+        foreach (var (typed, expected) in new[] {
+            ("subewomotanai", "すべをもたない"), ("ronpa", "ろんぱ"), ("cve", "cve"), ("he-", "へー"), ("USENsama", "USENさま"), ("beepon", "beepおん"), ("meni", "めに"), ("maenogo", "まえのご"),
+            ("Xnopost", "Xのpost"), ("AInomodel", "AIのmodel"), ("Goderewrite", "Goでrewrite"), ("jsnocode", "jsのcode"), ("lsshite", "lsして") })
             Assert.Equal(expected, Type(typed), typed);
     }
 }

@@ -11,7 +11,7 @@ namespace Meltype.Tests;
 ///   dotnet run --project src/Meltype.Core.Tests -- --eval       … 品質テストの正解率と外れた例
 ///   dotnet run --project src/Meltype.Core.Tests -- --version    … 版 (Meltype.Core)
 ///   dotnet run --project src/Meltype.Core.Tests -- --explain konnichiwa hello … 1 文字ずつの判定理由
-/// Windows では src/Meltype.Tests から実行すると、Windows のスペルチェッカーを使い、Windows 専用のテストもまとめて流す。
+/// Windows では src/Meltype.Windows.Tests から実行すると、Windows 専用のテストもまとめて流す。
 /// </summary>
 internal static class Program
 {
@@ -25,20 +25,25 @@ internal static class Program
             case "--eval":
                 Quality.Print(Quality.Run());
                 return 0;
+            case "--tune-weights":
+                // 日英の区切りの辺をつなぐ重みを 1 つずつ動かして、品質テストの打鍵の例が崩れない範囲と、外れが減る重みの組を出す (WeightTuning)
+                WeightTuning.Run();
+                return 0;
             case "--repro":
                 // 打ったキーをそのまま打ってみて、結果を JSON で返す (GitHub の bot が報告を再現するのに使う)。
-                //   --repro nihongowohanasu [enter|space|none]
-                Repro.Type(args.ElementAtOrDefault(1) ?? "", args.ElementAtOrDefault(2) ?? "enter");
+                //   --repro nihongowohanasu [enter|space|none] [--learn "打ったキー → 確定した語"]…
+                Repro.Type(args[1..]);
                 return 0;
             case "--segments":
                 // 調べる用: 打った文字の単位と、英語 / 日本語の区間分け (Enter の前) と、区間分けのラティスの道と重み
                 {
-                    var text = new Meltype.Composition.CompositionText(CompositionTests.Detector);
-                    foreach (var c in args.ElementAtOrDefault(1) ?? "") text.Append(c);
+                    var text = new Composition.CompositionTextState();
+                    var env = TestSupport.Env(CompositionTests.Detector);
+                    foreach (var c in args.ElementAtOrDefault(1) ?? "") Composition.CompositionText.Append(text, env, c);
                     Console.OutputEncoding = new System.Text.UTF8Encoding(false);
-                    Console.WriteLine("units: " + string.Join(" ", text.Units.Select(u => $"{u.Raw}={u.Kana}")) + (text.Pending.Length > 0 ? $" +{text.Pending}" : ""));
+                    Console.WriteLine("units: " + string.Join(" ", Composition.CompositionText.Units(text).Select(u => $"{u.Raw}={u.Kana}")) + (Composition.CompositionText.Pending(text).Length > 0 ? $" +{Composition.CompositionText.Pending(text)}" : ""));
                     CompositionTests.Detector.LatticeTrace = Console.WriteLine;
-                    var segments = text.Segments();
+                    var segments = Composition.CompositionText.Segments(text, env);
                     CompositionTests.Detector.LatticeTrace = null;
                     Console.WriteLine("segments: " + string.Join(" | ", segments.Select(s => (s.IsEnglish ? "EN:" : "JA:") + s.Raw)));
                 }
@@ -82,13 +87,13 @@ internal static class Program
                 {
                     var text = string.Join(" ", args.Skip(1));
                     var slash = text.IndexOf(" / ", StringComparison.Ordinal);
-                    Jht.Run(slash >= 0 ? text[..slash] : text, slash >= 0 ? text[(slash + 3)..] : null, null, Henkan.Keyboard, Henkan.EngineName);
+                    Jht.Run(slash >= 0 ? text[..slash] : text, slash >= 0 ? text[(slash + 3)..] : null, Henkan.ReadingOf, Henkan.Keyboard, Henkan.EngineName);
                     Henkan.Shutdown();
                 }
                 return 0;
             case "--jht-batch":
                 // 標準入力から 1 行に 1 つ「出てほしい文 [/ 読み]」を受け取り、1 行ずつ結果を返す (多くの文を続けて試すとき。起動の待ちを省く)
-                Jht.Batch(null, Henkan.Keyboard, () => Henkan.EngineName);
+                Jht.Batch(Henkan.ReadingOf, Henkan.Keyboard, () => Henkan.EngineName);
                 Henkan.Shutdown();
                 return 0;
             case "--dictionary-memory":

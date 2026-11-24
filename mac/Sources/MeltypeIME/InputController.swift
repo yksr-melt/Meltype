@@ -1,228 +1,211 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
+// Copyright (C) 2026 aster-void
+// Copyright (C) 2026 HarukiKubota
 
 import Carbon.HIToolbox
 import Cocoa
 import InputMethodKit
+import UniformTypeIdentifiers
 
-/// 入力欄 (クライアント) ごとの IME。キーを本体 (libMeltypeNative.dylib) に渡し、
-/// 返ってきた結果 (確定する文字・変換中の表示・候補) を入力欄に反映する。
+/// 入力欄 (クライアント) ごとの IME。Input Method Kit から読んだ事実 (キー・キャレットの前後の文字) を本体 (libMeltypeNative.dylib の ImeHost) に渡し、
+/// 返ってきた指示 (確定する文字・変換中の表示・候補・入力モードの表示) を入力欄に反映する。入力モードは本体が決めるので、ここでは持たない。
 /// Info.plist の InputMethodServerControllerClass に書いた名前で、Input Method Kit が作る。
 @objc(MeltypeInputController)
 final class MeltypeInputController: IMKInputController, ModeServiceTarget {
-    private var session: UnsafeMutableRawPointer?
-    private var candidateList: [String] = []
+    /// 本体が最後に返した表示のモード (入力メニューのチェックに使う)
+    private var japanese = true
     private var hasMarkedText = false
-    private var codeInput = ModeSelection.shared.current == .code
-    private var directInput = ModeSelection.shared.current == .direct
-    private var mode: MacInputMode { directInput ? .direct : codeInput ? .code : .automatic }
     private let modeIndicator = ModeIndicator.shared
-    private var suggestionPanel: NSPanel?
-    private var displayedSuggestion: String?
-    private var dictionaryObserver: NSObjectProtocol?
+    /// 候補と案内のパネル。表示するのは今の入力欄の分だけなので、すべての入力欄で 1 つを共有する。
+    private static let compositionPanel = CompositionPanel(choose: { index in
+        active?.sendCandidate("CandidateClicked", index: index)
+    }, highlight: { index in
+        active?.sendCandidate("CandidateHighlighted", index: index)
+    })
 
-    override func activateServer(_ sender: Any!) {
-        super.activateServer(sender)
-        ModeServices.shared.activate(self)
-        let selected = ModeSelection.shared.current
-        if mode != selected {
-            directInput = selected == .direct
-            codeInput = selected == .code
-        }
-        NativeCore.shared.setDirect(session, directInput)
-        NativeCore.shared.setCodeInput(session, codeInput)
+    /// ロック画面と OS の認証ダイアログを Password として送り、Core でアプリ別設定より優先する (#1752)。
+    private static let authenticationApps: Set<String> = ["com.apple.loginwindow", "com.apple.SecurityAgent"]
+
+    /// 判定の文脈とコードの行の判定に使う、キャレットの前の文字数
+    private static let beforeLength = 4000
+    private static let afterLength = 20
+
+    /// フォーカスのある入力欄。背景の変換の結果が届いたら、この入力欄の表示を作り直す。メインスレッドからだけ使う。
+    nonisolated(unsafe) static weak var active: MeltypeInputController?
+
+    /// 入力の本体 (ImeHost)。Input Method Kit は入力欄ごとにこのクラスを作るが、入力モードはすべての入力欄で同じにするので、プロセスで 1 つにする。
+    /// メインスレッドからだけ使う。
+    nonisolated(unsafe) private static var host = NativeCore.shared.createHost()
+
+    /// 送るのは同じプロセスの importUserDictionary だけなので、ほかのプロセスから届く分散通知では受けない
+    nonisolated(unsafe) private static let dictionaryObserver = NotificationCenter.default.addObserver(
+        forName: Notification.Name("MeltypeUserDictionaryChanged"), object: nil, queue: .main
+    ) { _ in
+        // 取り込んだユーザー辞書は、入力の本体を作るときに読む
+        if let active = MeltypeInputController.active { active.commitComposition(active.client()) }
+        NativeCore.shared.destroyHost(MeltypeInputController.host)
+        MeltypeInputController.host = NativeCore.shared.createHost()
     }
 
     override init!(server: IMKServer!, delegate: Any!, client inputClient: Any!) {
         super.init(server: server, delegate: delegate, client: inputClient)
-        session = NativeCore.shared.createSession()
-        NativeCore.shared.setDirect(session, directInput)
-        NativeCore.shared.setCodeInput(session, codeInput)
-        // 送るのは同じプロセスの importUserDictionary だけなので、ほかのプロセスから届く分散通知では受けない
-        dictionaryObserver = NotificationCenter.default.addObserver(
-            forName: Notification.Name("MeltypeUserDictionaryChanged"), object: nil, queue: .main
-        ) { [weak self] _ in
-            guard let self else { return }
-            self.commitComposition(self.client())
-            NativeCore.shared.destroySession(self.session)
-            self.session = NativeCore.shared.createSession()
-            NativeCore.shared.setDirect(self.session, self.directInput)
-            NativeCore.shared.setCodeInput(self.session, self.codeInput)
-        }
+        _ = Self.dictionaryObserver
     }
 
-    deinit {
-        if let dictionaryObserver { NotificationCenter.default.removeObserver(dictionaryObserver) }
-        NativeCore.shared.destroySession(session)
+    // ---- 本体とのやり取り ----
+
+    /// 出来事を本体に送り、返ってきた指示を入力欄に出す。本体が処理できなければ nil。
+    @discardableResult
+    private func send(_ type: String, client: IMKTextInput?, _ fields: [String: Any] = [:], keyEvent: NSEvent? = nil) -> ImeOutput? {
+        var event: [String: Any] = ["version": 1, "type": type, "instance": "mac"]
+        let app = client?.bundleIdentifier()
+        if let app, Self.authenticationApps.contains(app) {
+            // ユーザー名は通常自動で入るため、SecurityAgent ではユーザー名欄も含めて打鍵を通す。
+            // 未確定入力の取消に必要な属性だけを送り、打鍵の内容や周辺文字列は Core に渡さない。
+            event["field"] = ["traits": ["Password"]]
+        } else {
+            if let client {
+                event["field"] = field(of: client, app: app)
+            }
+            if let keyEvent { event["key"] = key(of: keyEvent) }
+        }
+        event.merge(fields) { _, new in new }
+        guard let output = NativeCore.shared.send(Self.host, event) else { return nil }
+        japanese = output.state.languageMode == .japanese
+        if let client { apply(output.result, to: client) }
+        if output.state.modeIndicatorMs > 0 {
+            modeIndicator.show(japanese ? .japanese : .direct, caret: client.flatMap { modeIndicatorCaret($0) }, milliseconds: output.state.modeIndicatorMs)
+        }
+        return output
+    }
+
+    /// 入力欄の事実 (ImeField)。キャレットの前後は、変換中なら変換中の文字の前後
+    private func field(of client: IMKTextInput, app: String?) -> [String: Any] {
+        var field: [String: Any] = ["composing": hasMarkedText]
+        if let app { field["app"] = app }
+        let marked = client.markedRange()
+        let anchor = marked.location != NSNotFound && marked.length > 0 ? marked : client.selectedRange()
+        guard anchor.location != NSNotFound else {
+            noteBefore(unreadable: true) { "selectedRange が NSNotFound" }
+            return field
+        }
+        if anchor.length > 0, !hasMarkedText, let selection = client.attributedSubstring(from: anchor)?.string { field["selection"] = selection }
+        let start = max(0, anchor.location - Self.beforeLength)
+        let requested = NSRange(location: start, length: anchor.location - start)
+        let before = client.attributedSubstring(from: requested)?.string
+        if let before { field["before"] = before }
+        noteBefore(unreadable: before == nil) {
+            // 原因を調べるために、短い範囲なら読めるかも書く
+            let shortStart = max(0, anchor.location - 20)
+            let short = client.attributedSubstring(from: NSRange(location: shortStart, length: anchor.location - shortStart)) != nil
+            return "頼んだ範囲 \(NSStringFromRange(requested))・selectedRange \(NSStringFromRange(client.selectedRange()))・" +
+                "markedRange \(NSStringFromRange(marked))・20 文字前からなら\(short ? "読めた" : "読めない")"
+        }
+        if let after = client.attributedSubstring(from: NSRange(location: anchor.location + anchor.length, length: Self.afterLength))?.string { field["after"] = after }
+        return field
+    }
+
+    /// キャレットの前の文字を読めないか (読めない入力欄を調べられるように、変わったときだけ Console に書く)
+    private var beforeUnreadable = false
+
+    private func noteBefore(unreadable: Bool, _ detail: () -> String) {
+        guard unreadable != beforeUnreadable else { return }
+        beforeUnreadable = unreadable
+        NSLog("Meltype: %@", unreadable ? "キャレットの前の文字を読めません (\(detail()))" : "キャレットの前の文字を読めるようになりました")
+    }
+
+    func refreshConversion() {
+        send("ConversionFinished", client: client())
+    }
+
+    // ---- Input Method Kit からの呼び出し ----
+
+    override func activateServer(_ sender: Any!) {
+        super.activateServer(sender)
+        Self.active = self
+        ModeServices.shared.activate(self)
+        send("CaretMoved", client: client(), ["caret": ["moved": true, "passedKey": 0, "focusEntered": true]])
     }
 
     override func recognizedEvents(_ sender: Any!) -> Int {
-        Int(NSEvent.EventTypeMask.keyDown.rawValue)
+        // CapsLock は keyDown にならず、flagsChanged だけで届く
+        Int(NSEvent.EventTypeMask.keyDown.rawValue | NSEvent.EventTypeMask.flagsChanged.rawValue)
     }
 
     override func handle(_ event: NSEvent!, client sender: Any!) -> Bool {
-        guard let event, event.type == .keyDown, let client = sender as? IMKTextInput else { return false }
-        if event.keyCode == kVK_Space, event.characters == "　" || event.characters == "\u{00A0}",
-           event.modifierFlags.intersection([.command, .control]).isEmpty {
-            apply(NativeCore.shared.commit(session), to: client)
-            client.insertText(NSAttributedString(string: " "), replacementRange: NSRange(location: NSNotFound, length: 0))
-            return true
-        }
+        guard let event, event.type == .keyDown || event.type == .flagsChanged && Int(event.keyCode) == kVK_CapsLock,
+              let client = sender as? IMKTextInput else { return false }
+        return send("KeyPressed", client: client, keyEvent: event)?.result.consumed ?? false
+    }
 
-        // JIS キーボードの「英数」「かな」キー: 英数 (直接入力) ⇔ 日本語。
-        switch Int(event.keyCode) {
-        case kVK_JIS_Eisu:
-            apply(NativeCore.shared.commit(session), to: client)
-            directInput = true
-            NativeCore.shared.setDirect(session, true)
-            rememberMode(caret: modeIndicatorCaret(client))
-            return true
-        case kVK_JIS_Kana:
-            directInput = false
-            codeInput = false
-            NativeCore.shared.setCodeInput(session, false)
-            NativeCore.shared.setDirect(session, false)
-            rememberMode(caret: modeIndicatorCaret(client))
-            return true
-        default:
-            break
-        }
-
-        guard let vk = KeyMapping.virtualKey(for: event) else { return false }
+    private func key(of event: NSEvent) -> [String: Any] {
+        let flags = event.modifierFlags
+        // flagsChanged (CapsLock) の isARepeat・characters は例外になる。characters は KeyMapping.text が読まない
+        var key: [String: Any] = ["vk": KeyMapping.virtualKey(for: event),
+                                  "shift": flags.contains(.shift), "ctrl": flags.contains(.control),
+                                  "alt": flags.contains(.option), "command": flags.contains(.command), "repeat": event.type == .keyDown && event.isARepeat]
         // event.characters は「見た目の 1 文字」で、UTF-16 要素が複数のことがある
-        // (補助面の文字・結合文字・ZWJ 絵文字・異体字セレクター)。1 要素へ切り詰めたり 0 に置き換えたりしない。
-        // 1 スカラーならそのコードポイントのまま本体へ渡し、複数スカラーは未確定内容だけ確定して
-        // 元のイベントを 1 回アプリへ通す (本体側の pass-through 契約と対にする)。
+        // (補助面の文字・結合文字・ZWJ 絵文字・異体字セレクター)。1 スカラーならそのコードポイント、複数ならそのまま渡す
         let text = KeyMapping.text(for: event)
         let scalars = Array(text.unicodeScalars)
         if scalars.count > 1 {
-            apply(NativeCore.shared.commitBeforeExternalText(session, text: text), to: client)
-            return false
+            key["text"] = text
+        } else if let scalar = scalars.first {
+            // JIS キーボードの Option+Space などは全角・ノーブレークの空白を入れる。Space として渡す (本体が全角・半角を決める)
+            let space = scalar.value == 0x20 || scalar.value == 0x3000 || scalar.value == 0xA0
+            key["ch"] = space ? 0x20 : scalar.value
+            if space { key["vk"] = 0x20 }
         }
-        let character: Int32 = scalars.count == 1 ? Int32(scalars[0].value) : 0
-        let flags = event.modifierFlags
-        var modifiers: Int32 = 0
-        if flags.contains(.shift) { modifiers |= 1 }
-        if flags.contains(.control) { modifiers |= 2 }
-        if flags.contains(.option) { modifiers |= 4 }
-        if flags.contains(.command) { modifiers |= 8 }
-
-        let (before, after) = hasMarkedText ? (nil, nil) : surroundingText(of: client)
-        guard let result = NativeCore.shared.handleKey(session, vk: vk, character: character, modifiers: modifiers, before: before, after: after) else {
-            return false
-        }
-        apply(result, to: client)
-        // 本体が設定「日本語 / 英数を切り替えるキーを追加」の切替をしたときは、モード表示と入力メニューも合わせる (#1033)。
-        // 合わせないと、別のアプリに移ったときの activateServer で、本体のモードが元に戻ってしまう。
-        if NativeCore.shared.takeModeToggled(session) {
-            directInput = NativeCore.shared.isDirect(session)
-            codeInput = false
-            NativeCore.shared.setCodeInput(session, false)
-            rememberMode(caret: modeIndicatorCaret(client))
-        }
-        return result.consumed
+        return key
     }
 
     /// フォーカスが外れた・クリックで別の場所に移ったときなど。未確定の内容をそのまま確定する。
     override func commitComposition(_ sender: Any!) {
         guard let client = (sender as? IMKTextInput) ?? self.client() else { return }
-        apply(NativeCore.shared.commit(session), to: client)
+        send("CommitRequested", client: client, ["caret": ["moved": true, "passedKey": 0]])
     }
 
     override func deactivateServer(_ sender: Any!) {
+        if Self.active === self { Self.active = nil }
         ModeServices.shared.deactivate(self)
-        commitComposition(sender)
-        candidatesWindow?.hide()
-        suggestionPanel?.orderOut(nil)
-        displayedSuggestion = nil
-        meaningKey = nil
-        candidateList = []
+        if let client = (sender as? IMKTextInput) ?? self.client() {
+            send("CommitRequested", client: client, ["caret": ["moved": true, "passedKey": 0, "focusLeft": true]])
+        }
+        Self.compositionPanel.hide()
         super.deactivateServer(sender)
-    }
-
-    // ---- 変換の候補の一覧 ----
-
-    override func candidates(_ sender: Any!) -> [Any]! {
-        candidateList
-    }
-
-    override func candidateSelected(_ candidateString: NSAttributedString!) {
-        guard let client = self.client(),
-              let string = candidateString?.string,
-              let index = candidateList.firstIndex(of: string) else { return }
-        // クリックした候補が候補ウィンドウで選ばれているので、覚えている位置も合わせる。
-        windowIndex = index
-        apply(NativeCore.shared.selectCandidate(session, index: index), to: client)
-    }
-
-    /// 候補ウィンドウの中で選択が動いた (マウスで選んだときなど)。本体の選択も合わせる。
-    /// 本体の選択を候補ウィンドウに反映しているとき (selectingFromCore) にも呼ばれるので、そのときは何もしない。
-    /// moveDown / moveUp の通知が遅れて届くと古い番号に戻してしまうので、マウスの操作のときだけ受け付ける。
-    private var selectingFromCore = false
-
-    override func candidateSelectionChanged(_ candidateString: NSAttributedString!) {
-        let mouseTypes: [NSEvent.EventType] = [.leftMouseDown, .leftMouseUp, .leftMouseDragged]
-        guard !selectingFromCore,
-              let type = NSApp.currentEvent?.type, mouseTypes.contains(type),
-              let client = self.client(),
-              let string = candidateString?.string,
-              let index = candidateList.firstIndex(of: string) else { return }
-        windowIndex = index
-        apply(NativeCore.shared.selectCandidate(session, index: index), to: client)
     }
 
     // ---- メニュー (メニューバーの入力メニュー) ----
 
     override func menu() -> NSMenu! {
         let menu = NSMenu()
-        for (title, action, selected) in [
-            ("日本語・英語の自動判定", #selector(selectAutomatic(_:)), !codeInput && !directInput),
-            ("英数の直接入力", #selector(selectDirect(_:)), directInput),
-            ("コード入力 (コメント・文字列は日本語)", #selector(selectCode(_:)), codeInput && !directInput)
-        ] {
-            let item = menu.addItem(withTitle: title, action: action, keyEquivalent: "")
+        for (mode, action) in [(MacInputMode.japanese, #selector(selectJapanese(_:))), (MacInputMode.direct, #selector(selectDirect(_:)))] {
+            let item = menu.addItem(withTitle: mode.title, action: action, keyEquivalent: "")
             item.target = self
-            item.state = selected ? .on : .off
+            item.state = (mode == .japanese) == japanese ? .on : .off
         }
         menu.addItem(.separator())
-        let indicator = menu.addItem(withTitle: "入力モードをミニウィンドウで表示", action: #selector(toggleModeIndicator(_:)), keyEquivalent: "")
-        indicator.target = self
-        indicator.state = ModeIndicatorSettings.shared.isEnabled ? .on : .off
         let importItem = menu.addItem(withTitle: "macOSのユーザー辞書を取り込む…", action: #selector(importUserDictionary(_:)), keyEquivalent: "")
         importItem.target = self
-        let configItem = menu.addItem(withTitle: "Meltype の設定ファイル (config.json) を開く…", action: #selector(openConfigFile(_:)), keyEquivalent: "")
-        configItem.target = self
+        let settingsItem = menu.addItem(withTitle: "Meltype の設定…", action: #selector(openSettings(_:)), keyEquivalent: "")
+        settingsItem.target = self
         menu.addItem(withTitle: "Meltype のデータフォルダを開く (設定・ユーザー辞書)", action: #selector(openDataFolder(_:)), keyEquivalent: "")
         menu.addItem(withTitle: "不具合の報告・提案… (Mac 版はプレビュー版です)", action: #selector(openReport(_:)), keyEquivalent: "")
         return menu
     }
 
-    private func selectMode(direct: Bool, code: Bool, showIndicator: Bool = false) {
-        let inputClient = client()
-        let caret = inputClient.flatMap { modeIndicatorCaret($0) }
-        commitComposition(inputClient)
-        directInput = direct
-        codeInput = code
-        NativeCore.shared.setDirect(session, direct)
-        NativeCore.shared.setCodeInput(session, code)
-        rememberMode(caret: inputClient.flatMap { modeIndicatorCaret($0) } ?? caret, showIndicator: showIndicator)
-    }
+    @objc private func selectJapanese(_ sender: Any?) { send("JapaneseModeSelected", client: client()) }
+    @objc private func selectDirect(_ sender: Any?) { send("AlphanumericModeSelected", client: client()) }
 
-    /// メニューと同じく、現在の表示を確定してからモードとミニウィンドウを更新する。
     func selectModeFromService(_ action: ModeShortcutAction) -> Bool {
-        guard client() != nil else { return false }
-        let selected = action.mode(after: mode)
-        selectMode(direct: selected == .direct, code: selected == .code, showIndicator: true)
-        return true
-    }
-
-    private func rememberMode(caret: NSRect?, showIndicator: Bool = true) {
-        ModeSelection.shared.select(mode)
-        if showIndicator {
-            modeIndicator.show(mode, caret: caret)
-        } else {
-            modeIndicator.hide()
+        guard let client = client() else { return false }
+        switch action {
+        case .japanese: send("JapaneseModeSelected", client: client)
+        case .direct: send("AlphanumericModeSelected", client: client)
+        case .toggle: send("ModeToggleRequested", client: client)
         }
+        return true
     }
 
     private func modeIndicatorCaret(_ client: IMKTextInput) -> NSRect? {
@@ -232,15 +215,6 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         var rectangle = NSRect.zero
         _ = client.attributes(forCharacterIndex: index, lineHeightRectangle: &rectangle)
         return ModeIndicator.validCaret(rectangle) ? rectangle : nil
-    }
-
-    @objc private func selectAutomatic(_ sender: Any?) { selectMode(direct: false, code: false) }
-    @objc private func selectDirect(_ sender: Any?) { selectMode(direct: true, code: false) }
-    @objc private func selectCode(_ sender: Any?) { selectMode(direct: false, code: true) }
-
-    @objc private func toggleModeIndicator(_ sender: Any?) {
-        ModeIndicatorSettings.shared.isEnabled.toggle()
-        modeIndicator.hide()
     }
 
     @objc private func importUserDictionary(_ sender: Any?) {
@@ -259,6 +233,11 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
 
     private static func importUserDictionaryFile() {
         let panel = NSOpenPanel()
+        // 取り込めるのは、macOS の「ユーザ辞書」から書き出した plist だけ。
+        // ~/Library/KeyboardServices の TextReplacements.db は Apple 内部の形式なので読まない。
+        panel.message = MacUserDictionary.exportGuide
+        panel.directoryURL = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first
+        panel.allowedContentTypes = [.propertyList]
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         guard panel.runModal() == .OK, let source = panel.url,
@@ -271,7 +250,7 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
             NotificationCenter.default.post(name: Notification.Name("MeltypeUserDictionaryChanged"), object: nil)
         } catch {
             alert.messageText = "ユーザー辞書を取り込めませんでした"
-            alert.informativeText = error.localizedDescription
+            alert.informativeText = error.localizedDescription + "\n\n" + MacUserDictionary.exportGuide
         }
         alert.runModal()
     }
@@ -281,15 +260,16 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         NSWorkspace.shared.open(url)
     }
 
-    /// 設定ファイル (Windows 版と共通の config.json) を、無ければ空の設定で作ってから、既定のエディターで開く (issue #508)。
-    /// 空の設定にも、本体が隣に書く config.schema.json を指定しておく (エディターで項目の補完・説明が出る)。
-    @objc private func openConfigFile(_ sender: Any?) {
-        guard let directory = NativeCore.shared.dataDirectory else { return }
-        let url = URL(fileURLWithPath: directory, isDirectory: true).appendingPathComponent("config.json")
-        if !FileManager.default.fileExists(atPath: url.path) {
-            try? "{\n  \"$schema\": \"./config.schema.json\"\n}\n".write(to: url, atomically: true, encoding: .utf8)
+    /// 設定アプリ (Meltype Settings.app)。install.sh は ~/Applications に、Homebrew は /Applications に入れるので、場所ではなく bundle ID で探す。
+    @objc private func openSettings(_ sender: Any?) {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "io.github.yksr-melt.Meltype.Settings") else {
+            let alert = NSAlert()
+            alert.messageText = "Meltype の設定アプリが見つかりません"
+            alert.informativeText = "Meltype をインストールし直してください (Meltype Settings.app が ~/Applications に入ります)。"
+            alert.runModal()
+            return
         }
-        NSWorkspace.shared.open(url)
+        NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
     }
 
     @objc private func openDataFolder(_ sender: Any?) {
@@ -297,25 +277,19 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         NSWorkspace.shared.open(URL(fileURLWithPath: directory, isDirectory: true))
     }
 
-    // ---- 結果を入力欄に反映する ----
+    // ---- 指示を入力欄に反映する ----
 
-    private func apply(_ result: SessionResult?, to client: IMKTextInput) {
-        guard let result else { return }
+    private func apply(_ result: SessionResult, to client: IMKTextInput) {
         for edit in result.commits {
+            // 確定し直し: キャレット (変換中の文字があればその先頭) の前の remove を置き換える (本体が照合済み)
             var range = NSRange(location: NSNotFound, length: 0)
-            var text = edit.text
-            if edit.deleteBefore > 0 {
-                if let verified = verifiedRange(for: edit, client: client) {
-                    // 確定し直し: キャレットの前の文字を置き換える。
-                    range = verified
-                } else {
-                    // 消す文字を確認できないときは、前の文字は消さずに今打った文字だけを入れる
-                    // (text には直した前の語も入っている。edit ごと捨てると、今打った文字まで消える)。
-                    NSLog("Meltype: 確定し直す文字を確認できないため、前の文字を消しません")
-                    text = edit.current ?? edit.text
-                }
+            if let remove = edit.removeBefore {
+                let length = (remove as NSString).length
+                let marked = client.markedRange()
+                let caret = marked.location != NSNotFound && marked.length > 0 ? marked.location : client.selectedRange().location
+                if caret != NSNotFound && caret >= length { range = NSRange(location: caret - length, length: length) }
             }
-            client.insertText(NSAttributedString(string: text), replacementRange: range)
+            client.insertText(NSAttributedString(string: edit.text), replacementRange: range)
             hasMarkedText = false
         }
         if let view = result.view {
@@ -323,17 +297,6 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         } else {
             hideComposition(client: client)
         }
-    }
-
-    /// 消してよいと確認できた範囲 (キャレット (変換中の文字があればその先頭) の前の DeleteBefore 文字)。確認できないときは nil。
-    private func verifiedRange(for edit: TextEdit, client: IMKTextInput) -> NSRange? {
-        let marked = client.markedRange()
-        let caret = marked.location != NSNotFound && marked.length > 0 ? marked.location : client.selectedRange().location
-        guard caret != NSNotFound, caret >= edit.deleteBefore else { return nil }
-        let candidate = NSRange(location: caret - edit.deleteBefore, length: edit.deleteBefore)
-        let previous = client.attributedSubstring(from: candidate)?.string
-        guard matchesExpectedText(previous, expected: edit.expect, deleteBefore: edit.deleteBefore) else { return nil }
-        return candidate
     }
 
     /// 変換中の文字を入力欄に下線付きで出す (変換中は文節ごと、選んでいる文節は太い下線)。
@@ -353,8 +316,7 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         }
         client.setMarkedText(NSAttributedString(attributedString: text), selectionRange: NSRange(location: length, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
         hasMarkedText = length > 0
-        updateCandidates(view, client: client)
-        showSuggestion(view.suggestion, client: client)
+        showCompositionPanel(view, markedText: view.text as NSString, client: client)
     }
 
     private func hideComposition(client: IMKTextInput) {
@@ -363,50 +325,44 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
             client.setMarkedText(NSAttributedString(string: ""), selectionRange: NSRange(location: 0, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
             hasMarkedText = false
         }
-        candidateList = []
-        candidatesWindow?.hide()
-        suggestionPanel?.orderOut(nil)
-        displayedSuggestion = nil
-        meaningKey = nil
+        Self.compositionPanel.hide()
     }
 
-    private func showSuggestion(_ suggestion: String?, client: IMKTextInput) {
-        let selection = client.selectedRange()
-        guard let suggestion, selection.location != NSNotFound else {
-            suggestionPanel?.orderOut(nil)
-            displayedSuggestion = nil
+    private func showCompositionPanel(_ view: CompositionView, markedText: NSString, client: IMKTextInput) {
+        let guide = [view.typedKeys, view.spellingSuggestion, view.hint].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: "　")
+        guard markedText.length > 0, !guide.isEmpty || view.candidates != nil else {
+            Self.compositionPanel.hide()
             return
         }
-        var caret = NSRect.zero
-        _ = client.attributes(forCharacterIndex: selection.location, lineHeightRectangle: &caret)
-        guard caret.minX.isFinite, caret.minY.isFinite,
-              caret.width.isFinite, caret.height.isFinite, caret.height > 0 else {
-            suggestionPanel?.orderOut(nil)
-            displayedSuggestion = nil
+
+        // IMK は文書全体からの位置ではなく、未確定文字列の先頭からの UTF-16 オフセットを取る。
+        var start = NSRect.zero
+        _ = client.attributes(forCharacterIndex: 0, lineHeightRectangle: &start)
+        var end = start
+        let last = markedText.rangeOfComposedCharacterSequence(at: markedText.length - 1).location
+        if last > 0 {
+            end = .zero
+            _ = client.attributes(forCharacterIndex: last, lineHeightRectangle: &end)
+        }
+        let screen = NSScreen.screens.first { $0.frame.contains(NSPoint(x: start.minX, y: start.midY)) }
+        let caretPlacement = screen.flatMap { screen in
+            screen.frame.contains(NSPoint(x: end.minX, y: end.midY))
+                ? CompositionPanelPlacement(start: start, end: end, visible: screen.visibleFrame) : nil
+        }
+        // 入力位置を返さないアプリでも候補を選べるよう、入力モードの表示と同じくマウスのある画面の下端に出す。
+        let mouseScreen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) }
+        guard let placement = caretPlacement ?? mouseScreen.map({ CompositionPanelPlacement(bottomOf: $0.visibleFrame) }) else {
+            Self.compositionPanel.hide()
             return
         }
-        displayedSuggestion = suggestion
-        let label = NSTextField(labelWithString: suggestion)
-        label.font = .systemFont(ofSize: 13)
-        label.sizeToFit()
-        let size = NSSize(width: label.frame.width + 24, height: label.frame.height + 16)
-        let panel = suggestionPanel ?? NSPanel(contentRect: NSRect(origin: .zero, size: size),
-            styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-        panel.level = panelLevel(.floating, above: client)
-        panel.hasShadow = true
-        panel.backgroundColor = .windowBackgroundColor
-        panel.ignoresMouseEvents = true
-        panel.setContentSize(size)
-        panel.contentView?.subviews.forEach { $0.removeFromSuperview() }
-        label.frame.origin = NSPoint(x: 12, y: 8)
-        panel.contentView?.addSubview(label)
-        if let screen = NSScreen.screens.first(where: { $0.frame.intersects(caret) }) ?? NSScreen.main {
-            let visible = screen.visibleFrame
-            panel.setFrameOrigin(NSPoint(x: max(visible.minX, min(caret.minX, visible.maxX - size.width)),
-                y: max(visible.minY, min(caret.minY - size.height - 6, visible.maxY - size.height))))
-        }
-        suggestionPanel = panel
-        panel.orderFrontRegardless()
+
+        Self.compositionPanel.show(guide: guide, list: view.candidates, converting: view.converting, clause: view.selectedClause, placement: placement,
+                   aboveWindowLevel: client.windowLevel())
+    }
+
+    private func sendCandidate(_ event: String, index: Int) {
+        guard let client = client() else { return }
+        send(event, client: client, ["index": index])
     }
 
     private func addMark(_ style: Int, to text: NSMutableAttributedString, range: NSRange) {
@@ -421,91 +377,5 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
             }
         }
         text.addAttributes(attributes, range: range)
-    }
-
-    /// 候補で少し (1.5 秒) 止まったら、その候補の意味を候補ウィンドウの注釈に出す (Windows 版と同じ)。
-    private var meaningKey: String?
-
-    private func scheduleMeaning(_ view: CompositionView) {
-        let key = view.meaning.map { "\(view.selectedIndex):\($0)" }
-        guard key != meaningKey else { return }
-        meaningKey = key
-        guard let key, let meaning = view.meaning else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
-            guard let self, self.meaningKey == key, let window = candidatesWindow, window.isVisible() else { return }
-            window.showAnnotation(NSAttributedString(string: meaning))
-        }
-    }
-
-    private func updateCandidates(_ view: CompositionView, client: IMKTextInput) {
-        guard let window = candidatesWindow else { return }
-        if view.candidates.count > 1 {
-            // 作り直し・選択で候補ウィンドウから candidateSelectionChanged が来ても、本体に返さない。
-            selectingFromCore = true
-            defer { selectingFromCore = false }
-            // 一覧を作り直すと選択が先頭に戻るので、中身が変わったとき (別の文節に移ったときなど) だけ作り直す。
-            if candidateList != view.candidates || !window.isVisible() {
-                candidateList = view.candidates
-                // IMK が入力位置を取り直すよう、更新前にいったん非表示にする。
-                window.hide()
-                window.update()
-                window.show(kIMKLocateCandidatesBelowHint)
-                // macOS 26 の IMK は入力位置の更新前に画面を選ぶため、画面移動直後は以前の画面に収まる。
-                // 更新された入力位置で画面を選び直し、その後で選択位置を本体とそろえる。
-                window.show(kIMKLocateCandidatesBelowHint)
-                windowIndex = 0
-            }
-            setCandidatesWindowLevel(above: client)
-            if view.selectedIndex >= 0 && view.selectedIndex < view.candidates.count {
-                selectInWindow(window, index: view.selectedIndex)
-            }
-            scheduleMeaning(view)
-        } else {
-            meaningKey = nil
-            candidateList = []
-            window.hide()
-        }
-    }
-
-    /// 候補ウィンドウで今選ばれている候補の番号 (一覧を作り直すと先頭に戻る)。
-    private var windowIndex = 0
-
-    /// 候補ウィンドウ (IMKUIPanel) のもともとの表示レベル (macOS 15 で確かめた値。IMK のウィンドウはこの 1 つだけだった)。
-    private static let defaultCandidatesLevel = NSWindow.Level(rawValue: 20)
-
-    /// Spotlight のように、ふつうのウィンドウより高い表示レベルの入力欄では、候補ウィンドウや予測候補のパネルが入力欄の裏に隠れる。
-    /// なので、もともとの表示レベルと「入力欄より 1 つ上」の高い方にする。
-    /// 候補ウィンドウはすべての入力欄で共有するので、前の入力欄で上げたままにしないよう、毎回入れ直す。
-    private func panelLevel(_ base: NSWindow.Level, above client: IMKTextInput) -> NSWindow.Level {
-        NSWindow.Level(rawValue: max(base.rawValue, Int(client.windowLevel()) + 1))
-    }
-
-    /// IMKCandidates には表示レベルを変える口が無いので、このプロセスにある IMK のウィンドウ (候補ウィンドウは IMKUIPanel) を探して変える。
-    private func setCandidatesWindowLevel(above client: IMKTextInput) {
-        for window in NSApp.windows where String(describing: type(of: window)).hasPrefix("IMK") {
-            window.level = panelLevel(Self.defaultCandidatesLevel, above: client)
-        }
-    }
-
-    /// 候補ウィンドウの選択を index 番目の候補に合わせる。
-    /// selectCandidate(withIdentifier:) では選択が動かず、selectedCandidate() も今の選択とずれることがある (macOS 26)。
-    /// なので、選択の位置はこちらで覚えておき、矢印キーと同じ moveDown / moveUp でその差だけ動かす。
-    private func selectInWindow(_ window: IMKCandidates, index: Int) {
-        let step = index > windowIndex ? #selector(NSResponder.moveDown(_:)) : #selector(NSResponder.moveUp(_:))
-        guard window.responds(to: step) else { return }
-        for _ in 0..<abs(index - windowIndex) {
-            window.perform(step, with: nil)
-        }
-        windowIndex = index
-    }
-
-    /// 入力欄のキャレットの前後の文字列 (それぞれ 20 文字まで)。取れなければ nil。
-    private func surroundingText(of client: IMKTextInput) -> (String?, String?) {
-        let selection = client.selectedRange()
-        guard selection.location != NSNotFound else { return (nil, nil) }
-        let start = max(0, selection.location - (codeInput ? 4000 : 20))
-        let before = client.attributedSubstring(from: NSRange(location: start, length: selection.location - start))?.string
-        let after = client.attributedSubstring(from: NSRange(location: selection.location + selection.length, length: 20))?.string
-        return (before, after)
     }
 }
