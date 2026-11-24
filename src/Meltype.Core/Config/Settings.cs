@@ -757,7 +757,7 @@ public sealed class Settings
             }
             var shortcut = new ToggleShortcut
             {
-                Key = ToggleShortcut.NormalizeHankakuKey(parsed.Vk),
+                Key = ToggleShortcut.NormalizeKey(parsed.Vk),
                 Modifiers = (parsed.Ctrl ? ShortcutModifiers.Control : 0) | (parsed.Alt ? ShortcutModifiers.Alt : 0)
                     | (parsed.Shift ? ShortcutModifiers.Shift : 0) | (parsed.Win ? ShortcutModifiers.Win : 0),
             };
@@ -921,7 +921,7 @@ public sealed class Settings
             {
                 var error = shortcut is null ? ShortcutValidationError.Invalid : ToggleShortcutValidator.Validate(shortcut, this, valid);
                 if (shortcut is not null && error == ShortcutValidationError.None)
-                    valid.Add(shortcut with { Key = ToggleShortcut.NormalizeHankakuKey(shortcut.Key) });
+                    valid.Add(shortcut with { Key = ToggleShortcut.NormalizeKey(shortcut.Key) });
                 else if (reportShortcutExclusions)
                     Diagnostics.ShortcutExclusions.Report(shortcut, error, ActiveProfile);
             }

@@ -7,11 +7,18 @@ using Meltype.Libraries.Lexicon;
 
 namespace Meltype.Dictionary;
 
-/// <summary>ユーザー辞書の 1 語。</summary>
-public sealed record UserWord(string Reading, string Word);
+/// <summary>
+/// ユーザー辞書の 1 語。品詞 (Pos) は変換エンジン (Mozc) に渡し、活用 (動詞・形容詞) とコストに使う。品詞の名前は、Mozc の品詞名か、
+/// 取り込んだ辞書 (Microsoft IME・Google 日本語入力・ATOK) の品詞名のまま持ち、Mozc が自分の品詞に読み替える。
+/// </summary>
+public sealed record UserWord(string Reading, string Word, string Pos = UserWord.Noun)
+{
+    /// <summary>品詞を書いていない語の品詞。</summary>
+    public const string Noun = "名詞";
+}
 
 /// <summary>
-/// ユーザー辞書 (%LOCALAPPDATA%\Meltype\userdict.txt、1 行に「読み[Tab]単語」)。
+/// ユーザー辞書 (%LOCALAPPDATA%\Meltype\userdict.txt、1 行に「読み[Tab]単語」か「読み[Tab]単語[Tab]品詞」。品詞が無ければ名詞)。
 /// 登録した語は変換エンジン (Mozc) のユーザー辞書に渡し (<see cref="EngineWords"/>)、ほかの語との取り合いを Mozc のコストで決める。
 /// 同梱の語句 (phrases.txt) は、変換する読みの中に語句の読みが含まれていれば、その部分は変換エンジンの区切りに関係なく
 /// 語句にする (<see cref="Split"/>)。ユーザーが同じ読みを登録した語句は使わない。
@@ -200,7 +207,7 @@ public sealed class UserDictionary
             // 制御文字 (ESC など) の入った語は、確定するとアプリにキー操作として届くので読まない
             if (parts.Length >= 2 && parts[0].Trim().Length >= MinRegisteredReadingLength && parts[1].Trim().Length > 0 && !parts[0].Any(char.IsControl) && !parts[1].Any(char.IsControl))
             {
-                words.Add(new UserWord(parts[0].Trim(), parts[1].Trim()));
+                words.Add(new UserWord(parts[0].Trim(), parts[1].Trim(), parts.Length >= 3 && parts[2].Trim() is { Length: > 0 } pos ? pos : UserWord.Noun));
             }
         }
     }
@@ -382,8 +389,9 @@ public sealed class UserDictionary
         if (_path is null) return;
         try
         {
-            var lines = new List<string> { "# Meltype ユーザー辞書: 1 行に「読み<Tab>単語」" };
-            lines.AddRange(_words.Select(w => $"{w.Reading}\t{w.Word}"));
+            var lines = new List<string> { "# Meltype ユーザー辞書: 1 行に「読み<Tab>単語」か「読み<Tab>単語<Tab>品詞」(品詞が無ければ名詞)" };
+            // 名詞は品詞を書かない (前の版と、macOS の取り込み (MacUserDictionary.swift) が書く 2 列の行と同じ形にする)
+            lines.AddRange(_words.Select(w => w.Pos == UserWord.Noun ? $"{w.Reading}\t{w.Word}" : $"{w.Reading}\t{w.Word}\t{w.Pos}"));
             Config.DataFile.Write(_path, temp => File.WriteAllLines(temp, lines, new UTF8Encoding(true)));
             _fileTime = FileTime();
             _read = _fileTime is not null;
