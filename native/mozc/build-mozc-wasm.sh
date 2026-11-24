@@ -3,13 +3,14 @@
 # Copyright (C) 2026 hisiragi
 #
 # ブラウザー版 (web-engine/) の変換ヘルパーを WebAssembly にして、native/mozc/bin/wasm/ (mozc.js・mozc.wasm) に置く。
-#   native/mozc/build-mozc-wasm.sh [Mozc を置く場所 (既定: ~/mozc-wasm)]
+#   native/mozc/build-mozc-wasm.sh [Mozc を置く場所 (既定: ~/mozc-wasm)] [Bazel のキャッシュの置き場 (省略可。GitHub Actions がキャッシュする)]
 # 必要なもの: git、Bazelisk (bazel)、clang (辞書を作るツールをこの PC 向けにビルドする)。初回は 30 分以上かかる。
 # Mozc の版は MOZC_COMMIT。デスクトップ版のヘルパー (build-mozc-helper.sh) とは別の場所に取る
 # (MODULE.bazel に emsdk を足すので、同じ場所だとデスクトップ版のビルドまで emsdk を読むことになる)。
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 mozc="${1:-$HOME/mozc-wasm}"
+cache="${2:-}"
 commit="$(tr -d '[:space:]' < "$here/MOZC_COMMIT")"
 # Mozc が使う Bazel 9 で読める emsdk の Bazel のモジュール
 emsdk_version=6.0.13
@@ -54,8 +55,9 @@ fi
 
 cd "$src"
 # Emscripten は POSIX として動くので、Mozc の Linux 向けの分岐 (oss_linux) でビルドする
-"${BAZEL:-bazel}" build //converter:meltype_mozc_wasm --config oss_linux --config release_build \
-    "--downloader_config=$here/bazel-downloader.cfg"
+options=(--config oss_linux --config release_build "--downloader_config=$here/bazel-downloader.cfg")
+[[ -n "$cache" ]] && options+=("--disk_cache=$cache")
+"${BAZEL:-bazel}" build //converter:meltype_mozc_wasm "${options[@]}"
 out="$here/bin/wasm"
 mkdir -p "$out"
 cp -f bazel-bin/converter/meltype_mozc_wasm/meltype_mozc_wasm_bin.js "$out/mozc.js"
