@@ -80,16 +80,18 @@ internal static class CompositionKeys
                 return;
             }
             // 母音の後の - は長音 (ro-maji → ろーまじ、de-ta → でーた)。英語の接頭辞 (e-mail、co-op) なら - の後ろで判定する。
-            // すでに完結した英単語の後ろでは、home-made のように - をアプリへ通す (#2219)。
+            // 完結した英単語の後ろでは home-made のように - を通す。長音まで含めた読み (とれー) が
+            // 辞書にあれば、英単語 (tore) にも一致していても日本語に戻す (#2219)。
             var part = CompositionDirectInput.LastHyphenPart(state);
             if (vk == VirtualKeys.OemMinus && !state.Shift && !state.Modifier && part.Length > 0 &&
-                env.Detector.Romaji.AnalyzeFragment(part) is { IsValid: true, Partial: "" })
+                env.Detector.Romaji.AnalyzeFragment(part) is { IsValid: true, Partial: "" } romaji)
             {
                 var firstPart = state.HeldLetters.Length == part.Length;
                 var prefix = firstPart && CompositionDetector.IsHyphenPrefix(part);
                 var finishedEnglishWord = firstPart && !prefix &&
                     env.Detector.IsListedEnglishWord(CompositionText.LearningContext(state.Text, env), part) &&
-                    env.ClassifyDirect!(part, true) == Verdict.English;
+                    env.ClassifyDirect!(part, true) == Verdict.English &&
+                    !CommonReadings.Words.Contains(romaji.Kana + 'ー');
                 if (!finishedEnglishWord)
                 {
                     state.HeldLetters.Append('-');

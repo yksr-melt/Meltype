@@ -411,16 +411,7 @@ internal static class CompositionTests
             {
                 Host.Apply(new SessionResult(false, [], null), vk, shift, _ctrlHeld, captured: false);
                 // アプリに通したキーはキャレットを動かすかもしれない
-                if (!VirtualKeys.IsModifier(vk))
-                {
-                    Send(ImeEventType.CaretMoved, caret: new ImeCaret
-                    {
-                        Moved = true,
-                        PassedKey = vk,
-                        PassedChar = !_ctrlHeld ? Host.CharFromKey(vk, shift) ?? '\0' : '\0',
-                        Ctrl = _ctrlHeld,
-                    });
-                }
+                if (!VirtualKeys.IsModifier(vk)) Send(ImeEventType.CaretMoved, caret: new ImeCaret { Moved = true, PassedKey = vk, Ctrl = _ctrlHeld });
                 return false;
             }
             var releaseFollows = _state.Capture.KeyReleases && !VirtualKeys.IsModifier(vk);
@@ -2064,6 +2055,24 @@ internal static class CompositionTests
             ("inuga", "いぬが"),
             ("inuwo", "いぬを"),
             ("inuwokau", "いぬをかう"),
+        })
+        {
+            var k = new Keyboard(direct: true);
+            k.Type(keys + "\n");
+            Assert.Equal(expected, k.Host.Document, keys);
+        }
+    }
+
+    [Test]
+    public static void DirectMode_LongVowelAfterAnEnglishWordCanStillBeJapanese()
+    {
+        foreach (var (keys, expected) in new[]
+        {
+            ("tore-ninngu", "とれーにんぐ"),
+            ("tore-na-", "とれーなー"),
+            ("tore-do", "とれーど"),
+            ("tore-sa-", "とれーさー"),
+            ("tore-ra-", "とれーらー"),
         })
         {
             var k = new Keyboard(direct: true);

@@ -502,7 +502,7 @@ STDMETHODIMP TextService::OnEndEdit(ITfContext* context, TfEditCookie ec, ITfEdi
     if (composition_ == nullptr || context != compositionContext_) {
         // 変換していないとき (変換中の文字が別の入力欄に残っているときも) に、キャレットが動いた・文字が変わった。
         // コードの行の判定・前の語の確定し直しは、Meltype.exe が今のキャレットの前の文字で決める
-        SendCaret(ec, context, record, changed != FALSE);
+        SendCaret(ec, context, changed != FALSE);
         return S_OK;
     }
     const GUID* properties[] = {&kPropInputScope};
@@ -545,7 +545,7 @@ STDMETHODIMP TextService::OnEndEdit(ITfContext* context, TfEditCookie ec, ITfEdi
     return S_OK;
 }
 
-void TextService::SendCaret(TfEditCookie ec, ITfContext* context, ITfEditRecord* record, bool selectionChanged) {
+void TextService::SendCaret(TfEditCookie ec, ITfContext* context, bool selectionChanged) {
     if (disabled_ || !state_.known || !state_.Active()) return;
     std::string field;
     // パスワード欄や IME が無効な欄では、通したキーをキャレット通知に載せない。
@@ -559,18 +559,9 @@ void TextService::SendCaret(TfEditCookie ec, ITfContext* context, ITfEditRecord*
     // 改行の後の自動のインデントなど、キーに続くアプリの編集でも通知が来るので、通したキーは少しの間覚えておく。
     // ただし、マウスのボタンを押しているあいだに選択が変わったら、キーの直後でもクリックとして伝える
     const bool clicked = selectionChanged && ((GetAsyncKeyState(VK_LBUTTON) | GetAsyncKeyState(VK_RBUTTON)) & 0x8000) != 0;
-    bool recent = !clicked && passedTime_ != 0 && GetTickCount64() - passedTime_ < 500;
-    // アプリがキャレットだけを移動したときは、直前に打った文字が移動先の直前と同じでも、同じ語が続いたことにしない (#2219)。
-    if (recent && passedChar_ != 0) {
-        Microsoft::WRL::ComPtr<IEnumTfRanges> updates;
-        recent = SUCCEEDED(record->GetTextAndPropertyUpdates(TF_GTP_INCL_TEXT, nullptr, 0, &updates)) &&
-                 updates && updates->Skip(1) == S_OK;
-    }
+    const bool recent = !clicked && passedTime_ != 0 && GetTickCount64() - passedTime_ < 500;
     std::string caret = std::string(",\"caret\":{\"moved\":") + (selectionChanged || recent ? "true" : "false");
-    if (recent) {
-        caret += ",\"passedKey\":" + std::to_string(passedVk_) + (passedControl_ ? ",\"ctrl\":true" : "");
-        if (passedChar_ != 0) caret += ",\"passedChar\":" + std::to_string(passedChar_);
-    }
+    if (recent) caret += ",\"passedKey\":" + std::to_string(passedVk_) + (passedControl_ ? ",\"ctrl\":true" : "");
     else if (selectionChanged) caret += ",\"passedKey\":0";
     caret += "}";
     JsonValue reply;
@@ -1211,7 +1202,7 @@ STDMETHODIMP TextService::OnTestKeyDown(ITfContext* context, WPARAM wParam, LPAR
     wchar_t ch = 0;
     *eaten = WouldEat(context, vk, lParam, ch, true) ? TRUE : FALSE;
     // アプリにそのまま渡すキー (BackSpace・矢印・Enter・Space など) はキャレットを動かす (編集の通知で Meltype.exe に伝える)
-    if (!*eaten && !IsModifier(vk)) RememberPassed(context, vk, ch);
+    if (!*eaten && !IsModifier(vk)) RememberPassed(context, vk);
     return S_OK;
 }
 
@@ -1225,7 +1216,7 @@ STDMETHODIMP TextService::OnKeyDown(ITfContext* context, WPARAM wParam, LPARAM l
     passVk_ = 0;
     wchar_t ch = 0;
     if (!WouldEat(context, vk, lParam, ch, false)) {
-        if (!IsModifier(vk)) RememberPassed(context, vk, ch);
+        if (!IsModifier(vk)) RememberPassed(context, vk);
         *eaten = FALSE;
         return S_OK;
     }
@@ -1387,14 +1378,13 @@ void TextService::HandleAltKey(UINT vk, UINT flags) {
     FlushOpen();
 }
 
-void TextService::RememberPassed(ITfContext* context, UINT vk, wchar_t ch) {
+void TextService::RememberPassed(ITfContext* context, UINT vk) {
     // 通常欄に戻った直後の通知にも、秘密欄で通したキーを持ち越さない。
     if (!state_.Active() || ContextDisabled(context)) {
         passedTime_ = 0;
         return;
     }
     passedVk_ = vk;
-    passedChar_ = ch;
     passedControl_ = KeyDown(VK_CONTROL);
     passedTime_ = GetTickCount64();
 }

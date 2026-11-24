@@ -257,13 +257,7 @@ internal static class ImeSession
             if (caret.Moved)
             {
                 ForgetLastCommit(state);
-                // 素通しした英数字でキャレットが進んでも、同じ語の途中から判定し直さない (#2219)。
-                if (caret is { FocusLeft: false, FocusEntered: false, PassedChar: >= '!' and <= '~' and var passedChar } &&
-                    EnglishWordCharacters.Contains((char)passedChar) &&
-                    (e.Field?.Before is null || e.Field.Before is [.., var last] && last == passedChar))
-                    CompositionController.AbandonDirectHold(state.Composition);
-                else
-                    ForgetDirectInput(state);
+                ForgetDirectInput(state);
             }
             if (caret.PassedKey is { } vk) CaretMoved(state, vk, caret.Ctrl);
             // 入力欄を出入りした (入った知らせだけで、出た知らせが来ないこともある)
