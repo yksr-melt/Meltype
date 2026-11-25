@@ -281,7 +281,7 @@ internal static class CompositionTests
         public bool Direct
         {
             get => !_state.ImeOpen;
-            set => Send(value ? ImeEventType.AlphanumericModeSelected : ImeEventType.JapaneseModeSelected);
+            set => Send(value ? new ImeEvent.AlphanumericModeSelected() : new ImeEvent.JapaneseModeSelected());
         }
 
         /// <summary>先頭か空白の直後の / $ @ で始まる語をそのまま入力するか (設定の SigilWordsDirect)。</summary>
@@ -354,16 +354,11 @@ internal static class CompositionTests
         public string VersionCandidate => Composition.Utility.VersionConversion.Candidate(Settings, OtherTipVersion);
 
         /// <summary>出来事を送り、応答を入力欄に当てる。vk は、本体が使わなかったらアプリに入れるキー (0 ならなし)。</summary>
-        private SessionResult Send(ImeEventType type, ImeKey? key = null, ImeCaret? caret = null, int index = 0, int vk = 0, bool shift = false)
+        private SessionResult Send(ImeEvent e, int vk = 0, bool shift = false)
         {
-            var output = _ime.Handle(new ImeEvent
+            var output = _ime.Handle(e with
             {
-                Version = ImeHost.Version,
-                Type = type,
                 Instance = "keyboard",
-                Key = key,
-                Caret = caret,
-                Index = index,
                 Field = new ImeField
                 {
                     Before = Host.Before,
@@ -396,14 +391,14 @@ internal static class CompositionTests
         {
             _now += 30;
             // 打つ前に入力欄にフォーカスが入る
-            if (_stale) Send(ImeEventType.CaretMoved, caret: new ImeCaret { Moved = true, PassedKey = 0, FocusEntered = true });
+            if (_stale) Send(new ImeEvent.CaretMoved(new ImeCaret { Moved = true, PassedKey = 0, FocusEntered = true }));
             if (vk is VirtualKeys.LControl or VirtualKeys.RControl) _ctrlHeld = !up;
             if (vk is VirtualKeys.LShift or VirtualKeys.RShift) _shiftHeld = !up;
             var shift = _shiftHeld || Host.PhysicalShift;
             if (up)
             {
                 _held.Remove(vk);
-                if (_releaseFollows.Remove(vk)) Send(ImeEventType.KeyReleased, new ImeKey { Vk = vk });
+                if (_releaseFollows.Remove(vk)) Send(new ImeEvent.KeyReleased(new ImeKeyRelease(vk)));
                 return false;
             }
             var repeat = !_held.Add(vk);
@@ -411,21 +406,21 @@ internal static class CompositionTests
             {
                 Host.Apply(new SessionResult(false, [], null), vk, shift, _ctrlHeld, captured: false);
                 // アプリに通したキーはキャレットを動かすかもしれない
-                if (!VirtualKeys.IsModifier(vk)) Send(ImeEventType.CaretMoved, caret: new ImeCaret { Moved = true, PassedKey = vk, Ctrl = _ctrlHeld });
+                if (!VirtualKeys.IsModifier(vk)) Send(new ImeEvent.CaretMoved(new ImeCaret { Moved = true, PassedKey = vk, Ctrl = _ctrlHeld }));
                 return false;
             }
             var releaseFollows = _state.Capture.KeyReleases && !VirtualKeys.IsModifier(vk);
             if (releaseFollows) _releaseFollows.Add(vk);
             var ch = !_ctrlHeld && Host.CharFromKey(vk, shift) is { } c && !char.IsControl(c) ? c : 0;
-            return Send(ImeEventType.KeyPressed, new ImeKey { Vk = vk, Ch = ch, Shift = shift, Ctrl = _ctrlHeld, Repeat = repeat, ReleaseFollows = releaseFollows },
+            return Send(new ImeEvent.KeyPressed(new ImeKey { Vk = vk, Ch = ch, Shift = shift, Ctrl = _ctrlHeld, Repeat = repeat, ReleaseFollows = releaseFollows }),
                 vk: vk, shift: shift).Consumed;
         }
 
         /// <summary>候補の一覧 (フロントに渡した一覧) の index 番目をクリックする。</summary>
-        public void SelectCandidate(int index) => Send(ImeEventType.CandidateClicked, index: index);
+        public void SelectCandidate(int index) => Send(new ImeEvent.CandidateClicked(index));
 
         /// <summary>入力欄をクリックした (キャレットが動いたかもしれない)。</summary>
-        public void Click() => Send(ImeEventType.CaretMoved, caret: new ImeCaret { Moved = true, PassedKey = 0 });
+        public void Click() => Send(new ImeEvent.CaretMoved(new ImeCaret { Moved = true, PassedKey = 0 }));
 
         /// <summary>変換ボックスに入力中か (本体がキーを受け取るか)。</summary>
         public bool Captured => _composing;
