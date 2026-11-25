@@ -1448,6 +1448,44 @@ internal static class ImeContractTests
     }
 
     [Test]
+    public static void Capture_TakesSpaceOnlyWhereItTypesJapanese()
+    {
+        // #1883: 英数とコードの行では、全角スペースにならない Shift+Space・Space をアプリに通す
+        static bool HasSpace(Front front, int mods) =>
+            Capture(front.Event("StateRequested")).GetProperty("shortcuts").EnumerateArray()
+                .Any(k => k.GetProperty("vk").GetInt32() == VirtualKeys.Space && k.GetProperty("modifiers").GetInt32() == mods);
+        static void Check(Front front, bool expected)
+        {
+            front.Settings.SpaceWidth = SpaceWidth.FullWidth;
+            Assert.Equal(expected, HasSpace(front, (int)ShortcutModifiers.Shift), front.Trace);
+            Assert.Equal(expected, HasSpace(front, 0), front.Trace);
+        }
+        Check(new Front(), true);
+        Check(new Front { Open = false }, false);
+        var code = new Front { Terminal = true };
+        code.Type("ls ");
+        Check(code, false);
+        code.Key(ToggleShortcut.Hankaku);
+        Check(code, true);
+        code.Key(ToggleShortcut.Hankaku);
+        Check(code, false);
+        code.Document = "echo \"";
+        Check(code, true);
+        // コードの行で最初に打ったキーが Shift+Space でも、その応答から受け取らない (TSF はその応答を適用してから送り直す)
+        var first = new Front { Terminal = true, Document = "ls " };
+        Assert.True(!Consumed(first.Key(VirtualKeys.Space, ' ', shift: true)), first.Trace);
+        Check(first, false);
+        // 入力モード切り替えキーに割り当てた Shift+Space は、英数でもコードの行でも受け取る
+        var toggle = new Front { Terminal = true };
+        toggle.Type("ls ");
+        foreach (var front in new[] { new Front { Open = false }, toggle })
+        {
+            front.Settings.ToggleShortcuts = [new() { Key = VirtualKeys.Space, Modifiers = ShortcutModifiers.Shift }];
+            Assert.True(HasSpace(front, (int)ShortcutModifiers.Shift), "切り替えキーは受け取る\n" + front.Trace);
+        }
+    }
+
+    [Test]
     public static void CharacterKeys_NeedNoVirtualKey()
     {
         // 文字を入力するキーは ch だけで送れる (仮想キーコードは本体が決める)
