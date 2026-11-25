@@ -58,3 +58,9 @@ dice die dies died
 issue issues
 # へれ・へろ は 減る の活用 (readings.txt) だが、日本語で打つことはまず無い
 here hero
+
+# 英字で書く技術用語
+assignee assignees chezmoi cuda paru
+
+# 「し + t」と読める語は、英語の候補を軽くして語末まで英字にする。
+shit

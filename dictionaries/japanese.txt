@@ -85,7 +85,7 @@ daidokoro genkan niwa kouen ginkou yuubinkyoku toshokan eigakan konbini suupaa d
 toukyou oosaka kyouto hokkaidou okinawa kyuushuu
 
 # 食べ物
-gyuudon karee okashi gyuunyuu tamago mikan biiru osake koohii yakiniku oyatsu obentou ohiru
+gyuudon karee okashi gyuunyuu tamago mikan biiru osake koohii yakiniku oyatsu obentou ohiru zenzai
 
 # 動詞
 neru okiru nemuru hashiru aruku oyogu asobu utau odoru warau okoru tetsudau tasukeru wasureru oboeru

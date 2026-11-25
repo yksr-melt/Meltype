@@ -22,6 +22,11 @@ Steam PlayStation Xbox Switch Minecraft Fortnite Roblox Valorant Apex Overwatch 
 Uber Airbnb Tesla PayPal Stripe Shopify Etsy eBay DLsite
 Visa Mastercard JCB Amex
 
+# OS・開発ツール
+Hyprland Wayland CachyOS NixOS Manjaro Gentoo Ghostty WezTerm Alacritty Kitty Tailscale WireGuard
+DeepSeek Codex Devin Mistral Llama Zenzai Mergify Antigravity Zed Helix Lazygit
+PipeWire systemd Btrfs Playwright Prisma Drizzle Lucide Biome Ruff
+
 # 企業・ブランド
 Adidas Nike Puma Reebok Converse Vans Gucci Prada Chanel Hermes Rolex Omega Citizen
 Sony Panasonic Sharp Canon Nikon Fujifilm Olympus Epson Brother

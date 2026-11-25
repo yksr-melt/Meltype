@@ -5567,6 +5567,48 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void EnglishSlangAndToolNames_StayInLatinLetters()
+    {
+        var words = new[]
+        {
+            "fuck", "fucking", "fucked", "fucker", "fuckers", "motherfucker", "shit", "shits", "shitty", "shitting", "bullshit",
+            "asshole", "assholes", "cunt", "bastard", "piss", "pissed", "slut", "whore", "dick", "cock", "pussy", "douchebag", "scumbag",
+            "wtf", "stfu", "gtfo", "lmao", "lmfao", "rofl", "omfg", "ikr", "imho", "smh", "irl", "ngl", "tbh", "idk",
+            "bruh", "noob", "noobs", "nerf", "nerfed", "goat", "sus", "af",
+            "hyprland", "wayland", "devin", "Zenzai", "mergify", "sideload", "assignee", "kitty",
+        };
+        AssertCommitted([.. words.Select(word => (word, word))]);
+        AssertCommitted(("cachyos", "CachyOS"), ("nixos", "NixOS"),
+            ("majidefuck", "まじでfuck"), ("kyouhashit", "きょうはshit"), ("shitgasuki", "shitがすき"));
+    }
+
+    [Test]
+    public static void EnglishDictionaryAdditions_KeepJapaneseReadings()
+    {
+        AssertCommitted(
+            ("shita", "した"), ("ashitaha", "あしたは"), ("shitara", "したら"), ("fuku", "ふく"), ("fukka", "ふっか"),
+            ("issune", "いっすね"), ("zenzen", "ぜんぜん"), ("kamo", "かも"), ("zenzaiwotaberu", "ぜんざいをたべる"),
+            ("afoo", "あふぉお"), ("afureta", "あふれた"), ("imo", "いも"), ("fyi", "ふぃ"),
+            ("susume", "すすめ"), ("kitte", "きって"), ("kittiya", "きっちや"), ("cudasai", "ください"),
+            ("shitmeasu", "してます"));
+    }
+
+    [Test]
+    public static void ToolNames_AppearInKanaConversionCandidates()
+    {
+        foreach (var (typed, name) in new[]
+        {
+            ("haipa-rando", "Hyprland"), ("weirando", "Wayland"), ("kyatti-o-esu", "CachyOS"), ("nikkusuo-esu", "NixOS"),
+            ("dhi-pushi-ku", "DeepSeek"), ("ko-dekkusu", "Codex"), ("debin", "Devin"), ("zenzai", "Zenzai"),
+        })
+        {
+            var k = new Keyboard();
+            k.Type(typed + " ");
+            Assert.True(k.Host.View!.Candidates.Contains(name), typed);
+        }
+    }
+
+    [Test]
     public static void EnglishWords_AreShownAsEnglish()
     {
         foreach (var (word, expected) in new[] { ("github", "GitHub"), ("hello", "hello"), ("typescript", "TypeScript"), ("npm", "npm"), ("localhost", "localhost"), ("zoom", "zoom"), ("git", "git"), ("test", "test"), ("iphone", "iPhone"), ("stackoverflow", "stackoverflow") })

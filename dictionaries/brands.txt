@@ -247,3 +247,37 @@
 
 # Issue #1460
 さいき PSYQUI
+
+# OS・開発ツール
+はいぱーらんど Hyprland
+うぇいらんど Wayland
+きゃっちーおーえす CachyOS
+にっくすおーえす NixOS
+まんじゃろ Manjaro
+じぇんつー Gentoo
+ごーすてぃ Ghostty
+うぇずたーむ WezTerm
+あらくりてぃ Alacritty
+きてぃ Kitty
+ているすけーる Tailscale
+わいやーがーど WireGuard
+でぃーぷしーく DeepSeek
+こーでっくす Codex
+でびん Devin
+みすとらる Mistral
+らま Llama
+まーじふぁい Mergify
+あんちぐらびてぃ Antigravity
+ぜっど Zed
+へりっくす Helix
+れいじーぎっと Lazygit
+ぱいぷわいやー PipeWire
+しすてむでぃー systemd
+びーてぃーあーるえふえす Btrfs
+ぷれいらいと Playwright
+ぷりずま Prisma
+どりずる Drizzle
+しゃどしーえぬ shadcn/ui
+るーしど Lucide
+ばいおーむ Biome
+らふ Ruff
