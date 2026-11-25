@@ -3,7 +3,7 @@
 
 using System.Buffers.Binary;
 using System.IO.Pipes;
-using System.Runtime.Versioning;
+using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using Meltype.Config;
@@ -11,8 +11,8 @@ using Meltype.Config;
 namespace Meltype.Input;
 
 /// <summary>
-/// Discord のステータス (Rich Presence) に打鍵数と起動からの経過時間を出す (打鍵数の「Discord に表示する」。既定は OFF)。
-/// Discord のローカル IPC (Windows の名前付きパイプ discord-ipc-N) で送り、外のサーバーは使わない。
+/// Discord のステータス (Rich Presence) に打鍵数と起動からの経過時間を出す (設定「打鍵数」の「数えて Discord に表示する」。既定は OFF)。
+/// Discord のローカル IPC (discord-ipc-N。Windows は名前付きパイプ、macOS・Linux は Unix ソケット) で送り、外のサーバーは使わない。
 /// 送るのは今日と合計の打鍵数・直近の 1 分あたりの打鍵数・Meltype の起動時刻だけ (打った文字・変換候補・入力先のアプリ名は送らない)。
 /// 入力とは別のスレッドで UpdateInterval ごとに送り、Discord が起動していない・切れたときは次の回につなぎ直す (入力には影響しない)。
 /// </summary>
@@ -38,7 +38,6 @@ public sealed class DiscordPresence : IDisposable
     private string? _sent;
     private (long Total, DateTimeOffset At)? _last;
 
-    [SupportedOSPlatform("windows")]
     public DiscordPresence(Func<bool> enabled, Func<Stats> stats, string clientId = ClientId)
     {
         _enabled = enabled;
@@ -114,9 +113,9 @@ public sealed class DiscordPresence : IDisposable
 
     private async Task ConnectAsync(CancellationToken token)
     {
-        for (var i = 0; i < 10; i++)
+        foreach (var name in PipeNames())
         {
-            var stream = await OpenAsync(i, token);
+            var stream = await OpenAsync(name, token);
             if (stream is null) continue;
             _stream = stream;
             try
@@ -134,18 +133,31 @@ public sealed class DiscordPresence : IDisposable
         throw new IOException("Discord が起動していません。");
     }
 
-    private static async Task<Stream?> OpenAsync(int index, CancellationToken token)
+    private static readonly string[] RuntimeVariables = ["XDG_RUNTIME_DIR", "TMPDIR", "TMP", "TEMP"];
+
+    /// <summary>Discord が待つパイプの名前。macOS・Linux では、Discord と同じく最初に設定されている環境変数のフォルダーにあるソケット (Flatpak・Snap 版も)。</summary>
+    private static IEnumerable<string> PipeNames()
     {
-        // パイプの名前はユーザー間で共有で、ほかのユーザーが先に同じ名前のパイプを作って待てる。
-        // CurrentUserOnly は、つないだパイプの所有者が自分でなければ、何も送る前に UnauthorizedAccessException にする
-        var pipe = new NamedPipeClientStream(".", $"discord-ipc-{index}", PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+        var names = Enumerable.Range(0, 10).Select(i => $"discord-ipc-{i}");
+        if (OperatingSystem.IsWindows()) return names;
+        var root = RuntimeVariables.Select(Environment.GetEnvironmentVariable).FirstOrDefault(dir => !string.IsNullOrEmpty(dir)) ?? "/tmp";
+        string[] directories = [root, Path.Combine(root, "app", "com.discordapp.Discord"), Path.Combine(root, "snap.discord")];
+        // NamedPipeClientStream は、絶対パスの名前をその場所の Unix ソケットとして開く。無いソケットは時間切れまで待つので、あるものだけ試す
+        return directories.SelectMany(directory => names.Select(name => Path.Combine(directory, name))).Where(File.Exists);
+    }
+
+    private static async Task<Stream?> OpenAsync(string name, CancellationToken token)
+    {
+        // パイプの名前と /tmp はユーザー間で共有で、ほかのユーザーが先に同じ名前のパイプ・ソケットを作って待てる。
+        // CurrentUserOnly は、つないだ相手のユーザーが自分でなければ、何も送る前に UnauthorizedAccessException にする
+        var pipe = new NamedPipeClientStream(".", name, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
         try
         {
             await pipe.ConnectAsync(200, token);
             return pipe;
         }
         // ほかのユーザーが使っている番号なら、自分の Discord は次以降の番号で待っている
-        catch (Exception ex) when (ex is TimeoutException or IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is TimeoutException or IOException or UnauthorizedAccessException or SocketException)
         {
             await pipe.DisposeAsync();
             return null;

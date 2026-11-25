@@ -100,7 +100,7 @@ Windows のコード署名の方針は [Code signing policy](docs/CODE-SIGNING.m
   <img src="docs/images/cards/privacy-storage.svg" alt="保存も PC の中: 設定・学習データ・辞書は %LOCALAPPDATA% の中に" width="32%">
 </p>
 
-保存するのは `%LOCALAPPDATA%\Meltype` の設定・学習データ・ユーザー辞書 (と、ON にしたときのログ、異常終了と自動更新の記録) だけです。
+保存するのは `%LOCALAPPDATA%\Meltype` の設定・学習データ・ユーザー辞書 (と、ON にしたときの打鍵数とログ、異常終了と自動更新の記録) だけです。
 セキュリティの方針と脆弱性の連絡先は [SECURITY.md](SECURITY.md) にあります。
 
 <br><br>

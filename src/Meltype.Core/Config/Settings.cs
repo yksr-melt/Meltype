@@ -137,6 +137,14 @@ public enum ModeIndicatorTiming
     [Description("切り替えたときと入力欄に入ったとき")] OnSwitchAndFocus,
 }
 
+/// <summary>打鍵数を数えるか。Discord に出すのは数えているときだけなので、1 つの選択肢にする。</summary>
+public enum KeyCountMode
+{
+    [Description("数えない")] Off,
+    [Description("数える")] Count,
+    [Description("数えて Discord に表示する")] CountAndDiscord,
+}
+
 /// <summary>確定した文字をアプリに入れる方法。</summary>
 public enum CommitMethod
 {
@@ -606,6 +614,8 @@ public sealed class Settings
         nameof(Enabled), nameof(JapaneseKeyboardOnly), nameof(AllowInjectedInput), nameof(FileLog), nameof(LogTypedText), nameof(AutoUpdate), nameof(UpdatePrerelease), nameof(ShowReleaseNotesAfterUpdate),
         // 入力の方式 (Windows の IME として入力するか) は PC 全体の選び方なので、プロファイルで変えない
         nameof(Mode),
+        // 打鍵数 (keycount.json) は全プロファイルの合計
+        nameof(KeyCount),
     ];
 
     /// <summary>今の設定の値のうち、プロファイルに入れるもの。</summary>
@@ -826,6 +836,10 @@ public sealed class Settings
     [Category("11. アプリ"), DisplayName("独自の種類"), Description("アプリ別設定の「種類」に使える、自分で作る種類です。一般 / コード を元に、自動判定・ライブ変換を変えられます (「全体と同じ」なら上の設定のまま)。")]
     public List<AppKind> AppKinds { get; set; } = [];
 
+    [Category("1. 全般"), DisplayName("打鍵数"),
+     Description("キーごと・日ごと・時間帯ごとの打鍵数を数えて、この PC の中に保存します (打った文字の並びは保存しません)。Windows 以外では、Meltype で入力しているときの打鍵だけを数えます (Shift などの修飾キーは数えません)。「Discord に表示する」を選ぶと、今日と合計の打鍵数・1 分あたりの打鍵数・Meltype を起動してからの時間を、この PC の Discord のアプリに送ります。既定は「数えない」です。")]
+    public KeyCountMode KeyCount { get; set; }
+
     [Category("12. ログ"), DisplayName("ファイルにログを書く"), Description("%LOCALAPPDATA%\\Meltype\\meltype.log にログを書きます (OFF でも、トレイの「ログ / 判定理由」で見られるログは Meltype が動いている間だけメモリに残ります)。/・$・@ で始まる語を検知したときの先頭の記号 1 文字・アプリ名・入力欄の名前が含まれます。確定した文字列などは「ログに入力した文字を残す」が ON のときだけ残ります。")]
     public bool FileLog { get; set; }
 
@@ -948,6 +962,7 @@ public sealed class Settings
         if (!Enum.IsDefined(InputStyle)) InputStyle = InputStyle.Romaji;
         if (!Enum.IsDefined(KanaLayout)) KanaLayout = KanaLayout.Jis;
         if (!Enum.IsDefined(RomajiLayout)) RomajiLayout = RomajiLayout.Qwerty;
+        if (!Enum.IsDefined(KeyCount)) KeyCount = KeyCountMode.Off;
         AppRules ??= [];
         AppKinds ??= [];
         AppRules.RemoveAll(r => r is null || string.IsNullOrWhiteSpace(r.Process));

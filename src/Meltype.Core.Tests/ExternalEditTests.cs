@@ -128,12 +128,12 @@ internal static class ExternalEditTests
         try
         {
             var path = Path.Combine(directory, "keycount.json");
-            File.WriteAllText(path, "{\"Total\":12345,\"Enabled\":true}");
+            File.WriteAllText(path, "{\"Total\":12345}");
             KeyCounter counter;
             using (new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
             {
                 counter = new KeyCounter(path);
-                counter.Enabled = true;
+                counter.Count(0, 'a', DateTime.Today);
                 counter.Save();
             }
             Assert.Equal(12345L, new KeyCounter(path).Total, "読めないあいだは保存しない");

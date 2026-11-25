@@ -70,6 +70,7 @@ struct Native {
     void *handle = nullptr;
     int (*init)(const char *) = nullptr;
     void (*setConversionReady)(void (*)()) = nullptr;
+    void (*startKeyCount)() = nullptr;
     void *(*create)() = nullptr;
     char *(*handle_)(void *, const char *) = nullptr;
     void (*destroy)(void *) = nullptr;
@@ -85,12 +86,13 @@ struct Native {
         auto sym = [this](const char *name) { return dlsym(handle, name); };
         init = reinterpret_cast<decltype(init)>(sym("meltype_init"));
         setConversionReady = reinterpret_cast<decltype(setConversionReady)>(sym("meltype_set_conversion_ready"));
+        startKeyCount = reinterpret_cast<decltype(startKeyCount)>(sym("meltype_start_key_count"));
         create = reinterpret_cast<decltype(create)>(sym("meltype_ime_create"));
         handle_ = reinterpret_cast<decltype(handle_)>(sym("meltype_ime_handle"));
         destroy = reinterpret_cast<decltype(destroy)>(sym("meltype_ime_destroy"));
         free = reinterpret_cast<decltype(free)>(sym("meltype_free"));
         shutdown = reinterpret_cast<decltype(shutdown)>(sym("meltype_shutdown"));
-        if (!init || !setConversionReady || !create || !handle_ || !destroy || !free || !shutdown) {
+        if (!init || !setConversionReady || !startKeyCount || !create || !handle_ || !destroy || !free || !shutdown) {
             FCITX_ERROR() << "Meltype: libMeltypeNative.so の関数が足りません";
             return false;
         }
@@ -422,6 +424,7 @@ public:
             dispatcher_.attach(&instance_->eventLoop());
             s_engine = this;
             native_.setConversionReady(&MeltypeEngine::onConversionReady);
+            native_.startKeyCount();
         }
         instance_->inputContextManager().registerProperty("meltypeState", &factory_);
     }
@@ -464,7 +467,9 @@ public:
         const bool shift = states.test(fcitx::KeyState::Shift) || (vk == 0x20 && state->shiftHeld);
         const std::string fields = std::string(",\"key\":{\"vk\":") + std::to_string(vk) + ",\"ch\":" + std::to_string(character) +
             ",\"shift\":" + boolean(shift) + ",\"ctrl\":" + boolean(states.test(fcitx::KeyState::Ctrl)) +
-            ",\"alt\":" + boolean(states.test(fcitx::KeyState::Alt)) + ",\"command\":" + boolean(states.test(fcitx::KeyState::Super)) + "}";
+            ",\"alt\":" + boolean(states.test(fcitx::KeyState::Alt)) + ",\"command\":" + boolean(states.test(fcitx::KeyState::Super)) +
+            // key() の修飾キーは正規化されている
+            ",\"repeat\":" + boolean(event.rawKey().states().test(fcitx::KeyState::Repeat)) + "}";
         Json output;
         // 本体が使わなかったキーは受け取らず、fcitx5 とアプリに任せる
         if (send(ic, "KeyPressed", fields, output) && output.get("result")->flag("consumed")) event.filterAndAccept();

@@ -181,4 +181,58 @@ internal static class RuntimeTests
             Assert.Equal(PunctuationStyle.FullWidthCommaPeriod, runtime.Settings.Current.Punctuation);
         });
     }
+
+    [Test]
+    public static void KeyCountMode_MovesFromKeyCountFile()
+    {
+        foreach (var (json, expected) in new[]
+        {
+            ("{\"Total\":5}", KeyCountMode.Off),
+            ("{\"Total\":5,\"Enabled\":false,\"DiscordPresence\":true}", KeyCountMode.Off),
+            ("{\"Total\":5,\"Enabled\":true,\"DiscordPresence\":false}", KeyCountMode.Count),
+            ("{\"Total\":5,\"Enabled\":true,\"DiscordPresence\":true}", KeyCountMode.CountAndDiscord),
+        })
+        {
+            WithRuntime((runtime, directory) =>
+            {
+                var path = Path.Combine(directory, "keycount.json");
+                File.WriteAllText(path, json);
+                Assert.Equal(5L, runtime.StartKeyCount().Total);
+                Assert.Equal(expected, runtime.Settings.Current.KeyCount, json);
+                // 移したあとで変えた設定を、次に起動したときに戻さない
+                Assert.True(!File.ReadAllText(path).Contains("Enabled", StringComparison.Ordinal), json);
+            });
+        }
+    }
+
+    [Test]
+    public static void KeyCount_CountsKeysTheHostHandles()
+    {
+        WithRuntime((runtime, directory) =>
+        {
+            runtime.StartConverter(directory);
+            var counter = runtime.StartKeyCount();
+            var host = runtime.CreateHost(new FakeEnvironment(runtime), () => runtime.Settings.Current, () => true, countKeys: true);
+            long Press(string key, string traits = "")
+            {
+                host.Handle($"{{\"version\":{ImeHost.Version},\"type\":\"KeyPressed\",\"instance\":\"t\",\"field\":{{\"traits\":[{traits}]}},\"key\":{{{key}}}}}");
+                return counter.Total;
+            }
+            Assert.Equal(0L, Press("\"ch\":97"), "既定では数えない");
+            runtime.Settings.Edit(settings => { var next = settings.Clone(); next.KeyCount = KeyCountMode.Count; return next; });
+            Assert.Equal(1L, Press("\"ch\":97"));
+            Assert.Equal(1L, Press("\"ch\":97,\"repeat\":true"), "押しっぱなし");
+            Assert.Equal(1L, Press("\"vk\":164"), "修飾キー");
+            Assert.Equal(1L, Press("\"ch\":97", "\"Password\""), "パスワード欄");
+            Assert.Equal(2L, Press("\"ch\":98"));
+        });
+    }
+
+    private sealed class FakeEnvironment(MeltypeRuntime runtime) : IImeEnvironment
+    {
+        public InputMode? InputMethod => null;
+        public SnippetStore Snippets => runtime.Snippets;
+        public string? ClipboardText => null;
+        public string? OtherTipVersion => null;
+    }
 }

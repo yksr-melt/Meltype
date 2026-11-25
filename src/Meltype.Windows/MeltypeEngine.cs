@@ -36,9 +36,6 @@ internal sealed class MeltypeEngine : IDisposable
 
     /// <summary>打鍵数のカウンター (トレイの「打鍵数...」)。</summary>
     public KeyCounter KeyCounter { get; }
-    private readonly System.Threading.Timer _keyCountTimer;
-    /// <summary>Discord のステータスに打鍵数を出す (打鍵数の「Discord に表示する」が ON の間だけ。入力とは別のスレッドで送る)。</summary>
-    private readonly DiscordPresence _discordPresence;
 
     // ほかのソフトが送ったキーを通したことを、1 回だけログに書いたか (#250)
     private bool _injectedHintLogged;
@@ -55,11 +52,7 @@ internal sealed class MeltypeEngine : IDisposable
         };
         Load(runtime.Settings.Current);
         _monitor = new KeyboardMonitor(OnKey, OnMouseButton, OnForegroundChanged, OnFocusChanged);
-        KeyCounter = new KeyCounter(Path.Combine(runtime.DataDirectory, "keycount.json"));
-        _keyCountTimer = new System.Threading.Timer(_ => KeyCounter.Save(), null, 60_000, 60_000);
-        _discordPresence = new DiscordPresence(
-            () => KeyCounter.DiscordPresence && KeyCounter.Enabled,
-            () => new DiscordPresence.Stats(KeyCounter.OnDay(DateTime.Today), KeyCounter.Total));
+        KeyCounter = runtime.StartKeyCount();
     }
 
     /// <summary>設定・辞書・学習データ (どの OS も同じもの)。</summary>
@@ -178,11 +171,11 @@ internal sealed class MeltypeEngine : IDisposable
     }
 
     /// <summary>
-    /// 打鍵数に数えてよいか。Meltype を一時停止しているとき・アプリ別に OFF のとき・パスワード欄では数えない。
+    /// 打鍵数に数えるか。設定「打鍵数」が「数えない」のとき・Meltype を一時停止しているとき・アプリ別に OFF のとき・パスワード欄では数えない。
     /// フォーカスが移った先をまだ調べている間も数えない (前の入力欄の判定のままパスワード欄の打鍵を数えないように)。
     /// </summary>
     private bool KeyCountAllowed(Settings settings) =>
-        settings.Enabled && settings.IsAppEnabled(_foreground.Current.ProcessName) && Focus is { Resolved: true, Current.IsPassword: false };
+        settings.KeyCount != KeyCountMode.Off && settings.Enabled && settings.IsAppEnabled(_foreground.Current.ProcessName) && Focus is { Resolved: true, Current.IsPassword: false };
 
     /// <summary>
     /// config.json を読み直してから change で 1 項目を変えて保存する (設定アプリが直前に書いた値を戻さない)。
@@ -222,9 +215,6 @@ internal sealed class MeltypeEngine : IDisposable
         _disposed = true;
         _monitor.Dispose();
         _remote.Dispose();
-        _keyCountTimer.Dispose();
-        _discordPresence.Dispose();
-        KeyCounter.Save();
         Runtime.Dispose();
         Log.Info("Meltype を終了しました。");
         Log.FlushFile();

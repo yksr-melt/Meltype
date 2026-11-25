@@ -8,6 +8,7 @@ using Meltype.Detection;
 using Meltype.Diagnostics;
 using Meltype.Dictionary;
 using Meltype.Engine;
+using Meltype.Input;
 using Meltype.Learning;
 using Meltype.Libraries.Chars;
 using Meltype.Composition.Utility.NowPlaying;
@@ -146,8 +147,58 @@ public sealed class MeltypeRuntime : IDisposable
     /// 入力欄 1 つの本体を作る。辞書・学習データ・変換エンジンは、ほかの入力欄と共有する。
     /// lateResults は、フロントが変換エンジンの答えを後から受け取れるか (<see cref="ConversionReady"/> で refresh を送る)。corrected は、ユーザーが判定を直したとき。
     /// </summary>
-    public ImeHost CreateHost(IImeEnvironment environment, Func<Settings> settings, Func<bool> lateResults, Action<Correction>? corrected = null) =>
-        new(environment, SessionParts(Converter, Converter.Candidates, Converter.Reading, corrected) with { LateResults = lateResults }, settings);
+    /// <param name="countKeys">受け持った打鍵を数える (<see cref="StartKeyCount"/> を呼んだとき)。フックで数える Windows では付けない。</param>
+    public ImeHost CreateHost(IImeEnvironment environment, Func<Settings> settings, Func<bool> lateResults, Action<Correction>? corrected = null, bool countKeys = false) =>
+        new(environment, SessionParts(Converter, Converter.Candidates, Converter.Reading, corrected) with { LateResults = lateResults }, settings, countKeys ? CountKey : null);
+
+    private KeyCounter? _keyCounter;
+    private Timer? _keyCountSave;
+    private DiscordPresence? _discordPresence;
+
+    /// <summary>
+    /// 打鍵数 (keycount.json) を読み、設定「打鍵数」が「数えて Discord に表示する」の間は Discord に出す。プロセスで 1 回だけ呼ぶ。
+    /// keycount.json は丸ごと書き直すので、同時にいくつも動くプロセス (端末) では呼ばない。
+    /// </summary>
+    public KeyCounter StartKeyCount()
+    {
+        var counter = new KeyCounter(Path.Combine(DataDirectory, "keycount.json"));
+        MoveLegacyKeyCountMode(counter);
+        _keyCounter = counter;
+        _keyCountSave = new Timer(_ => counter.Save(), null, 60_000, 60_000);
+        _discordPresence = new DiscordPresence(
+            () => Settings.Current.KeyCount == KeyCountMode.CountAndDiscord,
+            () => new DiscordPresence.Stats(counter.OnDay(DateTime.Today), counter.Total));
+        return counter;
+    }
+
+    // 前の版は keycount.json に書いていた。config.json に書けなければ、次に起動したときに移す
+    private void MoveLegacyKeyCountMode(KeyCounter counter)
+    {
+        if (counter.LegacyMode is not { } mode) return;
+        try
+        {
+            Settings.Edit(settings =>
+            {
+                var next = settings.Clone();
+                next.KeyCount = mode;
+                return next;
+            });
+        }
+        catch (Exception ex) when (DataFile.IsFileError(ex))
+        {
+            Diagnostics.Log.Warn($"打鍵数の設定を config.json に移せませんでした: {ex.Message}");
+            return;
+        }
+        counter.ForgetLegacyMode();
+        counter.Save();
+    }
+
+    // 修飾キーは、フロントが送るもの (左右の Alt) と送らないものがあるので数えない
+    private void CountKey(ImeKey key)
+    {
+        if (_keyCounter is null || key.Repeat || VirtualKeys.IsModifier(key.Vk) || Settings.Current.KeyCount == KeyCountMode.Off) return;
+        _keyCounter.Count(key.Vk, key.Ch, DateTime.Now);
+    }
 
     /// <summary>単語の登録のホットキー (Windows) 用: 選んでいた語の読みを推測する。分からなければ空。</summary>
     public string GuessReading(string word) => Converter.Reading(word) ?? "";
@@ -237,7 +288,11 @@ public sealed class MeltypeRuntime : IDisposable
     {
         _settingsCheck.Dispose();
         _nowPlaying?.Dispose();
+        _keyCountSave?.Dispose();
+        _keyCounter?.Save();
         foreach (var converter in _converters) converter.Dispose();
+        // Discord の応答を待つことがあるので最後
+        _discordPresence?.Dispose();
     }
 
     /// <summary>
