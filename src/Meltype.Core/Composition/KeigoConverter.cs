@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 shiromenya
 
+using System.Buffers;
+
 namespace Meltype.Composition;
 
 /// <summary>
@@ -521,8 +523,18 @@ internal static class KeigoConverter
         ("送ってくれる", "お送りくださいます"),
         ("見てくれた", "ご覧くださいました"),
         ("見てくれる", "ご覧くださいます"),
+        ("来てくれた", "お越しくださいました"),
+        ("来てくれる", "お越しくださいます"),
         ("連絡してくれた", "ご連絡くださいました"),
         ("連絡してくれる", "ご連絡くださいます"),
+        ("行かない", "いらっしゃいません"),
+        ("いません", "いらっしゃいません"),
+        ("いない", "いらっしゃいません"),
+        ("来ない", "お越しになりません"),
+        ("食べない", "召し上がりません"),
+        ("飲まない", "召し上がりません"),
+        ("見ない", "ご覧になりません"),
+        ("くれない", "くださいません"),
         ("くれます", "くださいます"),
         ("くれる", "くださいます"),
         ("くれました", "くださいました"),
@@ -993,7 +1005,7 @@ internal static class KeigoConverter
     private static readonly Dictionary<char, (string Suffix, string Replacement)[]> MidClauseSuffixBuckets =
         MidClauseSuffixes.GroupBy(x => x.Suffix[^1]).ToDictionary(g => g.Key, g => g.ToArray());
 
-    // 変換後テキスト内の語彙置き換え (Zenzai などで 1 文節にまとまった文にも対応)
+    // 変換後テキスト内の語彙置き換え (単語境界チェック付きで「午後で」「早急に」等の誤爆を防ぐ)
     private static readonly (string From, string To)[] InTextReplacements =
     [
         ("問題ないですか", "問題ございませんでしょうか"),
@@ -1039,6 +1051,7 @@ internal static class KeigoConverter
         ("しっかり", "入念に"),
         ("いきなり", "突然"),
         ("急に", "急遽"),
+        ("ものすごく", "大変"),
         ("めちゃくちゃ", "大変"),
         ("めっちゃ", "大変"),
         ("すごく", "大変"),
@@ -1051,6 +1064,10 @@ internal static class KeigoConverter
         ("とりあえず", "取り急ぎ"),
         ("ひとまず", "取り急ぎ"),
     ];
+
+    // 1 回の SIMD スキャンで InTextReplacements のヒット有無を判定 (大半の文節を 0 アロケーションで素通りさせる)
+    private static readonly SearchValues<string> InTextSearchValues =
+        SearchValues.Create(InTextReplacements.Select(x => x.From).ToArray(), StringComparison.Ordinal);
 
     // 文末の変換後テキストの語尾ルール (長いものから順に照合)
     private static readonly (string Suffix, string Replacement)[] TailTextSuffixes =
@@ -1130,9 +1147,23 @@ internal static class KeigoConverter
         ("知っている", "存じております"),
         ("知ってる", "存じております"),
         ("と思います", "と存じます"),
+        ("確認してくれてありがとう", "ご確認いただきありがとうございます"),
+        ("教えてくれてありがとう", "ご教示いただきありがとうございます"),
+        ("送ってくれてありがとう", "お送りいただきありがとうございます"),
+        ("対応してくれてありがとう", "ご対応いただきありがとうございます"),
+        ("待たせてごめん", "お待たせしてしまい申し訳ございません"),
+        ("待たせてすみません", "お待たせしてしまい申し訳ございません"),
+        ("お待たせしてすみません", "お待たせしてしまい申し訳ございません"),
+        ("遅れてすみません", "遅れてしまい申し訳ございません"),
+        ("遅れてごめん", "遅れてしまい申し訳ございません"),
         ("と思う", "と存じます"),
+        ("と思っています", "と存じております"),
+        ("と思っている", "と存じております"),
+        ("と思ってる", "と存じております"),
         ("と思いました", "と存じました"),
         ("と思った", "と存じました"),
+        ("つもりだ", "所存です"),
+        ("つもりです", "所存です"),
         ("思う", "存じます"),
         ("思います", "存じます"),
         ("思った", "存じました"),
@@ -1408,6 +1439,17 @@ internal static class KeigoConverter
         var lastContentIndex = clauses.Count - 1;
         while (lastContentIndex >= 0 && IsPunctuationOnly(clauses[lastContentIndex].Text))
             lastContentIndex--;
+
+        // 単文節かつ先行文脈なしの高頻度ケースは StringBuilder を確保せずゼロアロケーションで処理する
+        if (clauses.Count == 1 && string.IsNullOrEmpty(before))
+        {
+            var c = clauses[0];
+            if (IsPunctuationOnly(c.Text) && IsPunctuationOnly(c.Reading)) return;
+            var role = DetectSubjectRole(c.Text);
+            if (ConvertClause(c.Reading, c.Text, isSentenceEnd: true, nextIsQuestion: false, role, prevReading: "", hasNextContent: false) is { } singleConverted && singleConverted != c.Text)
+                SetKeigo(c, singleConverted);
+            return;
+        }
 
         // 直前の確定済みテキストからは「最後の文」だけを引き継ぐ (前の文の主語が改行や句点をまたいで残らないようにする)
         var currentSentence = new System.Text.StringBuilder().Append(LastSentenceOf(before));
@@ -1800,10 +1842,39 @@ internal static class KeigoConverter
 
     private static string ApplyInTextReplacements(string text)
     {
+        // 高速フィルタ: 候補語彙が 1 つも含まれない大半の文節は 0 アロケーションで即返す
+        if (text.Length < 2 || !text.AsSpan().ContainsAny(InTextSearchValues))
+            return text;
+
         var rewritten = text;
         foreach (var (from, to) in InTextReplacements)
-            rewritten = rewritten.Replace(from, to, StringComparison.Ordinal);
+        {
+            var searchFrom = 0;
+            while (searchFrom <= rewritten.Length - from.Length)
+            {
+                var idx = rewritten.IndexOf(from, searchFrom, StringComparison.Ordinal);
+                if (idx < 0) break;
+                if (IsReplacementBoundary(rewritten, idx))
+                {
+                    rewritten = string.Concat(rewritten.AsSpan(0, idx), to, rewritten.AsSpan(idx + from.Length));
+                    searchFrom = idx + to.Length;
+                }
+                else
+                {
+                    searchFrom = idx + 1;
+                }
+            }
+        }
         return rewritten;
+    }
+
+    /// <summary>「午後で」「早急に」「只今から」のように別の漢字熟語の途中へ部分一致する誤爆を防ぐ。</summary>
+    private static bool IsReplacementBoundary(string text, int index)
+    {
+        if (index == 0) return true;
+        var prev = text[index - 1];
+        return prev is '、' or '。' or '，' or '．' or ',' or '.' or '！' or '？' or '!' or '?' or ' ' or '　' or '「' or '（' or '('
+            or 'は' or 'が' or 'を' or 'に' or 'で' or 'と' or 'も' or 'の' or 'へ' or 'か' or 'て';
     }
 
     private static string? TryPoliteAdjective(string text)

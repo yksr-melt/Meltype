@@ -6880,6 +6880,19 @@ internal static class CompositionTests
         KeigoConverter.Apply(ikaga);
         Assert.Equal("いかがでしたでしょうか？", ikaga[0].Text, "どうだった？ → いかがでしたでしょうか？");
 
+        // 誤爆防止 (午後で・早急に・ものすごく) とビジネス感謝・謝罪表現
+        var gogo = new List<Clause> { new("ごごで", false, ["午後で"]), new("おねがい", false, ["お願い"]) };
+        KeigoConverter.Apply(gogo);
+        Assert.Equal("午後でお願いいたします", string.Concat(gogo.Select(c => c.Text)), "「午後で」を「午後ほど」に誤爆しない");
+
+        var soukyuu = new List<Clause> { new("そうきゅうに", false, ["早急に"]), new("たいおうする", false, ["対応する"]) };
+        KeigoConverter.Apply(soukyuu);
+        Assert.Equal("早急に対応いたします", string.Concat(soukyuu.Select(c => c.Text)), "「早急に」を「早急遽」に誤爆しない");
+
+        var thanksBiz = new List<Clause> { new("かくにんしてくれてありがとう", false, ["確認してくれてありがとう"]) };
+        KeigoConverter.Apply(thanksBiz);
+        Assert.Equal("ご確認いただきありがとうございます", thanksBiz[0].Text, "〜してくれてありがとう → ご〜いただきありがとうございます");
+
         // OFF (既定) なら通常のまま
         var off = new Keyboard(live: true);
         off.Type("ryoukai");
