@@ -26,14 +26,13 @@ internal static class CompositionContext
     }
 
     /// <summary>
-    /// キャレットの前の言語。日本語の文の中の英単語のすぐ後ろは、日本語の続き (今日はGitHub + でも)。
+    /// キャレットの前の言語。日本語の文の中の英単語・数字のすぐ後ろは、日本語の続き (今日はGitHub + でも) とも英語 (今日はGitHub + issue) とも決めない。
     /// 英単語の後ろに空白があれば、Space で英単語を確定して英語を続けるところ (今日はsample + issue)。
     /// </summary>
     private static bool? LanguageBefore(string? before)
     {
-        var language = LanguageOf(before);
-        if (language != true || before is not [.., not ' ']) return language;
-        return !IsJapaneseText(before[(before.LastIndexOfAny(['\r', '\n']) + 1)..]);
+        if (before is [.., > ' ' and < '\x7F'] && IsJapaneseText(before[(before.LastIndexOfAny(['\r', '\n']) + 1)..])) return null;
+        return LanguageOf(before);
     }
 
     /// <summary>確定する text を記録する。text を入れる前に、キャレットの前を deleteBefore 文字だけ消す。</summary>

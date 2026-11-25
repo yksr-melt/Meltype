@@ -75,9 +75,15 @@ internal static class TextContextTests
     [Test]
     public static void SameText_SameResult()
     {
-        // 日本語の文の中の英単語のすぐ後ろは日本語の続き
-        AssertFollows("kyouhagoogle\n", "demo\n", "でも");
-        AssertFollows("kyouhagoogle\n", ",\n", "、");
+        // 日本語の文の中の英単語・数字のすぐ後ろは、英語とも日本語とも読める語は日本語、英語の語は英語
+        foreach (var first in new[] { "kyouhagoogle\n", "githubnipush\n", "kyouha100\n" })
+        {
+            AssertFollows(first, "demo\n", "でも");
+            AssertFollows(first, "sore\n", "それ");
+            AssertFollows(first, ",\n", "、");
+            AssertFollows(first, "issuekakuka\n", "issueかくか");
+            AssertFollows(first, "ver1.1\n", "ver1.1");
+        }
         // Space で英単語を確定したら英語の続き
         AssertFollows("kyouhasample ", "issuekakuka\n", "issueかくか");
         // 英語だけの後は英語
