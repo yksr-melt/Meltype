@@ -226,6 +226,65 @@ internal static class KanaLayoutTests
         Assert.Equal("ががが", shifted.Showing);
     }
 
+
+    [Test]
+    public static void KanaLayout_OverlappingThumbsUseMostRecent()
+    {
+        foreach (var layout in new[] { KanaLayout.Nicola, KanaLayout.NakayubiNicola, KanaLayout.Tron })
+        {
+            var k = Layout(layout);
+            k.Key(NonConvert);
+            k.Key(0x57);
+            k.Key(Convert);
+            k.Key(0x4B);
+            k.Key(0x57, up: true);
+            k.Key(NonConvert, up: true);
+            k.Key(0x4B, up: true);
+            k.Key(Convert, up: true);
+            Assert.Equal(layout == KanaLayout.Tron ? "そー" : "えの", k.Showing);
+            Assert.True(k.Host.View is { Converting: false }, "文字に使った親指キーを離しても変換しない");
+
+            k = Layout(layout);
+            k.Key(Convert);
+            k.TypeKanaKeys("w");
+            k.Key(NonConvert);
+            k.Key(0x53);
+            k.Key(Convert, up: true);
+            k.Key(0x53, up: true);
+            k.Key(NonConvert, up: true);
+            Assert.Equal(layout == KanaLayout.Tron ? "ぞね" : "があ", k.Showing);
+            Assert.True(k.Host.View is { Converting: false }, "反対の親指キーでも確定しない");
+        }
+    }
+
+    [Test]
+    public static void KanaLayout_LateThumbDoesNotRewriteAnEarlierHeldLetter()
+    {
+        var k = Layout(KanaLayout.Nicola);
+        k.Key(0x41);
+        k.Key(0x4A);
+        k.Key(0x4A, up: true);
+        k.Key(Convert);
+        k.Key(0x41, up: true);
+        k.Key(Convert, up: true);
+        Assert.Equal("うと", k.Showing);
+        Assert.True(k.Host.View is { Converting: true }, "最後の文字を離した後の親指キーは変換する");
+    }
+
+    [Test]
+    public static void KanaLayout_NakayubiNicola_ContinuousShiftSurvivesLetterRollover()
+    {
+        var k = Layout(KanaLayout.NakayubiNicola);
+        k.Key(0x4B);
+        k.TypeKanaKeys("a");
+        k.Key(0x53);
+        k.Key(0x44);
+        k.Key(0x53, up: true);
+        k.Key(0x44, up: true);
+        k.Key(0x4B, up: true);
+        Assert.Equal("をしな", k.Showing);
+    }
+
     [Test]
     public static void KanaLayout_Tron_ThumbShift()
     {

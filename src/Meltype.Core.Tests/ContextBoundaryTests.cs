@@ -18,7 +18,7 @@ internal static class ContextBoundaryTests
         {
             PrecedingEnglish = before.Length == 0 ? null : true,
             PrecedingEnglishSentence = before.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length >= 2,
-            PrecedingEnglishName = CompositionController.IsEnglishNameContext(before),
+            PrecedingEnglishName = CompositionContext.IsEnglishNameContext(before),
         };
         return (new CompositionTextState(), TestSupport.Env(detector, new Settings { AutoDetection = !manual }) with { Context = () => context });
     }

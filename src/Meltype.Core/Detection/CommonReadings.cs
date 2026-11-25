@@ -71,7 +71,7 @@ internal static class CommonReadings
 
     private static readonly Lazy<PackedWordSet> SharedRare = new(() => PackedWordSet.FromLines(RareText(), firstField: true));
 
-    /// <summary>よく使う語でない語の長い読み (dictionaries/readings-rare.txt の かんれんづける)。日英の区切りだけで使い、打ち間違い直しには使わない。</summary>
+    /// <summary>よく使う語でない語の 3 文字以上の読み (dictionaries/readings-rare.txt の ろんぱ・かんれんづける)。日英の区切りだけで使い、打ち間違い直しには使わない。</summary>
     public static PackedWordSet Rare => SharedRare.Value;
 
     /// <summary>readings-rare.txt の本文を読み直す (活用形の生成に使う)。</summary>

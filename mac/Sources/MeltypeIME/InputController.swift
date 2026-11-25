@@ -63,7 +63,9 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         if let app, Self.authenticationApps.contains(app) {
             // ユーザー名は通常自動で入るため、SecurityAgent ではユーザー名欄も含めて打鍵を通す。
             // 未確定入力の取消に必要な属性だけを送り、打鍵の内容や周辺文字列は Core に渡さない。
+            // 打鍵は、今の状態だけを受け取る出来事 (StateRequested) にする。
             event["field"] = ["traits": ["Password"]]
+            if keyEvent != nil { event["type"] = "StateRequested" }
         } else {
             if let client {
                 event["field"] = field(of: client, app: app)

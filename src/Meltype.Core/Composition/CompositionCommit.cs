@@ -1,92 +1,70 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 aster-void
+// Copyright (C) 2026 yksr-melt
 
-using System.Globalization;
 using System.Text;
-using Meltype.Config;
 using Meltype.Detection;
-using Meltype.Diagnostics;
 
 namespace Meltype.Composition;
 
-/// <summary>確定: 確定する文字の組み立て、英単語の前後の空白、確定した後に前の語を確定し直す自動修正、予測変換の候補の確定。</summary>
-internal static partial class CompositionController
+/// <summary>確定する文字の組み立てと学習、確定済みの語の修正。入力の開始・終了は CompositionLifecycle を通す。</summary>
+internal static class CompositionCommit
 {
-    /// <summary>今の表示 (確定するときと同じく打ち間違いを直した形。ライブ変換が有効なら日本語区間は漢字に変換済み)。</summary>
-    private static ComposedText CurrentComposed(CompositionState state, CompositionEnv env, bool final) =>
-        CompositionText.AsCommitted(state.Text, env, text => CompositionText.Compose(text, env, final, env.Settings.LiveConversion ? (kana, afterEnglish, shown) => LiveConvert(state, env, kana, afterEnglish, SegmentBefore(env, shown)) : null));
 
-    /// <summary><see cref="CurrentComposed"/> の文字。</summary>
-    private static string CurrentDisplay(CompositionState state, CompositionEnv env, bool final) => CurrentComposed(state, env, final).Text;
-
-    /// <summary>
-    /// 変換していないときに確定する文字。答えを後から受け取れるフロントでは、ライブ変換の答えが間に合っていなくても env.Deadline までは答えを待つ
-    /// (受け取れないフロントは、表示のときから待っている)。
-    /// </summary>
-    private static ComposedText CommittedDisplay(CompositionState state, CompositionEnv env) => env.LateResults
-        ? CompositionText.AsCommitted(state.Text, env, committed => CompositionText.Compose(committed, env, final: true, env.Settings.LiveConversion
-            ? (kana, afterEnglish, shown) => CountsAsLive(kana) ? Composed(ConvertJapaneseSegment(state, env, kana, afterEnglish, SegmentBefore(env, shown), zenzai: true)) : ComposedText.Kana(kana)
-            : null))
-        : CurrentComposed(state, env, final: true);
-
-    /// <summary>文節の文字。</summary>
-    private static ComposedText Composed(IEnumerable<Clause> clauses) => ComposedText.Concat(clauses.Select(c => Candidate(c, c.Text)));
-
-    private static void CommitIfAny(CompositionState state, CompositionEnv env, bool preserveText = false)
+    internal static void CommitIfAny(CompositionState state, CompositionEnv env, bool preserveText = false)
     {
-        if (!CompositionText.IsEmpty(state.Text)) Commit(state, env, preserveText: preserveText);
+        if (state.Scene is CompositionScene.WithInput scene) Commit(state, scene, env, preserveText: preserveText);
     }
 
-    /// <summary>今の未確定入力が、自動では変換してはいけない保護区間か (F9/F10 などの明示指定は除く)。</summary>
-    private static bool IsProtectedInput(CompositionState state) => !IsConverting(state) && state.Text.Mode == DisplayMode.Auto && CompositionText.HasProtectedTail(state.Text);
-
-    private static void Commit(CompositionState state, CompositionEnv env, string suffix = "", bool preserveText = false)
+    internal static void Commit(CompositionState state, CompositionScene.WithInput scene, CompositionEnv env, string suffix = "", bool preserveText = false)
     {
-        if (IsProtectedInput(state))
+        var input = scene.Input;
+        if (CompositionLifecycle.IsProtectedInput(scene))
         {
-            CommitProtected(state, env, suffix);
+            CommitProtected(state, input, env, suffix);
             return;
         }
-        var converting = IsConverting(state) && state.Clauses.Count > 0;
+        var conversion = (scene as CompositionScene.Converting)?.Conversion;
         // 文全体の文節で区切りの案を選び直したら、選んだ案の文節で確定する (選び直したことは chosen に残す)。
         // 案の文 (botと・ボット) を選んだときは、英語 / 日本語を学習しない (LanguageMemory に覚えさせない)。日英判定の精度がまだ低く、
         // 間違えて選んだ案やその場限りの案まで覚えると、次からの判定を崩すため。判定の精度が上がったら、学習するかを見直す。
         // 文節が 1 つの案の、その文節の候補 (Shift+Space で変換した make の まけ) を選んだときは、その文節で選んだときと同じく学習する。
         // 案が 1 つだけで文全体の文節にならなかったときと、同じ候補を選んで学習が変わらないようにするため
-        var chosenWhole = converting && state.Clauses is [{ Alternatives: not null, Changed: true }];
-        if (converting) SplitWholeSentence(state);
+        var chosenWhole = conversion?.Clauses is [{ Alternatives: not null, Changed: true }];
+        if (conversion is not null) CompositionConversion.SplitWholeSentence(conversion);
+        var clauses = conversion?.Clauses;
         // 区間分けの重みで決まらなかった確定の決まり。誤変換の報告をログから読み解けるよう、通った決まりを確定のログに書く (issue #1644)
         var rules = new List<string>();
-        var text = converting ? Composed(state.Clauses) : CommittedDisplay(state, env);
+        var text = clauses is not null ? CompositionPresentation.Composed(clauses) : CompositionPresentation.CommittedDisplay(input, env);
         // 英語の文脈で英字だけに見えていた入力 (hello mata) は、確定するときに判定し直してかなにしない: 見えているとおりに確定する (issue #127)。
         // 文脈がない単独の語 (mine → みね) は、今までどおり確定時の判定に任せる
-        if (!converting && state.Text.Mode == DisplayMode.Auto && !state.Text.KanaInput && env.Context().PrecedingEnglish == true && CurrentDisplay(state, env, final: false) is { Length: > 0 } shown &&
+        if (clauses is null && input.Text.Mode == DisplayMode.Auto && !input.Text.KanaInput && env.Context().PrecedingEnglish == true && CompositionPresentation.CurrentDisplay(input, env, final: false) is { Length: > 0 } shown &&
             shown.All(char.IsAsciiLetter) && shown != text.Text && text.Text.Any(c => c > 0x7F))
         {
             text = ComposedText.English(shown);
             rules.Add("英語の文脈なので見えていた英字のまま (#127)");
         }
-        var english = converting ? state.Clauses.All(c => c.IsEnglish) : CompositionText.IsAlphanumericAt(state.Text, env, final: true);
+        var english = clauses is not null ? clauses.All(c => c.IsEnglish) : CompositionText.IsAlphanumericAt(input.Text, env, final: true);
         // F6〜F10 で、はっきり英字 / かなを選んで確定した語も、後から確定し直さない。
-        var chosen = converting ? chosenWhole || state.Clauses.Any(c => c.Changed) : state.Text.Mode != DisplayMode.Auto;
-        if (state.Reconversion is not null)
+        var chosen = clauses is not null ? chosenWhole || clauses.Any(c => c.Changed) : input.Text.Mode != DisplayMode.Auto;
+        if (input.Reconversion is not null)
         {
             // 入れた文字は、アプリが選択していた文字と置き換える。
             rules.Add("選択していた文字の再変換");
-            LogCommit(state, env, text.Text + suffix, string.Join("、", rules));
+            LogCommit(scene, env, text.Text + suffix, string.Join("、", rules));
             // 学習の文脈は確定する前のキャレットの前 (確定した文字を入れる前)
-            if (converting) LearnClauses(state, env);
+            if (clauses is not null) LearnClauses(state, input, clauses, env);
             CompositionOutput.Commit(state.Out, env, text + ComposedText.English(suffix));
-            ResetContext(state);
-            ClearComposition(state);
+            CompositionLifecycle.ResetContext(state);
+            CompositionLifecycle.Finish(state);
             return;
         }
-        RecordCorrection(state, env, converting, text.Text, suffix);
-        if (converting) LearnClauses(state, env);
-        else if (Learning(state, env) && !state.EscReverted) env.Learning.LearnLanguage(state.Text, CompositionText.Segments(state.Text, env), CompositionText.LearningContext(state.Text, env));
-        if (!converting || state.Clauses.All(CompositionLearning.Learnable))
-            RememberPhrase(state, env, converting ? string.Concat(state.Clauses.Select(c => c.IsEnglish ? "" : c.Reading)) : CompositionText.AllKana(state.Text, env, final: true), text.Text, english);
-        CommitText(state, env, text + ComposedText.English(suffix), english, CompositionText.Raw(state.Text), chosen, preserveText, string.Join("、", rules));
+        CompositionSpelling.RecordCorrection(scene, env, text.Text, suffix);
+        if (clauses is not null) LearnClauses(state, input, clauses, env);
+        else if (CompositionLifecycle.Learning(state, input, env) && !input.EscReverted) env.Learning.LearnLanguage(input.Text, CompositionText.Segments(input.Text, env), CompositionText.LearningContext(env));
+        if (clauses is null || clauses.All(CompositionLearning.Learnable))
+            RememberPhrase(state, input, env, clauses is not null ? string.Concat(clauses.Select(c => c.IsEnglish ? "" : c.Reading)) : CompositionText.AllKana(input.Text, env, final: true), CompositionOutput.Render(env, text), english);
+        CommitText(state, env, text + ComposedText.English(suffix), english, CompositionText.Raw(input.Text), chosen, preserveText, string.Join("、", rules));
     }
 
     /// <summary>
@@ -94,35 +72,36 @@ internal static partial class CompositionController
     /// 誤変換の報告を、利用者のログから読み解けるようにする。打った文字は設定「ログに入力した文字を残す」に従う。
     /// </summary>
     /// <param name="rule">区切りの重みでは決まらなかった確定の決まりの名前 (#127 で見えていた英字のまま、など)。</param>
-    private static void LogCommit(CompositionState state, CompositionEnv env, string text, string rule)
+    private static void LogCommit(CompositionScene.WithInput scene, CompositionEnv env, string text, string rule)
     {
-        if (CompositionText.IsEmpty(state.Text)) return;
+        var typed = scene.Input.Text;
         var parts = new List<string>();
-        if (Diagnostics.Log.RecordText) parts.Add($"読み「{CompositionText.AllKana(state.Text, env, final: true)}」");
+        if (Diagnostics.Log.RecordText) parts.Add($"読み「{CompositionText.AllKana(typed, env, final: true)}」");
         // 区切りは、表示に使ったのと同じ計算 (Segments) から取る
-        if (state.Text.Mode == DisplayMode.Auto) parts.Add(CompositionText.ExplainSegments(state.Text, env));
-        else parts.Add($"F6〜F10 で選んだ表示 ({state.Text.Mode})");
-        if (Diagnostics.Log.RecordText && !IsConverting(state) && IsKanaMode(state.Text.Mode))
-            parts.Add("形を当てる前の文節 " + string.Join(" | ", CommittedClauses(state, env).Select(c => $"{c.Reading}→{c.Engine ?? "(英語)"}")));
-        if (state.Clauses.Count > 0)
-            parts.Add("文節 " + string.Join(" | ", state.Clauses.Select(c => (Diagnostics.Log.RecordText ? $"{c.Reading}→{c.Text}" : $"({c.Reading.Length} 文字)") + (c.Changed ? " (選び直した)" : ""))));
+        if (typed.Mode == DisplayMode.Auto) parts.Add(CompositionText.ExplainSegments(typed, env));
+        else parts.Add($"F6〜F10 で選んだ表示 ({typed.Mode})");
+        if (scene is CompositionScene.Converting { Conversion.Clauses: var clauses })
+            parts.Add("文節 " + string.Join(" | ", clauses.Select(c => (Diagnostics.Log.RecordText ? $"{c.Reading}→{c.Text}" : $"({c.Reading.Length} 文字)") + (c.Changed ? " (選び直した)" : ""))));
+        else if (Diagnostics.Log.RecordText && IsKanaMode(typed.Mode))
+            parts.Add("形を当てる前の文節 " + string.Join(" | ", CommittedClauses(scene, env).Select(c => $"{c.Reading}→{c.Engine ?? "(英語)"}")));
         if (rule.Length > 0) parts.Add(rule);
-        Diagnostics.Log.Decision($"確定: {Diagnostics.Log.Text(CompositionText.Raw(state.Text))}→{Diagnostics.Log.Text(text)}; {string.Join("; ", parts.Where(p => p.Length > 0))}");
+        Diagnostics.Log.Decision($"確定: {Diagnostics.Log.Text(CompositionText.Raw(typed))}→{Diagnostics.Log.Text(text)}; {string.Join("; ", parts.Where(p => p.Length > 0))}");
     }
 
     /// <summary>
     /// 確定する入力の文節ごとの記録 (確定する前に呼ぶ)。変換中なら変換の文節。F6〜F8 で形を当てた入力は、形を当てる前の文節
     /// (F6〜F8 を押す前の変換。変換していなければ自動の表示のライブ変換) に、その形を当てた文字を付ける。
     /// </summary>
-    internal static IReadOnlyList<CommittedClause> CommittedClauses(CompositionState state, CompositionEnv env)
+    internal static IReadOnlyList<CommittedClause> CommittedClauses(CompositionScene.WithInput scene, CompositionEnv env)
     {
-        if (IsConverting(state)) return [.. state.Clauses.Select(c => new CommittedClause(c.Reading, c.Engine, c.Text))];
-        var mode = state.Text.Mode;
-        var left = state.LeftConversion is { } kept && kept.Raw == CompositionText.Raw(state.Text)
+        if (scene is CompositionScene.Converting { Conversion: var conversion }) return [.. conversion.Clauses.Select(c => new CommittedClause(c.Reading, c.Engine, c.Text))];
+        var input = scene.Input;
+        var mode = input.Text.Mode;
+        var left = input.LeftConversion is { } kept && kept.Raw == CompositionText.Raw(input.Text)
             ? kept.Conversion.Clauses.Select(c => (c.Reading, c.Engine, c.Text)).ToList()
-            : AutoClauses(state, env);
+            : AutoClauses(input, env);
         if (!IsKanaMode(mode)) return [.. left.Select(c => new CommittedClause(c.Reading, c.Engine, mode == DisplayMode.Auto ? c.Text : null))];
-        var matches = string.Concat(left.Select(c => c.Reading)) == CompositionText.AllKana(state.Text, env, final: true);
+        var matches = string.Concat(left.Select(c => c.Reading)) == CompositionText.AllKana(input.Text, env, final: true);
         return [.. left.Select(c => new CommittedClause(c.Reading, c.Engine, matches ? KanaForm(mode, c.Reading) : null))];
     }
 
@@ -136,20 +115,20 @@ internal static partial class CompositionController
     };
 
     // 自動の表示の文節: 英語の区間は 1 つの文節 (変換エンジンの答えは無し)、日本語の区間はライブ変換の文節 (ライブ変換を使わなければかなのまま)
-    private static List<(string Reading, string? Engine, string Text)> AutoClauses(CompositionState state, CompositionEnv env)
+    private static List<(string Reading, string? Engine, string Text)> AutoClauses(CompositionInput input, CompositionEnv env)
     {
-        var mode = state.Text.Mode;
-        state.Text.Mode = DisplayMode.Auto;
+        var mode = input.Text.Mode;
+        input.Text.Mode = DisplayMode.Auto;
         try
         {
             var clauses = new List<(string Reading, string? Engine, string Text)>();
-            var segments = CompositionText.Segments(state.Text, env);
+            var segments = CompositionText.Segments(input.Text, env);
             for (var i = 0; i < segments.Count; i++)
             {
                 var segment = segments[i];
-                if (segment.IsEnglish) clauses.Add((segment.Kana, null, segment.Raw));
-                else if (env.Settings.LiveConversion && CountsAsLive(segment.Kana))
-                    clauses.AddRange(LiveClauses(state, env, segment.Kana, i > 0 && segments[i - 1].IsEnglish, SegmentBefore(env, string.Concat(clauses.Select(c => c.Text))))
+                if (segment.IsEnglish) clauses.Add((segment.Kana, null, CompositionText.DisplayEnglishSegment(segments, i, env)));
+                else if (env.Settings.LiveConversion && CompositionConversion.CountsAsLive(segment.Kana))
+                    clauses.AddRange(CompositionConversion.LiveClauses(input, env, segment.Kana, i > 0 && segments[i - 1].IsEnglish, CompositionConversion.SegmentBefore(env, string.Concat(clauses.Select(c => c.Text))))
                         .Select(c => (c.Reading, c.Engine, c.Text)));
                 else clauses.Add((segment.Kana, null, segment.Kana));
             }
@@ -157,107 +136,58 @@ internal static partial class CompositionController
         }
         finally
         {
-            state.Text.Mode = mode;
+            input.Text.Mode = mode;
         }
-    }
-
-    private static void RecordCorrection(CompositionState state, CompositionEnv env, bool converting, string text, string suffix)
-    {
-        if (env.Corrected is null || CompositionText.Raw(state.Text).Length == 0 || !CompositionText.Raw(state.Text).Any(char.IsAsciiLetter)) return;
-        string shown;
-        if (converting)
-        {
-            // 英語 / 日本語を選び直した文節があるときだけ (漢字の選び直しは判定の間違いではない)
-            var switched = state.Clauses.Any(c => c.Changed && (c.IsEnglish ? IsJapaneseText(c.Text) : c.Raw is { } raw && c.Text == raw));
-            if (!switched) return;
-            shown = string.Concat(state.Clauses.Select(c => c.Candidates[0]));
-        }
-        else
-        {
-            if (state.Text.Mode == DisplayMode.Auto) return;
-            var (mode, letterCase) = (state.Text.Mode, state.Text.Case);
-            state.Text.Mode = DisplayMode.Auto;
-            shown = CompositionText.Display(state.Text, env, final: true);
-            (state.Text.Mode, state.Text.Case) = (mode, letterCase);
-        }
-        if (shown == text) return;
-        var before = env.Context().PrecedingText ?? "";
-        env.Corrected.Invoke(new Correction(CompositionText.Raw(state.Text), shown, text, suffix.Contains(' ') ? "Space (変換)" : "Enter (確定)",
-            before.Length > 20 ? before[^20..] : before, DateTime.Now));
     }
 
     /// <summary>
     /// 保護区間 (メンション・URL・メール・パス) を、自動変換・かな化・幅変換・誤字補正・学習・確定後補正に
     /// 渡さず、打った原文のまま確定する。Space は IME が半角空白を 1 つ足し、Enter は足さない。
     /// </summary>
-    private static void CommitProtected(CompositionState state, CompositionEnv env, string suffix)
+    internal static void CommitProtected(CompositionState state, CompositionInput input, CompositionEnv env, string suffix)
     {
         // 表示の再計算に依存せず、打った原文そのものを使う (確定条件で区間分けが変わっても記号を変えない)。
-        var text = (CompositionText.IsProtectedRaw(state.Text) ? ComposedText.Of(SpanKind.Protected, CompositionText.Raw(state.Text)) : CurrentComposed(state, env, final: true)) + ComposedText.English(suffix);
-        state.Conversion = null;
+        var text = (CompositionText.IsProtectedRaw(input.Text) ? ComposedText.Of(SpanKind.Protected, CompositionText.Raw(input.Text)) : CompositionPresentation.CurrentComposed(input, env, final: true)) + ComposedText.English(suffix);
         state.Correctable.Clear();
         // raw を空にして渡し、保護原文を確定後補正・学習の対象にしない (INV-06)。
         CommitText(state, env, text, english: false, preserveText: true, rule: "保護区間 (メンション・URL・メール・パス) で終わるので、打ったまま");
     }
 
     /// <summary>確定した日本語の語句を、予測変換のために覚える (設定「予測変換」が ON のとき)。</summary>
-    private static void RememberPhrase(CompositionState state, CompositionEnv env, string reading, string text, bool english)
+    private static void RememberPhrase(CompositionState state, CompositionInput input, CompositionEnv env, string reading, string text, bool english)
     {
-        if (!english && Learning(state, env) && env.Settings.PredictiveCandidates) env.Learning.RememberPhrase(reading, text);
+        if (!english && CompositionLifecycle.Learning(state, input, env) && env.Settings.PredictiveCandidates) env.Learning.RememberPhrase(reading, text);
     }
 
     /// <summary>確定した文節を学習する。設定「ユーザー学習を使う」が OFF なら、新しく覚えない (issue #277)</summary>
-    private static void LearnClauses(CompositionState state, CompositionEnv env)
+    internal static void LearnClauses(CompositionState state, CompositionInput input, IReadOnlyList<Clause> clauses, CompositionEnv env)
     {
-        if (Learning(state, env)) env.Learning.Learn(state.Clauses, env.Context().PrecedingText, CompositionText.LearningContext(state.Text, env));
+        if (CompositionLifecycle.Learning(state, input, env)) env.Learning.Learn(clauses, env.Context().PrecedingText, CompositionText.LearningContext(env));
     }
 
     /// <summary>予測変換の候補を確定する。日本語なら覚え直して、次からより前に出す。</summary>
-    private static void CommitPrediction(CompositionState state, CompositionEnv env, Prediction prediction)
+    internal static void CommitPrediction(CompositionState state, CompositionInput input, CompositionEnv env, Prediction prediction)
     {
-        if (state.Predictions is { } list) list.Index = -1;
-        if (!prediction.Text.All(c => c < 0x80) && Learning(state, env))
-            env.Services.Predictor?.Phrases?.Remember(PredictionReading(state, env, prediction.Text, prediction.Reading), prediction.Text);
+        if (!prediction.Text.All(c => c < 0x80) && CompositionLifecycle.Learning(state, input, env))
+            env.Services.Predictor?.Phrases?.Remember(PredictionReading(env, prediction.Text, prediction.Reading), prediction.Text);
         // 最後の文節の続きの候補なら、前の文節 (見えているとおり) とつなげて確定する
-        var text = PredictionText(prediction);
+        var text = CompositionPresentation.PredictionText(prediction);
         var english = text.Text.All(c => c < 0x80);
-        CommitText(state, env, text, english, english ? text.Text : CompositionText.Raw(state.Text), chosen: true);
+        CommitText(state, env, text, english, english ? text.Text : CompositionText.Raw(input.Text), chosen: true);
     }
-
-    /// <summary>予測の候補を、前の文節 (見えている文字) とつなげた文字。</summary>
-    private static ComposedText PredictionText(Prediction prediction) =>
-        ComposedText.Kana(prediction.Before) + ComposedText.Of(prediction.Text.All(c => c < 0x80) ? SpanKind.English : SpanKind.Japanese, prediction.Text);
 
     /// <summary>予測の候補の読み (前に確定したときの読み)。分からなければ打ちかけの読み。</summary>
-    private static string PredictionReading(CompositionState state, CompositionEnv env, string prediction, string typed) =>
+    private static string PredictionReading(CompositionEnv env, string prediction, string typed) =>
         env.Services.Predictor?.Phrases?.ReadingOf(prediction, typed) ?? typed;
-
-    /// <summary>
-    /// 直前に確定した語。英語とも日本語とも読める語 (i, sushi) を文脈が分からないまま確定したとき、
-    /// 次の語で文脈がはっきりしたら確定し直す (I want: 「胃」→「I」)。キャレットが動いたら (ほかのキー・クリック) 無効。
-    /// </summary>
-    /// <param name="AfterEnglish">確定したとき、前が英語だった (Are + you)。英文の中の語なので、後ろが日本語でも日本語に直さない (#265)。</param>
-    internal sealed record CommitRecord(ComposedText Text, string Raw, bool English, bool SpaceIntended, bool AfterEnglish = false);
     private const int MaxCorrectable = 4;
-
-    /// <summary>キャレットが動いたかもしれないとき (Meltype を通らなかったキー・クリック)。直前の語は確定し直さない。</summary>
-    public static void ForgetLastCommit(CompositionState state)
-    {
-        state.Correctable.Clear();
-        CompositionOutput.ForgetCommitted(state.Out);
-        // キャレットが動いた・アプリが文字を入れた: キャレットの前は自分が確定した語ではないので、読めたらアプリの文字を使う。
-        // 読めなければ前の文字も、それが英語だったかも分からないものとして扱う (消した後・行の先頭に、英単語の前後の空白を足さない)
-        state.LastCommitTime = long.MinValue / 2;
-        state.Last = null;
-    }
 
     /// <summary>
     /// 今確定しようとしている語 (raw) で文脈がはっきりしたら、直前に確定した英語とも日本語とも読める語を確定し直す。
     /// 例: 「i」を Space で「胃」にした後に want と打つ → 「I want」、「sushi 」の後に「がすき」 → 「すしがすき」。
     /// </summary>
-    private static ComposedText? CorrectPreviousCommit(CompositionState state, CompositionEnv env, string raw, bool english)
+    private static (int Count, ComposedText Text)? CorrectPreviousCommit(CompositionState state, CompositionEnv env, string raw, bool english)
     {
-        if (state.Correctable.Count == 0 || !AutoCorrect(state, env) || !env.CanDeleteBackward) return null;
+        if (state.Correctable.Count == 0 || !CompositionLifecycle.AutoCorrect(env) || !env.CanDeleteBackward) return null;
         var previous = state.Correctable[^1];
         List<CommitRecord> targets = [];
         ComposedText? replacement = null;
@@ -276,7 +206,7 @@ internal static partial class CompositionController
             // する の活用のローマ字 (site→して、sita→した) は、後ろが英語でも日本語のまま
             // (site PR → site PR に確定し直さず、して PR を保つ)。
             // sure→すれ は英文 (make sure) でも使うので含めない。
-            if (targets.Any(t => IsSuruRomajiKeepJapanese(state, env, t.Raw)))
+            if (targets.Any(t => CompositionConversion.IsSuruRomajiKeepJapanese(env, t.Raw)))
             {
                 // Space で変換を始めていた分の空白だけは残す (してPR → して PR)。
                 replacement = ComposedText.Concat(targets.Select(t => t.Text + ComposedText.English(t.SpaceIntended ? " " : "")));
@@ -298,13 +228,13 @@ internal static partial class CompositionController
             if (env.Services.RomajiTypos is { } lexicon && !lexicon.IsWord(replacement.Text)) return null;
         }
         // ユーザーが英字 / かなに直して覚えた語 (F10 で英字にした api) は、覚えたとおりなら書き換えない (issue #124)。
-        if (targets.Any(t => env.Services.Languages?.Get(t.Raw.ToLowerInvariant(), CompositionText.LearningContext(state.Text, env)) == t.English)) return null;
+        if (targets.Any(t => env.Services.Languages?.Get(t.Raw.ToLowerInvariant(), CompositionText.LearningContext(env)) == t.English)) return null;
         var original = string.Concat(targets.Select(t => t.Text.Text));
         if (replacement is null || replacement.Text == original) return null;
         // 直前に確定した語が、今のキャレットの位置に無い (別の場所をクリックした等) ときは書き換えない。
         // 消すつもりの文字がそこに無いので、消すとキャレットの前の別の文字が消えてしまう。
         // 入力欄の文字をその場で読めるホストだけ確かめる (Windows は別のスレッドで後から読むので、古い値で誤って止めない)。
-        if (CompositionOutput.Before(state.Out, env) is { } caretBefore && !caretBefore.EndsWith(original, StringComparison.Ordinal))
+        if (CompositionOutput.RawBefore(state.Out, env) is { } caretBefore && !caretBefore.EndsWith(CompositionOutput.Render(env, ComposedText.Concat(targets.Select(t => t.Text))), StringComparison.Ordinal))
         {
             Diagnostics.Log.Decision($"キャレットの位置が変わっているので確定し直しません: {Diagnostics.Log.Text(original)}");
             state.Correctable.Clear();
@@ -314,28 +244,25 @@ internal static partial class CompositionController
         Diagnostics.Log.Decision($"前後の文脈に合わせて確定し直しました: {Diagnostics.Log.Text(original)}→{Diagnostics.Log.Text(replacement.Text)}");
         // 消して入れ直すのは、続けて確定する文字と一緒に送る (CommitText)。別々に送ると、その間に入れ直した文字と
         // 続けて確定した文字の順番が入れ替わるアプリがある (Are yoよ人間う？: issue #258)
-        state.PendingReplace = (original.Length, replacement);
         if (state.Last is { } last) state.Last = last with { Text = replacement.Text };
         state.Correctable.Clear();
-        return replacement;
+        return (original.Length, replacement);
     }
 
     /// <summary>カッコの組 (設定「カッコを打ったら中にカーソルを移動」で、確定したら中に入る)。</summary>
     private static readonly HashSet<string> BracketPairs = ["「」", "『』", "（）", "()", "［］", "[]", "｛｝", "{}", "【】", "〈〉", "《》", "〔〕", "\"\"", "“”"];
 
     /// <summary>確定して入力する。英語だったか日本語だったか・確定した文字列を、次の入力の文脈として覚えておく。</summary>
-    private static void CommitText(CompositionState state, CompositionEnv env, ComposedText text, bool english, string raw = "", bool chosen = false, bool preserveText = false, string rule = "")
+    internal static void CommitText(CompositionState state, CompositionEnv env, ComposedText text, bool english, string raw = "", bool chosen = false, bool preserveText = false, string rule = "")
     {
-        LogCommit(state, env, text.Text, rule);
-        var spaceIntended = state.Conversion?.StartedBy == ConversionTrigger.Space;
+        if (state.Scene is CompositionScene.WithInput scene) LogCommit(scene, env, text.Text, rule);
+        var spaceIntended = state.Scene is CompositionScene.Converting { Conversion.StartedBy: ConversionTrigger.Space };
         var afterEnglish = env.Context().PrecedingEnglish == true;
-        CompositionText.Clear(state.Text);
-        state.Conversion = null;
-        state.LeftConversion = null;
+        CompositionLifecycle.Finish(state);
         if (text.Length == 0) return;
         var corrected = CorrectPreviousCommit(state, env, raw, english);
         if (!preserveText && (env.Settings.SpaceAroundEnglish || env.Settings.SpaceAroundNumbers))
-            text = text.WithSpaces(AddSpacesAroundEnglish(text.Text, corrected?.Text ?? env.Context().PrecedingText, env.Context().FollowingText, env.Settings.SpaceAroundEnglish, env.Settings.SpaceAroundNumbers));
+            text = text.WithSpaces(AddSpacesAroundEnglish(text.Text, corrected?.Text.Text ?? env.Context().PrecedingText, env.Context().FollowingText, env.Settings.SpaceAroundEnglish, env.Settings.SpaceAroundNumbers));
         // 英語とも日本語とも読める語を、文脈を決めずに (選び直さずに) 確定したときだけ、後で確定し直せるようにしておく。
         if (!chosen && env.Detector.IsAmbiguousWord(raw))
         {
@@ -348,9 +275,8 @@ internal static partial class CompositionController
         var joined = (state.Last?.Text ?? "") + text.Text;
         state.Last = new LastCommit(joined.Length > 20 ? joined[^20..] : joined, english);
         state.LastCommitTime = env.NowMs;
-        if (state.PendingReplace is var (count, replacement))
+        if (corrected is var (count, replacement))
         {
-            state.PendingReplace = null;
             CompositionOutput.ReplaceBackward(state.Out, env, count, replacement, text);
         }
         else CompositionOutput.Commit(state.Out, env, text);
@@ -410,6 +336,6 @@ internal static partial class CompositionController
     }
 
     /// <summary>変換ボックスの最後が英語の区間か (Space を空白として扱うか)。</summary>
-    private static bool EndsWithEnglish(CompositionState state, CompositionEnv env) =>
-        state.Text.Mode == DisplayMode.Auto && CompositionText.Segments(state.Text, env) is { Count: > 0 } segments && segments[^1].IsEnglish;
+    internal static bool EndsWithEnglish(CompositionInput input, CompositionEnv env) =>
+        input.Text.Mode == DisplayMode.Auto && CompositionText.Segments(input.Text, env) is { Count: > 0 } segments && segments[^1].IsEnglish;
 }

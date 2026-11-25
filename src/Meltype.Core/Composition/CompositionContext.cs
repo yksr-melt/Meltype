@@ -1,28 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Yukishiro
 // Copyright (C) 2026 aster-void
+// Copyright (C) 2026 yksr-melt
 
-using System.Globalization;
-using System.Text;
-using Meltype.Config;
 using static Meltype.Libraries.Chars.TextChars;
 
 namespace Meltype.Composition;
 
-/// <summary>入力欄の文脈: キャレットの前後の文字 (英語か日本語か)、変換エンジンに渡す文脈、学習の文脈。</summary>
-internal static partial class CompositionController
+/// <summary>キャレットの前後と直前の確定から、判定・変換・学習の文脈を作る。</summary>
+internal static class CompositionContext
 {
-    private static void BeginComposition(CompositionState state, CompositionEnv env, bool privateInput = false)
-    {
-        state.PrivateComposition = Private(state) || privateInput;
-        state.KeptChoices.Clear();
-        state.ModeByKey = false;
-        state.EscReverted = false;
-        // 設定「英字を主に入力」: 判定せず、打った英字のまま見せる (issue #839)
-        if (env.Settings.EnglishFirstInput && !KanaInput(state, env) && state.Text.Mode == DisplayMode.Auto) state.Text.Mode = DisplayMode.HalfWidthAlphanumeric;
-        state.Text.KanaInput = KanaInput(state, env);
-        state.Text.FullWidthParentheses = env.Settings.FullWidthParentheses;
-        state.Text.SquareBrackets = env.Settings.SquareBrackets;
-    }
+    /// <summary>自分が確定してから、この時間内はアプリ側のテキストがまだ更新されていないかもしれないので自分の記録を優先する。</summary>
+    private const long OwnCommitTrustMs = 1500;
 
     /// <summary>
     /// 入力欄の文脈 (<see cref="TextEnv.Context"/>)。フロントが渡したキャレットの前後の文字 (この出来事で確定した文字を入れたもの) から決める。

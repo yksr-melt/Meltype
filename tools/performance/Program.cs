@@ -30,7 +30,8 @@ foreach (var length in lengths) foreach (var pair in cases.Where(p => args.Lengt
         if (sample >= 0) Console.WriteLine(string.Join("\t", pair.Key, length, sample, elapsed, allocated, deltas[deltas.Count / 2], deltas[(int)Math.Floor((deltas.Count - 1) * 0.95)], deltas[^1], Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(output.ToString())))));
     }
 }
-static ImeEvent Key(int vk, int ch, bool shift) => new() { Version = ImeHost.Version, Type = ImeEventType.KeyPressed, Key = new ImeKey { Vk = vk, Ch = ch, Shift = shift } };
+// JSON で作る (baseline の古い版でもビルドできるように。ImeEvent の型の形は版で違う)
+static ImeEvent Key(int vk, int ch, bool shift) => ImeHost.Parse($$"""{"version":{{ImeHost.Version}},"type":"KeyPressed","key":{"vk":{{vk}},"ch":{{ch}},"shift":{{(shift ? "true" : "false")}} } }""")!;
 static class Bench { public static int Sink; }
 sealed class Environment : IImeEnvironment { public InputMode? InputMethod => null; public SnippetStore Snippets { get; } = new(null); public string? ClipboardText => null; public string? OtherTipVersion => null; }
 sealed class Converter : IKanjiConverter { public IReadOnlyList<ConversionClause>? Convert(ConversionRequest request) => null; }
