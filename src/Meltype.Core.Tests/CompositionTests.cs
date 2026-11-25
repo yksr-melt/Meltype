@@ -6837,6 +6837,23 @@ internal static class CompositionTests
         KeigoConverter.Apply(askNegative);
         Assert.Equal("ご教示いただけませんでしょうか？", askNegative[0].Text, "〜てくれない？ → いただけませんでしょうか？");
 
+        // 読点直後の即時複文変換・過去否定・勧誘形・割合記号+だ
+        var commaImmediate = new List<Clause> { new("しゅうせいしたから、", false, ["修正したから、"]) };
+        KeigoConverter.Apply(commaImmediate);
+        Assert.Equal("修正いたしましたので、", commaImmediate[0].Text, "読点直後でまだ続きを打っていなくても複文接続を即時変換");
+
+        var pastNeg = new List<Clause> { new("おわってなかった", false, ["終わってなかった"]) };
+        KeigoConverter.Apply(pastNeg);
+        Assert.Equal("終わっておりませんでした", pastNeg[0].Text, "〜てなかった → 〜ておりませんでした");
+
+        var volitional = new List<Clause> { new("そうだんしよう", false, ["相談しよう"]) };
+        KeigoConverter.Apply(volitional);
+        Assert.Equal("ご相談いたしましょう", volitional[0].Text, "〜しよう → 〜いたしましょう");
+
+        var percentDa = new List<Clause> { new("100%だ", false, ["100%だ"]) };
+        KeigoConverter.Apply(percentDa);
+        Assert.Equal("100%です", percentDa[0].Text, "記号+だ → です");
+
         // OFF (既定) なら通常のまま
         var off = new Keyboard(live: true);
         off.Type("ryoukai");
