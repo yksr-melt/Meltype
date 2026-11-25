@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Yukishiro
 
 using System.Globalization;
+using Meltype.Config;
 using Meltype.Input;
 
 namespace Meltype.UI;
@@ -14,16 +15,15 @@ internal sealed class KeyCountForm : Form
 {
     private readonly KeyCounter _counter;
     private readonly Label _summary = new() { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(8), Font = new Font("Yu Gothic UI", 12F) };
-    private readonly CheckBox _enable = new() { Text = "打鍵を数える (OFF の間は数えません。一時停止中・パスワード欄でも数えません)", Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(8, 0, 8, 0) };
-    private readonly CheckBox _discord = new() { Text = "Discord に打鍵数と起動からの経過時間を表示する", Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(8, 0, 8, 4) };
+    private readonly ComboBox _mode = new() { Dock = DockStyle.Top, DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly DataGridView _keyGrid = FormControls.ReadOnlyGrid();
     private readonly DataGridView _dayGrid = FormControls.ReadOnlyGrid();
     private readonly TextBox _analysis = new() { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, Font = new Font("BIZ UDGothic", 10F), BorderStyle = BorderStyle.None };
     private readonly System.Windows.Forms.Timer _refresh = new() { Interval = 1000 };
 
-    public KeyCountForm(KeyCounter counter)
+    public KeyCountForm(MeltypeEngine engine)
     {
-        _counter = counter;
+        _counter = engine.KeyCounter;
         Text = "Meltype 打鍵数";
         StartPosition = FormStartPosition.CenterScreen;
         Size = new Size(520, 560);
@@ -57,31 +57,22 @@ internal sealed class KeyCountForm : Form
         buttons.Controls.AddRange([close, reset, import]);
 
         Controls.Add(tabs);
-        Controls.Add(_discord);
-        Controls.Add(_enable);
+        Controls.Add(_mode);
         Controls.Add(_summary);
         Controls.Add(buttons);
         CancelButton = close;
 
-        _enable.Checked = counter.Enabled;
-        _enable.CheckedChanged += (_, _) =>
-        {
-            _counter.Enabled = _enable.Checked;
-            _counter.Save();
-            _discord.Enabled = _enable.Checked;
-        };
-        // Discord のアプリ (PC 版) へ、この PC の中だけでつなぐ (外のサーバーは通さない)。20 秒ごとに送る
-        _discord.Checked = counter.DiscordPresence;
-        _discord.Enabled = counter.Enabled;
-        _discord.CheckedChanged += (_, _) =>
-        {
-            _counter.DiscordPresence = _discord.Checked;
-            _counter.Save();
-        };
+        var modes = Enum.GetValues<KeyCountMode>();
+        _mode.Items.AddRange([.. modes.Select(mode => SettingsCatalog.ChoiceName(typeof(KeyCountMode), mode))]);
+        void ShowMode() => _mode.SelectedIndex = Array.IndexOf(modes, engine.Running.KeyCount);
+        ShowMode();
+        // 設定アプリで変えた値を出すときに書き戻さないよう、利用者が選んだときだけ受け取る
+        _mode.SelectionChangeCommitted += (_, _) => engine.EditSettings(settings => settings.KeyCount = modes[_mode.SelectedIndex]);
 
         // 開いたままでも、分析・キーごと・日ごとを今の数にする (数が変わったときだけ作り直す)
         _refresh.Tick += (_, _) =>
         {
+            if (!_mode.DroppedDown) ShowMode();
             if (_counter.Total != _shownTotal) Reload();
             else UpdateSummary();
         };
