@@ -53,6 +53,16 @@ if [[ "${1:-}" != --prepared ]]; then
     receipt="${4:-}"
     [[ "$policy" == manual || "$policy" == homebrew ]] || { echo "Unknown installation policy: $policy" >&2; exit 1; }
     [[ -d "$source_app" ]] || { echo "Missing app: $source_app" >&2; exit 1; }
+    # The released ZIP is for Apple silicon only. Refuse it on Intel before staging: the helper
+    # could not run and would fail with 126, which is also how a refused helper fails, so the
+    # whole app copy would be retained for diagnosis.
+    # Ask for the hardware because uname -m reports x86_64 in a Rosetta shell on Apple silicon.
+    apple_silicon="$(/usr/sbin/sysctl -in hw.optional.arm64)"
+    helper_kind="$(/usr/bin/file -b "$source_app/Contents/MacOS/MeltypeInstallSupport")"
+    if [[ "$apple_silicon" != 1 && "$helper_kind" == "Mach-O 64-bit executable arm64"* ]]; then
+        echo "この Meltype は Apple シリコン用なので、Intel の Mac では動きません。Intel の Mac では、ソースからビルドしてください: https://github.com/yksr-melt/Meltype/blob/main/mac/README.md" >&2
+        exit 1
+    fi
     validate_target
     [[ -f "$here/start-input-method.sh" ]] || { echo "Missing start-input-method.sh" >&2; exit 1; }
     mkdir -p "$(dirname "$target_app")"

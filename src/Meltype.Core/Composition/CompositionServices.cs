@@ -49,12 +49,6 @@ internal sealed record CompositionServices
 
     internal Func<GitHubIssueTitles?> GitHubTitles { get; init; } = () => null;
 
-    /// <summary>今の時刻 (UTC。タイムゾーンを指定した時計の候補に使う。テストでは差し替える)。</summary>
-    public Func<DateTime> UtcNow { get; init; } = () => DateTime.UtcNow;
-
-    /// <summary>この PC のタイムゾーン (時計の候補にタイムゾーンの名前を付けるかの判定に使う。テストでは差し替える)。</summary>
-    public Func<TimeZoneInfo> LocalTimeZone { get; init; } = () => TimeZoneInfo.Local;
-
     /// <summary>ユーザーが英字 / かなに直した語の学習。</summary>
     public LanguageMemory? Languages { get; init; }
 

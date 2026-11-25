@@ -6,6 +6,7 @@ using Meltype.Composition;
 using Meltype.Config;
 using Meltype.Engine;
 using Meltype.Input;
+using Meltype.Ime;
 using Meltype.Learning;
 
 namespace Meltype.Tests;
@@ -262,6 +263,49 @@ internal static class BackgroundConversionTests
         public override string? Convert(string hiragana, string? before) => string.Concat(Clauses.Select(c => c.Text));
 
         public override IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) => Clauses;
+    }
+
+    [Test]
+    public static void Refresh_AfterEnterOrFocusCommitDoesNotReviveTheFinishedInput()
+    {
+        foreach (var focusCommit in new[] { false, true })
+        {
+            var converter = new ChangingAnswer { Clauses = [new("にほんご", "日本語")] };
+            var session = Session(converter);
+            SessionFacadeTests.Type(session, "nihongo ");
+            var committed = focusCommit ? session.CommitPending() : session.HandleKey(VirtualKeys.Return, null, false, false, false, false);
+            Assert.Equal("日本語", string.Concat(committed.Commits.Select(c => c.Text)), $"確定: {focusCommit}");
+
+            converter.Clauses = [new("にほんご", "二本語")];
+            var arrived = session.Send(new ImeEvent.ConversionFinished());
+            Assert.True(arrived.View is null && arrived.Commits.Count == 0, "確定後の答えで未確定入力を復活させず、二重に確定しない");
+
+            converter.Clauses = [new("きょう", "今日")];
+            var next = SessionFacadeTests.Type(session, "kyou ")[^1].View;
+            Assert.Equal("今日", next?.Text, "次の入力は、新しい読みの変換になる");
+            Assert.True(next?.Candidates.Contains("二本語") == false, "前の読みの候補を持ち越さない");
+        }
+    }
+
+    [Test]
+    public static void Refresh_AfterEscapeOrDeletingAllTextDoesNotReviveCancelledInput()
+    {
+        foreach (var deleteAll in new[] { false, true })
+        {
+            var converter = new ChangingAnswer { Clauses = [new("にほんご", "日本語")] };
+            var session = Session(converter);
+            SessionFacadeTests.Type(session, "nihongo");
+            if (deleteAll)
+            {
+                for (var i = 0; i < "nihongo".Length; i++) session.HandleKey(VirtualKeys.Back, null, false, false, false, false);
+            }
+            else session.HandleKey(VirtualKeys.Escape, null, false, false, false, false);
+
+            converter.Clauses = [new("にほんご", "二本語")];
+            var arrived = session.Send(new ImeEvent.ConversionFinished());
+            Assert.True(arrived.View is null && arrived.Commits.Count == 0, $"取り消した入力を後から表示・確定しない: {deleteAll}");
+            Assert.True(!session.IsComposing, "入力は終わっている");
+        }
     }
 
     [Test]
