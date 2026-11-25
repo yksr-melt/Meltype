@@ -353,10 +353,12 @@ internal static class KeigoConverter
         ("見た", "ご覧になりましたでしょうか"),
         ("見ます", "ご覧になりますでしょうか"),
         ("見る", "ご覧になりますでしょうか"),
+        ("行かない", "行かれませんでしょうか"),
         ("行きました", "行かれましたでしょうか"),
         ("行った", "行かれましたでしょうか"),
         ("行きます", "行かれますでしょうか"),
         ("行く", "行かれますでしょうか"),
+        ("来ない", "お越しになりませんでしょうか"),
         ("来ました", "お越しになりましたでしょうか"),
         ("来た", "お越しになりましたでしょうか"),
         ("来ます", "お越しになりますでしょうか"),
@@ -370,20 +372,32 @@ internal static class KeigoConverter
         ("終わった", "完了されましたでしょうか"),
         ("できます", "可能でしょうか"),
         ("できる", "可能でしょうか"),
-        ("いいです", "よろしいでしょうか"),
-        ("いい", "よろしいでしょうか"),
-        ("あります", "ございますでしょうか"),
-        ("ある", "ございますでしょうか"),
+        ("てもいいです", "てもよろしいでしょうか"),
+        ("てもいい", "てもよろしいでしょうか"),
+        ("ていいです", "てもよろしいでしょうか"),
+        ("ていい", "てもよろしいでしょうか"),
+        ("でいいです", "でよろしいでしょうか"),
+        ("でいい", "でよろしいでしょうか"),
+        ("がいい", "がよろしいでしょうか"),
+        ("はいい", "はよろしいでしょうか"),
+        ("もいい", "もよろしいでしょうか"),
+        ("ではありません", "ではございませんでしょうか"),
+        ("じゃありません", "ではございませんでしょうか"),
+        ("ではない", "ではございませんでしょうか"),
+        ("じゃない", "ではございませんでしょうか"),
+        ("がない", "がございませんでしょうか"),
+        ("はない", "はございませんでしょうか"),
         ("ありません", "ございませんでしょうか"),
-        ("ない", "ございませんでしょうか"),
+        ("あります", "ございますでしょうか"),
+        ("がある", "がございますでしょうか"),
+        ("はある", "はございますでしょうか"),
         ("しました", "されましたでしょうか"),
-        ("した", "されましたでしょうか"),
         ("します", "されますでしょうか"),
-        ("する", "されますでしょうか"),
+        ("ました", "ましたでしょうか"),
+        ("ます", "ますでしょうか"),
         ("だった", "でしたでしょうか"),
         ("でした", "でしたでしょうか"),
         ("です", "でしょうか"),
-        ("だ", "でしょうか"),
     ];
 
     // 文末の動詞・表現の置き換え (読み → 敬語)
@@ -903,14 +917,6 @@ internal static class KeigoConverter
         ("じゃありません", "ではございません"),
         ("ではない", "ではございません"),
         ("じゃない", "ではございません"),
-        ("したいです", "したく存じます"),
-        ("したい", "したく存じます"),
-        ("しません", "いたしません"),
-        ("しない", "いたしません"),
-        ("する", "いたします"),
-        ("します", "いたします"),
-        ("した", "いたしました"),
-        ("しました", "いたしました"),
         ("だった", "でした"),
         ("だろう", "でしょう"),
         ("でしょ", "でしょう"),
@@ -919,13 +925,41 @@ internal static class KeigoConverter
         ("だね", "ですね"),
     ];
 
-    // 文末に「です」を付けられる代表的な い形容詞の語尾 (漢字 + い / かった)
-    private static readonly string[] PoliteAdjectives =
+    // 末尾 1 文字ごとの語尾ルール索引 (毎打鍵の線形走査を 1/10 以下に絞る)
+    private static readonly Dictionary<char, (string Suffix, string Replacement)[]> TailTextSuffixBuckets =
+        TailTextSuffixes.GroupBy(x => x.Suffix[^1]).ToDictionary(g => g.Key, g => g.ToArray());
+
+    // サ変動詞 (2 字以上の漢字熟語・カタカナ語 + する/した/しない/したい) の活用ルール
+    private static readonly (string Suffix, string SuruReplacement, string? GodanSaReplacement)[] SuruOrGodanSuffixes =
+    [
+        ("したいです", "したく存じます", null),
+        ("したい", "したく存じます", "したいです"),
+        ("しません", "いたしません", null),
+        ("しない", "いたしません", null),
+        ("しました", "いたしました", null),
+        ("します", "いたします", null),
+        ("した", "いたしました", "しました"),
+        ("する", "いたします", null),
+    ];
+
+    // 文末に「です」を付けられる代表的な い形容詞の語尾 (現在形・過去形を事前展開して実行時アロケーションを 0 にする)
+    private static readonly string[] PoliteAdjectiveEndings = BuildAdjectiveEndings(
     [
         "難しい", "忙しい", "早い", "遅い", "多い", "少ない", "新しい", "古い",
         "高い", "低い", "大きい", "小さい", "長い", "短い", "近い", "遠い",
-        "強い", "弱い", "重い", "軽い", "良い", "悪い", "厳しい", "詳しい", "正しい", "ありがたい",
-    ];
+        "強い", "弱い", "重い", "軽い", "良い", "悪い", "厳しい", "詳しい", "正しい", "ありがたい", "危ない",
+    ]);
+
+    private static string[] BuildAdjectiveEndings(string[] adjectives)
+    {
+        var list = new List<string>(adjectives.Length * 2);
+        foreach (var adj in adjectives)
+        {
+            list.Add(adj);
+            list.Add(adj[..^1] + "かった");
+        }
+        return [.. list];
+    }
 
     public static void Apply(List<Clause> clauses, string? before = null)
     {
@@ -967,10 +1001,12 @@ internal static class KeigoConverter
                 continue;
             }
 
-            var hasClauseEnd = HasClauseEnd(clauseText) || HasClauseEnd(clauseReading);
+            var hasSentenceBreak = HasSentenceBreak(clauseText) || HasSentenceBreak(clauseReading);
             var nextIsPunct = i + 1 < clauses.Count && IsPunctuationOnly(clauses[i + 1].Text);
+            var nextIsSentenceBreak = nextIsPunct && HasSentenceBreak(clauses[i + 1].Text);
             var hasNextContent = i < lastContentIndex;
-            var isSentenceEnd = !hasNextContent || hasClauseEnd || nextIsPunct;
+            // 読点 (、) の後ろに続きの文節があるときは途中節なので文末扱いにしない (「見て、連絡する」を「ご覧ください、ご連絡いたします」にしない)
+            var isSentenceEnd = !hasNextContent || hasSentenceBreak || nextIsSentenceBreak;
             var nextIsQuestion = nextIsPunct && IsQuestion(clauses[i + 1].Text);
 
             var prevReading = i > 0 ? clauses[i - 1].Reading : "";
@@ -1112,17 +1148,26 @@ internal static class KeigoConverter
         if (isSentenceEnd)
         {
             var suffixApplied = false;
-            if (!IsAlreadyKeigo(rewritten))
+            if (rewritten.Length > 0 && !IsAlreadyKeigo(rewritten))
             {
-                foreach (var (suffix, replacement) in TailTextSuffixes)
+                if (TailTextSuffixBuckets.TryGetValue(rewritten[^1], out var bucket))
                 {
-                    if (rewritten.EndsWith(suffix, StringComparison.Ordinal) &&
-                        (rewritten.Length > suffix.Length || suffix.Length >= 2))
+                    foreach (var (suffix, replacement) in bucket)
                     {
-                        rewritten = rewritten[..^suffix.Length] + replacement;
-                        suffixApplied = true;
-                        break;
+                        if (rewritten.EndsWith(suffix, StringComparison.Ordinal) &&
+                            (rewritten.Length > suffix.Length || suffix.Length >= 2))
+                        {
+                            rewritten = rewritten[..^suffix.Length] + replacement;
+                            suffixApplied = true;
+                            break;
+                        }
                     }
+                }
+
+                if (!suffixApplied && TrySuruOrGodanSa(rewritten) is { } suruOrGodan)
+                {
+                    rewritten = suruOrGodan;
+                    suffixApplied = true;
                 }
             }
 
@@ -1150,6 +1195,35 @@ internal static class KeigoConverter
         return rewritten != textCore ? rewritten + punct : null;
     }
 
+    private static string? TrySuruOrGodanSa(string text)
+    {
+        foreach (var (suffix, suruReplacement, godanSaReplacement) in SuruOrGodanSuffixes)
+        {
+            if (!text.EndsWith(suffix, StringComparison.Ordinal)) continue;
+            var stem = text[..^suffix.Length];
+            if (IsVerbalNounStem(stem))
+                return stem + suruReplacement;
+            if (godanSaReplacement is not null && stem.Length >= 1 && !IsKanaOnly(stem))
+                return stem + godanSaReplacement;
+            return null;
+        }
+        return null;
+    }
+
+    // サ変動詞の語幹か: 末尾が 2 文字以上の漢字熟語またはカタカナ語 (完了・設定・テスト・ログイン など。押・貸・思い出 などの五段サ行は除外)
+    private static bool IsVerbalNounStem(string stem)
+    {
+        if (stem.Length < 2) return false;
+        var a = stem[^2];
+        var b = stem[^1];
+        var bothKanji = IsKanji(a) && IsKanji(b);
+        var bothKatakana = IsKatakana(a) && IsKatakana(b);
+        return bothKanji || bothKatakana;
+    }
+
+    private static bool IsKanji(char c) => c is >= '一' and <= '鿿' or '々';
+    private static bool IsKatakana(char c) => c is (>= 'ァ' and <= 'ヺ') or 'ー';
+
     private static string? ConvertQuestion(string readingCore, string textCore, string punct)
     {
         if (QuestionReadingMap.TryGetValue(readingCore, out var qWord))
@@ -1175,15 +1249,34 @@ internal static class KeigoConverter
         }
 
         var rewritten = ApplyInTextReplacements(textCore);
-        if (!rewritten.EndsWith("でしょうか", StringComparison.Ordinal))
+        if (!rewritten.EndsWith("でしょうか", StringComparison.Ordinal) &&
+            !rewritten.EndsWith("ますか", StringComparison.Ordinal) &&
+            !rewritten.EndsWith("ましたか", StringComparison.Ordinal) &&
+            !rewritten.EndsWith("ですか", StringComparison.Ordinal) &&
+            !rewritten.EndsWith("ませんか", StringComparison.Ordinal))
         {
+            var matched = false;
             foreach (var (suffix, replacement) in QuestionSuffixes)
             {
                 if (rewritten.EndsWith(suffix, StringComparison.Ordinal))
                 {
                     rewritten = rewritten[..^suffix.Length] + replacement;
+                    matched = true;
                     break;
                 }
+            }
+
+            if (!matched)
+            {
+                // サ変動詞 + した？ / する？ (完了した？ → 完了されましたでしょうか？)
+                if (rewritten.EndsWith("した", StringComparison.Ordinal) && IsVerbalNounStem(rewritten[..^2]))
+                    rewritten = rewritten[..^2] + "されましたでしょうか";
+                else if (rewritten.EndsWith("する", StringComparison.Ordinal) && IsVerbalNounStem(rewritten[..^2]))
+                    rewritten = rewritten[..^2] + "されますでしょうか";
+                else if (rewritten.Length >= 2 && rewritten.EndsWith('だ') && IsNominalStem(rewritten[^2]))
+                    rewritten = rewritten[..^1] + "でしょうか";
+                else if (TryPoliteAdjective(rewritten) is not null)
+                    rewritten += "でしょうか";
             }
         }
 
@@ -1194,28 +1287,27 @@ internal static class KeigoConverter
     {
         var rewritten = text;
         foreach (var (from, to) in InTextReplacements)
-        {
-            if (rewritten.Contains(from, StringComparison.Ordinal))
-                rewritten = rewritten.Replace(from, to, StringComparison.Ordinal);
-        }
+            rewritten = rewritten.Replace(from, to, StringComparison.Ordinal);
         return rewritten;
     }
 
     private static string? TryPoliteAdjective(string text)
     {
-        foreach (var adj in PoliteAdjectives)
+        if (text.Length < 2 || text[^1] is not ('い' or 'た')) return null;
+        foreach (var ending in PoliteAdjectiveEndings)
         {
-            if (text.EndsWith(adj, StringComparison.Ordinal)) return text + "です";
-            var past = adj[..^1] + "かった";
-            if (text.EndsWith(past, StringComparison.Ordinal)) return text + "です";
+            if (text.EndsWith(ending, StringComparison.Ordinal))
+                return text + "です";
         }
         return null;
     }
 
     private static bool IsAlreadyKeigo(string text) =>
+        text.Length > 0 && text[^1] is 'す' or 'た' or 'ん' or 'か' or 'い' &&
         AlreadyKeigoEndings.Any(e => text.EndsWith(e, StringComparison.Ordinal));
 
     private static bool IsAlreadyPolite(string text) =>
+        text.Length > 0 && text[^1] is 'す' or 'た' or 'ん' or 'か' or 'い' or 'せ' or 'う' &&
         AlreadyPoliteEndings.Any(e => text.EndsWith(e, StringComparison.Ordinal));
 
     // 「〜だ → 〜です」を安全に適用できる直前文字 (漢字・カタカナ・英数字。ひらがなの「んだ」「まだ」は除外)
@@ -1227,9 +1319,6 @@ internal static class KeigoConverter
 
     private static bool IsPunctuationOnly(string text) =>
         text.Length > 0 && text.All(IsPunctuationChar);
-
-    private static bool HasClauseEnd(string text) =>
-        text.Length > 0 && IsPunctuationChar(text[^1]);
 
     private static bool IsQuestion(string punct) =>
         punct.Contains('？') || punct.Contains('?');

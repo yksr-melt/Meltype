@@ -1033,7 +1033,7 @@ internal static class CompositionConversion
     /// <summary>ライブ変換の文節 (読み・変換エンジンの答え・学習などで選び直した後の文字)。予測変換で最後の文節を探すときも、同じ打鍵で変換した結果を使う。</summary>
     internal static List<(string Reading, string? Engine, string Text)> LiveClauses(CompositionInput input, CompositionEnv env, string kana, bool afterEnglish, string before)
     {
-        var key = string.Join("\u0001", kana, afterEnglish, before, EnglishInComposition(input, env), env.Context().FollowingText, env.Services.History?.Version, env.Settings.KeigoMode);
+        var key = string.Join("\u0001", kana, afterEnglish ? "1" : "0", before, EnglishInComposition(input, env), env.Context().FollowingText, env.Services.History?.Version, env.Settings.KeigoMode ? "1" : "0");
         if (env.LiveCache.TryGetValue(key, out var cached)) return cached;
         var clauses = ConvertJapaneseSegment(input, env.WithoutWaiting(), kana, afterEnglish, before, zenzai: true).Select(c => (c.Reading, c.Engine, c.Text)).ToList();
         if (env.LiveCache.Count > 256) env.LiveCache.Clear();

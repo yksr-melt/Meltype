@@ -6770,6 +6770,29 @@ internal static class CompositionTests
         KeigoConverter.Apply(teHoshii);
         Assert.Equal("ご覧いただけますでしょうか", teHoshii[0].Text, "てほしい系も正しく敬語になる");
 
+        // 途中の読点 (、) で文末敬語に化けないこと
+        var midComma = new List<Clause> { new("みて、", false, ["見て、"]), new("れんらくする", false, ["連絡する"]) };
+        KeigoConverter.Apply(midComma);
+        Assert.Equal("見て、ご連絡いたします", string.Concat(midComma.Select(c => c.Text)), "途中の読点を文末の『ご覧ください、』にしない");
+
+        // 五段サ行動詞 (押した・思い出した) を『押いたしました』にせず『押しました』にし、サ変動詞 (完了した) は『完了いたしました』にする
+        var godanSa = new List<Clause> { new("おした", false, ["押した"]) };
+        KeigoConverter.Apply(godanSa);
+        Assert.Equal("押しました", godanSa[0].Text, "五段サ行は『押いたしました』にせず『押しました』");
+
+        var suruNoun = new List<Clause> { new("かんりょうした", false, ["完了した"]) };
+        KeigoConverter.Apply(suruNoun);
+        Assert.Equal("完了いたしました", suruNoun[0].Text, "サ変動詞は『完了いたしました』");
+
+        // 疑問文の誤変換防止 (食べました？・危ない？・可愛い？)
+        var politeQuest = new List<Clause> { new("たべました？", false, ["食べました？"]) };
+        KeigoConverter.Apply(politeQuest);
+        Assert.Equal("食べましたでしょうか？", politeQuest[0].Text, "『食べまされましたでしょうか？』にしない");
+
+        var adjQuest = new List<Clause> { new("あぶない？", false, ["危ない？"]) };
+        KeigoConverter.Apply(adjQuest);
+        Assert.Equal("危ないでしょうか？", adjQuest[0].Text, "『危ございませんでしょうか？』にしない");
+
         // OFF (既定) なら通常のまま
         var off = new Keyboard(live: true);
         off.Type("ryoukai");
