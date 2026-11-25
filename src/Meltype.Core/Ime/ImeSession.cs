@@ -720,8 +720,7 @@ internal static class ImeSession
         var lineKind = CodeInput(state) && !CompositionController.IsComposing(state.Composition) ? CodeLineKind(state, before) : (LineKind?)null;
         var slashComment = lineKind == LineKind.Comment;
         // ドキュメントコメントの /// や //! の記号は本文ではないので、日本語の記号 (・ ！) にしない。
-        // かな入力では記号のキーもかな (; は れ) を打つキーなので、本文として扱う。
-        if (slashComment && settings.InputStyle == InputStyle.Romaji && !modifier && before is { } commentLine && ch is { } mark && LineContext.ContinuesSlashCommentMarker(commentLine, mark))
+        if (slashComment && !modifier && before is { } commentLine && ch is { } mark && LineContext.ContinuesSlashCommentMarker(commentLine, mark, settings.InputStyle == InputStyle.Kana))
         {
             return CompositionController.Pass(state.Composition, Env(state, env), now);
         }

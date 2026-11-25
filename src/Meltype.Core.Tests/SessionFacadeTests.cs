@@ -1080,7 +1080,7 @@ internal static class SessionFacadeTests
     public static void CodeInput_TerminalSlashArgumentsRemainDirect()
     {
         // シェルの // から始まる引数 (Bazel のラベル・Git Bash のパス) はコメントではないので、引数も後ろに続けて打つ語もコードとして直接入力する。
-        foreach (var command in new[] { "bazel build //src/main:app ima", "bazel test //tools:koko", "docker run -v //c/work ima", "// komento" })
+        foreach (var command in new[] { "bazel build //src/main:app ima", "bazel test //tools:koko", "docker run -v //c/work ima" })
         {
             var session = Create();
             session.CodeInput = true;
@@ -1098,14 +1098,59 @@ internal static class SessionFacadeTests
     }
 
     [Test]
-    public static void CodeInput_TerminalWithoutSurroundingTextContinuesLineComments()
+    public static void CodeInput_TerminalEditorSlashCommentsComposeJapanese()
     {
-        foreach (var marker in new[] { "#" })
+        // ターミナルの中のエディター (Vim など) の、空白の後の // コメントは日本語で書く。前の行も含む周辺文字列を返すターミナルでも同じ。
+        foreach (var before in new[] { "", "x = 1; ", "int a;\n", "$ ls\n" })
+            foreach (var body in new[] { "// ", "//\t" })
+            {
+                var session = Create();
+                session.CodeInput = true;
+                session.CodeTerminal = true;
+                Assert.Equal("こめんと", Type(session, "komento", new Field(before + body))[^1].View?.Text, before + body);
+            }
+    }
+
+    [Test]
+    public static void CodeInput_TerminalSlashArgumentsDoNotOpenBlocks()
+    {
+        // 引数の // に続く /* は、次の行まで続くコメントの始まりではない。
+        foreach (var before in new[] { "$ gsutil ls gs://bucket/*\n$ ", "$ curl https://example.com/*\n$ ", "int a; // foo /* bar\n" })
         {
             var session = Create();
             session.CodeInput = true;
             session.CodeTerminal = true;
-            Assert.Equal("こめんと", Type(session, marker + "komento")[^1].View?.Text, marker);
+            Assert.True(Type(session, "ima", new Field(before)).All(r => !r.Consumed && r.View is null), before);
+        }
+    }
+
+    [Test]
+    public static void CodeInput_KanaInputKeepsTripleSlash()
+    {
+        // かな入力でも、/// のようにドキュメントコメントの / を続けて打てる (め にしない)。
+        var session = new TestSession(() => new Settings { LiveConversion = false, InputStyle = InputStyle.Kana }) { CodeInput = true };
+        var field = new Field();
+        foreach (var c in "///")
+        {
+            var r = session.HandleKey(VirtualKeys.Oem2, c, false, false, false, false, field.Text);
+            Assert.True(!r.Consumed, field.Text);
+            field.Text += c;
+        }
+        Assert.Equal("///", field.Text);
+    }
+
+    [Test]
+    public static void CodeInput_TerminalWithoutSurroundingTextContinuesLineComments()
+    {
+        foreach (var marker in new[] { "#", "// " })
+        {
+            var session = Create();
+            session.CodeInput = true;
+            session.CodeTerminal = true;
+            // フロントは Space の文字も渡す (覚えた行に空白を入れる)
+            foreach (var c in marker)
+                Assert.True(!session.HandleKey(c == ' ' ? VirtualKeys.Space : KeyOf(c).Vk, c, false, false, false, false).Consumed, marker);
+            Assert.Equal("こめんと", Type(session, "komento")[^1].View?.Text, marker);
             session.HandleKey(VirtualKeys.F7, null, false, false, false, false);
             var commit = Type(session, "\n").Single();
             Assert.True(commit.Consumed, "最初の Enter は確定");
