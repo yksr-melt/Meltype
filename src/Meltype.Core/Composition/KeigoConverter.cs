@@ -20,7 +20,9 @@ internal static class KeigoConverter
         "いただきます", "いただきました", "いただけます", "いただけますでしょうか",
         "くださいます", "くださいました",
         "いらっしゃいます", "いらっしゃいました",
-        "おっしゃいます", "おっしゃいました",
+        "おっしゃいます", "おっしゃいました", "おっしゃっています", "おっしゃっていました",
+        "なさいます", "なさいました", "なさっています", "なさっていました",
+        "になります", "になりました", "になっています", "になっていました",
         "まいります", "まいりました", "参ります", "参りました",
         "伺います", "伺いました", "拝見します", "拝見しました",
         "ご覧ください", "ご教示ください", "ご確認ください", "お送りください", "ご連絡ください", "少々お待ちください",
@@ -233,6 +235,9 @@ internal static class KeigoConverter
         ["きます"] = "お越しになります",
         ["きた"] = "お越しになりました",
         ["きました"] = "お越しになりました",
+        ["きている"] = "お越しになっています",
+        ["きてる"] = "お越しになっています",
+        ["きています"] = "お越しになっています",
         ["いる"] = "いらっしゃいます",
         ["います"] = "いらっしゃいます",
         ["いた"] = "いらっしゃいました",
@@ -241,6 +246,26 @@ internal static class KeigoConverter
         ["みます"] = "ご覧になります",
         ["みた"] = "ご覧になりました",
         ["みました"] = "ご覧になりました",
+        ["みている"] = "ご覧になっています",
+        ["みてる"] = "ご覧になっています",
+        ["みています"] = "ご覧になっています",
+        ["よむ"] = "お読みになります",
+        ["よみます"] = "お読みになります",
+        ["よんだ"] = "お読みになりました",
+        ["よみました"] = "お読みになりました",
+        ["かく"] = "お書きになります",
+        ["かきます"] = "お書きになります",
+        ["かいた"] = "お書きになりました",
+        ["かきました"] = "お書きになりました",
+        ["つかう"] = "お使いになります",
+        ["つかいます"] = "お使いになります",
+        ["つかった"] = "お使いになりました",
+        ["つかいました"] = "お使いになりました",
+        ["まつ"] = "お待ちになります",
+        ["まちます"] = "お待ちになります",
+        ["まっている"] = "お待ちになっています",
+        ["まってる"] = "お待ちになっています",
+        ["まっています"] = "お待ちになっています",
         ["いう"] = "おっしゃいます",
         ["いいます"] = "おっしゃいます",
         ["いいました"] = "おっしゃいました",
@@ -260,10 +285,27 @@ internal static class KeigoConverter
         ["おもいます"] = "お思いになります",
         ["おもった"] = "お思いになりました",
         ["おもいました"] = "お思いになりました",
+        ["かんがえる"] = "お考えになります",
+        ["かんがえます"] = "お考えになります",
+        ["かんがえた"] = "お考えになりました",
+        ["かんがえました"] = "お考えになりました",
+        ["かんがえている"] = "お考えになっています",
+        ["かんがえてる"] = "お考えになっています",
+        ["かえる"] = "お帰りになります",
+        ["かえります"] = "お帰りになります",
+        ["かえった"] = "お帰りになりました",
+        ["かえりました"] = "お帰りになりました",
+        ["やすむ"] = "お休みになります",
+        ["やすみます"] = "お休みになります",
+        ["やすんだ"] = "お休みになりました",
+        ["やすみました"] = "お休みになりました",
         ["する"] = "なさいます",
         ["します"] = "なさいます",
         ["した"] = "なさいました",
         ["しました"] = "なさいました",
+        ["している"] = "なさっています",
+        ["してる"] = "なさっています",
+        ["しています"] = "なさっています",
         ["くれる"] = "くださいます",
         ["くれます"] = "くださいます",
         ["くれた"] = "くださいました",
@@ -284,15 +326,45 @@ internal static class KeigoConverter
         ["ききます"] = "お聞きになります",
         ["きいた"] = "お聞きになりました",
         ["ききました"] = "お聞きになりました",
+        ["つたえる"] = "お伝えになります",
+        ["つたえます"] = "お伝えになります",
+        ["つたえた"] = "お伝えになりました",
+        ["つたえました"] = "お伝えになりました",
+        ["きめる"] = "お決めになります",
+        ["きめます"] = "お決めになります",
+        ["きめた"] = "お決めになりました",
+        ["きめました"] = "お決めになりました",
+        ["たいおうする"] = "ご対応なさいます",
+        ["たいおうします"] = "ご対応なさいます",
+        ["たいおうした"] = "ご対応なさいました",
+        ["たいおうしました"] = "ご対応なさいました",
+        ["さんかする"] = "ご参加なさいます",
+        ["さんかします"] = "ご参加なさいます",
+        ["さんかした"] = "ご参加なさいました",
+        ["さんかしました"] = "ご参加なさいました",
+        ["へんしんする"] = "ご返信なさいます",
+        ["へんしんします"] = "ご返信なさいます",
+        ["へんしんした"] = "ご返信なさいました",
+        ["へんしんしました"] = "ご返信なさいました",
+        ["きょうゆうする"] = "ご共有なさいます",
+        ["きょうゆうします"] = "ご共有なさいます",
+        ["きょうゆうした"] = "ご共有なさいました",
+        ["きょうゆうしました"] = "ご共有なさいました",
     };
 
     // 目上・相手が主語のときの尊敬語語尾 (テキスト末尾)
     private static readonly (string Suffix, string Replacement)[] RespectfulTextSuffixes =
     [
+        ("確認しています", "ご確認になっています"),
+        ("確認している", "ご確認になっています"),
+        ("確認してる", "ご確認になっています"),
         ("確認します", "ご確認になります"),
         ("確認する", "ご確認になります"),
         ("確認しました", "ご確認になりました"),
         ("確認した", "ご確認になりました"),
+        ("送っています", "お送りになっています"),
+        ("送っている", "お送りになっています"),
+        ("送ってる", "お送りになっています"),
         ("送ります", "お送りになります"),
         ("送る", "お送りになります"),
         ("送りました", "お送りになりました"),
@@ -301,22 +373,87 @@ internal static class KeigoConverter
         ("連絡する", "ご連絡になります"),
         ("連絡しました", "ご連絡になりました"),
         ("連絡した", "ご連絡になりました"),
+        ("対応します", "ご対応なさいます"),
+        ("対応する", "ご対応なさいます"),
+        ("対応しました", "ご対応なさいました"),
+        ("対応した", "ご対応なさいました"),
+        ("参加します", "ご参加なさいます"),
+        ("参加する", "ご参加なさいます"),
+        ("参加しました", "ご参加なさいました"),
+        ("参加した", "ご参加なさいました"),
+        ("返信します", "ご返信なさいます"),
+        ("返信する", "ご返信なさいます"),
+        ("返信しました", "ご返信なさいました"),
+        ("返信した", "ご返信なさいました"),
+        ("共有します", "ご共有なさいます"),
+        ("共有する", "ご共有なさいます"),
+        ("共有しました", "ご共有なさいました"),
+        ("共有した", "ご共有なさいました"),
         ("聞きます", "お聞きになります"),
         ("聞く", "お聞きになります"),
         ("聞きました", "お聞きになりました"),
         ("聞いた", "お聞きになりました"),
+        ("伝えます", "お伝えになります"),
+        ("伝える", "お伝えになります"),
+        ("伝えました", "お伝えになりました"),
+        ("伝えた", "お伝えになりました"),
+        ("決めます", "お決めになります"),
+        ("決める", "お決めになります"),
+        ("決めました", "お決めになりました"),
+        ("決めた", "お決めになりました"),
+        ("読みます", "お読みになります"),
+        ("読む", "お読みになります"),
+        ("読みました", "お読みになりました"),
+        ("読んだ", "お読みになりました"),
+        ("書きます", "お書きになります"),
+        ("書く", "お書きになります"),
+        ("書きました", "お書きになりました"),
+        ("書いた", "お書きになりました"),
+        ("使います", "お使いになります"),
+        ("使う", "お使いになります"),
+        ("使いました", "お使いになりました"),
+        ("使った", "お使いになりました"),
+        ("待っています", "お待ちになっています"),
+        ("待っている", "お待ちになっています"),
+        ("待ってる", "お待ちになっています"),
+        ("待ちます", "お待ちになります"),
+        ("待つ", "お待ちになります"),
+        ("考えます", "お考えになります"),
+        ("考える", "お考えになります"),
+        ("考えました", "お考えになりました"),
+        ("考えた", "お考えになりました"),
+        ("考えています", "お考えになっています"),
+        ("考えている", "お考えになっています"),
+        ("考えてる", "お考えになっています"),
+        ("帰ります", "お帰りになります"),
+        ("帰る", "お帰りになります"),
+        ("帰りました", "お帰りになりました"),
+        ("帰った", "お帰りになりました"),
+        ("休みます", "お休みになります"),
+        ("休む", "お休みになります"),
+        ("休みました", "お休みになりました"),
+        ("休んだ", "お休みになりました"),
         ("行きます", "いらっしゃいます"),
         ("行く", "いらっしゃいます"),
         ("行きました", "いらっしゃいました"),
         ("行った", "いらっしゃいました"),
+        ("来ています", "お越しになっています"),
+        ("来ている", "お越しになっています"),
+        ("来てる", "お越しになっています"),
         ("来ます", "お越しになります"),
         ("来る", "お越しになります"),
         ("来ました", "お越しになりました"),
         ("来た", "お越しになりました"),
+        ("見ています", "ご覧になっています"),
+        ("見ている", "ご覧になっています"),
+        ("見てる", "ご覧になっています"),
         ("見ます", "ご覧になります"),
         ("見る", "ご覧になります"),
         ("見ました", "ご覧になりました"),
         ("見た", "ご覧になりました"),
+        ("言っています", "おっしゃっています"),
+        ("言っている", "おっしゃっています"),
+        ("言ってる", "おっしゃっています"),
         ("言います", "おっしゃいます"),
         ("言う", "おっしゃいます"),
         ("言いました", "おっしゃいました"),
@@ -343,6 +480,16 @@ internal static class KeigoConverter
         ("する", "なさいます"),
         ("しました", "なさいました"),
         ("した", "なさいました"),
+        ("確認してくれた", "ご確認くださいました"),
+        ("確認してくれる", "ご確認くださいます"),
+        ("教えてくれた", "ご教示くださいました"),
+        ("教えてくれる", "ご教示くださいます"),
+        ("送ってくれた", "お送りくださいました"),
+        ("送ってくれる", "お送りくださいます"),
+        ("見てくれた", "ご覧くださいました"),
+        ("見てくれる", "ご覧くださいます"),
+        ("連絡してくれた", "ご連絡くださいました"),
+        ("連絡してくれる", "ご連絡くださいます"),
         ("くれます", "くださいます"),
         ("くれる", "くださいます"),
         ("くれました", "くださいました"),
@@ -352,7 +499,12 @@ internal static class KeigoConverter
     ];
 
     private static readonly string[] OtherSubjectTokens = BuildSubjectTokens(
-        ["お客様", "皆様", "皆さん", "先方", "御社", "貴社", "先生", "社長", "部長", "課長", "係長", "専務", "常務", "取締役", "担当者", "相手", "そちら", "あなた", "様", "さん"]);
+        [
+            "ご担当者様", "ご担当者", "担当者", "お客様", "皆様", "皆さん", "先方", "御社", "貴社",
+            "取引先", "クライアント", "代表", "社長", "副社長", "専務", "常務", "取締役",
+            "部長", "次長", "課長", "係長", "主任", "マネージャー", "リーダー", "オーナー",
+            "先生", "上司", "先輩", "相手", "そちら", "あなた", "様", "さん",
+        ]);
 
     private static readonly string[] SelfSubjectTokens = BuildSubjectTokens(
         ["私ども", "弊社", "当社", "こちら", "私", "僕", "俺", "自分"]);
@@ -1026,6 +1178,16 @@ internal static class KeigoConverter
         ("残す", "残します"),
         ("残した", "残しました"),
         // 補助動詞・助動詞
+        ("確認してくれた", "ご確認くださいました"),
+        ("確認してくれる", "ご確認くださいます"),
+        ("教えてくれた", "ご教示くださいました"),
+        ("教えてくれる", "ご教示くださいます"),
+        ("送ってくれた", "お送りくださいました"),
+        ("送ってくる", "お送りくださいます"),
+        ("見てくれた", "ご覧くださいました"),
+        ("見てくれる", "ご覧くださいます"),
+        ("連絡してくれた", "ご連絡くださいました"),
+        ("連絡してくれる", "ご連絡くださいます"),
         ("てもらえますか", "ていただけますでしょうか"),
         ("てもらえる", "ていただけますでしょうか"),
         ("てもらいました", "ていただきました"),
@@ -1215,9 +1377,9 @@ internal static class KeigoConverter
             // 次の文節と合わせてすでに敬語になっている場合は二重敬語を防ぐ
             if (!nextIsPunct && IsAlreadyFollowedByPolite(clauseReading, nextReading, nextText)) continue;
 
-            var respectfulSubject = IsOtherSubject(currentSentence.ToString());
+            var subjectRole = DetectSubjectRole(currentSentence.ToString());
 
-            if (ConvertClause(clauseReading, clauseText, isSentenceEnd, nextIsQuestion, respectfulSubject, prevReading, hasNextContent) is { } converted && converted != clauseText)
+            if (ConvertClause(clauseReading, clauseText, isSentenceEnd, nextIsQuestion, subjectRole, prevReading, hasNextContent) is { } converted && converted != clauseText)
             {
                 SetKeigo(clauses[i], converted);
             }
@@ -1266,12 +1428,15 @@ internal static class KeigoConverter
     private static bool HasSentenceBreak(string text) =>
         text.Length > 0 && text[^1] is '。' or '！' or '？' or '!' or '?';
 
-    /// <summary>現在の文の直近の主語手がかりから、相手・目上の人の動作 (尊敬語) か、自分の動作 (謙譲語) かを判別する。</summary>
-    private static bool IsOtherSubject(string text)
+    // 主語の種類: 相手・目上が主語 / 自分側が主語 / 主語の手がかりなし
+    private enum SubjectRole { Unknown, Other, Self }
+
+    private static SubjectRole DetectSubjectRole(string text)
     {
         var lastOther = LastTokenEnd(text, OtherSubjectTokens);
         var lastSelf = LastTokenEnd(text, SelfSubjectTokens);
-        return lastOther > lastSelf;
+        if (lastOther < 0 && lastSelf < 0) return SubjectRole.Unknown;
+        return lastOther > lastSelf ? SubjectRole.Other : SubjectRole.Self;
     }
 
     private static int LastTokenEnd(string text, string[] tokens)
@@ -1300,7 +1465,7 @@ internal static class KeigoConverter
         return false;
     }
 
-    private static string? ConvertClause(string reading, string text, bool isSentenceEnd, bool nextIsQuestion, bool respectfulSubject, string prevReading, bool hasNextContent)
+    private static string? ConvertClause(string reading, string text, bool isSentenceEnd, bool nextIsQuestion, SubjectRole subjectRole, string prevReading, bool hasNextContent)
     {
         var (readingCore, readingPunct) = SplitTrailingPunctuation(reading);
         var (textCore, textPunct) = SplitTrailingPunctuation(text);
@@ -1310,12 +1475,12 @@ internal static class KeigoConverter
         var prevEndsWithTe = prevReading.EndsWith('て') || prevReading.EndsWith('で');
         var isQuestion = IsQuestion(punct) || nextIsQuestion;
 
-        // 0. 疑問文 (？ / ?) の文末は相手への質問として尊敬・丁寧形にする
+        // 0. 疑問文 (？ / ?) は主語に応じて切り替える (自分主語「私が送った？」→ お送りいたしましたでしょうか？ / それ以外 → 尊敬・相手への質問)
         if (isSentenceEnd && isQuestion)
-            return ConvertQuestion(readingCore, textCore, punct);
+            return ConvertQuestion(readingCore, textCore, punct, subjectRole);
 
-        // 0.5 相手・目上が主語の文末は尊敬語を優先する (社長が見る → ご覧になります、お客様が来る → お越しになります)
-        if (isSentenceEnd && respectfulSubject && !IsAlreadyKeigo(textCore))
+        // 0.5 相手・目上が主語の文末は尊敬語を優先する (社長が見る → ご覧になります、お客様が来ている → お越しになっています)
+        if (isSentenceEnd && subjectRole == SubjectRole.Other && !IsAlreadyKeigo(textCore))
         {
             if (RespectfulReadingMap.TryGetValue(readingCore, out var respWord))
                 return respWord + punct;
@@ -1482,8 +1647,24 @@ internal static class KeigoConverter
     private static bool IsKanji(char c) => c is >= '一' and <= '鿿' or '々';
     private static bool IsKatakana(char c) => c is (>= 'ァ' and <= 'ヺ') or 'ー';
 
-    private static string? ConvertQuestion(string readingCore, string textCore, string punct)
+    private static string? ConvertQuestion(string readingCore, string textCore, string punct, SubjectRole subjectRole)
     {
+        // 自分が主語の疑問文 (私が送った？ / 弊社が確認した？) は謙譲語 + でしょうか にする
+        if (subjectRole == SubjectRole.Self)
+        {
+            if (TailReadingMap.TryGetValue(readingCore, out var selfKeigo))
+                return selfKeigo + "でしょうか" + punct;
+            var selfText = ApplyInTextReplacements(textCore);
+            if (selfText.Length > 0 && TailTextSuffixBuckets.TryGetValue(selfText[^1], out var bucket))
+            {
+                foreach (var (suffix, replacement) in bucket)
+                {
+                    if (selfText.EndsWith(suffix, StringComparison.Ordinal))
+                        return AppendWithoutDuplicatePrefix(selfText[..^suffix.Length], replacement) + "でしょうか" + punct;
+                }
+            }
+        }
+
         if (QuestionReadingMap.TryGetValue(readingCore, out var qWord))
             return qWord + punct;
 

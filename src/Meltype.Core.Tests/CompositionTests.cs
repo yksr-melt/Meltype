@@ -6854,6 +6854,19 @@ internal static class CompositionTests
         KeigoConverter.Apply(percentDa);
         Assert.Equal("100%です", percentDa[0].Text, "記号+だ → です");
 
+        // 尊敬語と謙譲語のさらなる判別 (進行形・自分主語の疑問文・〜てくれた)
+        var bossProgressive = new List<Clause> { new("ぶちょうが", false, ["部長が"]), new("みている", false, ["見ている"]) };
+        KeigoConverter.Apply(bossProgressive);
+        Assert.Equal("部長がご覧になっています", string.Concat(bossProgressive.Select(c => c.Text)), "目上主語の進行形 → ご覧になっています");
+
+        var selfQuestion = new List<Clause> { new("わたしが", false, ["私が"]), new("おくった？", false, ["送った？"]) };
+        KeigoConverter.Apply(selfQuestion);
+        Assert.Equal("私がお送りいたしましたでしょうか？", string.Concat(selfQuestion.Select(c => c.Text)), "自分主語の疑問文は謙譲語");
+
+        var clientGave = new List<Clause> { new("おきゃくさまが", false, ["お客様が"]), new("おくってくれた", false, ["送ってくれた"]) };
+        KeigoConverter.Apply(clientGave);
+        Assert.Equal("お客様がお送りくださいました", string.Concat(clientGave.Select(c => c.Text)), "〜てくれた → お送りくださいました");
+
         // OFF (既定) なら通常のまま
         var off = new Keyboard(live: true);
         off.Type("ryoukai");
