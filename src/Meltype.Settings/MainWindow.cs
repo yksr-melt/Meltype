@@ -2,13 +2,16 @@
 // Copyright (C) 2026 aster-void
 
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Layout;
+using Avalonia.Media;
 using Meltype.Config;
 using Meltype.Dictionary;
 
 namespace Meltype.SettingsApp;
 
-/// <summary>左に検索とページの一覧、右に選んだページ。ページは設定の分類と、設定以外の操作 (<see cref="Pages"/>)。</summary>
+/// <summary>左に検索とページの一覧、右に選んだページと、その下に入力プレビュー。ページは設定の分類と、設定以外の操作 (<see cref="Pages"/>)。</summary>
 internal sealed class MainWindow : Window
 {
     private readonly SettingsStore _store = new();
@@ -50,7 +53,13 @@ internal sealed class MainWindow : Window
         sidebar.Children.Add(_navigation);
         var root = new DockPanel();
         root.Children.Add(Dock(new Border { Classes = { "sidebar" }, Child = sidebar }, Avalonia.Controls.Dock.Left));
-        root.Children.Add(_content);
+        // Tab で、ページの項目からプレビューの順に移る (DockPanel の Bottom にすると、プレビューが先になる)
+        var right = new Grid { RowDefinitions = new RowDefinitions("*,Auto") };
+        right.Children.Add(_content);
+        var preview = Preview();
+        Grid.SetRow(preview, 1);
+        right.Children.Add(preview);
+        root.Children.Add(right);
         Content = root;
 
         // --add-word [語 [読み]]: ユーザー辞書のページを、登録欄に語と読みを入れて開く (Windows の単語の登録のホットキー)
@@ -64,6 +73,24 @@ internal sealed class MainWindow : Window
 
     /// <summary>起動の引数で登録欄に入れる語。ほかのページに移ったら捨てる。</summary>
     private UserWord? _addWord;
+
+    /// <summary>
+    /// 入力プレビュー: 変えた設定を、入力している Meltype でそのまま試す欄。ページの外に置くので、ページを移っても打った文章が残る。
+    /// 設定アプリの中で入力の本体 (ImeHost) を動かさない: OS の IME とキーを取り合い、候補の表示も本物と別に描くことになる。
+    /// </summary>
+    private static Border Preview()
+    {
+        var text = new TextBox { AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, Height = 72, PlaceholderText = "Meltype でここに打つと、今の設定を試せます (変えた設定は 1 秒ほどで反映します)" };
+        AutomationProperties.SetName(text, "入力プレビュー");
+        var header = new DockPanel();
+        // 入力欄にフォーカスを戻さない: 戻すと、fcitx5 では変換中の文字が、消した後の入力欄に確定する
+        var clear = SettingEditors.Button("入力をクリア", text.Clear);
+        header.Children.Add(Dock(clear, Avalonia.Controls.Dock.Right));
+        var heading = Pages.Heading("入力プレビュー");
+        heading.VerticalAlignment = VerticalAlignment.Center;
+        header.Children.Add(heading);
+        return new Border { Classes = { "preview" }, Child = new StackPanel { Spacing = 8, Children = { header, text } } };
+    }
 
     private static Control Dock(Control control, Dock dock)
     {
