@@ -2,9 +2,9 @@
 // Copyright (C) 2026 Yukishiro
 //
 // 公開版のリリースから、パッケージマネージャーに出すマニフェストを作る (winget・Homebrew)。
-//   node tools/make-manifests.mjs <版> [Mac の zip] [Windows のインストーラー (setup.exe)]
-//   例: node tools/make-manifests.mjs 1.2.0 dist/Meltype-1.2.0-mac.zip dist/Meltype-1.2.0-setup.exe
-//   Homebrew だけ: node tools/make-manifests.mjs 1.2.0 dist/Meltype-1.2.0-mac.zip (release.yml がタグのときに作る)
+//   node packaging/make-manifests.mjs <版> [Mac の zip] [Windows のインストーラー (setup.exe)]
+//   例: node packaging/make-manifests.mjs 1.2.0 dist/Meltype-1.2.0-mac.zip dist/Meltype-1.2.0-setup.exe
+//   Homebrew だけ: node packaging/make-manifests.mjs 1.2.0 dist/Meltype-1.2.0-mac.zip (release.yml がタグのときに作る)
 // ファイルは名前で見分ける (-mac.zip は Mac、-setup.exe は Windows のインストーラー)。
 // zip・setup.exe は GitHub のリリース (v<版>) に同じ名前で上げたもの。SHA-256 をここで計算する。
 // できたものは dist/manifests/ に置く。出し方は docs/dev/RELEASE.md。
@@ -16,7 +16,7 @@ const [version, ...files] = process.argv.slice(2);
 const windowsSetup = files.find(file => file.endsWith('-setup.exe'));
 const macZip = files.find(file => file.endsWith('-mac.zip'));
 if (!version || (!windowsSetup && !macZip)) {
-  console.error('使い方: node tools/make-manifests.mjs <版> [Mac の zip] [Windows の setup.exe]');
+  console.error('使い方: node packaging/make-manifests.mjs <版> [Mac の zip] [Windows の setup.exe]');
   process.exit(1);
 }
 const repo = 'https://github.com/yksr-melt/Meltype';

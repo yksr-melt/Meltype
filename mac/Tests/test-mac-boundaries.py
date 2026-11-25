@@ -3,7 +3,7 @@
 # Copyright (C) 2026 0924haruto12
 """Swift の実際のラッパーを NativeAOT と接続して検証する。IME はインストールしない。
 
-python3 tools/test-mac-boundaries.py path/to/MeltypeNative.dylib
+python3 mac/Tests/test-mac-boundaries.py path/to/MeltypeNative.dylib
 """
 
 import argparse
@@ -21,7 +21,7 @@ def main():
     parser.add_argument("library", type=Path)
     args = parser.parse_args()
     library = args.library.resolve(strict=True)
-    repo = Path(__file__).resolve().parent.parent
+    repo = Path(__file__).resolve().parents[2]
     with tempfile.TemporaryDirectory(prefix="meltype-swift-boundaries-") as temporary:
         root = Path(temporary)
         contents = root / "BoundaryTests.app" / "Contents"
@@ -33,7 +33,7 @@ def main():
         (contents / "Info.plist").write_bytes(plistlib.dumps({"CFBundleExecutable": executable.name,
                                                             "CFBundlePackageType": "APPL"}))
         subprocess.run(["xcrun", "swiftc", "-swift-version", "5",
-                        str(repo / "tools/test-mac-boundaries.swift"),
+                        str(repo / "mac/Tests/test-mac-boundaries.swift"),
                         *[str(repo / "mac/Sources/MeltypeIME" / name)
                           for name in ("NativeCore.swift", "InputController.swift", "KeyMapping.swift",
                                        "MacUserDictionary.swift", "ModeShortcuts.swift", "ModeIndicator.swift",

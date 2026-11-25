@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <!-- benchmark-composition.py が一時フォルダーに作る計測用のプロジェクトと同じ名前。Meltype.Core.csproj の InternalsVisibleTo がこの名前を指す -->
+    <AssemblyName>Benchmark</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Meltype.Core/Meltype.Core.csproj" />
+  </ItemGroup>
+</Project>

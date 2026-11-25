@@ -6,7 +6,7 @@
 #   docs/images/cards/*.svg  … プライバシー・開発に参加する のカード (1 枚ずつ。カードごとにリンクを付ける)
 #   pip install fonttools
 #   curl -L -o mplus.ttf https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/mplusrounded1c/MPLUSRounded1c-ExtraBold.ttf
-#   python3 tools/make-readme-art.py docs/images
+#   python3 docs/images/make-readme-art.py docs/images
 # 文字は M PLUS Rounded 1c (SIL Open Font License 1.1) の字形を図形にして埋め込む。
 # デモの途中の表示は、Meltype の本物の判定で打ったときの見え方 (src/Meltype.Core.Tests の --repro で確かめたもの)。
 import os, sys

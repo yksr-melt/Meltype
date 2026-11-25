@@ -80,7 +80,7 @@ internal static unsafe class NativeBoundaryTests
     [Test]
     public static void Native_MultiScalarTextCommitsAndPasses()
     {
-        // tools/test-mac-boundaries.swift と同じ場面 (Mac は 1 回のキーで入る複数のスカラーを text で渡す)
+        // mac/Tests/test-mac-boundaries.swift と同じ場面 (Mac は 1 回のキーで入る複数のスカラーを text で渡す)
         foreach (var (raw, text, f6, expected) in new (string, string, bool, string?)[]
                  {
                      ("e", "\u0301\u0300", false, "e"), ("ka", "\u3099\uFE0F", false, "か"), ("ka", "\U000E0100\U000E0101", false, "か"),

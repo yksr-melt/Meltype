@@ -17,7 +17,7 @@ Playwright Testで、製品IME(Meltype)を通したブラウザー入力を検�
 Node.js 22.xを用意し、リポジトリのルートから実行します。
 
 ```bash
-cd tools/ime-tests
+cd linux/ime-tests
 npm ci
 npx playwright install chromium
 npm run test:ci
@@ -49,7 +49,7 @@ native/zenzai/build-llama-server.sh
 linux/build.sh
 
 # 2. テストを実行する
-cd tools/ime-tests
+cd linux/ime-tests
 python3 scripts/test_linux_ime.py
 MELTYPE_PACKAGE_DIR="$PWD/../../linux/build/Meltype-linux" npm run test:ime:linux:ci
 ```
