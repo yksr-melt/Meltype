@@ -62,8 +62,13 @@ internal sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     private const int SettleMs = 60;
 
     // 応答が遅かった (CPU の負荷が高いなど) ときは、しばらく使わず Mozc に任せる。
-    private const int BackoffMs = 5000;
+    private const int DefaultPauseMs = 5000;
     private long _pausedUntil;
+    // 続けて間に合わなくなった最初の時刻 (間に合えば 0)。_gate の中で読み書きする
+    private long _timingOutSince;
+
+    /// <summary>応答が遅かったときに休む時間 (テストでは縮める)。</summary>
+    public int PauseMs { get; init; } = DefaultPauseMs;
 
     /// <param name="serverPath">llama-server の実行ファイル。</param>
     /// <param name="modelPath">zenz の GGUF ファイル。</param>
@@ -109,6 +114,12 @@ internal sealed class ZenzaiConverter : IKanjiConverter, IDisposable
 
     /// <summary>何度も失敗して諦めたか (起動しない・答えない)。ファイルは見ない (ZenzaiHolder が変換のたびに見る)。</summary>
     public bool GaveUp => _failures >= 3;
+
+    /// <summary>
+    /// 間に合わないのがこの時間続いたら諦める (接続だけ受けて答えなくなった llama-server を作り直す: issue #2270)。
+    /// 回数で諦めると、少しのあいだ遅いだけ (ほかの処理で CPU が重い) の llama-server まで止めて、5 分使えなくなるので時間で見る。
+    /// </summary>
+    public int GiveUpAfterMs { get; init; } = 60_000;
 
     /// <summary>llama-server が起動して、変換を頼めるか (起動中は false)。</summary>
     public bool IsReady { get { lock (_gate) return _ready; } }
@@ -168,17 +179,23 @@ internal sealed class ZenzaiConverter : IKanjiConverter, IDisposable
 
     private IReadOnlyList<ConversionClause>? ConvertNow(string hiragana, string context, string key)
     {
-        var started = Environment.TickCount64;
-        var answer = Complete(Prompt(hiragana, context));
+        using var timeout = new CancellationTokenSource(_timeoutMs);
+        var answer = Complete(Prompt(hiragana, context), timeout.Token);
         // 読みのまま (変換していない: かんたん → かんたん) の答えは使わない。Mozc に任せる。記号の幅は、zenz に半角で渡すので見ない (ほんとう？ → ほんとう?)。
         // 壊れた答え (はーどうぇ → ハードウェアウェア…) かは、Mozc の候補と比べられる HybridConverter が決める
         var text = answer is null || ToHalfWidth(answer) == ToHalfWidth(hiragana) ? null : answer;
-        var slow = Environment.TickCount64 - started >= _timeoutMs;
+        // 経過時間を測って比べない。Windows の Environment.TickCount64 は約 16 ms 刻みなので、時間切れでも _timeoutMs より短く測れて、失敗に数えてしまう
+        var slow = timeout.IsCancellationRequested;
         lock (_gate)
         {
-            if (slow) Interlocked.Exchange(ref _pausedUntil, Environment.TickCount64 + BackoffMs);
-            if (answer is null && !slow) _failures++;
-            else if (answer is not null) { _failures = 0; _hasAnswered = true; }
+            if (slow) Interlocked.Exchange(ref _pausedUntil, Environment.TickCount64 + PauseMs);
+            if (answer is null && slow)
+            {
+                if (_timingOutSince == 0) _timingOutSince = Environment.TickCount64;
+                else if (Environment.TickCount64 - _timingOutSince >= GiveUpAfterMs) _failures = 3;
+            }
+            else if (answer is null) _failures++;
+            else { _failures = 0; _timingOutSince = 0; _hasAnswered = true; }
             if (_cache.Count >= MaxCache) _cache.Clear();
             // 使わないと決めた答えも覚える (打鍵のたびに聞き直さない)。失敗・遅いときは覚えない
             if (answer is not null && !slow) _cache[key] = text;
@@ -212,7 +229,7 @@ internal sealed class ZenzaiConverter : IKanjiConverter, IDisposable
                 span[i] = source[i] is >= 'ぁ' and <= 'ゖ' ? (char)(source[i] + 0x60) : source[i];
         });
 
-    private string? Complete(string prompt)
+    private string? Complete(string prompt, CancellationToken timeout)
     {
         try
         {
@@ -225,14 +242,13 @@ internal sealed class ZenzaiConverter : IKanjiConverter, IDisposable
                 ["cache_prompt"] = true,
                 ["parse_special"] = true,
             }.ToJsonString();
-            using var cts = new CancellationTokenSource(_timeoutMs);
             using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(_endpoint!, "completion"))
             {
                 Content = new StringContent(body, Encoding.UTF8, "application/json"),
             };
-            using var response = _http.Send(request, cts.Token);
+            using var response = _http.Send(request, timeout);
             if (!response.IsSuccessStatusCode) return null;
-            using var reader = new StreamReader(response.Content.ReadAsStream(cts.Token), Encoding.UTF8);
+            using var reader = new StreamReader(response.Content.ReadAsStream(timeout), Encoding.UTF8);
             using var json = JsonDocument.Parse(reader.ReadToEnd());
             // 形の違う答え (content が無い・文字列でない) は、答えなかったのと同じ (失敗として数え、続けば諦める)
             var content = json.RootElement is { ValueKind: JsonValueKind.Object } root && root.TryGetProperty("content", out var c) && c.ValueKind == JsonValueKind.String
@@ -272,6 +288,15 @@ internal sealed class ZenzaiConverter : IKanjiConverter, IDisposable
         }
     }
 
+    /// <summary>
+    /// 答えの記号が、読みの記号 (打った 、。「」？ など) とすべて同じか。<see cref="IsPlausible"/> は漢字・英数字を読みの何文字にも当てるので、
+    /// 記号が消えた答え (りんごを、たべた → 林檎を食べた) も通す。
+    /// </summary>
+    internal static bool KeepsSymbols(string hiragana, string answer) =>
+        hiragana.Select(Normalize).Where(IsSymbol).SequenceEqual(answer.Select(Normalize).Where(IsSymbol));
+
+    private static bool IsSymbol(char c) => char.IsPunctuation(c) || char.IsSymbol(c) || char.IsWhiteSpace(c);
+
     /// <summary>答えを、読みと 1 文字ずつ比べる文字 (かな・記号) と、読みの 1 文字以上に当たる字 (漢字 1 文字・英数字の並び) に分ける。</summary>
     private static List<(string Text, bool Wildcard)> Tokens(string answer)
     {
@@ -289,7 +314,7 @@ internal sealed class ZenzaiConverter : IKanjiConverter, IDisposable
             }
             var length = char.IsSurrogatePair(answer, i) ? 2 : 1;
             var kana = c is >= 'ぁ' and <= 'ゖ' or 'ー' or 'ゝ' or 'ゞ';
-            tokens.Add((answer.Substring(i, length), !kana && !char.IsAsciiLetterOrDigit(c) && !char.IsPunctuation(c) && !char.IsSymbol(c) && !char.IsWhiteSpace(c)));
+            tokens.Add((answer.Substring(i, length), !kana && !char.IsAsciiLetterOrDigit(c) && !IsSymbol(c)));
             i += length;
         }
         return tokens;

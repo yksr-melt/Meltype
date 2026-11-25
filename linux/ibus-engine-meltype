@@ -99,6 +99,8 @@ SPECIAL_KEYS = {
     # 左右の Alt (単独押しかは本体が決める。ImeCapture.AltKeys)
     IBus.KEY_Alt_L: 0xA4, IBus.KEY_Alt_R: 0xA5,
     IBus.KEY_Eisu_toggle: 0xF0, IBus.KEY_Hiragana_Katakana: 0x15, IBus.KEY_Henkan: 0x1C, IBus.KEY_Muhenkan: 0x1D,
+    # CapsLock (切り替えキーに登録したときだけ本体が使う。ほかはアプリに通す)
+    IBus.KEY_Caps_Lock: 0x14,
 }
 
 

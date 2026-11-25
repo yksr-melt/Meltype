@@ -6,6 +6,9 @@ namespace Meltype.Libraries.Chars;
 /// <summary>文字列の言語 (英語か日本語か) と、半角・全角の文字の扱い。</summary>
 internal static class TextChars
 {
+    /// <summary>文字列にかな・漢字が含まれるか。変換と学習で、選んだ候補が日本語かを同じ条件で見る。</summary>
+    public static bool IsJapaneseText(string text) => text.Any(c => c is >= '぀' and <= 'ヿ' or >= '㐀' and <= '䶿' or >= '一' and <= '鿿');
+
     /// <summary>確定済みの文字列の最後の (空白以外の) 文字が英数字なら英語、かな・漢字・全角記号なら日本語。</summary>
     public static bool? LanguageOf(string? text)
     {

@@ -29,16 +29,16 @@ internal sealed class PhraseHistory
         _saver = new DeferredSaver(Write);
         _path = path;
         _stamp = new FileStamp(path);
-        _entries = Load(path);
+        _entries = [];
+        Reload();
     }
 
-    private static Dictionary<(string Reading, string Text), (int Count, long Used)> Load(string? path)
+    private static Dictionary<(string Reading, string Text), (int Count, long Used)>? Load(string? path, Config.FileStamp stamp)
     {
         var entries = new Dictionary<(string Reading, string Text), (int Count, long Used)>();
-        if (path is null || !File.Exists(path)) return entries;
-        try
+        var read = Config.DataFile.Load(path, "予測変換の学習データ", content =>
         {
-            foreach (var line in File.ReadAllLines(path, Encoding.UTF8))
+            foreach (var line in content.ReplaceLineEndings("\n").Split('\n'))
             {
                 var parts = line.Split('\t');
                 if (parts.Length < 4 || parts[0].Length == 0 || parts[1].Length == 0) continue;
@@ -47,13 +47,8 @@ internal sealed class PhraseHistory
                 if (StaleWords.IsStale(parts[0], parts[1])) continue;
                 entries[(parts[0], parts[1])] = (Math.Max(1, count), used);
             }
-        }
-        catch (Exception ex)
-        {
-            // 読むときは型で絞らない (Config.DataFile)
-            Config.DataFile.ReportUnreadable("予測変換の学習データ", ex);
-        }
-        return entries;
+        }, stamp);
+        return read ? entries : null;
     }
 
     /// <summary>ほかのプロセス (設定アプリ) が phrases.txt を書き換えていたら読み直す (<see cref="FileStamp"/>)。</summary>
@@ -69,7 +64,8 @@ internal sealed class PhraseHistory
     private void Reload()
     {
         _stamp.Synced();
-        var entries = Load(_path);
+        // 読めなかったら前の中身のまま (Config.DataFile.Load)
+        if (Load(_path, _stamp) is not { } entries) return;
         lock (_gate)
         {
             _entries = entries;

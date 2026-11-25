@@ -326,6 +326,8 @@ int specialKey(fcitx::KeySym sym) {
     case FcitxKey_Hiragana_Katakana: return 0x15;
     case FcitxKey_Henkan: return 0x1C;
     case FcitxKey_Muhenkan: return 0x1D;
+    // CapsLock (切り替えキーに登録したときだけ本体が使う。ほかはアプリに通す)
+    case FcitxKey_Caps_Lock: return 0x14;
     default: return 0;
     }
 }

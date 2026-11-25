@@ -46,6 +46,24 @@ internal static class MemoryPersistenceTests
     }
 
     [Test]
+    public static void OneCharacterSymbolConversion_IsKeptAfterRestart()
+    {
+        // 数字・記号の 1 文字 (1 → ①) は覚えるので、読み直しても残す。1 文字のかな (き → 記) は前の版が覚えていても使わない。
+        var path = Path.Combine(Path.GetTempPath(), "meltype-conversions-" + Guid.NewGuid().ToString("N") + ".json");
+        try
+        {
+            File.WriteAllText(path, "{\"1\":{\"Text\":\"①\",\"Used\":\"2026-10-07T00:00:00Z\"},\"き\":{\"Text\":\"記\",\"Used\":\"2026-10-07T00:00:00Z\"}}");
+            var history = new ConversionHistory(path);
+            Assert.Equal("①", history.Get("1"), "数字 1 文字の学習は残る");
+            Assert.Equal(null, history.Get("き"), "かな 1 文字の学習は使わない");
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Test]
     public static void BrokenMemoryFiles_AreCopiedToBroken_AndKeptAfterSaving()
     {
         // 読めないファイルは .broken に残す。読めないまま空で動き、次の保存で上書きしても元の中身は .broken に残る。

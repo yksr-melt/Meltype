@@ -15,6 +15,7 @@ on:
       - 'native/zenzai/**'
       - 'native/build-core-linux.sh'
       - '.github/actions/linux-native/**'
+      - '.github/actions/linux-mozc/**'
       - 'src/Meltype.Core.CApi/**'
       - 'src/Meltype.Settings/**'
       - 'tools/test-native-boundaries.py'
@@ -28,6 +29,7 @@ on:
       - 'native/zenzai/**'
       - 'native/build-core-linux.sh'
       - '.github/actions/linux-native/**'
+      - '.github/actions/linux-mozc/**'
       - 'src/Meltype.Core/**'
       - 'src/Meltype.Core.CApi/**'
       - 'src/Meltype.Settings/**'
@@ -93,6 +95,22 @@ jobs:
       - uses: ./.github/actions/linux-native
       - name: Build
         run: linux/build.sh
+      # 同梱するものが、サポートする中で一番古い glibc (2.34、RHEL 9 系) より新しいシンボルを使っていないか。
+      # rpm-el9 のジョブは PR で実行しないので、ここで見る。
+      # fcitx5 のアドオンは除く (deb はこのランナーの fcitx5 に対してビルドしたものを、rpm は Fedora でビルドし直したものを入れる)
+      - name: glibc symbol versions
+        run: |
+          bad=0
+          while IFS= read -r -d '' f; do
+            if [[ "$(head -c 4 "$f")" != $'\x7fELF' ]]; then continue; fi
+            syms="$(objdump -T "$f" | grep -E 'GLIBC_2\.(3[5-9]|[4-9][0-9])([^0-9]|$)' || true)"
+            if [[ -n "$syms" ]]; then
+              echo "::error::$f が glibc 2.34 より新しいシンボルを使っています"
+              echo "$syms"
+              bad=1
+            fi
+          done < <(find linux/build/Meltype-linux -path linux/build/Meltype-linux/fcitx5 -prune -o -type f -print0)
+          exit "$bad"
       # fcitx5 のアドオンを、fcitx5 のテスト用のフロントエンドで動かす。Mozc を外した本体だけで、かなの確定と変換の候補を見る
       - name: Test fcitx5 addon
         run: |
@@ -130,7 +148,7 @@ jobs:
           test -x /opt/meltype/ibus-engine-meltype
           test -x /opt/meltype/mozc/meltype_mozc_helper
           # 設定アプリ (と描画に使う Skia) の要るライブラリが、deb の依存で入っているか
-          for f in /opt/meltype/meltype-settings /opt/meltype/libSkiaSharp.so /opt/meltype/libHarfBuzzSharp.so; do ! ldd "$f" | grep 'not found'; done
+          for f in /opt/meltype/meltype-settings /opt/meltype/libSkiaSharp.so /opt/meltype/libHarfBuzzSharp.so; do libs="$(ldd "$f")"; if grep 'not found' <<< "$libs"; then echo "::error::$f が要るライブラリがありません"; exit 1; fi; done
           test -f /usr/share/applications/ibus-setup-meltype.desktop
           # 設定アプリが X11 のライブラリ (dlopen で読むので ldd には出ない) を読んで起動し、落ちずに開いたままでいるか (timeout で止まると 124)
           status=0; timeout 15 xvfb-run -a /opt/meltype/meltype-settings || status=$?; test "$status" -eq 124
@@ -208,7 +226,7 @@ jobs:
         run: |
           dnf install -y ./linux/build/meltype-*.rpm
           test -x /opt/meltype/ibus-engine-meltype
-          for f in /opt/meltype/meltype-settings /opt/meltype/libSkiaSharp.so /opt/meltype/libHarfBuzzSharp.so; do ! ldd "$f" | grep 'not found'; done
+          for f in /opt/meltype/meltype-settings /opt/meltype/libSkiaSharp.so /opt/meltype/libHarfBuzzSharp.so; do libs="$(ldd "$f")"; if grep 'not found' <<< "$libs"; then echo "::error::$f が要るライブラリがありません"; exit 1; fi; done
           test -x /opt/meltype/mozc/meltype_mozc_helper
           /opt/meltype/zenzai/llama-server --version
           grep -q '<exec>/opt/meltype/ibus-engine-meltype --ibus</exec>' /usr/share/ibus/component/meltype.xml
@@ -255,7 +273,7 @@ jobs:
       # 設定アプリ (と描画に使う Skia) の要るライブラリが、rpm の依存で入っているか (glibc 2.34 で動くかも)
       - name: Settings app libraries
         run: |
-          for f in /opt/meltype/meltype-settings /opt/meltype/libSkiaSharp.so /opt/meltype/libHarfBuzzSharp.so; do ! ldd "$f" | grep 'not found'; done
+          for f in /opt/meltype/meltype-settings /opt/meltype/libSkiaSharp.so /opt/meltype/libHarfBuzzSharp.so; do libs="$(ldd "$f")"; if grep 'not found' <<< "$libs"; then echo "::error::$f が要るライブラリがありません"; exit 1; fi; done
       - name: Python tests
         run: |
           python3 linux/tests/test_virtual_key.py

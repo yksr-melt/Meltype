@@ -123,6 +123,25 @@ internal static class ZenzaiConverterTests
     }
 
     [Test]
+    public static void Answers_ThatLoseTypedSymbols_AreNotUsed()
+    {
+        // 漢字・英字を読みの何文字にも当てて比べるので、打った記号が消えた答えを使っていた
+        foreach (var (reading, answer) in new[] { ("わたしは、りんごを、たべた。", "私は、林檎を食べた。"), ("これは、ほん。", "これは、本"), ("わたしは「ほん」をよむ", "私は本を読む"), ("ぐーぐる、でけんさく", "Googleで検索") })
+        {
+            Assert.True(ZenzaiConverter.IsPlausible(reading, answer), answer + ": かなは読みと合う");
+            Assert.True(!ZenzaiConverter.KeepsSymbols(reading, answer), answer + ": 記号が消えている");
+        }
+        foreach (var (reading, answer) in new[] { ("わたしは、りんごを、たべた。", "私は、林檎を、食べた。"), ("わたしは「ほん」をよむ!", "私は「本」を読む！"), ("すごーい～", "すごーい～"), ("さんかげつ", "三ヶ月") })
+            Assert.True(ZenzaiConverter.KeepsSymbols(reading, answer), answer);
+
+        IReadOnlyList<(ConversionClause, IReadOnlyList<string>)> mozc = [(new("りんごを", "林檎を"), ["林檎を"]), (new("、", "、"), ["、", "，"]), (new("たべた", "食べた"), ["食べた"])];
+        Assert.Equal("林檎を|、|食べた", Joined("林檎を食べた"), "記号が消えた答えでなく Mozc の答え");
+        Assert.Equal("リンゴを、喰べた", Joined("リンゴを、喰べた"), "記号が残っていれば Zenzai の答え");
+
+        string Joined(string answer) => string.Join("|", HybridConverter.Choose("りんごを、たべた", mozc, [new("りんごを、たべた", answer)])!.Select(c => c.Text));
+    }
+
+    [Test]
     public static void LearnedHallucinations_AreForgottenWithMozcCandidates()
     {
         // 前の版が学習した Zenzai の壊れた答えは消し、表記が読みと違う Mozc の候補・ユーザー辞書の語は残す (issue #1779)。
@@ -142,6 +161,7 @@ internal static class ZenzaiConverterTests
             [
                 "なまえは\t名前は魚のは\t3\t0", "なまえは\t名前は\t3\t0", "きずくのがはやい\t気づくのが早い\t3\t0",
                 "おせわに\tお世話になっております\t3\t0", "おせわになっております\tお世話になっております\t3\t0",
+                "わたしは、いく\t私は，行く\t3\t0",
             ]);
             File.WriteAllText(Path.Combine(directory, "userdict.txt"), "おせわ\tお世話になっております\n");
             using var runtime = new MeltypeRuntime(directory);
@@ -155,6 +175,7 @@ internal static class ZenzaiConverterTests
             foreach (var e in conversions.Skip(2)) Assert.Equal(e[1], runtime.History.Get(e[0]), $"{e[0]} → {e[1]} は残す");
             Assert.Equal("名前は", string.Join(",", runtime.Phrases.StartingWith("なま")), "予測変換の語句も消す");
             Assert.Equal("気づくのが早い", string.Join(",", runtime.Phrases.StartingWith("きず")), "Mozc の候補で作れる語句は残す");
+            Assert.Equal("私は，行く", string.Join(",", runtime.Phrases.StartingWith("わたし")), "設定の句読点で覚えた語句は残す");
             Assert.Equal("おせわになっております", string.Join(",", runtime.Phrases.Entries().Where(e => e.Text == "お世話になっております").Select(e => e.Reading)),
                 "壊れた答えと同じ語句を正しい読みで覚えたものは残す");
 
@@ -234,7 +255,7 @@ internal static class ZenzaiConverterTests
         SessionFacadeTests.Type(session, "githubnitsuitehanasu", before: "昨日は");
         SpinWait.SpinUntil(() => server.Prompts.Any(p => ReadingIn(p) == "についてはなす"), 5000);
         var asked = server.Prompts.Where(p => ReadingIn(p) == "についてはなす").ToList();
-        Assert.True(asked.Count > 0 && asked.All(p => p.StartsWith("昨日はgithub", StringComparison.Ordinal)), "依頼: " + string.Join(" / ", asked));
+        Assert.True(asked.Count > 0 && asked.All(p => p.StartsWith("昨日はGitHub", StringComparison.Ordinal)), "依頼: " + string.Join(" / ", asked));
     }
 
     [Test]
@@ -416,6 +437,26 @@ internal static class ZenzaiConverterTests
         Thread.Sleep(50);
         Assert.Equal(before, server.Prompts.Count, "遅いあいだはサーバーに頼まない");
         Assert.True(zenzai.IsAvailable, "遅いだけでは諦めない (また使える)");
+    }
+
+    [Test]
+    public static void ServerThatNeverAnswers_IsGivenUp()
+    {
+        // 接続は受けるが答えない llama-server は、休むのを繰り返さずに諦める (ZenzaiHolder が作り直す)
+        using var server = new FakeServer { Answer = p => { Thread.Sleep(300); return "遅い"; } };
+        using var zenzai = new ZenzaiConverter(server.Endpoint, timeoutMs: 100) { PauseMs = 0, GiveUpAfterMs = 3000 };
+        for (var i = 0; i < 3; i++)
+        {
+            zenzai.ConvertClauses("う" + new string('い', i), "前の文");
+            Thread.Sleep(100);
+        }
+        Assert.True(!zenzai.GaveUp, "少しのあいだ間に合わないだけでは諦めない");
+        for (var i = 0; i < 50 && !zenzai.GaveUp; i++)
+        {
+            zenzai.ConvertClauses("あ" + new string('い', i), "前の文");
+            Thread.Sleep(100);
+        }
+        Assert.True(zenzai.GaveUp, "間に合わないのが続いたら諦める");
     }
 
     [Test]

@@ -275,15 +275,6 @@ if ($env:MELTYPE_SIGN_PFX -and (Test-Path -LiteralPath $env:MELTYPE_SIGN_PFX)) {
 else {
     Write-Host '証明書が無いので署名しません (MELTYPE_SIGN_PFX)。'
 }
-
-# 配布する Meltype IME の DLL (署名した後) のハッシュ。インストールのとき、管理者として登録する前に、DLL が書き換えられていないかを確かめるのに使う。
-# (MeltypeTip.dll.sha256・MeltypeTipImpl.dll.sha256 は署名する前の中身のハッシュで、更新のときに「同じ DLL か」を比べるのに使う。
-#  MeltypeTipImpl.dll.sha256 は、インストール先の impl のフォルダー名と、Meltype.exe が要求の impl を照合するのにも使う)
-foreach ($dll in Get-MeltypeImeDlls) {
-    $sha = [System.Security.Cryptography.SHA256]::Create()
-    try { $hash = [BitConverter]::ToString($sha.ComputeHash([IO.File]::ReadAllBytes($dll))).Replace('-', '') } finally { $sha.Dispose() }
-    [IO.File]::WriteAllText("$dll.package.sha256", $hash)
-}
 }
 
 if ($Portable) {

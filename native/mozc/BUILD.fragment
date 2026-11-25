@@ -3,6 +3,7 @@ mozc_cc_binary(
     name = "meltype_mozc_helper",
     srcs = ["meltype_mozc_helper.cc"],
     deps = [
+        ":attribute",
         ":converter_interface",
         ":segments",
         "//base:init_mozc",
@@ -12,7 +13,7 @@ mozc_cc_binary(
         "//config:config_handler",
         "//dictionary:dictionary_interface",
         "//dictionary:user_dictionary_util",
-        "//dictionary:user_pos",
+        "//dictionary:user_dictionary_importer",
         "//engine",
         "//engine:engine_factory",
         "//protocol:commands_cc_proto",

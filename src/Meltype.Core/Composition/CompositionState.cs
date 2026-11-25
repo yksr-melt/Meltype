@@ -1,22 +1,24 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 aster-void
 
-using System.Text;
 using Meltype.Detection;
 using Meltype.Diagnostics;
 using Meltype.Engine;
 using Meltype.Input;
-using static Meltype.Composition.CompositionController;
+using Meltype.Learning;
 
 namespace Meltype.Composition;
 
 /// <summary>入力中の文字列の処理 (<see cref="CompositionText"/>) が使う、入力欄の状態でないもの (判定器・入力欄のアプリの設定・ローマ字の打ち間違いの直し方)。</summary>
-internal record TextEnv(CompositionDetector Detector, Config.Settings Settings, RomajiTypoCorrector? RomajiTypos)
+internal record TextEnv(CompositionDetector Detector, Config.Settings Settings, RomajiTypoCorrector? RomajiTypos, ConversionHistory? History = null)
 {
     /// <summary>打った英字を読み直す断片なら、読み直す元の入力 (<see cref="CompositionText.FragmentEnv"/>)。断片でなければ null。</summary>
     public FragmentOrigin? Fragment { get; init; }
 
-    /// <summary>入力欄の文脈。使うたびに、そのときの入力欄の文字と自分の確定の記録から決める (<see cref="CompositionController.ContextOf"/>)。</summary>
+    /// <summary>コードの入力欄の文字列リテラルの中か (require('jquery') などの識別子を自動で大文字にしない)。</summary>
+    public bool CodeString { get; init; }
+
+    /// <summary>入力欄の文脈。使うたびに、そのときの入力欄の文字と自分の確定の記録から決める (<see cref="CompositionContext.ContextOf"/>)。</summary>
     public required Func<TextContext> Context { get; init; }
 }
 
@@ -38,18 +40,26 @@ internal sealed record FragmentOrigin(bool? LearningContext);
 /// 変換ボックスの処理が使う、入力欄の状態でないもの (判定器・変換エンジン・辞書・学習データ・入力欄のアプリの設定・OS の機能)。出来事ごとに作って渡す。
 /// </summary>
 internal sealed record CompositionEnv(CompositionDetector Detector, IKanjiConverter Converter, CompositionServices Services, Config.Settings Settings)
-    : TextEnv(Detector, Settings, Services.RomajiTypos)
+    : TextEnv(Detector, Settings, Services.RomajiTypos, Services.History)
 {
-    public CompositionLearning Learning { get; } = new(Services, Converter);
+    public CompositionLearning Learning { get; } = new(Services, Converter, Detector.ProperNouns);
 
     /// <summary>
-    /// 変換エンジンの答えを後から受け取れるフロント (<see cref="IKanjiConverter.ResultReady"/> を受けて RefreshConversion を呼ぶ) か。
+    /// 変換エンジンの答えを後から受け取れるフロント (<see cref="IKanjiConverter.ResultReady"/> を受けて <see cref="CompositionController.RefreshConversion"/> を呼ぶ) か。
     /// false なら答えるまで待つ (--repro・--self-test)。
     /// </summary>
     public bool LateResults { get; init; }
 
     /// <summary>変換エンジンの答えを待ってよい時刻 (<see cref="ConversionRequest.Deadline"/>)。</summary>
     public long Deadline { get; init; } = long.MaxValue;
+
+    /// <summary>Space・確定の応答を待つ時間。TSF の DLL の応答期限 (800ms) より短くする。</summary>
+    private const int InputBudgetMs = 400;
+
+    internal CompositionEnv WaitingForInput() => LateResults ? this with { Deadline = Environment.TickCount64 + InputBudgetMs } : this;
+
+    /// <summary>ライブ変換では待たない。後から結果を受け取れないフロントは、今までどおり待つ。</summary>
+    internal CompositionEnv WithoutWaiting() => LateResults ? this with { Deadline = 0 } : this;
 
     /// <summary>
     /// 英数状態で打ち始めた文字がローマ字 (日本語) かを判定する。null なら英数状態では判定しない。
@@ -68,6 +78,12 @@ internal sealed record CompositionEnv(CompositionDetector Detector, IKanjiConver
 
     /// <summary>入力欄で選んでいる文字 (変換キーで再変換する。フロントが送ってきたもの)。</summary>
     public string? Selection { get; init; }
+
+    /// <summary>このキーで始める入力の、打ち始めの / を中黒 (・) にするか (<see cref="CompositionTextState.SlashAtStart"/>)。</summary>
+    public bool SlashAtStart { get; init; }
+
+    /// <summary>ライブ変換の控え (<see cref="CompositionState.LiveCache"/>)。</summary>
+    public required Dictionary<string, List<(string Reading, string? Engine, string Text)>> LiveCache { get; init; }
 
     /// <summary>
     /// 入力欄の確定済みの文字を消せるか。消せない入力欄 (Linux で周りの文字の削除に対応していないアプリ) では、
@@ -109,7 +125,10 @@ internal sealed class Conversion(List<Clause> clauses, ConversionTrigger started
 {
     public List<Clause> Clauses { get; set; } = clauses;
 
+    /// <summary>選んでいる文節の番号。</summary>
     public int Selected { get; set; }
+
+    public Clause SelectedClause => Clauses[Selected];
 
     /// <summary>
     /// 変換を始めたキー。Space なら語の後に空白を打とうとした、とも取れる (確定し直して英語にするときに空白を足す)。
@@ -134,23 +153,22 @@ internal sealed class PredictionList(string key, List<Prediction> items)
     public int Index { get; set; } = -1;
 }
 
-/// <summary>入力欄 1 つ分の変換ボックスの状態 (データだけ)。処理は <see cref="CompositionController"/> の関数が受け取って書き換える。</summary>
+/// <summary>
+/// 入力欄 1 つ分の変換ボックスの状態 (データだけ)。出来事の入口は <see cref="CompositionController"/>、
+/// 場面を移す・文脈を捨てるのは <see cref="CompositionLifecycle"/>。場面と一緒に終わる値は <see cref="Scene"/> に、ほかの値はここに置く。
+/// </summary>
 internal sealed class CompositionState
 {
     public readonly CompositionOutputState Out = new();
 
-    public readonly CompositionTextState Text = new();
+    /// <summary>今の場面。移すのは <see cref="CompositionLifecycle"/> だけ。</summary>
+    public CompositionScene Scene = new CompositionScene.Japanese();
 
     // かな配列 (JIS かな以外。設定が変わったら作り直す。issue #1415)
     public KanaLayoutEngine KanaLayout = new(Input.KanaLayout.Jis);
 
-    /// <summary>英数 (直接入力) か。true の間はキーをすべてアプリに渡す (Mac の「英数」キー、「かな」キーで戻す)。</summary>
-    public bool Direct;
-
-    /// <summary>英数状態で打ち始めた語を英語と判定して、その続きを打っているか。</summary>
-    public bool DirectEnglishWord;
-
-    public readonly Dictionary<string, List<(string Reading, string Text)>> LiveCache = new(StringComparer.Ordinal);
+    /// <summary>ライブ変換の控え (<see cref="CompositionConversion.LiveClauses"/>)。</summary>
+    public readonly Dictionary<string, List<(string Reading, string? Engine, string Text)>> LiveCache = new(StringComparer.Ordinal);
 
     // 最後に押したキーの修飾キー (Shift は大文字・文節の区切り・Shift+Space に使う)。
     // 次のキーを押すまで、ほかの出来事 (離した親指キーのもとの働きなど) もこの値で処理する。
@@ -163,19 +181,6 @@ internal sealed class CompositionState
     // 押したキー (離したことを受け取るまで。親指シフトの親指キーを、文字に使わずに離したかを見る)
     public readonly HashSet<int> Pressed = [];
 
-    /// <summary>変換中なら、その文節と選んでいる文節など。変換していなければ null (変換を終えると、変換にかかわる値はまとめて消える)。</summary>
-    public Conversion? Conversion;
-
-    /// <summary>変換中の文節 (変換していなければ空)。変換を始める・終えるのは <see cref="Conversion"/> への代入だけにする。</summary>
-    public List<Clause> Clauses => Conversion?.Clauses ?? [];
-
-    /// <summary>選んでいる文節 (変換していなければ 0)。変換していないときには変えられない。</summary>
-    public int SelectedClause
-    {
-        get => Conversion?.Selected ?? 0;
-        set => (Conversion ?? throw new InvalidOperationException("変換していないのに文節を選んだ")).Selected = value;
-    }
-
     /// <summary>自分が最後に確定した文字 (末尾の 20 文字まで) と、それが英語だったか。キャレットの前が読めないときの文脈に使う。分からなければ null。</summary>
     public LastCommit? Last;
 
@@ -185,35 +190,9 @@ internal sealed class CompositionState
     /// </summary>
     public long LastCommitTime = long.MinValue / 2;
 
-    public ReconversionSelection? Reconversion;
-
-    // 予測変換の候補。null なら、次に表示するときに今の打ちかけから作る。
-    public PredictionList? Predictions;
-
-    // 英数状態で判定中の語。打鍵はすぐアプリに送り (待たせない)、ローマ字と分かったら消して変換ボックスに入れ直す。
-    public readonly StringBuilder HeldLetters = new();
-
-    // 英数状態で判定中の語のうち、アプリに通した文字 (文字の無いキーは \0)
-    public readonly StringBuilder HeldSent = new();
-
-    public long HeldLastKeyTime;
-
+    /// <summary>入力を覚えないように求める入力欄か。</summary>
     public bool PrivateField;
-
-    public bool PrivateComposition;
-
-    // F6〜F10 (Ctrl+U/I/O/P・無変換・ひらがなキーも) でかな・英字にしたか。次に文字を打ったら確定する。
-    public bool ModeByKey;
-
-    // Esc で戻した語は、判定として覚えない
-    public bool EscReverted;
 
     /// <summary>続けて確定した、英語とも日本語とも読める語 (古い順)。make sure you → have で全部英語に直す。</summary>
     public readonly List<CommitRecord> Correctable = [];
-
-    // 確定し直しで消す文字数と、入れ直す文字。今確定する文字と一緒に 1 回で送る。
-    public (int Count, string Text)? PendingReplace;
-
-    // 続けて打つ前に選んでいた候補 (読み → 文字)。確定するか、変換ボックスを空にするまで。
-    public readonly Dictionary<string, string> KeptChoices = [];
 }

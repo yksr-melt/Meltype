@@ -522,6 +522,13 @@ internal static class ImeContractTests
         front.Settings.KanaLayout = KanaLayout.Nicola;
         front.Key(VirtualKeys.NonConvert);
         Assert.True(front.Open, "NICOLA の無変換は切り替えない\n" + front.Trace);
+        // 変換・無変換が 1 つのキーのキーボードでは、そのキーを切り替えキーに登録して日本語 / 英数を行き来する
+        var toggle = new Front();
+        toggle.Settings.ToggleShortcuts = [new() { Key = VirtualKeys.Convert }];
+        toggle.Key(VirtualKeys.Convert);
+        Assert.True(!toggle.Open, "切り替えキーの変換で英数\n" + toggle.Trace);
+        toggle.Key(VirtualKeys.Convert);
+        Assert.True(toggle.Open, "もう一度押して日本語\n" + toggle.Trace);
     }
 
     [Test]
@@ -653,7 +660,7 @@ internal static class ImeContractTests
             {
                 AssertPasswordPass(front, front.Event("KeyPressed", extra: $",\"key\":{{\"vk\":{vk},\"ch\":{ch}}}"));
             }
-            AssertPasswordPass(front, front.Event("CandidateClicked"));
+            AssertPasswordPass(front, front.Event("CandidateClicked", extra: ",\"index\":0"));
             AssertPasswordPass(front, front.Event("AlphanumericModeSelected"));
             Assert.Equal(0, front.Sessions, front.Trace);
             front.Traits.Clear();
@@ -717,7 +724,7 @@ internal static class ImeContractTests
         foreach (var (type, extra) in new[]
                  {
                      ("KeyPressed", ",\"key\":{\"vk\":13}"), ("CaretMoved", Entered), ("CommitRequested", ""),
-                     ("CommittedByApp", ""), ("CandidateClicked", ",\"index\":0"), ("ModeToggleRequested", ""),
+                     ("CommittedByApp", Entered), ("CandidateClicked", ",\"index\":0"), ("ModeToggleRequested", ""), ("StateRequested", ""),
                  })
         {
             var languages = new LanguageMemory(null);
@@ -730,9 +737,9 @@ internal static class ImeContractTests
             AssertPasswordPass(front, front.Event(type, extra: extra));
             AssertPasswordPass(front, front.Event("CaretMoved", extra: Entered));
             AssertPasswordPass(front, front.Event("CommitRequested", omitField: true));
-            AssertPasswordPass(front, front.Event("CandidateHighlighted", omitField: true));
-            AssertPasswordPass(front, front.Event("CandidateClicked", omitField: true));
-            AssertPasswordPass(front, front.Event("CommittedByApp", omitField: true));
+            AssertPasswordPass(front, front.Event("CandidateHighlighted", extra: ",\"index\":0", omitField: true));
+            AssertPasswordPass(front, front.Event("CandidateClicked", extra: ",\"index\":0", omitField: true));
+            AssertPasswordPass(front, front.Event("CommittedByApp", extra: ",\"caret\":{\"moved\":true,\"passedKey\":0}", omitField: true));
             Assert.Equal("", front.Document, front.Trace);
             Assert.Equal(0, languages.Count, front.Trace);
             front.Traits.Clear();
@@ -1082,7 +1089,7 @@ internal static class ImeContractTests
     {
         // どのフロントも text をそのまま出す。確定される形 (OS が表示のまま確定しても同じになる) で、打っている途中の英字は typed で見える
         var front = new Front();
-        front.Settings.ShowTypedKeys = true;
+        front.Settings.TypedKeys = Meltype.Config.TypedKeysStyle.Keys;
         var view = front.Type("kan")[^1].GetProperty("result").GetProperty("view");
         Assert.Equal("かん", view.GetProperty("text").GetString(), front.Trace);
         Assert.Equal("kan", view.GetProperty("typedKeys").GetString(), front.Trace);
@@ -1120,6 +1127,24 @@ internal static class ImeContractTests
         var toggle = new Front();
         toggle.Settings.ToggleShortcuts = [new() { Key = 0x14 }];
         Assert.True(Consumed(toggle.Key(0x14)) && !toggle.Open, "切り替えキーの CapsLock で英数\n" + toggle.Trace);
+    }
+
+    [Test]
+    public static void KanaKey_IsTheSameKeyOnEveryFront()
+    {
+        // カタカナ/ひらがな キーは Windows が 0xF2、IBus・fcitx5・Mac が 0x15 で送る
+        foreach (var vk in new[] { VirtualKeys.OemCopy, VirtualKeys.Kana })
+        {
+            var front = new Front();
+            front.Key(VirtualKeys.NonConvert);
+            Assert.True(Consumed(front.Key(vk)) && front.Open, $"0x{vk:X2}: 日本語にする\n" + front.Trace);
+            var toggle = new Front();
+            toggle.Settings.ToggleShortcuts = [new() { Key = VirtualKeys.Kana }];
+            toggle.Key(vk);
+            Assert.True(!toggle.Open, $"0x{vk:X2}: 切り替えキーに登録したら英数\n" + toggle.Trace);
+            toggle.Key(vk);
+            Assert.True(toggle.Open, $"0x{vk:X2}: もう一度押して日本語\n" + toggle.Trace);
+        }
     }
 
     [Test]
@@ -1321,6 +1346,30 @@ internal static class ImeContractTests
     }
 
     [Test]
+    public static void CodeApps_KeepCommandNamesLowercase()
+    {
+        // 固有名詞の自動の大文字小文字 (mysql → MySQL、jquery → jQuery) は、コードの行や文字列リテラルの中では効かせない
+        foreach (var (app, before, typed) in new[]
+        {
+            ("Code.exe", "import ", "numpy"),
+            ("Code.exe", "db = ", "mysql"),
+            ("WindowsTerminal.exe", "$ ", "mysql"),
+            ("Code.exe", "require('", "jquery"),
+            ("Code.exe", "image = \"", "mysql"),
+        })
+        {
+            var front = new Front { App = app, Document = before };
+            front.Type(typed);
+            if (front.Composition.GetValueOrDefault("t1") is not null) front.Key('\n');
+            Assert.Equal(before + typed, front.Document, $"{app}: {before}{typed}\n" + front.Trace);
+        }
+        // コードのコメントの中は文章なので、通常どおり自動で直す
+        var comment = new Front { App = "Code.exe", Document = "// " };
+        comment.Type("iphone\n");
+        Assert.Equal("// iPhone", comment.Document, comment.Trace);
+    }
+
+    [Test]
     public static void Snippets_ExpandFromTheTextBeforeTheCaret()
     {
         // 何も打っていないときの Space・Tab・Esc は受け取らないキーなので、定型文に使うときだけ capture に入れる (TSF・Meltype キーボードはほかを通す)
@@ -1352,11 +1401,30 @@ internal static class ImeContractTests
         var front = new Front();
         front.Type("ka\n");
         front.Open = false;
-        var closed = front.Event("CaretMoved");
+        var closed = front.Event("CaretMoved", extra: ",\"caret\":{}");
         Assert.True(!Japanese(closed) && !Indicator(closed), "合わせるだけで表示はしない\n" + front.Trace);
         Assert.True(!Consumed(front.Key('a')), front.Trace);
         front.Open = true;
         Assert.True(Consumed(front.Key('k')), front.Trace);
+    }
+
+    [Test]
+    public static void ClosedWhileComposing_CommitsOnce()
+    {
+        // 入力中にアプリが IME を閉じた: TSF の DLL は、開閉だけを先に知らせ (応答の確定は入れない)、入力欄を編集できるようになってから確定を頼む。
+        // 状態だけを受け取る出来事では入力を続け、確定を頼まれたときに 1 回だけ確定する
+        foreach (var notice in new[] { ("StateRequested", ""), ("CaretMoved", ",\"caret\":{}") })
+        {
+            var front = new Front();
+            front.Type("ka");
+            front.Open = false;
+            var noticed = front.Event(notice.Item1, extra: notice.Item2);
+            Assert.True(Commits(noticed).GetArrayLength() == 0 && front.Composition["t1"] == "か" && !Japanese(noticed), front.Trace);
+            front.Event("CommitRequested");
+            Assert.Equal("か", front.Document, front.Trace);
+            front.Event("CommitRequested");
+            Assert.True(!Consumed(front.Key('a')) && front.Document == "かa", "確定した後は英数\n" + front.Trace);
+        }
     }
 
     [Test]
