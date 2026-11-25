@@ -6675,6 +6675,15 @@ internal static class CompositionTests
             ("osakini", "お先に失礼いたします"),
             ("daijoubudesu", "問題ございません"),
             ("susunda", "進みました"),
+            ("ryoukai.", "承知いたしました。"),
+            ("ryoukai,", "承知いたしました、"),
+            ("ryoukai!", "承知いたしました！"),
+            ("kyouhaiku.", "本日は伺います。"),
+            ("kyouhaiku!", "本日は伺います！"),
+            ("kyouhaiku?", "本日は行かれますでしょうか？"),
+            ("daijoubu?", "問題ございませんでしょうか？"),
+            ("arigatou!", "ありがとうございます！"),
+            ("oshiete!", "ご教示ください！"),
         })
         {
             var k = new Keyboard(live: true) { KeigoMode = true };
@@ -6713,6 +6722,23 @@ internal static class CompositionTests
         var noFalseKyou = new List<Clause> { new("いまにほん", false, ["今日本"]) };
         KeigoConverter.Apply(noFalseKyou);
         Assert.Equal("今日本", noFalseKyou[0].Text, "「今日本」の途中を「本日」に誤置換しない");
+
+        // 句読点・感嘆符・疑問符が別文節に分かれても元の文にリセットされない
+        var splitPeriod = new List<Clause> { new("きょうは", false, ["今日は"]), new("いく", false, ["行く"]), new("。", false, ["。"]) };
+        KeigoConverter.Apply(splitPeriod);
+        Assert.Equal("本日は伺います。", string.Concat(splitPeriod.Select(c => c.Text)), "別文節の句点でも敬語を保つ");
+
+        var splitComma = new List<Clause> { new("りょうかい", false, ["了解"]), new("、", false, ["、"]) };
+        KeigoConverter.Apply(splitComma);
+        Assert.Equal("承知いたしました、", string.Concat(splitComma.Select(c => c.Text)), "別文節の読点でも敬語を保つ");
+
+        var splitExcl = new List<Clause> { new("おしえて", false, ["教えて"]), new("！", false, ["！"]) };
+        KeigoConverter.Apply(splitExcl);
+        Assert.Equal("ご教示ください！", string.Concat(splitExcl.Select(c => c.Text)), "別文節の感嘆符でも敬語を保つ");
+
+        var splitQuest = new List<Clause> { new("みた", false, ["見た"]), new("？", false, ["？"]) };
+        KeigoConverter.Apply(splitQuest);
+        Assert.Equal("ご覧になりましたでしょうか？", string.Concat(splitQuest.Select(c => c.Text)), "別文節の疑問符でも尊敬・丁寧疑問形にする");
 
         // OFF (既定) なら通常のまま
         var off = new Keyboard(live: true);

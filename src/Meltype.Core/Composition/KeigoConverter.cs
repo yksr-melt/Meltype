@@ -187,26 +187,86 @@ internal static class KeigoConverter
     private static readonly string[] Particles =
         ["には", "では", "にも", "でも", "から", "まで", "より", "は", "が", "を", "に", "で", "と", "も", "の", "へ"];
 
+    // 疑問文 (？ / ?) のときの読み完全一致
+    private static readonly Dictionary<string, string> QuestionReadingMap = new(StringComparer.Ordinal)
+    {
+        ["だいじょうぶ"] = "問題ございませんでしょうか",
+        ["だいじょうぶです"] = "問題ございませんでしょうか",
+        ["もんだいない"] = "問題ございませんでしょうか",
+        ["もんだいないです"] = "問題ございませんでしょうか",
+        ["いい"] = "よろしいでしょうか",
+        ["いいです"] = "よろしいでしょうか",
+        ["できる"] = "可能でしょうか",
+        ["できます"] = "可能でしょうか",
+        ["ある"] = "ございますでしょうか",
+        ["あります"] = "ございますでしょうか",
+        ["ない"] = "ございませんでしょうか",
+        ["ありません"] = "ございませんでしょうか",
+        ["みた"] = "ご覧になりましたでしょうか",
+        ["みました"] = "ご覧になりましたでしょうか",
+        ["みる"] = "ご覧になりますでしょうか",
+        ["みます"] = "ご覧になりますでしょうか",
+        ["いった"] = "行かれましたでしょうか",
+        ["いきました"] = "行かれましたでしょうか",
+        ["いく"] = "行かれますでしょうか",
+        ["いきます"] = "行かれますでしょうか",
+        ["きた"] = "お越しになりましたでしょうか",
+        ["きました"] = "お越しになりましたでしょうか",
+        ["くる"] = "お越しになりますでしょうか",
+        ["きます"] = "お越しになりますでしょうか",
+        ["おくった"] = "お送りいただきましたでしょうか",
+        ["おくりました"] = "お送りいただきましたでしょうか",
+        ["しってる"] = "ご存じでしょうか",
+        ["しっている"] = "ご存じでしょうか",
+        ["しっています"] = "ご存じでしょうか",
+        ["わかった"] = "ご理解いただけましたでしょうか",
+        ["わかりました"] = "ご理解いただけましたでしょうか",
+        ["おわった"] = "完了されましたでしょうか",
+        ["おわりました"] = "完了されましたでしょうか",
+        ["かくにんした"] = "ご確認されましたでしょうか",
+        ["かくにんしました"] = "ご確認されましたでしょうか",
+    };
+
     // 疑問文 (？ / ?) のときの文末変換 (相手への質問なので謙譲語にせず尊敬・丁寧形にする)
     private static readonly (string Suffix, string Replacement)[] QuestionSuffixes =
     [
+        ("問題ございません", "問題ございませんでしょうか"),
+        ("確認しました", "ご確認されましたでしょうか"),
         ("確認した", "ご確認されましたでしょうか"),
+        ("見ました", "ご覧になりましたでしょうか"),
         ("見た", "ご覧になりましたでしょうか"),
+        ("見ます", "ご覧になりますでしょうか"),
         ("見る", "ご覧になりますでしょうか"),
+        ("行きました", "行かれましたでしょうか"),
         ("行った", "行かれましたでしょうか"),
+        ("行きます", "行かれますでしょうか"),
         ("行く", "行かれますでしょうか"),
+        ("来ました", "お越しになりましたでしょうか"),
         ("来た", "お越しになりましたでしょうか"),
+        ("来ます", "お越しになりますでしょうか"),
         ("来る", "お越しになりますでしょうか"),
+        ("送りました", "お送りいただきましたでしょうか"),
         ("送った", "お送りいただきましたでしょうか"),
+        ("知っています", "ご存じでしょうか"),
         ("知っている", "ご存じでしょうか"),
         ("知ってる", "ご存じでしょうか"),
+        ("終わりました", "完了されましたでしょうか"),
+        ("終わった", "完了されましたでしょうか"),
+        ("できます", "可能でしょうか"),
         ("できる", "可能でしょうか"),
+        ("いいです", "よろしいでしょうか"),
         ("いい", "よろしいでしょうか"),
+        ("あります", "ございますでしょうか"),
         ("ある", "ございますでしょうか"),
+        ("ありません", "ございませんでしょうか"),
         ("ない", "ございませんでしょうか"),
+        ("しました", "されましたでしょうか"),
         ("した", "されましたでしょうか"),
+        ("します", "されますでしょうか"),
         ("する", "されますでしょうか"),
         ("だった", "でしたでしょうか"),
+        ("でした", "でしたでしょうか"),
+        ("です", "でしょうか"),
         ("だ", "でしょうか"),
     ];
 
@@ -636,16 +696,22 @@ internal static class KeigoConverter
 
         for (var i = 0; i < clauses.Count; i++)
         {
-            var hasSentenceEnd = HasSentenceEnd(clauses[i].Text) || HasSentenceEnd(clauses[i].Reading);
-            var isSentenceEnd = i == clauses.Count - 1 || hasSentenceEnd;
+            if (IsPunctuationOnly(clauses[i].Text) && IsPunctuationOnly(clauses[i].Reading)) continue;
+
+            var hasClauseEnd = HasClauseEnd(clauses[i].Text) || HasClauseEnd(clauses[i].Reading);
+            var nextIsPunct = i + 1 < clauses.Count && IsPunctuationOnly(clauses[i + 1].Text);
+            var hasNextContent = clauses.Skip(i + 1).Any(c => !IsPunctuationOnly(c.Text));
+            var isSentenceEnd = !hasNextContent || hasClauseEnd || nextIsPunct;
+            var nextIsQuestion = i + 1 < clauses.Count && IsPunctuationOnly(clauses[i + 1].Text) && IsQuestion(clauses[i + 1].Text);
+
             var prevReading = i > 0 ? clauses[i - 1].Reading : "";
             var nextReading = i + 1 < clauses.Count ? clauses[i + 1].Reading : "";
             var nextText = i + 1 < clauses.Count ? clauses[i + 1].Text : "";
 
             // 次の文節と合わせてすでに敬語になっている場合は二重敬語を防ぐ
-            if (IsAlreadyFollowedByPolite(clauses[i].Reading, nextReading, nextText)) continue;
+            if (!nextIsPunct && IsAlreadyFollowedByPolite(clauses[i].Reading, nextReading, nextText)) continue;
 
-            if (ConvertClause(clauses[i].Reading, clauses[i].Text, isSentenceEnd, prevReading, nextReading) is { } converted && converted != clauses[i].Text)
+            if (ConvertClause(clauses[i].Reading, clauses[i].Text, isSentenceEnd, nextIsQuestion, prevReading, hasNextContent) is { } converted && converted != clauses[i].Text)
             {
                 SetKeigo(clauses[i], converted);
             }
@@ -663,7 +729,7 @@ internal static class KeigoConverter
         return false;
     }
 
-    private static string? ConvertClause(string reading, string text, bool isSentenceEnd, string prevReading, string nextReading)
+    private static string? ConvertClause(string reading, string text, bool isSentenceEnd, bool nextIsQuestion, string prevReading, bool hasNextContent)
     {
         var (readingCore, readingPunct) = SplitTrailingPunctuation(reading);
         var (textCore, textPunct) = SplitTrailingPunctuation(text);
@@ -671,19 +737,11 @@ internal static class KeigoConverter
         if (readingCore.Length == 0) return null;
 
         var prevEndsWithTe = prevReading.EndsWith('て') || prevReading.EndsWith('で');
-        var isQuestion = IsQuestion(punct);
+        var isQuestion = IsQuestion(punct) || nextIsQuestion;
 
         // 0. 疑問文 (？ / ?) の文末は相手への質問として尊敬・丁寧形にする
         if (isSentenceEnd && isQuestion)
-        {
-            if (IsAlreadyPolite(textCore)) return null;
-            foreach (var (suffix, replacement) in QuestionSuffixes)
-            {
-                if (textCore.EndsWith(suffix, StringComparison.Ordinal))
-                    return textCore[..^suffix.Length] + replacement + punct;
-            }
-            return null;
-        }
+            return ConvertQuestion(readingCore, textCore, punct);
 
         // 1. 前の文節が「〜て / 〜で」で、この文節が補助動詞のとき (確認して + ほしい → いただけますでしょうか)
         if (isSentenceEnd && prevEndsWithTe)
@@ -729,12 +787,7 @@ internal static class KeigoConverter
         }
 
         // 4. 変換後テキスト内の語彙と文末表現の変換
-        var rewritten = textCore;
-        foreach (var (from, to) in InTextReplacements)
-        {
-            if (rewritten.Contains(from, StringComparison.Ordinal))
-                rewritten = rewritten.Replace(from, to, StringComparison.Ordinal);
-        }
+        var rewritten = ApplyInTextReplacements(textCore);
 
         if (isSentenceEnd)
         {
@@ -765,8 +818,8 @@ internal static class KeigoConverter
                 {
                     rewritten = politeAdj;
                 }
-                // 文末の「〜て」依頼形 (教えて → 教えてください、確認して → 確認してください)。次文節があるときは付けない
-                else if (nextReading.Length == 0 && rewritten.Length >= 2 &&
+                // 文末の「〜て」依頼形 (教えて → 教えてください、確認して → 確認してください)。後ろに実質の文節があるときは付けない
+                else if (!hasNextContent && rewritten.Length >= 2 &&
                     (rewritten.EndsWith("して", StringComparison.Ordinal) || (!IsKanaOnly(rewritten) && (rewritten.EndsWith('て') || rewritten.EndsWith('で')))))
                 {
                     rewritten += "ください";
@@ -775,6 +828,57 @@ internal static class KeigoConverter
         }
 
         return rewritten != textCore ? rewritten + punct : null;
+    }
+
+    private static string? ConvertQuestion(string readingCore, string textCore, string punct)
+    {
+        if (QuestionReadingMap.TryGetValue(readingCore, out var qWord))
+            return qWord + punct;
+
+        // 語頭接頭辞 + 疑問の残り (きょうはいく？ → 本日は行かれますでしょうか？)
+        foreach (var (readingPrefix, keigoPrefix, allowsParticle) in ReadingPrefixes)
+        {
+            if (!readingCore.StartsWith(readingPrefix, StringComparison.Ordinal)) continue;
+            var afterPrefix = readingCore[readingPrefix.Length..];
+            if (allowsParticle)
+            {
+                foreach (var particle in Particles)
+                {
+                    if (!afterPrefix.StartsWith(particle, StringComparison.Ordinal)) continue;
+                    var tail = afterPrefix[particle.Length..];
+                    if (QuestionReadingMap.TryGetValue(tail, out var qTail))
+                        return keigoPrefix + particle + qTail + punct;
+                }
+            }
+            if (QuestionReadingMap.TryGetValue(afterPrefix, out var qRest))
+                return keigoPrefix + qRest + punct;
+        }
+
+        var rewritten = ApplyInTextReplacements(textCore);
+        if (!rewritten.EndsWith("でしょうか", StringComparison.Ordinal))
+        {
+            foreach (var (suffix, replacement) in QuestionSuffixes)
+            {
+                if (rewritten.EndsWith(suffix, StringComparison.Ordinal))
+                {
+                    rewritten = rewritten[..^suffix.Length] + replacement;
+                    break;
+                }
+            }
+        }
+
+        return rewritten != textCore ? rewritten + punct : null;
+    }
+
+    private static string ApplyInTextReplacements(string text)
+    {
+        var rewritten = text;
+        foreach (var (from, to) in InTextReplacements)
+        {
+            if (rewritten.Contains(from, StringComparison.Ordinal))
+                rewritten = rewritten.Replace(from, to, StringComparison.Ordinal);
+        }
+        return rewritten;
     }
 
     private static string? TryPoliteAdjective(string text)
@@ -798,8 +902,14 @@ internal static class KeigoConverter
     private static bool IsNominalStem(char c) =>
         c is (>= '一' and <= '鿿') or (>= 'ァ' and <= 'ヺ') or 'ー' || char.IsAsciiLetterOrDigit(c);
 
-    private static bool HasSentenceEnd(string text) =>
-        text.Length > 0 && text[^1] is '。' or '！' or '？' or '!' or '?';
+    private static bool IsPunctuationChar(char c) =>
+        c is '。' or '、' or '．' or '，' or '.' or ',' or '！' or '？' or '!' or '?' or '…' or '‥';
+
+    private static bool IsPunctuationOnly(string text) =>
+        text.Length > 0 && text.All(IsPunctuationChar);
+
+    private static bool HasClauseEnd(string text) =>
+        text.Length > 0 && IsPunctuationChar(text[^1]);
 
     private static bool IsQuestion(string punct) =>
         punct.Contains('？') || punct.Contains('?');
@@ -834,7 +944,7 @@ internal static class KeigoConverter
     private static (string Core, string Punctuation) SplitTrailingPunctuation(string text)
     {
         var end = text.Length;
-        while (end > 0 && text[end - 1] is '。' or '、' or '．' or '，' or '.' or ',' or '！' or '？' or '!' or '?' or '…' or '‥')
+        while (end > 0 && IsPunctuationChar(text[end - 1]))
             end--;
         return (text[..end], text[end..]);
     }
