@@ -746,6 +746,9 @@ internal static class KeigoConverter
         ("いました", "いらっしゃいました"),
     ];
 
+    private static readonly Dictionary<char, (string Suffix, string Replacement)[]> RespectfulTextSuffixBuckets =
+        BuildSuffixBuckets(RespectfulTextSuffixes);
+
     private static readonly string[] OtherSubjectTokens = BuildSubjectTokens(
         [
             "ご担当者様", "ご担当者", "担当者", "お客様", "お客さん", "お客", "客", "皆様", "皆さん", "先方", "先様", "御社", "貴社",
@@ -756,6 +759,14 @@ internal static class KeigoConverter
 
     private static readonly string[] SelfSubjectTokens = BuildSubjectTokens(
         ["私ども", "弊社", "当社", "こちら", "私", "僕", "俺", "自分"]);
+
+    // 1 回の SIMD スキャンで主語トークンの有無を判定し、該当しない大半の文節を 0 アロケーションで素通りさせる
+    private static readonly SearchValues<string> SubjectSearchValues =
+        SearchValues.Create([.. OtherSubjectTokens, .. SelfSubjectTokens], StringComparison.Ordinal);
+
+    private static Dictionary<char, (string Suffix, string Replacement)[]> BuildSuffixBuckets(
+        (string Suffix, string Replacement)[] suffixes) =>
+        suffixes.GroupBy(x => x.Suffix[^1]).ToDictionary(g => g.Key, g => g.ToArray());
 
     private static string[] BuildSubjectTokens(string[] markers)
     {
@@ -1010,6 +1021,9 @@ internal static class KeigoConverter
         ("でした", "でしたでしょうか"),
         ("です", "でしょうか"),
     ];
+
+    private static readonly Dictionary<char, (string Suffix, string Replacement)[]> QuestionSuffixBuckets =
+        BuildSuffixBuckets(QuestionSuffixes);
 
     // 文末の動詞・表現の置き換え (読み → 敬語)
     private static readonly Dictionary<string, string> TailReadingMap = new(StringComparer.Ordinal)
@@ -1373,10 +1387,35 @@ internal static class KeigoConverter
         ("だけど", "ですが"),
         ("だけれど", "ですが"),
         ("だから", "ですので"),
+        ("何かあれば", "ご不明な点がございましたら"),
+        ("何かあったら", "ご不明な点がございましたら"),
+        ("ご質問があれば", "ご質問がございましたら"),
+        ("質問があれば", "ご質問がございましたら"),
+        ("質問があったら", "ご質問がございましたら"),
+        ("ご要望があれば", "ご要望がございましたら"),
+        ("要望があれば", "ご要望がございましたら"),
+        ("要望があったら", "ご要望がございましたら"),
+        ("問題があれば", "問題がございましたら"),
+        ("問題があったら", "問題がございましたら"),
+        ("機会があれば", "機会がございましたら"),
+        ("機会があったら", "機会がございましたら"),
+        ("お時間があれば", "お時間がございましたら"),
+        ("時間があれば", "お時間がございましたら"),
+        ("時間があったら", "お時間がございましたら"),
+        ("ご都合がよければ", "ご都合がよろしければ"),
+        ("都合がよければ", "ご都合がよろしければ"),
+        ("があれば", "がございましたら"),
+        ("があったら", "がございましたら"),
+        ("はあれば", "はございましたら"),
+        ("はあったら", "はございましたら"),
+        ("もあれば", "もございましたら"),
+        ("もあったら", "もございましたら"),
+        ("がなければ", "がございませんでしたら"),
+        ("がなかったら", "がございませんでしたら"),
     ];
 
     private static readonly Dictionary<char, (string Suffix, string Replacement)[]> MidClauseSuffixBuckets =
-        MidClauseSuffixes.GroupBy(x => x.Suffix[^1]).ToDictionary(g => g.Key, g => g.ToArray());
+        BuildSuffixBuckets(MidClauseSuffixes);
 
     // 相手・目上が主語のときの複文途中節ルール (例: お客様が来るので → お越しになりますので)
     private static readonly (string Suffix, string Replacement)[] RespectfulMidClauseSuffixes =
@@ -1449,6 +1488,9 @@ internal static class KeigoConverter
         ("参加したから", "ご参加なさいましたので"),
         ("参加したけど", "ご参加なさいましたが"),
     ];
+
+    private static readonly Dictionary<char, (string Suffix, string Replacement)[]> RespectfulMidClauseSuffixBuckets =
+        BuildSuffixBuckets(RespectfulMidClauseSuffixes);
 
     // 2文節に分かれた「〜てくれて」＋「ありがとう/助かる/嬉しい」などの感謝・恐縮先読みキーワード
     private static readonly string[] GratitudeFollowingReadings =
@@ -2060,7 +2102,7 @@ internal static class KeigoConverter
 
     // 末尾 1 文字ごとの語尾ルール索引 (毎打鍵の線形走査を 1/10 以下に絞る)
     private static readonly Dictionary<char, (string Suffix, string Replacement)[]> TailTextSuffixBuckets =
-        TailTextSuffixes.GroupBy(x => x.Suffix[^1]).ToDictionary(g => g.Key, g => g.ToArray());
+        BuildSuffixBuckets(TailTextSuffixes);
 
     // サ変動詞 (2 字以上の漢字熟語・カタカナ語 + する/した/しない/したい) の活用ルール
     private static readonly (string Suffix, string SuruReplacement, string? GodanSaReplacement)[] SuruOrGodanSuffixes =
@@ -2147,7 +2189,7 @@ internal static class KeigoConverter
             // 次の文節と合わせてすでに敬語になっている場合は二重敬語を防ぐ
             if (!nextIsPunct && IsAlreadyFollowedByPolite(clauseReading, nextReading, nextText)) continue;
 
-            var subjectRole = DetectSubjectRole(currentSentence.ToString());
+            var subjectRole = DetectSubjectRole(currentSentence);
             var gratitudeFollows = i + 1 < clauses.Count && IsGratitudeFollowing(nextReading, nextText);
 
             if (ConvertClause(clauseReading, clauseText, isSentenceEnd, nextIsQuestion, gratitudeFollows, subjectRole, prevReading, hasNextContent) is { } converted && converted != clauseText)
@@ -2218,15 +2260,30 @@ internal static class KeigoConverter
     // 主語の種類: 相手・目上が主語 / 自分側が主語 / 主語の手がかりなし
     private enum SubjectRole { Unknown, Other, Self }
 
-    private static SubjectRole DetectSubjectRole(string text)
+    private static SubjectRole DetectSubjectRole(System.Text.StringBuilder sentence)
     {
+        var len = sentence.Length;
+        if (len < 2) return SubjectRole.Unknown;
+        if (len <= 256)
+        {
+            Span<char> buf = stackalloc char[len];
+            sentence.CopyTo(0, buf, len);
+            return DetectSubjectRole(buf);
+        }
+        return DetectSubjectRole(sentence.ToString());
+    }
+
+    private static SubjectRole DetectSubjectRole(ReadOnlySpan<char> text)
+    {
+        if (text.Length < 2 || !text.ContainsAny(SubjectSearchValues))
+            return SubjectRole.Unknown;
         var lastOther = LastTokenEnd(text, OtherSubjectTokens);
         var lastSelf = LastTokenEnd(text, SelfSubjectTokens);
         if (lastOther < 0 && lastSelf < 0) return SubjectRole.Unknown;
         return lastOther > lastSelf ? SubjectRole.Other : SubjectRole.Self;
     }
 
-    private static int LastTokenEnd(string text, string[] tokens)
+    private static int LastTokenEnd(ReadOnlySpan<char> text, string[] tokens)
     {
         var best = -1;
         foreach (var token in tokens)
@@ -2278,10 +2335,13 @@ internal static class KeigoConverter
         {
             // 漢字変換済みの同音異義語 (着た vs 来た) を区別するため、テキスト末尾ルールを先に照合する
             var respText = ApplyInTextReplacements(textCore);
-            foreach (var (suffix, replacement) in RespectfulTextSuffixes)
+            if (respText.Length > 0 && RespectfulTextSuffixBuckets.TryGetValue(respText[^1], out var respBucket))
             {
-                if (respText.EndsWith(suffix, StringComparison.Ordinal))
-                    return AppendWithoutDuplicatePrefix(respText[..^suffix.Length], replacement) + punct;
+                foreach (var (suffix, replacement) in respBucket)
+                {
+                    if (respText.EndsWith(suffix, StringComparison.Ordinal))
+                        return AppendWithoutDuplicatePrefix(respText[..^suffix.Length], replacement) + punct;
+                }
             }
             if (RespectfulReadingMap.TryGetValue(readingCore, out var respWord))
                 return respWord + punct;
@@ -2337,7 +2397,7 @@ internal static class KeigoConverter
         var hasTrailingComma = punct is "、" or "，" or ",";
         if ((!isSentenceEnd || hasTrailingComma) && rewritten.Length >= 2)
         {
-            rewritten = ApplyMidClausePolite(rewritten, subjectRole);
+            rewritten = ApplyMidClausePolite(rewritten, subjectRole, prevReading);
         }
 
         if (isSentenceEnd && !hasTrailingComma)
@@ -2390,11 +2450,17 @@ internal static class KeigoConverter
         return rewritten != textCore ? rewritten + punct : null;
     }
 
-    private static string ApplyMidClausePolite(string text, SubjectRole subjectRole)
+    private static string ApplyMidClausePolite(string text, SubjectRole subjectRole, string prevReading)
     {
-        if (subjectRole == SubjectRole.Other)
+        var prevEndsWithTe = prevReading.EndsWith('て') || prevReading.EndsWith('で');
+        if (!prevEndsWithTe)
         {
-            foreach (var (suffix, replacement) in RespectfulMidClauseSuffixes)
+            if (text is "あれば" or "あったら") return "ございましたら";
+            if (text is "なければ" or "なかったら") return "ございませんでしたら";
+        }
+        if (subjectRole == SubjectRole.Other && RespectfulMidClauseSuffixBuckets.TryGetValue(text[^1], out var respBucket))
+        {
+            foreach (var (suffix, replacement) in respBucket)
             {
                 if (text.EndsWith(suffix, StringComparison.Ordinal))
                     return AppendWithoutDuplicatePrefix(text[..^suffix.Length], replacement);
@@ -2415,7 +2481,7 @@ internal static class KeigoConverter
         // サ変動詞の複文接続 (修正したから → 修正いたしましたので、完了したけど → 完了いたしましたが)
         foreach (var (suffix, replacement) in (ReadOnlySpan<(string, string)>)[("したので", "いたしましたので"), ("したから", "いたしましたので"), ("したけど", "いたしましたが"), ("したけれど", "いたしましたが"), ("するので", "いたしますので"), ("するから", "いたしますので"), ("するけど", "いたしますが")])
         {
-            if (text.EndsWith(suffix, StringComparison.Ordinal) && IsVerbalNounStem(text[..^suffix.Length]))
+            if (text.EndsWith(suffix, StringComparison.Ordinal) && IsVerbalNounStem(text.AsSpan(0, text.Length - suffix.Length)))
                 return text[..^suffix.Length] + replacement;
         }
         return text;
@@ -2471,7 +2537,7 @@ internal static class KeigoConverter
     }
 
     // サ変動詞の語幹か: 末尾が 2 文字以上の漢字熟語またはカタカナ語 (完了・設定・テスト・ログイン など。押・貸・思い出 などの五段サ行は除外)
-    private static bool IsVerbalNounStem(string stem)
+    private static bool IsVerbalNounStem(ReadOnlySpan<char> stem)
     {
         if (stem.Length < 2) return false;
         var a = stem[^2];
@@ -2532,22 +2598,25 @@ internal static class KeigoConverter
             !rewritten.EndsWith("ませんか", StringComparison.Ordinal))
         {
             var matched = false;
-            foreach (var (suffix, replacement) in QuestionSuffixes)
+            if (rewritten.Length > 0 && QuestionSuffixBuckets.TryGetValue(rewritten[^1], out var qBucket))
             {
-                if (rewritten.EndsWith(suffix, StringComparison.Ordinal))
+                foreach (var (suffix, replacement) in qBucket)
                 {
-                    rewritten = AppendWithoutDuplicatePrefix(rewritten[..^suffix.Length], replacement);
-                    matched = true;
-                    break;
+                    if (rewritten.EndsWith(suffix, StringComparison.Ordinal))
+                    {
+                        rewritten = AppendWithoutDuplicatePrefix(rewritten[..^suffix.Length], replacement);
+                        matched = true;
+                        break;
+                    }
                 }
             }
 
             if (!matched)
             {
                 // サ変動詞 + した？ / する？ (完了した？ → 完了されましたでしょうか？)
-                if (rewritten.EndsWith("した", StringComparison.Ordinal) && IsVerbalNounStem(rewritten[..^2]))
+                if (rewritten.EndsWith("した", StringComparison.Ordinal) && IsVerbalNounStem(rewritten.AsSpan(0, rewritten.Length - 2)))
                     rewritten = rewritten[..^2] + "されましたでしょうか";
-                else if (rewritten.EndsWith("する", StringComparison.Ordinal) && IsVerbalNounStem(rewritten[..^2]))
+                else if (rewritten.EndsWith("する", StringComparison.Ordinal) && IsVerbalNounStem(rewritten.AsSpan(0, rewritten.Length - 2)))
                     rewritten = rewritten[..^2] + "されますでしょうか";
                 else if (rewritten.Length >= 2 && rewritten.EndsWith('だ') && IsNominalStem(rewritten[^2]))
                     rewritten = rewritten[..^1] + "でしょうか";
@@ -2676,11 +2745,21 @@ internal static class KeigoConverter
         return null;
     }
 
-    private static bool IsKanaOnly(string text) => text.All(c => c is (>= 'ぁ' and <= 'ゖ') or (>= 'ァ' and <= 'ヺ') or 'ー');
+    private static bool IsKanaOnly(ReadOnlySpan<char> text)
+    {
+        foreach (var c in text)
+        {
+            if (c is not ((>= 'ぁ' and <= 'ゖ') or (>= 'ァ' and <= 'ヺ') or 'ー'))
+                return false;
+        }
+        return true;
+    }
 
     private static (string Core, string Punctuation) SplitTrailingPunctuation(string text)
     {
-        var end = text.Length;
+        if (text.Length == 0 || !IsPunctuationChar(text[^1]))
+            return (text, "");
+        var end = text.Length - 1;
         while (end > 0 && IsPunctuationChar(text[end - 1]))
             end--;
         return (text[..end], text[end..]);

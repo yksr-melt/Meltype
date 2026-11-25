@@ -6974,6 +6974,19 @@ internal static class CompositionTests
         KeigoConverter.Apply(dokoNiIkunoQuest);
         Assert.Equal("どちらに行かれますでしょうか？", string.Concat(dokoNiIkunoQuest.Select(c => c.Text)), "どこに行くの？ → どちらに行かれますでしょうか？");
 
+        // あったら・あれば ＝ ございましたら (1文節/2文節 & 誤爆防止)
+        var mondaiAreba = new List<Clause> { new("もんだいがあれば、", false, ["問題があれば、"]), new("れんらくして", false, ["連絡して"]) };
+        KeigoConverter.Apply(mondaiAreba);
+        Assert.Equal("問題がございましたら、ご連絡ください", string.Concat(mondaiAreba.Select(c => c.Text)), "問題があれば → 問題がございましたら");
+
+        var splitAttara = new List<Clause> { new("しつもんが", false, ["質問が"]), new("あったら、", false, ["あったら、"]), new("おしえて", false, ["教えて"]) };
+        KeigoConverter.Apply(splitAttara);
+        Assert.Equal("質問がございましたら、ご教示ください", string.Concat(splitAttara.Select(c => c.Text)), "2文節に分かれた『あったら、』→ ございましたら、");
+
+        var kaiteAttara = new List<Clause> { new("かいて", false, ["書いて"]), new("あったら", false, ["あったら"]) };
+        KeigoConverter.Apply(kaiteAttara);
+        Assert.Equal("書いてあったら", string.Concat(kaiteAttara.Select(c => c.Text)), "補助動詞の『書いてあったら』は『書いてございましたら』に誤爆しない");
+
         // OFF (既定) なら通常のまま
         var off = new Keyboard(live: true);
         off.Type("ryoukai");
