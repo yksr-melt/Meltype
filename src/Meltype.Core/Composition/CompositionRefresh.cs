@@ -10,9 +10,9 @@ internal static class CompositionRefresh
     internal static bool Refresh(CompositionState state, CompositionEnv env)
     {
         state.LiveCache.Clear();
-        if (CompositionText.IsEmpty(state.Text) || CompositionLifecycle.IsConverting(state) && !RefreshOpenConversion(state, env)) return false;
+        if (state.Scene is not CompositionScene.WithInput { Input: var input } scene || scene is CompositionScene.Converting open && !RefreshOpenConversion(state, open, env)) return false;
         // 文節が分かると最後の文節の予測が出せる。予測を選んでいる間は、選んでいる候補を置き換えない
-        if (state.Predictions is not { Index: >= 0 }) state.Predictions = null;
+        if (input.Predictions is not { Index: >= 0 }) input.Predictions = null;
         CompositionPresentation.UpdateView(state, env);
         return true;
     }
@@ -24,13 +24,14 @@ internal static class CompositionRefresh
     /// 英日の区切りの案を候補にした文全体の文節を選び直したあとも置き換えない。作り直すと選んだ文が新しい案に無くなることがあり、
     /// その案の文節に分けられなくなる (← → で選び直せず、文節ごとの学習もできない)。
     /// </summary>
-    private static bool RefreshOpenConversion(CompositionState state, CompositionEnv env)
+    private static bool RefreshOpenConversion(CompositionState state, CompositionScene.Converting scene, CompositionEnv env)
     {
-        if (state.Conversion is not { Edited: false } open || state.Reconversion is not null || state.Clauses is [{ Alternatives: not null, Changed: true }]) return false;
-        var incoming = CompositionConversion.BuildConversion(state, env.WithoutWaiting(), open.StartedBy, open.PreferJapanese);
+        var open = scene.Conversion;
+        if (open.Edited || scene.Input.Reconversion is not null || open.Clauses is [{ Alternatives: not null, Changed: true }]) return false;
+        var incoming = CompositionConversion.BuildConversion(scene.Input, env.WithoutWaiting(), open.StartedBy, open.PreferJapanese);
         var merged = Merge(open, incoming, CompositionConversion.InitialClause(env, open.Clauses.Count));
         if (ReferenceEquals(merged, open)) return false;
-        state.Conversion = merged;
+        CompositionLifecycle.Convert(state, scene.Input, merged);
         return true;
     }
 

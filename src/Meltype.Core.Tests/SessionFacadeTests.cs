@@ -891,13 +891,13 @@ internal static class SessionFacadeTests
             foreach (var (steps, expected) in new (string[] Steps, string Expected)[]
             {
                 // 報告された例: 打って、すべて消して、同じものを打つ
-                (["githubnipushsuru\n", new string('\b', "github に push する".Length), "githubnipushsuru\n"], "github に push する"),
-                (["pushsuru\n", "\n", "github\n"], "push する\ngithub"),
-                (["github\n", " ", "ni\n"], "github に"),
-                (["pushsuru\n", " ", "github\n"], "push する github"),
+                (["githubnipushsuru\n", new string('\b', "GitHub に push する".Length), "githubnipushsuru\n"], "GitHub に push する"),
+                (["pushsuru\n", "\n", "github\n"], "push する\nGitHub"),
+                (["github\n", " ", "ni\n"], "GitHub に"),
+                (["pushsuru\n", " ", "github\n"], "push する GitHub"),
                 // 続けて確定したときは、前に確定した文字との間に入れる
-                (["github\n", "ni\n", "push\n", "suru\n"], "github に push する"),
-                (["pushsuru\n", "github\n"], "push する github"),
+                (["github\n", "ni\n", "push\n", "suru\n"], "GitHub に push する"),
+                (["pushsuru\n", "github\n"], "push する GitHub"),
             })
             {
                 var detector = CompositionDetector.CreateDefault();
@@ -1007,6 +1007,12 @@ internal static class SessionFacadeTests
         session = Create();
         session.CodeInput = true;
         Assert.True(Type(session, "/help", new Field("> ")).All(r => !r.Consumed), "AI の入力行の /help はアプリへ");
+        // 打ち始めの / が変換ボックスに入らなかったら (英数でアプリに通した)、後で日本語の後ろに打った / を ・ にしない。
+        session = Create();
+        session.Direct = true;
+        Assert.True(!Type(session, "/", before: "")[0].Consumed, "英数の / はアプリへ");
+        session.Direct = false;
+        Assert.Equal("/", Type(session, "/", before: "あ")[0].View?.Text);
     }
 
     [Test]

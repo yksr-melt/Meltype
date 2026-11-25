@@ -24,7 +24,7 @@ dotnet run -c Release --project src/Meltype.Core.Tests -- --perf perf.json
 MELTYPE_MOZC=/path/to/meltype_mozc_helper dotnet run -c Release --project src/Meltype.Core.Tests -- --perf perf.json
 ```
 
-`--perf 出力ファイル [例文のファイル] [回数]` です。例文は既定で `tools/mozc-compare-cases.tsv` (1 行に「打ったもの<Tab>期待」)、回数は 5 回です。
+`--perf 出力ファイル [例文のファイル] [回数]` です。例文は既定で `src/Meltype.Core.Tests/data/perf-cases.tsv` (1 行に「打ったもの<Tab>期待」)、回数は 5 回です。
 `MELTYPE_MOZC` が無いと判定だけ (漢字にしない) で測るので、時間は Mozc ありのものと比べられません。
 必ず `-c Release` で動かしてください (結果の `meta.configuration` に残ります)。
 
@@ -48,7 +48,7 @@ dotnet run -c Release --project src/Meltype.Core.Tests -- --perf-compare $env:TE
 
 - ほかに重い処理が動いていないときに、同じ PC・同じ電源の設定で測る
 - 前 → 後 → 前 → 後 のように交互に 2 回ずつ測り、同じ版どうしのずれより大きいかを見る
-- 回数を増やす (`--perf perf.json tools/mozc-compare-cases.tsv 20`) と p99 が安定する
+- 回数を増やす (`--perf perf.json src/Meltype.Core.Tests/data/perf-cases.tsv 20`) と p99 が安定する
 - 回数・控えの使い回し率・候補の数・正解率はばらつかないので、変わっていればそれは変更のせいです
 
 <a name="測るもの"></a>

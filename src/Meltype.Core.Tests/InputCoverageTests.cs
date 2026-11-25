@@ -66,7 +66,7 @@ internal static class InputCoverageTests
                 }
                 if (!result.Consumed) output += character;
             }
-            Assert.Equal(phrase, output);
+            Assert.Equal(phrase == "github" ? "GitHub" : phrase, output);
         }
     }
 }

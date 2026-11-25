@@ -20,7 +20,7 @@ internal sealed record CommittedClause(string Reading, string? Engine, string? T
 /// 設定「ユーザー学習を使う」と入力欄が学習を求めないかは、呼ぶ側 (<see cref="CompositionCommit"/>) が見る。
 /// 学習しない候補は <see cref="Learnable"/> の 1 か所で決める。
 /// </summary>
-internal sealed partial class CompositionLearning(CompositionServices services, IKanjiConverter converter)
+internal sealed partial class CompositionLearning(CompositionServices services, IKanjiConverter converter, ProperNouns? properNouns = null)
 {
     /// <summary>計算の言葉 (かける・わる …) の文節の読み。前後に数字が付いていてもよい (変換エンジンが 3かける を 1 つの文節にする)。</summary>
     [GeneratedRegex("^[0-9０-９]*(?:かける|わる|たす|ひく|ぷらす|まいなす|いこーる)[0-9０-９]*$")]
@@ -49,6 +49,16 @@ internal sealed partial class CompositionLearning(CompositionServices services, 
         foreach (var clause in clauses.Where(c => c.IsEnglish && TextChars.IsJapaneseText(c.Text) && c.Reading.All(char.IsAsciiLetter) && Learnable(c)))
         {
             services.Languages?.Remember(clause.Reading, english: false, context: context);
+        }
+        // 自動で大文字にする固有名詞 (iPhone) で打ったままの小文字 (iphone) を選んだら、次から小文字のままにする。大文字の形を選び直したら忘れる。
+        if (properNouns is not null)
+        {
+            foreach (var clause in clauses.Where(c => c.Changed))
+            {
+                if (properNouns.AutoCanonical(clause.Reading) is not { } auto) continue;
+                if (clause.Text == clause.Reading) services.History?.Remember(clause.Reading, clause.Text);
+                else if (clause.Text == auto) services.History?.Forget(clause.Reading);
+            }
         }
         // 英訳を選んだら、英訳の記録に (普通の変換の学習より弱く効く)。
         foreach (var clause in clauses.Where(c => c.Translations.Contains(c.Text)))
@@ -100,9 +110,11 @@ internal sealed partial class CompositionLearning(CompositionServices services, 
     /// </summary>
     public void LearnLanguage(CompositionTextState text, IReadOnlyList<CompositionSegment> automatic, bool? context)
     {
-        if (services.Languages is not { } memory) return;
         var raw = CompositionText.Raw(text);
         if (raw.Length < 2 || !raw.All(char.IsAsciiLetter)) return;
+        if (text.Mode == DisplayMode.HalfWidthAlphanumeric && text.Case == LetterCase.AsTyped && properNouns?.AutoCanonical(raw) is not null)
+            services.History?.Remember(raw, raw);
+        if (services.Languages is not { } memory) return;
         switch (text.Mode)
         {
             case DisplayMode.HalfWidthAlphanumeric or DisplayMode.FullWidthAlphanumeric when !automatic.All(s => s.IsEnglish):
