@@ -73,12 +73,27 @@ bool IsModifier(UINT vk) {
 
 bool KeyDown(int vk) { return (GetKeyState(vk) & 0x8000) != 0; }
 
-// このスレッドでメニューを開いている (Win+X のメニュー・右クリックのメニュー・メニューバーなど: issue #862)。
-// メニューの間に打つキーはメニューのアクセスキー (Win+X の U など) なので、入力欄の IME として受け取らない
+// このスレッドで Win32 のメニューを開いている (右クリックのメニュー・メニューバーなど: issue #862)。
+// メニューの間に打つキーはアクセスキーなので、入力欄の IME として受け取らない。
+// タスクバーの XAML のメニュー (Win+X など) はこのフラグを立てないため、InTaskbar で調べる。
 bool InMenuMode() {
     GUITHREADINFO info = {sizeof(info)};
     return GetGUIThreadInfo(GetCurrentThreadId(), &info) &&
            (info.flags & (GUI_INMENUMODE | GUI_POPUPMENUMODE | GUI_SYSTEMMENUMODE)) != 0;
+}
+
+bool ClassIs(HWND window, const wchar_t* name) {
+    wchar_t buffer[32];
+    return window && GetClassNameW(window, buffer, 32) > 0 && wcscmp(buffer, name) == 0;
+}
+
+// このスレッドのフォーカスがタスクバー (複数モニターでは Shell_SecondaryTrayWnd) のメニュー・ボタンにある。
+// キーを処理するスレッドのフォーカスを打鍵と同時に読むので、メニューを開いた直後の 1 打目にも間に合う。
+// タスクバーで文字を入力するのは Windows 10 のアドレス ツールバー (Edit) だけなので、Edit は除く。
+bool InTaskbar() {
+    const HWND focus = GetFocus();
+    const HWND root = GetAncestor(focus, GA_ROOT);
+    return (ClassIs(root, L"Shell_TrayWnd") || ClassIs(root, L"Shell_SecondaryTrayWnd")) && !ClassIs(focus, L"Edit");
 }
 
 // US 配列の Alt + ` (半角/全角キー相当)。Alt はキーイベントの lParam も確認する。
@@ -104,6 +119,37 @@ void MaskSystemModifier() {
     mask[0].ki.dwExtraInfo = mask[1].ki.dwExtraInfo = kReinjectMarker;
     mask[1].ki.dwFlags = KEYEVENTF_KEYUP;
     SendInput(2, mask, sizeof(INPUT));
+}
+
+// ワークアラウンド: Tk (Python の IDLE など) は、IME が確定した文字のコードを仮想キーとしても引き、p〜~ (0x70〜0x7E) を
+// F1〜F15 のキーにする (IDLE では p でヘルプが開く。issue #1463)。そのため Tk の入力欄には、確定した文字をメッセージで送る。
+// Tk が直っても、直る前の Tk を同梱した Python が使われる間は消せない (永続)
+bool IsTkWindow(HWND window) {
+    return ClassIs(window, L"TkChild");
+}
+
+// フォーカスが移ったときの確定では、GetFocus() はもう移った先なので、確定元の TSF コンテキストの窓を見る
+HWND ContextWindow(ITfContext* context) {
+    Microsoft::WRL::ComPtr<ITfContextView> view;
+    HWND window = nullptr;
+    if (SUCCEEDED(context->GetActiveView(&view))) view->GetWnd(&window);
+    return window;
+}
+
+// - ASCII は WM_CHAR で送る (WM_UNICHAR だと、IME の確定と同じく仮想キーとしても引かれる)。
+//   それ以外は WM_UNICHAR で送る (WM_CHAR だと、U+0080〜U+00FF を今のコード ページのバイトとして読み、× が ﾗ になる)
+// - SendMessage にするのは、Tk がその場で自分の列に積むため。ポストすると、キーを処理する Tk に ANSI で取り出されて文字が欠けることがあり、
+//   フォーカスの移動より後に処理されると移った先に入る (Tk は文字を、届いた窓でなくそのときのフォーカスに入れる)。
+//   SendInput だと、すでに打った次のキーより後に届く
+void SendTextToTk(HWND window, const std::wstring& text) {
+    for (size_t i = 0; i < text.size(); ++i) {
+        UINT32 code = text[i];
+        if (i + 1 < text.size() && IS_SURROGATE_PAIR(text[i], text[i + 1])) {
+            ++i;
+            code = 0x10000 + ((code - 0xD800) << 10) + (text[i] - 0xDC00);
+        }
+        SendMessageW(window, code < 0x80 ? WM_CHAR : WM_UNICHAR, code, 1);
+    }
 }
 
 // そのキーで入力される文字 (無ければ 0)
@@ -1045,6 +1091,15 @@ bool TextService::WouldEat(ITfContext* context, UINT vk, LPARAM lParam, wchar_t&
     ch = 0;
     if (disabled_ || vk >= 256) return false;
     if (IsModifier(vk) && !CapturesKey(vk, lParam)) return false;
+    // タスクバーの XAML メニュー (Win+X など) のアクセスキーと Space による選択を、メニューへ渡す (#2000)。
+    // Space を入力モードのキーに割り当てていてもメニューを優先するため、CapturesKey より前で調べる。
+    // タスクバーには変換中の文字が無いので、ここで返しても ResumeOrCommit などの後始末は要らない
+    // (このスレッドの前の入力欄で変換中だった文字は、フォーカスが移ったときに OnSetFocus で確定している)。
+    if (InTaskbar() && !KeyDown(VK_SHIFT) && !KeyDown(VK_CONTROL) && !KeyDown(VK_MENU) && !KeyDown(VK_LWIN) && !KeyDown(VK_RWIN) &&
+        (static_cast<ULONG_PTR>(lParam) & (1u << 29)) == 0) {
+        const wchar_t menuKey = CharOf(vk, lParam);
+        if (vk == VK_SPACE || (menuKey >= L'!' && menuKey <= L'~')) return false;
+    }
     // アプリが確定した打ちかけの文字があれば、このキーの前に、変換中に戻すか確定したことにする
     ResumeOrCommit(context);
     // VK_PACKET: ほかのソフト (パスワード管理・AutoHotkey など) が送り込んだ文字。送り直せないので受け取らずに通す。
@@ -1633,6 +1688,9 @@ void TextService::MoveCaretAfterCommit(TfEditCookie ec, ITfContext* context, ITf
 }
 
 bool TextService::ExtendOverPrevious(TfEditCookie ec, ITfRange* range, LONG count, const JsonValue& expect) {
+    // Tk には文字をメッセージで送るので (SendTextToTk)、前に確定した文字を消せない。確定し直さない
+    Microsoft::WRL::ComPtr<ITfContext> context;
+    if (SUCCEEDED(range->GetContext(&context)) && IsTkWindow(ContextWindow(context.Get()))) return false;
     Microsoft::WRL::ComPtr<ITfRange> previous;
     if (FAILED(range->Clone(&previous))) return false;
     previous->Collapse(ec, TF_ANCHOR_START);
@@ -1681,6 +1739,19 @@ void TextService::RewriteBeforeCaret(ITfContext* context, ITfRange* end, LONG co
 }
 
 bool TextService::WriteCommit(TfEditCookie ec, ITfContext* context, ITfRange* range, const std::wstring& text, int caretBack, ITfRange** movedCaret) {
+    // Tk には、変換中の文字を消して変換を終えてから、文字を送る (上の IsTkWindow のワークアラウンド)
+    if (const HWND window = ContextWindow(context); IsTkWindow(window)) {
+        if (composition_ != nullptr) {
+            ITfRange* composing = nullptr;
+            if (SUCCEEDED(composition_->GetRange(&composing))) {
+                composing->SetText(ec, 0, L"", 0);
+                composing->Release();
+            }
+            EndComposition(ec);
+        }
+        SendTextToTk(window, text);
+        return true;
+    }
     if (composition_ == nullptr) {
         ITfContextComposition* contextComposition = nullptr;
         if (SUCCEEDED(context->QueryInterface(IID_ITfContextComposition, reinterpret_cast<void**>(&contextComposition)))) {

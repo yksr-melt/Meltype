@@ -288,6 +288,15 @@ internal sealed class ZenzaiConverter : IKanjiConverter, IDisposable
         }
     }
 
+    /// <summary>
+    /// 答えの記号が、読みの記号 (打った 、。「」？ など) とすべて同じか。<see cref="IsPlausible"/> は漢字・英数字を読みの何文字にも当てるので、
+    /// 記号が消えた答え (りんごを、たべた → 林檎を食べた) も通す。
+    /// </summary>
+    internal static bool KeepsSymbols(string hiragana, string answer) =>
+        hiragana.Select(Normalize).Where(IsSymbol).SequenceEqual(answer.Select(Normalize).Where(IsSymbol));
+
+    private static bool IsSymbol(char c) => char.IsPunctuation(c) || char.IsSymbol(c) || char.IsWhiteSpace(c);
+
     /// <summary>答えを、読みと 1 文字ずつ比べる文字 (かな・記号) と、読みの 1 文字以上に当たる字 (漢字 1 文字・英数字の並び) に分ける。</summary>
     private static List<(string Text, bool Wildcard)> Tokens(string answer)
     {
@@ -305,7 +314,7 @@ internal sealed class ZenzaiConverter : IKanjiConverter, IDisposable
             }
             var length = char.IsSurrogatePair(answer, i) ? 2 : 1;
             var kana = c is >= 'ぁ' and <= 'ゖ' or 'ー' or 'ゝ' or 'ゞ';
-            tokens.Add((answer.Substring(i, length), !kana && !char.IsAsciiLetterOrDigit(c) && !char.IsPunctuation(c) && !char.IsSymbol(c) && !char.IsWhiteSpace(c)));
+            tokens.Add((answer.Substring(i, length), !kana && !char.IsAsciiLetterOrDigit(c) && !IsSymbol(c)));
             i += length;
         }
         return tokens;
