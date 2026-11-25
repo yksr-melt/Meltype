@@ -11,19 +11,24 @@ namespace Meltype.Composition;
 /// 書き込みと表示の文字は区間の並び (<see cref="ComposedText"/>) で受け取り、ここで文字列にする (<see cref="Render"/>)。
 /// 句読点は、読み・変換・学習では設定によらず 、。 で持ち (<see cref="CompositionText"/> の Symbol)、設定の句読点は文字列にするときに当てる。
 /// 入力欄から読んだ文字 (<see cref="Before"/>・<see cref="After"/>) は、設定の句読点を 、。 に戻して渡す。
-/// ここのほかに設定の句読点を扱うのは、再変換の読み (<see cref="FromSetting"/>) と候補の重複を消す所 (<see cref="ToSetting"/>) だけ。
+/// 設定の句読点を当てるのは打った句読点の区間 (<see cref="SpanKind.Punctuation"/>) だけで、語の中の 、。 (モーニング娘。) は変えない。
+/// ここのほかに設定の句読点を扱うのは、再変換の読み (<see cref="FromSetting"/>) だけ。
 /// </summary>
 internal static class CompositionOutput
 {
     private const int MaxCommitted = 256;
 
     /// <summary>キャレットの前の文字。出来事の前の文字に、この出来事で確定した文字を入れたもの (フロントは確定を入れてから変換中の文字を置く)。</summary>
-    public static string? Before(CompositionOutputState state, CompositionEnv env)
+    public static string? Before(CompositionOutputState state, CompositionEnv env) =>
+        RawBefore(state, env) is { } before ? FromSetting(env.Settings.Punctuation, before) : null;
+
+    /// <summary><see cref="Before"/> の、設定の句読点を戻す前の文字 (入力欄の文字のまま)。</summary>
+    public static string? RawBefore(CompositionOutputState state, CompositionEnv env)
     {
         var before = env.Before;
         if (before is null) return null;
         foreach (var edit in state.Commits) before = before[..^Math.Min(edit.DeleteBefore, before.Length)] + edit.Text;
-        return FromSetting(env.Settings.Punctuation, before);
+        return before;
     }
 
     public static CompositionView? View(CompositionOutputState state) => state.Hidden ? null : state.View;
@@ -95,17 +100,17 @@ internal static class CompositionOutput
         state.Hidden = false;
     }
 
-    /// <summary>書き込み・表示の文字。区間によらず、、。 をすべて設定の句読点にする (辞書の語・顔文字の 、。 (モーニング娘。) も変わる)。</summary>
-    private static string Render(CompositionEnv env, ComposedText text) => string.Concat(text.Spans.Select(s => ToSetting(env.Settings.Punctuation, s.Text)));
+    /// <summary>書き込み・表示の文字。打った句読点の区間にだけ設定の句読点を当てる。</summary>
+    internal static string Render(CompositionEnv env, ComposedText text) =>
+        string.Concat(text.Spans.Select(s => s.Kind == SpanKind.Punctuation ? Punctuate(env.Settings.Punctuation, s.Text) : s.Text));
 
-    /// <summary>、。 をすべて設定の句読点にする。</summary>
-    internal static string ToSetting(Config.PunctuationStyle style, string text)
+    private static string Punctuate(Config.PunctuationStyle style, string text)
     {
         var (comma, period) = Marks(style);
         return text.Replace('、', comma).Replace('。', period);
     }
 
-    /// <summary>設定の句読点を 、。 に戻す (<see cref="ToSetting"/> の逆)。</summary>
+    /// <summary>入力欄から読んだ文字の、設定の句読点を 、。 に戻す。</summary>
     internal static string FromSetting(Config.PunctuationStyle style, string text)
     {
         var (comma, period) = Marks(style);
