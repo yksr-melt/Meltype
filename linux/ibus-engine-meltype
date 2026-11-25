@@ -183,8 +183,8 @@ class MeltypeEngine(IBus.Engine):
         self._alt_keys = False
         self._alt_down = 0
         self._alt_interrupted = False
-        # 押しているキーの keycode (最後に押したもの。0 なら無し)。IBus は自動の繰り返しかを知らせない
-        self._held_keycode = 0
+        # 押しているキーの keycode。IBus は自動の繰り返しかを知らせない
+        self._held_keycodes = set()
         self._mode_property = IBus.Property(key="InputMode", prop_type=IBus.PropType.NORMAL, label=IBus.Text.new_from_string("あ"),
                                             symbol=IBus.Text.new_from_string("あ"), sensitive=False, visible=True)
         self._properties.append(self._mode_property)
@@ -245,12 +245,12 @@ class MeltypeEngine(IBus.Engine):
         if vk in ALT_KEYS:
             return self._alt_key(vk, keyval, keycode, state, released)
         if released:
-            if keycode == self._held_keycode:
-                self._held_keycode = 0
+            self._held_keycodes.discard(keycode)
             return False
+        repeat = keycode in self._held_keycodes
         # keycode の無い (0) キーは、ソフトが送ったもの
-        repeat = keycode != 0 and keycode == self._held_keycode
-        self._held_keycode = keycode
+        if keycode:
+            self._held_keycodes.add(keycode)
         if self._alt_down:
             self._alt_interrupted = True
         if vk is None:
@@ -298,7 +298,7 @@ class MeltypeEngine(IBus.Engine):
         届かないうえ、届いても順序が壊れるので、本体には「表示のまま確定された」と伝える。
         """
         # Alt + Tab などでフォーカスが移ると、キーを離したことはこのエンジンに届かない。本体には、Alt を割り込まれて離したと伝える
-        self._held_keycode = 0
+        self._held_keycodes.clear()
         if self._alt_down:
             vk, self._alt_down, self._alt_interrupted = self._alt_down, 0, False
             self.send("KeyReleased", key={"vk": vk, "interrupted": True})

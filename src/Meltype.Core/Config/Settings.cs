@@ -1184,7 +1184,17 @@ public sealed class Settings
     /// <summary><see cref="Load"/> と同じだが、読めなければ例外を投げる (既定値に戻さず、.broken も作らない)。</summary>
     internal static Settings LoadOrThrow(string path)
     {
-        if (!File.Exists(path)) return new Settings();
+        var keyCountPath = Path.Combine(Path.GetDirectoryName(path) ?? "", KeyCounter.FileName);
+        if (!File.Exists(path))
+        {
+            var created = new Settings();
+            if (KeyCounter.LegacyMode(keyCountPath) is { } moved)
+            {
+                created.KeyCount = moved;
+                created.SaveMigrated(path);
+            }
+            return created;
+        }
         var json = File.ReadAllText(path);
         if (JsonNode.Parse(json, documentOptions: DocumentOptions) is not JsonObject values) throw new JsonException("config.json の一番上が { } ではありません");
         var version = values[nameof(SettingsVersion)] is JsonValue number && number.TryGetValue<int>(out var v) ? v : 1;
@@ -1219,20 +1229,25 @@ public sealed class Settings
             foreach (var profile in (values[nameof(Profiles)] as JsonArray ?? []).OfType<JsonObject>())
                 if (profile[nameof(SettingsProfile.Values)] is JsonObject profileValues) MigrateToV13(profileValues);
         }
+        // 打鍵数を数えるかは、前の版が keycount.json に書いていた。ここで選んだ値があれば、移さない
+        var legacyKeyCount = values.ContainsKey(nameof(KeyCount)) ? null : KeyCounter.LegacyMode(keyCountPath);
         var settings = values.Deserialize(JsonType) ?? new Settings();
         settings.SettingsVersion = version;
+        if (legacyKeyCount is { } keyCount) settings.KeyCount = keyCount;
         // 動作モードが IME 自動切替 (消した) だった: Meltype IME として読んでいる (InputModeJsonConverter)。保存して名前を書き直す
         var autoSwitch = TopLevelStringIs(json, nameof(Mode), "AutoSwitch");
         var migrated = settings.Migrate();
         // 移行したキーの競合も保存前に除外し、次回起動時の再通知を防ぐ。
         settings.Normalize();
-        if (migrated || autoSwitch)
-        {
-            // 保存できなくても、読み込んだ設定は使う (既定値に戻すと、次の保存でユーザーの設定が消える)。
-            try { settings.Save(path); }
-            catch (Exception ex) when (DataFile.IsFileError(ex)) { Diagnostics.Log.Warn($"移行した config.json を保存できませんでした: {ex.Message}"); }
-        }
+        if (migrated || autoSwitch || legacyKeyCount is not null) settings.SaveMigrated(path);
         return settings;
+    }
+
+    // 保存できなくても、読み込んだ設定は使う (既定値に戻すと、次の保存でユーザーの設定が消える)。
+    private void SaveMigrated(string path)
+    {
+        try { Save(path); }
+        catch (Exception ex) when (DataFile.IsFileError(ex)) { Diagnostics.Log.Warn($"移行した config.json を保存できませんでした: {ex.Message}"); }
     }
 
     /// <summary>config.json の一番上の項目 property が、文字列の value か (プロファイルの中の値は見ない)。</summary>

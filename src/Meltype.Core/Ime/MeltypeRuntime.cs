@@ -161,36 +161,13 @@ public sealed class MeltypeRuntime : IDisposable
     /// </summary>
     public KeyCounter StartKeyCount()
     {
-        var counter = new KeyCounter(Path.Combine(DataDirectory, "keycount.json"));
-        MoveLegacyKeyCountMode(counter);
+        var counter = new KeyCounter(Path.Combine(DataDirectory, KeyCounter.FileName));
         _keyCounter = counter;
         _keyCountSave = new Timer(_ => counter.Save(), null, 60_000, 60_000);
         _discordPresence = new DiscordPresence(
             () => Settings.Current.KeyCount == KeyCountMode.CountAndDiscord,
             () => new DiscordPresence.Stats(counter.OnDay(DateTime.Today), counter.Total));
         return counter;
-    }
-
-    // 前の版は keycount.json に書いていた。config.json に書けなければ、次に起動したときに移す
-    internal void MoveLegacyKeyCountMode(KeyCounter counter)
-    {
-        if (counter.LegacyMode is not { } mode) return;
-        try
-        {
-            Settings.Edit(settings =>
-            {
-                var next = settings.Clone();
-                next.KeyCount = mode;
-                return next;
-            });
-        }
-        catch (Exception ex) when (DataFile.IsFileError(ex))
-        {
-            Diagnostics.Log.Warn($"打鍵数の設定を config.json に移せませんでした: {ex.Message}");
-            return;
-        }
-        counter.ForgetLegacyMode();
-        counter.Save();
     }
 
     // 修飾キーは、フロントが送るもの (左右の Alt) と送らないものがあるので数えない

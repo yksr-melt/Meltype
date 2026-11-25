@@ -186,26 +186,40 @@ internal static class RuntimeTests
     [Test]
     public static void KeyCountMode_MovesFromKeyCountFile()
     {
-        foreach (var (json, expected) in new[]
+        const string on = "{\"Total\":5,\"Enabled\":true,\"DiscordPresence\":true}";
+        foreach (var (config, keyCount, expected) in new[]
         {
-            ("{\"Total\":5}", KeyCountMode.Off),
-            ("{\"Total\":5,\"Enabled\":false,\"DiscordPresence\":true}", KeyCountMode.Off),
-            ("{\"Total\":5,\"Enabled\":true,\"DiscordPresence\":false}", KeyCountMode.Count),
-            ("{\"Total\":5,\"Enabled\":true,\"DiscordPresence\":true}", KeyCountMode.CountAndDiscord),
+            (null, "{\"Total\":5}", KeyCountMode.Off),
+            (null, "{\"Total\":5,\"Enabled\":false,\"DiscordPresence\":true}", KeyCountMode.Off),
+            (null, "{\"Total\":5,\"Enabled\":true,\"DiscordPresence\":false}", KeyCountMode.Count),
+            (null, on, KeyCountMode.CountAndDiscord),
+            (null, "{\"Enabled\":", KeyCountMode.Off),
+            ("{\"SettingsVersion\":12}", on, KeyCountMode.CountAndDiscord),
+            ("{\"SettingsVersion\":13}", on, KeyCountMode.CountAndDiscord),
+            // 選んだ値を、前の版の値で上書きしない
+            ("{\"SettingsVersion\":13,\"KeyCount\":\"Off\"}", on, KeyCountMode.Off),
+            ("{\"SettingsVersion\":13,\"KeyCount\":\"Count\"}", on, KeyCountMode.Count),
         })
         {
-            WithRuntime((runtime, directory) =>
+            var directory = Path.Combine(Path.GetTempPath(), "meltype-runtime-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            try
             {
-                var path = Path.Combine(directory, "keycount.json");
-                File.WriteAllText(path, json);
-                // StartKeyCount は「数えて Discord に表示する」で、動いている Discord につなぐ
-                var counter = new KeyCounter(path);
-                runtime.MoveLegacyKeyCountMode(counter);
-                Assert.Equal(5L, new KeyCounter(path).Total);
-                Assert.Equal(expected, runtime.Settings.Current.KeyCount, json);
-                // 移したあとで変えた設定を、次に起動したときに戻さない
-                Assert.True(!File.ReadAllText(path).Contains("Enabled", StringComparison.Ordinal), json);
-            });
+                var (configPath, keyCountPath) = (Path.Combine(directory, "config.json"), Path.Combine(directory, "keycount.json"));
+                if (config is not null) File.WriteAllText(configPath, config);
+                File.WriteAllText(keyCountPath, keyCount);
+                var label = $"{config} {keyCount}";
+                Assert.Equal(expected, Settings.Load(configPath).KeyCount, label);
+                // 前の版の値が消えても (打鍵数を保存した)、移した設定は残る
+                new KeyCounter(keyCountPath).Save();
+                if (keyCount == on)
+                {
+                    Assert.True(!File.ReadAllText(keyCountPath).Contains("Enabled", StringComparison.Ordinal), label);
+                    Assert.Equal(5L, new KeyCounter(keyCountPath).Total, label);
+                }
+                Assert.Equal(expected, Settings.Load(configPath).KeyCount, label);
+            }
+            finally { Directory.Delete(directory, recursive: true); }
         }
     }
 

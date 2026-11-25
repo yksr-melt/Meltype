@@ -18,6 +18,8 @@ namespace Meltype.Input;
 /// </summary>
 public sealed partial class KeyCounter
 {
+    internal const string FileName = "keycount.json";
+
     public sealed class Data
     {
         public long Total { get; set; }
@@ -29,7 +31,7 @@ public sealed partial class KeyCounter
         public Dictionary<string, long> Keys { get; set; } = [];
         /// <summary>取り込んだテキストの SHA-256 (取り込んだ順)。同じものを 2 回取り込んで 2 倍にしないため。</summary>
         public List<string> ImportedHashes { get; set; } = [];
-        /// <summary>前の版が keycount.json に書いた、数えるかどうか・Discord に出すか。設定に移したら null にして、保存しない (<see cref="LegacyMode"/>)。</summary>
+        /// <summary>前の版が書いた、数えるかどうか・Discord に出すか。設定に移す (<see cref="LegacyMode"/>) ので、読んでも保存しない。</summary>
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public bool? Enabled { get; set; }
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -58,39 +60,39 @@ public sealed partial class KeyCounter
             data.Keys ??= [];
             data.ImportedHashes ??= [];
             if (data.Hours is not { Length: 24 }) data.Hours = new long[24];
-            lock (_lock) _data = data;
+            lock (_lock)
+            {
+                // 設定は先に移してある (Settings.LoadOrThrow)
+                _dirty = LegacyMode(data) is not null;
+                (data.Enabled, data.DiscordPresence) = (null, null);
+                _data = data;
+            }
         });
 
     public static string DayKey(DateTime day) => day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
-    /// <summary>前の版が keycount.json に書いた設定。無い・設定に移し終えたなら null。</summary>
-    internal KeyCountMode? LegacyMode
+    /// <summary>前の版が keycount.json に書いた設定。無い・読めないなら null (読めないことは、打鍵数を読むときにログに書く)。</summary>
+    internal static KeyCountMode? LegacyMode(string path)
     {
-        get
+        if (!File.Exists(path)) return null;
+        try
         {
-            lock (_lock)
-            {
-                return (_data.Enabled, _data.DiscordPresence) switch
-                {
-                    (null, null) => null,
-                    (true, true) => KeyCountMode.CountAndDiscord,
-                    (true, _) => KeyCountMode.Count,
-                    _ => KeyCountMode.Off,
-                };
-            }
+            return JsonSerializer.Deserialize(File.ReadAllText(path), KeyCountJsonContext.Default.Data) is { } data ? LegacyMode(data) : null;
+        }
+        // 利用者が書き換えられる中身なので、型で絞らない (DataFile)。ここで投げると、config.json ごと読めなくなる
+        catch (Exception)
+        {
+            return null;
         }
     }
 
-    /// <summary>前の版の設定を移し終えたので、次の保存で keycount.json から消す。</summary>
-    internal void ForgetLegacyMode()
+    private static KeyCountMode? LegacyMode(Data data) => (data.Enabled, data.DiscordPresence) switch
     {
-        lock (_lock)
-        {
-            _data.Enabled = null;
-            _data.DiscordPresence = null;
-            _dirty = true;
-        }
-    }
+        (null, null) => null,
+        (true, true) => KeyCountMode.CountAndDiscord,
+        (true, _) => KeyCountMode.Count,
+        _ => KeyCountMode.Off,
+    };
 
     /// <summary>
     /// フックで見た 1 打鍵を数える。押しっぱなしの繰り返しは数えない (離すまで 1 回)。
@@ -190,7 +192,7 @@ public sealed partial class KeyCounter
     {
         lock (_lock)
         {
-            _data = new Data { Enabled = _data.Enabled, DiscordPresence = _data.DiscordPresence };
+            _data = new Data();
             _dirty = true;
         }
     }
