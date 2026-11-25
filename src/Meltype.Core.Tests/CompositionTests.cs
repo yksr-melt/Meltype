@@ -258,6 +258,7 @@ internal static class CompositionTests
         public bool NonConvertCyclesKana { get => Settings.NonConvertCyclesKana; set => Settings.NonConvertCyclesKana = value; }
         public bool EnglishFirstInput { get => Settings.EnglishFirstInput; set => Settings.EnglishFirstInput = value; }
         public bool ConsonantAbbreviations { get => Settings.ConsonantAbbreviations; set => Settings.ConsonantAbbreviations = value; }
+        public bool KeigoMode { get => Settings.KeigoMode; set => Settings.KeigoMode = value; }
 
         /// <summary>句読点の組み合わせ (設定)。</summary>
         public Meltype.Config.PunctuationStyle Punctuation { get => Settings.Punctuation; set => Settings.Punctuation = value; }
@@ -6657,5 +6658,65 @@ internal static class CompositionTests
             k.Type(keys);
             return Meltype.Diagnostics.Log.Snapshot().Last(e => e.Level == Meltype.Diagnostics.LogLevel.Decision && e.Message.StartsWith("確定:", StringComparison.Ordinal)).Message;
         }
+    }
+
+    [Test]
+    public static void KeigoMode_RealtimeConversion()
+    {
+        foreach (var (typed, expected) in new[]
+        {
+            ("ryoukai", "承知いたしました"),
+            ("arigatou", "ありがとうございます"),
+            ("sumimasen", "申し訳ございません"),
+            ("kyouhaiku", "本日は伺います"),
+            ("sakkiokutta", "先ほどお送りいたしました"),
+            ("ohayo", "おはようございます"),
+            ("makasete", "お任せください"),
+            ("osakini", "お先に失礼いたします"),
+            ("daijoubudesu", "問題ございません"),
+            ("susunda", "進みました"),
+        })
+        {
+            var k = new Keyboard(live: true) { KeigoMode = true };
+            k.Type(typed);
+            Assert.Equal(expected, k.Showing, $"ライブ変換: {typed}");
+            Assert.True(k.Host.View?.ContextHint?.StartsWith("敬語モード ON", StringComparison.Ordinal) == true, "入力中に敬語モード ON を表示");
+            k.Type("\n");
+            Assert.Equal(expected, k.Host.Document, $"確定: {typed}");
+        }
+
+        // 二重敬語・疑問文の精度確認 (KeigoConverter 直接)
+        var doubleKeigo = new List<Clause> { new("ありがとう", false, ["ありがとう"]), new("ございます", false, ["ございます"]) };
+        KeigoConverter.Apply(doubleKeigo);
+        Assert.Equal("ありがとうございます", string.Concat(doubleKeigo.Select(c => c.Text)), "二重敬語にしない");
+
+        var question = new List<Clause> { new("みた？", false, ["見た？"]) };
+        KeigoConverter.Apply(question);
+        Assert.Equal("ご覧になりましたでしょうか？", question[0].Text, "疑問文は相手への尊敬・丁寧形にする");
+
+        var pastDa = new List<Clause> { new("よんだ", false, ["読んだ"]) };
+        KeigoConverter.Apply(pastDa);
+        Assert.Equal("拝読いたしました", pastDa[0].Text, "動詞の過去形を「読んです」にしない");
+
+        var nominalDa = new List<Clause> { new("よていだ", false, ["予定だ"]) };
+        KeigoConverter.Apply(nominalDa);
+        Assert.Equal("予定です", nominalDa[0].Text, "名詞+だ は です にする");
+
+        var adj = new List<Clause> { new("むずかしい", false, ["難しい"]) };
+        KeigoConverter.Apply(adj);
+        Assert.Equal("難しいです", adj[0].Text, "い形容詞の文末は です を付ける");
+
+        var politeAlready = new List<Clause> { new("かくにんいたします", false, ["確認いたします"]) };
+        KeigoConverter.Apply(politeAlready);
+        Assert.Equal("確認いたします", politeAlready[0].Text, "すでに敬語の文末は変えない");
+
+        var noFalseKyou = new List<Clause> { new("いまにほん", false, ["今日本"]) };
+        KeigoConverter.Apply(noFalseKyou);
+        Assert.Equal("今日本", noFalseKyou[0].Text, "「今日本」の途中を「本日」に誤置換しない");
+
+        // OFF (既定) なら通常のまま
+        var off = new Keyboard(live: true);
+        off.Type("ryoukai");
+        Assert.True(off.Showing != "承知いたしました", "OFF は通常のまま: " + off.Showing);
     }
 }

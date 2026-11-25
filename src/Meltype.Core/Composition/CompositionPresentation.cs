@@ -66,20 +66,29 @@ internal static class CompositionPresentation
         if (!selected.Expanded) CompositionConversion.Expand(env, selected);
         // 出している文節に Zenzai の答えがあれば、説明の頭に「Zenzai」と出す (学習・選び直しで変わった文節は数えない。issue #1152)
         var zenzai = conversion.Clauses.Any(c => c.ZenzaiText is { } z && c.Text == z);
+        var keigo = env.Settings.KeigoMode;
+        var prefix = (keigo ? "敬語モード ON · " : "") + (zenzai ? "Zenzai · " : "");
+        var contextHint = (keigo, zenzai) switch
+        {
+            (true, true) => "敬語モード ON · Zenzai",
+            (true, false) => "敬語モード ON",
+            (false, true) => "Zenzai",
+            _ => null,
+        };
         var clauses = conversion.Clauses.Select(c => Composed([c])).ToList();
         return new ComposedView(
             ComposedText.Concat(clauses),
             [.. selected.Candidates.Select(c => Candidate(selected, c))],
             selected.Index,
             true,
-            (zenzai ? "Zenzai · " : "") + "←→ 文節　Space/↓ 候補　1〜9 選択　Shift+←→ 区切り　Enter 確定　Esc 戻る",
+            prefix + "←→ 文節　Space/↓ 候補　1〜9 選択　Shift+←→ 区切り　Enter 確定　Esc 戻る",
             clauses,
             conversion.Selected,
             CandidateNotes(selected),
             CandidateMeaning(env, selected),
             Suggestion(CompositionSpelling.MisspellingSuggestion(input, env)),
             Typed: TypedKeys(input, conversion, env),
-            Committed: ComposedText.Concat(clauses), ContextHint: zenzai ? "Zenzai" : null);
+            Committed: ComposedText.Concat(clauses), ContextHint: contextHint);
     }
 
     private static ComposedView TypingView(CompositionInput input, CompositionEnv env)
@@ -99,6 +108,11 @@ internal static class CompositionPresentation
         {
             contextHint = "Tab 予測の候補を選ぶ";
             hint = contextHint + "　" + hint;
+        }
+        if (env.Settings.KeigoMode)
+        {
+            contextHint = contextHint is null ? "敬語モード ON" : $"敬語モード ON · {contextHint}";
+            hint = "敬語モード ON · " + hint;
         }
         var selected = predictionIndex >= 0 ? PredictionText(predictions[predictionIndex]) : null;
         var display = selected ?? CurrentComposed(input, env, final: false);

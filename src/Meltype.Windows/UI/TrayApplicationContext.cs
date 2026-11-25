@@ -23,10 +23,12 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly HotkeyWindow _registerHotkey;
     private readonly Control _invoker = new();
     private readonly Icon _onIcon = CreateIcon("あ", Color.FromArgb(0, 120, 212));
+    private readonly Icon _keigoIcon = CreateIcon("敬", Color.FromArgb(124, 58, 237));
     private readonly Icon _directIcon = CreateIcon("A", Color.FromArgb(0, 120, 212));
     private readonly Icon _offIcon = CreateIcon("A", Color.FromArgb(120, 120, 120));
     private readonly ToolStripMenuItem _keyboardModeItem;
     private readonly ToolStripMenuItem _autoDetectionItem;
+    private readonly ToolStripMenuItem _keigoModeItem;
     private readonly ToolStripMenuItem _profileItem;
     private readonly Composition.CompositionService _composition;
     private readonly Tip.TipServer _tipServer;
@@ -92,6 +94,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
         // 英語 / 日本語の自動判定 (OFF なら提案だけ出し、Tab で英字にする)
         _autoDetectionItem = new ToolStripMenuItem("英語 / 日本語を自動で判定する", null, (_, _) => ToggleAutoDetection());
         menu.Items.Add(_autoDetectionItem);
+        _keigoModeItem = new ToolStripMenuItem("敬語モード", null, (_, _) => ToggleKeigoMode());
+        menu.Items.Add(_keigoModeItem);
         // プロファイル (仕事用・趣味用・SNS 用など)。一覧は開くたびに作る (設定画面で足したもの・名前を変えたものを出す)
         _profileItem = new ToolStripMenuItem("プロファイル");
         _profileItem.DropDownItems.Add("(読み込み中)");
@@ -504,6 +508,14 @@ internal sealed class TrayApplicationContext : ApplicationContext
         UpdateStatus();
     }
 
+    private void ToggleKeigoMode()
+    {
+        _engine.EditSettings(settings => settings.KeigoMode = !settings.KeigoMode);
+        UpdateStatus();
+        if (_engine.Settings.ShowNotifications)
+            ShowBalloonTip(1500, "Meltype", _engine.Settings.KeigoMode ? "敬語モードを ON にしました" : "敬語モードを OFF にしました");
+    }
+
     private void SetMode(InputMode mode)
     {
         if (AppPaths.IsPortable && mode != InputMode.Keyboard) return;
@@ -531,6 +543,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         var registered = Tip.TipServer.IsRegistered;
         _tsfModeItem.Enabled = tsf || Tip.TipServer.IsUsable || CanRegisterTsf;
         _autoDetectionItem.Checked = settings.AutoDetection;
+        _keigoModeItem.Checked = settings.KeigoMode;
         _profileItem.Text = $"プロファイル: {settings.ActiveProfile}";
 
         string status;
@@ -541,13 +554,15 @@ internal sealed class TrayApplicationContext : ApplicationContext
         }
         else if (tsf)
         {
-            _tray.Icon = _onIcon;
-            status = registered ? "Meltype IME (Win + Space で Meltype を選んで入力)" : "Meltype IME が登録されていません (トレイの「Meltype IME」を選ぶと登録できます)";
+            _tray.Icon = settings.KeigoMode ? _keigoIcon : _onIcon;
+            status = registered
+                ? (settings.KeigoMode ? "Meltype IME (敬語モード ON)" : "Meltype IME (Win + Space で Meltype を選んで入力)")
+                : "Meltype IME が登録されていません (トレイの「Meltype IME」を選ぶと登録できます)";
         }
         else
         {
-            _tray.Icon = _keyboard.Japanese ? _onIcon : _directIcon;
-            status = _keyboard.Japanese ? "キーボード: 日本語" : "キーボード: 直接入力 (半角/全角 で日本語)";
+            _tray.Icon = _keyboard.Japanese ? (settings.KeigoMode ? _keigoIcon : _onIcon) : _directIcon;
+            status = _keyboard.Japanese ? (settings.KeigoMode ? "キーボード: 日本語 (敬語モード ON)" : "キーボード: 日本語") : "キーボード: 直接入力 (半角/全角 で日本語)";
         }
         _statusItem.Text = status;
         var zenzai = _composition.Runtime.ZenzaiStatus();
@@ -646,6 +661,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _registerHotkey.Dispose();
         _tray.Visible = false;
         _tray.Dispose();
+        _keigoIcon.Dispose();
         _invoker.Dispose();
         base.ExitThreadCore();
     }
