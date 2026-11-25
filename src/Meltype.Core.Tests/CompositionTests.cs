@@ -6793,6 +6793,27 @@ internal static class CompositionTests
         KeigoConverter.Apply(adjQuest);
         Assert.Equal("危ないでしょうか？", adjQuest[0].Text, "『危ございませんでしょうか？』にしない");
 
+        // 会社・ビジネス実戦 (複文接続・二重敬語回避・メール定型)
+        var compound = new List<Clause> { new("しゅうせいしたから、", false, ["修正したから、"]), new("みてほしい", false, ["見てほしい"]) };
+        KeigoConverter.Apply(compound);
+        Assert.Equal("修正いたしましたので、ご覧いただけますでしょうか", string.Concat(compound.Select(c => c.Text)), "複文の『〜したから』もビジネス敬語にする");
+
+        var compoundKedo = new List<Clause> { new("よていだけど、", false, ["予定だけど、"]), new("れんらくする", false, ["連絡する"]) };
+        KeigoConverter.Apply(compoundKedo);
+        Assert.Equal("予定ですが、ご連絡いたします", string.Concat(compoundKedo.Select(c => c.Text)), "名詞+だけど → ですが");
+
+        var bizQuest = new List<Clause> { new("かくにんした？", false, ["確認した？"]) };
+        KeigoConverter.Apply(bizQuest);
+        Assert.Equal("ご確認いただけましたでしょうか？", bizQuest[0].Text, "二重敬語『ご確認されましたでしょうか』を避ける");
+
+        var doneQuest = new List<Clause> { new("おわった？", false, ["終わった？"]) };
+        KeigoConverter.Apply(doneQuest);
+        Assert.Equal("お済みでしょうか？", doneQuest[0].Text, "ビジネスで自然な完了確認");
+
+        var bizIdiom = new List<Clause> { new("おせわになります", false, ["お世話になります"]) };
+        KeigoConverter.Apply(bizIdiom);
+        Assert.Equal("お世話になっております", bizIdiom[0].Text, "メール書き出し定型");
+
         // OFF (既定) なら通常のまま
         var off = new Keyboard(live: true);
         off.Type("ryoukai");
