@@ -6948,6 +6948,23 @@ internal static class CompositionTests
         KeigoConverter.Apply(tekureteExplain);
         Assert.Equal("ご説明いただきありがとうございます", string.Concat(tekureteExplain.Select(c => c.Text)), "説明してくれて＋ありがとう → ご説明いただきありがとうございます");
 
+        // 文化庁『敬語の指針』準拠 (着る/寝る/座る/尋ねる/待つ)
+        var bossWear = new List<Clause> { new("しゃちょうが", false, ["社長が"]), new("きた", false, ["着た"]) };
+        KeigoConverter.Apply(bossWear);
+        Assert.Equal("社長がお召しになりました", string.Concat(bossWear.Select(c => c.Text)), "社長が着た → お召しになりました");
+
+        var selfWait = new List<Clause> { new("まっている", false, ["待っている"]) };
+        KeigoConverter.Apply(selfWait);
+        Assert.Equal("お待ちしております", selfWait[0].Text, "待っている → お待ちしております");
+
+        var selfAsk = new List<Clause> { new("たずねた", false, ["尋ねた"]) };
+        KeigoConverter.Apply(selfAsk);
+        Assert.Equal("伺いました", selfAsk[0].Text, "尋ねた → 伺いました");
+
+        var sitDown = new List<Clause> { new("すわって", false, ["座って"]) };
+        KeigoConverter.Apply(sitDown);
+        Assert.Equal("お掛けください", sitDown[0].Text, "座って → お掛けください");
+
         // OFF (既定) なら通常のまま
         var off = new Keyboard(live: true);
         off.Type("ryoukai");
