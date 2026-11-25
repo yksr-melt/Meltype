@@ -80,9 +80,9 @@ internal static class LineContext
             }
             var atStart = lineStart && !char.IsWhiteSpace(c);
             if (!char.IsWhiteSpace(c)) lineStart = false;
-            if (SchemeSlashes(text, i) is > 0 and var slashes)
+            if (UrlLength(text, i) is > 0 and var url)
             {
-                i += slashes - 1;
+                i += url - 1;
                 continue;
             }
             string? open = null;
@@ -142,9 +142,9 @@ internal static class LineContext
                 quote = c;
                 continue;
             }
-            if (SchemeSlashes(line, i) is > 0 and var slashes)
+            if (UrlLength(line, i) is > 0 and var url)
             {
-                i += slashes - 1;
+                i += url - 1;
                 continue;
             }
             if (StartsWith(line, i, "//")) return LineKind.Comment;
@@ -174,15 +174,22 @@ internal static class LineContext
         return quote is null ? LineKind.Code : LineKind.String;
     }
 
-    // #1623: http:// や file:/// のスキーム名の後の / の数 (それ以外は 0)。コメントの // とみなさない。
-    // :// はほぼ URL にしか出ないので、スキーム名は一覧にせず「英字 + :」で見分ける。
-    // URL の残りは読み飛ばさず、続く // や # はコメントとして調べる (URL の終わりが分からないため)。
-    private static int SchemeSlashes(string text, int index)
+    // #1623: http:// や file:/// のスキーム名の後の / から URL の終わりまでの長さ (URL でなければ 0)。
+    // URL の中の // と /* (gs://bucket/* のワイルドカード) をコメントとみなさない。
+    // :// はほぼ URL にしか出ないので、スキーム名は一覧にせず「英字で始まり英数字・+・-・. が続く名前 + :」で見分ける (s3://・git+ssh://)。
+    // URL には空白と引用符が入らないので、そこを URL の終わりとする。後ろの // や # はコメントとして調べる。
+    private static int UrlLength(string text, int index)
     {
-        if (index < 2 || text[index - 1] != ':' || !char.IsAsciiLetter(text[index - 2])) return 0;
-        var end = index;
-        while (end < text.Length && text[end] == '/') end++;
-        return end - index is 2 or 3 ? end - index : 0;
+        if (index < 2 || text[index - 1] != ':') return 0;
+        var scheme = index - 1;
+        while (scheme > 0 && (char.IsAsciiLetterOrDigit(text[scheme - 1]) || text[scheme - 1] is '+' or '-' or '.')) scheme--;
+        if (scheme == index - 1 || !char.IsAsciiLetter(text[scheme])) return 0;
+        var slashes = index;
+        while (slashes < text.Length && text[slashes] == '/') slashes++;
+        if (slashes - index is not (2 or 3)) return 0;
+        var end = slashes;
+        while (end < text.Length && !char.IsWhiteSpace(text[end]) && text[end] is not ('"' or '\'' or '`')) end++;
+        return end - index;
     }
 
     /// <summary>

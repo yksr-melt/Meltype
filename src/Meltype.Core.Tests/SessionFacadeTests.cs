@@ -856,7 +856,7 @@ internal static class SessionFacadeTests
     public static void CodeInput_UrlSchemesRemainCode()
     {
         // #1623: http:// の // はコメントではない。
-        foreach (var input in new[] { "curl http://example.com/a", "curl HTTPS://example.com", "open file:///tmp/a", "x=git+ssh://a" })
+        foreach (var input in new[] { "curl http://example.com/a", "curl HTTPS://example.com", "open file:///tmp/a", "x=git+ssh://a", "aws s3 cp s3://bucket/a", "curl -x socks5://localhost", "curl http://a/b//", "gsutil ls gs://bucket/*" })
         {
             var session = Create();
             session.CodeInput = true;
@@ -866,11 +866,18 @@ internal static class SessionFacadeTests
             Assert.True(Type(session, " ima", field).All(r => !r.Consumed && r.View is null), input);
         }
         // URL の後ろや前のコメント、引用符の中は今までどおり日本語。
-        foreach (var before in new[] { "curl http://a // ", "curl http://a #", "x = 1 // http://a ", "s = \"http://a ", "curl http://a/b//" })
+        foreach (var before in new[] { "curl http://a // ", "curl http://a #", "x = 1 // http://a ", "s = \"http://a " })
         {
             var session = Create();
             session.CodeInput = true;
             Assert.Equal("いま", Type(session, "ima", new Field(before))[^1].View?.Text, before);
+        }
+        // URL の中の /* (ワイルドカード) は複数行コメントの始まりではない。次の行はコードのまま。
+        foreach (var before in new[] { "gsutil ls gs://bucket/*\n", "origins:\n  - https://example.com/*\n  - ", "const a = `https://x/*`;\n" })
+        {
+            var session = Create();
+            session.CodeInput = true;
+            Assert.True(Type(session, "ima", new Field(before)).All(r => !r.Consumed && r.View is null), before);
         }
     }
 
