@@ -235,7 +235,8 @@ internal static class BackgroundConversionTests
             var chosen = moved?.Text;
             Assert.True(chosen != "にほんご", $"選び直した: {chosen}");
             release.Set();
-            var view = RefreshUntil(session, v => v.Candidates.Contains("日本語"));
+            // 1 回の作り直しの途中で答えが届くと、日本語 が にほんご の下に入った一覧が一度出る。答えがすべて届いた後の一覧を待つ
+            var view = RefreshUntil(session, v => v.Candidates is ["日本語", ..]);
             Assert.Equal(chosen, view?.Text, "選んでいる候補は変えない");
             Assert.Equal("日本語", view?.Candidates[0], "新しい候補は上に入る");
             Assert.Equal(view!.Candidates.ToList().IndexOf(chosen!), view.SelectedIndex);
@@ -277,7 +278,7 @@ internal static class BackgroundConversionTests
             Assert.Equal("日本語", string.Concat(committed.Commits.Select(c => c.Text)), $"確定: {focusCommit}");
 
             converter.Clauses = [new("にほんご", "二本語")];
-            var arrived = session.Send(ImeEventType.ConversionFinished);
+            var arrived = session.Send(new ImeEvent.ConversionFinished());
             Assert.True(arrived.View is null && arrived.Commits.Count == 0, "確定後の答えで未確定入力を復活させず、二重に確定しない");
 
             converter.Clauses = [new("きょう", "今日")];
@@ -302,7 +303,7 @@ internal static class BackgroundConversionTests
             else session.HandleKey(VirtualKeys.Escape, null, false, false, false, false);
 
             converter.Clauses = [new("にほんご", "二本語")];
-            var arrived = session.Send(ImeEventType.ConversionFinished);
+            var arrived = session.Send(new ImeEvent.ConversionFinished());
             Assert.True(arrived.View is null && arrived.Commits.Count == 0, $"取り消した入力を後から表示・確定しない: {deleteAll}");
             Assert.True(!session.IsComposing, "入力は終わっている");
         }
