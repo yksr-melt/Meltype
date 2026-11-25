@@ -76,7 +76,10 @@ internal sealed class LanguageMemory
         var read = Config.DataFile.Load(path, "英語 / 日本語の学習データ", content =>
         {
             var loaded = JsonSerializer.Deserialize(content, Config.LearningJsonContext.Default.Languages);
-            if (loaded is not null) foreach (var (word, entry) in loaded) entries[word] = entry;
+            // 値が null の語は捨てる (手で書き換えたファイル・細工したバックアップ。System.Text.Json は辞書の値の null を拒まない)
+            if (loaded is not null)
+                foreach (var (word, entry) in loaded)
+                    if (entry is not null) entries[word] = entry;
         }, stamp);
         return read ? entries : null;
     }
