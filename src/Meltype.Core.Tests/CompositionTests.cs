@@ -6740,6 +6740,28 @@ internal static class CompositionTests
         KeigoConverter.Apply(splitQuest);
         Assert.Equal("ご覧になりましたでしょうか？", string.Concat(splitQuest.Select(c => c.Text)), "別文節の疑問符でも尊敬・丁寧疑問形にする");
 
+        // ですます調からの敬語変換
+        var masu = new List<Clause> { new("たべます", false, ["食べます"]) };
+        KeigoConverter.Apply(masu);
+        Assert.Equal("いただきます", masu[0].Text, "ですます調 (食べます) も敬語にする");
+
+        var masuTeiru = new List<Clause> { new("かくにんしています", false, ["確認しています"]) };
+        KeigoConverter.Apply(masuTeiru);
+        Assert.Equal("確認しております", masuTeiru[0].Text, "ですます調 (確認しています) も敬語にする");
+
+        // 主語の手がかりによる尊敬語 / 謙譲語の自動判別
+        var sonkeigo = new List<Clause> { new("しゃちょうが", false, ["社長が"]), new("みます", false, ["見ます"]) };
+        KeigoConverter.Apply(sonkeigo);
+        Assert.Equal("社長がご覧になります", string.Concat(sonkeigo.Select(c => c.Text)), "目上が主語のときは尊敬語");
+
+        var sonkeigoBefore = new List<Clause> { new("きます", false, ["来ます"]) };
+        KeigoConverter.Apply(sonkeigoBefore, before: "お客様は");
+        Assert.Equal("お越しになります", sonkeigoBefore[0].Text, "直前の文脈に相手主語があるときも尊敬語");
+
+        var kenjougo = new List<Clause> { new("わたしが", false, ["私が"]), new("みます", false, ["見ます"]) };
+        KeigoConverter.Apply(kenjougo);
+        Assert.Equal("私が拝見いたします", string.Concat(kenjougo.Select(c => c.Text)), "自分が主語のときは謙譲語");
+
         // OFF (既定) なら通常のまま
         var off = new Keyboard(live: true);
         off.Type("ryoukai");

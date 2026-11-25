@@ -424,7 +424,7 @@ internal static class CompositionConversion
         // 変換エンジンに文脈 (英単語・これ) を渡しても、名詞の読みを前に付けて変換しても、なら・しか・しよう は直らなかった。
         // 変換エンジンが英単語を前の文脈として受け取り、後ろの読みを付属語として変換するようになったら消せる
         if (afterEnglish && japanese.Count > 0 && IsParticleAfterEnglish(japanese[0])) Prefer(japanese[0], japanese[0].Reading);
-        if (env.Settings.KeigoMode) KeigoConverter.Apply(japanese);
+        if (env.Settings.KeigoMode) KeigoConverter.Apply(japanese, before);
         return japanese;
     }
 
