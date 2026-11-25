@@ -1099,12 +1099,12 @@ internal static class ImeContractTests
     [Test]
     public static void List_IsOneAndSelectReadsTheLastOne()
     {
-        // 入力中の変換の候補 (設定「入力中も変換候補をいくつか表示」) も、変換の候補と同じ一覧で渡す。select の番号は前の応答の一覧で読む
+        // select の番号は前の応答の一覧で読む
         var front = new Front();
-        front.Settings.ShowCandidatesWhileTyping = true;
-        var list = front.Type("kyou")[^1].GetProperty("result").GetProperty("view").GetProperty("candidates");
+        front.Type("kyou");
+        var list = front.Key(' ').GetProperty("result").GetProperty("view").GetProperty("candidates");
         Assert.True(list.ValueKind == JsonValueKind.Object && list.GetProperty("items").GetArrayLength() > 0 && !list.TryGetProperty("prediction", out _),
-            "入力中も一覧を出す\n" + front.Trace);
+            "変換の候補の一覧\n" + front.Trace);
         var second = list.GetProperty("items")[1].GetString();
         var selected = front.Event("CandidateClicked", extra: ",\"index\":1");
         Assert.Equal(second, selected.GetProperty("result").GetProperty("view").GetProperty("text").GetString(), "見えていた一覧の 2 番目\n" + front.Trace);
@@ -1224,11 +1224,14 @@ internal static class ImeContractTests
     [Test]
     public static void List_IsNumberedOnlyWhenNumberKeysSelect()
     {
-        // 数字キーで選べるのは変換中の候補だけ。入力中の一覧の数字は、そのまま打つ文字になる
-        var front = new Front();
-        front.Settings.ShowCandidatesWhileTyping = true;
+        // 数字キーで選べるのは変換中の候補だけ。予測変換の一覧の数字は、そのまま打つ文字になる
+        var front = new Front { Services = new CompositionServices { Predictor = new Predictor(null, null, null) } };
+        front.Settings.PredictiveCandidates = true;
+        front.Document = "I made ";
         static bool Numbered(JsonElement output) => output.GetProperty("result").GetProperty("view").GetProperty("candidates").GetProperty("numbered").GetBoolean();
-        Assert.True(!Numbered(front.Type("kyou")[^1]), "入力中\n" + front.Trace);
+        Assert.True(!Numbered(front.Type("decis")[^1]), "予測変換\n" + front.Trace);
+        front = new Front();
+        front.Type("kyou");
         Assert.True(Numbered(front.Key(' ')), "変換中\n" + front.Trace);
     }
 
