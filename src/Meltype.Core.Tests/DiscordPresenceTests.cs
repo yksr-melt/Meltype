@@ -88,6 +88,7 @@ internal static class DiscordPresenceTests
     [Test]
     public static void NoDiscord_DoesNotThrowAndDisposesQuickly()
     {
+        if (!OperatingSystem.IsWindows()) return;
         // Discord が起動していなくても例外を外に出さず、すぐ止まる
         var presence = new DiscordPresence(() => true, () => new(1, 1), "0");
         var watch = System.Diagnostics.Stopwatch.StartNew();
