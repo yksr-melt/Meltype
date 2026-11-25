@@ -73,11 +73,12 @@ internal static class CommittedClausesTests
 
     private static (CompositionState State, CompositionEnv Env) Composing(string typed, bool liveConversion, Engine.IKanjiConverter? converter = null, CompositionServices? services = null)
     {
+        var state = new CompositionState();
         var env = new CompositionEnv(CompositionTests.Detector, converter ?? new CompositionTests.FakeConverter(), services ?? new CompositionServices(), new Settings { LiveConversion = liveConversion })
         {
             Context = () => TextContext.None,
+            LiveCache = state.LiveCache,
         };
-        var state = new CompositionState();
         foreach (var c in typed) Press(state, env, char.ToUpperInvariant(c), c);
         return (state, env);
     }

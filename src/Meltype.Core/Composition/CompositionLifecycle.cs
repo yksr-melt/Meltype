@@ -26,9 +26,28 @@ internal static class CompositionLifecycle
     {
         state.PrivateField = value;
         if (!value) return;
-        if (state.Scene is CompositionScene.WithInput { Input: var input }) input.Private = true;
-        if (state.Scene is CompositionScene.Judging judging) judging.Private = true;
+        CompositionScene WithPrivateInput(CompositionScene.WithInput scene)
+        {
+            scene.Input.Private = true;
+            return scene;
+        }
+        state.Scene = state.Scene.Match(new CompositionScene.Cases<CompositionScene>
+        {
+            Japanese = Keep,
+            Direct = Keep,
+            Judging = judging =>
+            {
+                judging.Private = true;
+                return judging;
+            },
+            EnglishWord = Keep,
+            Typing = WithPrivateInput,
+            Converting = WithPrivateInput,
+        });
     }
+
+    /// <summary>場面を移さない。</summary>
+    private static CompositionScene Keep(CompositionScene scene) => scene;
 
     internal static bool Learning(CompositionState state, CompositionInput input, CompositionEnv env) => env.Settings.LearningEnabled && !Private(state) && !input.Private;
 
@@ -38,7 +57,15 @@ internal static class CompositionLifecycle
     internal static bool AutoCorrect(CompositionEnv env) => env.Settings.AutoCorrectAfterCommit && env.Settings.AutoDetection;
 
     /// <summary>変換ボックスに入力中か、英数状態で打ち始めの語を判定中か。</summary>
-    internal static bool IsComposing(CompositionState state) => state.Scene is CompositionScene.WithInput or CompositionScene.Judging;
+    internal static bool IsComposing(CompositionState state) => state.Scene.Match(new CompositionScene.Cases<bool>
+    {
+        Japanese = _ => false,
+        Direct = _ => false,
+        Judging = _ => true,
+        EnglishWord = _ => false,
+        Typing = _ => true,
+        Converting = _ => true,
+    });
 
     /// <summary>変換して候補を選んでいるか。</summary>
     internal static bool IsConverting(CompositionState state) => state.Scene is CompositionScene.Converting;
@@ -55,12 +82,19 @@ internal static class CompositionLifecycle
     });
 
     /// <summary>英数状態で英語と判定した語の続きを打っているか。</summary>
-    internal static bool InEnglishWord(CompositionState state) => state.Scene is CompositionScene.EnglishWord or CompositionScene.Judging { InEnglishWord: true };
+    internal static bool InEnglishWord(CompositionState state) => state.Scene.Match(new CompositionScene.Cases<bool>
+    {
+        Japanese = _ => false,
+        Direct = _ => false,
+        Judging = judging => judging.InEnglishWord,
+        EnglishWord = _ => true,
+        Typing = _ => false,
+        Converting = _ => false,
+    });
 
     /// <summary>英数 (直接入力) にする・やめる。入力中なら、入力が終わったときの英数 / 日本語を変える。</summary>
     internal static void SetDirect(CompositionState state, bool direct)
     {
-        CompositionScene Keep(CompositionScene scene) => scene;
         CompositionScene Return(CompositionScene.WithInput scene)
         {
             scene.Input.Direct = direct;
@@ -92,17 +126,30 @@ internal static class CompositionLifecycle
     internal static void StartEnglishWord(CompositionState state) => state.Scene = new CompositionScene.EnglishWord();
 
     /// <summary>英数状態で打っている語を忘れる (キャレットが動いた・入力モードが変わった)。</summary>
-    internal static void ForgetDirectInput(CompositionState state)
+    internal static void ForgetDirectInput(CompositionState state) => state.Scene = state.Scene.Match(new CompositionScene.Cases<CompositionScene>
     {
-        if (state.Scene is CompositionScene.Judging or CompositionScene.EnglishWord) state.Scene = Idle(true);
-    }
+        Japanese = Keep,
+        Direct = Keep,
+        Judging = _ => Idle(true),
+        EnglishWord = _ => Idle(true),
+        Typing = Keep,
+        Converting = Keep,
+    });
 
     /// <summary>英語と判定した語の続きではなくなった (英数字でない文字を打った)。</summary>
-    internal static void LeaveEnglishWord(CompositionState state)
+    internal static void LeaveEnglishWord(CompositionState state) => state.Scene = state.Scene.Match(new CompositionScene.Cases<CompositionScene>
     {
-        if (state.Scene is CompositionScene.EnglishWord) state.Scene = Idle(true);
-        if (state.Scene is CompositionScene.Judging judging) judging.InEnglishWord = false;
-    }
+        Japanese = Keep,
+        Direct = Keep,
+        Judging = judging =>
+        {
+            judging.InEnglishWord = false;
+            return judging;
+        },
+        EnglishWord = _ => Idle(true),
+        Typing = Keep,
+        Converting = Keep,
+    });
 
     /// <summary>変換ボックスの入力を始める。</summary>
     internal static CompositionInput Begin(CompositionState state, CompositionEnv env, bool privateInput = false, ReconversionSelection? reconversion = null)

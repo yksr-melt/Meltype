@@ -83,7 +83,7 @@ internal sealed record CompositionEnv(CompositionDetector Detector, IKanjiConver
     public bool SlashAtStart { get; init; }
 
     /// <summary>ライブ変換の控え (<see cref="CompositionState.LiveCache"/>)。</summary>
-    public Dictionary<string, List<(string Reading, string? Engine, string Text)>> LiveCache { get; init; } = new(StringComparer.Ordinal);
+    public required Dictionary<string, List<(string Reading, string? Engine, string Text)>> LiveCache { get; init; }
 
     /// <summary>
     /// 入力欄の確定済みの文字を消せるか。消せない入力欄 (Linux で周りの文字の削除に対応していないアプリ) では、
