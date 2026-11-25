@@ -126,7 +126,7 @@ const dictionaries = {
   'readings-rare.txt': {
     format: tabbed(1, 2, ([reading]) => [
       hiragana.test(reading) ? null : `読み「${reading}」がひらがなでない`,
-      [...reading].length >= 5 ? null : `読み「${reading}」が 5 文字より短い`,
+      [...reading].length >= 3 ? null : `読み「${reading}」が 3 文字より短い`,
     ]),
   },
   'readings-extra.txt': {

@@ -3,7 +3,7 @@
 
 using System.Buffers.Binary;
 using System.IO.Pipes;
-using System.Net.Sockets;
+using System.Runtime.Versioning;
 using System.Text;
 using System.Text.Json;
 using Meltype.Config;
@@ -12,7 +12,7 @@ namespace Meltype.Input;
 
 /// <summary>
 /// Discord のステータス (Rich Presence) に打鍵数と起動からの経過時間を出す (打鍵数の「Discord に表示する」。既定は OFF)。
-/// Discord のローカル IPC (Windows は名前付きパイプ discord-ipc-N、macOS・Linux は Unix ソケット) で送り、外のサーバーは使わない。
+/// Discord のローカル IPC (Windows の名前付きパイプ discord-ipc-N) で送り、外のサーバーは使わない。
 /// 送るのは今日と合計の打鍵数・直近の 1 分あたりの打鍵数・Meltype の起動時刻だけ (打った文字・変換候補・入力先のアプリ名は送らない)。
 /// 入力とは別のスレッドで UpdateInterval ごとに送り、Discord が起動していない・切れたときは次の回につなぎ直す (入力には影響しない)。
 /// </summary>
@@ -38,6 +38,7 @@ public sealed class DiscordPresence : IDisposable
     private string? _sent;
     private (long Total, DateTimeOffset At)? _last;
 
+    [SupportedOSPlatform("windows")]
     public DiscordPresence(Func<bool> enabled, Func<Stats> stats, string clientId = ClientId)
     {
         _enabled = enabled;
@@ -135,51 +136,20 @@ public sealed class DiscordPresence : IDisposable
 
     private static async Task<Stream?> OpenAsync(int index, CancellationToken token)
     {
-        var name = $"discord-ipc-{index}";
-        if (OperatingSystem.IsWindows())
+        // パイプの名前はユーザー間で共有で、ほかのユーザーが先に同じ名前のパイプを作って待てる。
+        // CurrentUserOnly は、つないだパイプの所有者が自分でなければ、何も送る前に UnauthorizedAccessException にする
+        var pipe = new NamedPipeClientStream(".", $"discord-ipc-{index}", PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+        try
         {
-            var pipe = new NamedPipeClientStream(".", name, PipeDirection.InOut, PipeOptions.Asynchronous);
-            try
-            {
-                await pipe.ConnectAsync(200, token);
-                return pipe;
-            }
-            catch (Exception ex) when (ex is TimeoutException or IOException)
-            {
-                await pipe.DisposeAsync();
-                return null;
-            }
+            await pipe.ConnectAsync(200, token);
+            return pipe;
         }
-        foreach (var dir in SocketDirectories())
+        // ほかのユーザーが使っている番号なら、自分の Discord は次以降の番号で待っている
+        catch (Exception ex) when (ex is TimeoutException or IOException or UnauthorizedAccessException)
         {
-            var path = Path.Combine(dir, name);
-            if (!File.Exists(path)) continue;
-            var socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
-            try
-            {
-                await socket.ConnectAsync(new UnixDomainSocketEndPoint(path), token);
-                return new NetworkStream(socket, ownsSocket: true);
-            }
-            catch (SocketException)
-            {
-                socket.Dispose();
-            }
+            await pipe.DisposeAsync();
+            return null;
         }
-        return null;
-    }
-
-    /// <summary>macOS・Linux で Discord がソケットを置くところ (Flatpak・Snap 版も)。</summary>
-    private static IEnumerable<string> SocketDirectories()
-    {
-        foreach (var variable in new[] { "XDG_RUNTIME_DIR", "TMPDIR", "TMP", "TEMP" })
-        {
-            var dir = Environment.GetEnvironmentVariable(variable);
-            if (string.IsNullOrEmpty(dir)) continue;
-            yield return dir;
-            yield return Path.Combine(dir, "app", "com.discordapp.Discord");
-            yield return Path.Combine(dir, "snap.discord");
-        }
-        yield return "/tmp";
     }
 
     /// <summary>1 通送って、返事を 1 通読む (読まずにおくと Discord 側が詰まる)。</summary>
