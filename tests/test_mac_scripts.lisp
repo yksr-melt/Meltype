@@ -237,6 +237,7 @@
   (copy-install-script work)
   (fake-tool work "ditto" "cp -R \"$1\" \"$2\"")
   (fake-tool work "codesign" "exit 0")
+  (fake-tool work "install-settings-app.sh" "echo settings >> \"$MELTYPE_TEST_LOG\"")
   (write-file (merge-pathnames "select-input-source.swift" work) "// fake selector")
   (fake-tool work "swift" "echo selected >> \"$MELTYPE_TEST_LOG\"")
   (dolist (name '("pkill" "killall" "xattr" "lsregister"))
@@ -244,7 +245,7 @@
   (fake-tool work "killall" "echo UNEXPECTED_MENU_REFRESH >> \"$MELTYPE_TEST_LOG\"")
   (fake-tool work "open" "echo UNEXPECTED_OPEN >> \"$MELTYPE_TEST_LOG\"; exit 1")
   (run-script work "install.sh" nil)
-  (assert (equal '("app:--register-input-source" "started" "selected")
+  (assert (equal '("app:--register-input-source" "started" "settings" "selected")
                  (uiop:read-file-lines (merge-pathnames "calls" work)))))
 
 (defun test-update-keeps-input-menu (work)
@@ -438,7 +439,10 @@
     (write-file (merge-pathnames "Contents/Info.plist" source)
                 "<?xml version=\"1.0\"?><plist version=\"1.0\"><dict><key>CFBundleIdentifier</key><string>local.meltype.SwapTests</string><key>CFBundleExecutable</key><string>Meltype</string><key>CFBundlePackageType</key><string>APPL</string><key>CFBundleVersion</key><string>1</string></dict></plist>")
     (write-file (merge-pathnames "Contents/Resources/version" source) "A")
-    (uiop:run-program (list "cp" "/usr/bin/true" (namestring (merge-pathnames "Contents/MacOS/Meltype" source))))
+    ;; /usr/bin/true は arm64e で、署名し直すと Apple シリコンでは起動時に kill される。
+    (write-file (merge-pathnames "true.c" work) (format nil "int main(void) { return 0; }~%"))
+    (uiop:run-program (list "xcrun" "clang" "-o" (namestring (merge-pathnames "Contents/MacOS/Meltype" source))
+                           (namestring (merge-pathnames "true.c" work))))
     (uiop:run-program (list "/usr/bin/codesign" "--force" "--deep" "--sign" "-" (namestring source)))
     (run-script work "install-app.sh" arguments)
     (let ((first-hash (bundle-hash target))

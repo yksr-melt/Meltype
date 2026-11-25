@@ -8,6 +8,8 @@
 # 先に Mozc の変換ヘルパーを native/mozc/build-mozc-helper.sh で (native/mozc/bin/linux/)、
 # Zenzai の llama-server を native/zenzai/build-llama-server.sh で (native/zenzai/bin/linux-<版>/) ビルドしておく。
 # 必要なもの: .NET 10 SDK、clang (NativeAOT のリンクに使う)、zlib (zlib1g-dev)、curl (Zenzai のモデルを取るのに使う)
+# 配布物と同じく glibc 2.34 (RHEL 9 系) で動くようにするには、環境変数 MELTYPE_SYSROOT に sysroot を設定し、lld も入れる (src/Directory.Build.props)。
+# 設定しなければ、ビルドするマシンの glibc に対してリンクする
 set -euo pipefail
 out="$1"
 work="$2"
