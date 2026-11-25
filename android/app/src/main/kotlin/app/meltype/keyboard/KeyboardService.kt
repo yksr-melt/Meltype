@@ -17,6 +17,7 @@ import android.os.SystemClock
 import android.util.Log
 import android.view.KeyEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.ViewTreeObserver
 import android.view.WindowInsets
 import android.view.WindowInsetsController
@@ -295,6 +296,7 @@ class KeyboardService : InputMethodService(), KeyListener {
         override fun showEmojiPanel(pressedAtMs: Long) = openEmojiPanel(pressedAtMs)
     })
     private var shift = ShiftState.OFF
+    private var lastShiftPressMs = Long.MIN_VALUE / 2
 
     private var selStart = 0
     private var selEnd = 0
@@ -650,7 +652,12 @@ class KeyboardService : InputMethodService(), KeyListener {
                 if (editorAction != null) currentInputConnection?.performEditorAction(editorAction)
                 else sendDownUpKeyEvents(KeyEvent.KEYCODE_ENTER)
             }
-            KeyAction.Shift -> setShift(shift.onShiftPressed())
+            KeyAction.Shift -> {
+                // 連打の間隔は Android の既定のダブルタップの間隔 (ふつう 300ms) に合わせる。
+                val doubleTap = timeMs - lastShiftPressMs <= ViewConfiguration.getDoubleTapTimeout()
+                lastShiftPressMs = timeMs
+                setShift(shift.onShiftPressed(doubleTap))
+            }
             KeyAction.Language -> coreMode(ImeJson::modeToggleRequested)
             is KeyAction.Switch -> screens.switchTo(action.to)
             KeyAction.Emoji -> if (Settings(this).emojiEnabled) screens.openEmoji(timeMs)
