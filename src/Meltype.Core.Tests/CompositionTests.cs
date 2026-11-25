@@ -6948,7 +6948,7 @@ internal static class CompositionTests
         KeigoConverter.Apply(tekureteExplain);
         Assert.Equal("ご説明いただきありがとうございます", string.Concat(tekureteExplain.Select(c => c.Text)), "説明してくれて＋ありがとう → ご説明いただきありがとうございます");
 
-        // 文化庁『敬語の指針』準拠 (着る/寝る/座る/尋ねる/待つ)
+        // 基本動詞の敬語表現 (着る/寝る/座る/尋ねる/待つ)
         var bossWear = new List<Clause> { new("しゃちょうが", false, ["社長が"]), new("きた", false, ["着た"]) };
         KeigoConverter.Apply(bossWear);
         Assert.Equal("社長がお召しになりました", string.Concat(bossWear.Select(c => c.Text)), "社長が着た → お召しになりました");
