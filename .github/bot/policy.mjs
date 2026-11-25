@@ -3,13 +3,12 @@
 // PR の件数制限と、投稿者の返事を待っている Issue・PR の期限管理。
 // 件数の超過は Draft にせず「PR上限超過」を付けて順番待ちにし (枠が空いたら外す)、PR要対応・情報待ちは通知から 14 日で閉じる。
 // 件数には Draft も含める (Draft を作業中の下書きにだけ使い、上限を避けるために Draft にしなくてよいように)。
-// メンテナーが「次にレビュー」を付けた PR は、件数を数えるときに古い PR より先に枠へ入れる。
 // GitHub の本文・差分はデータとして読むだけ。PR のコードは実行しない。
 import fs from 'node:fs';
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 
-export const Labels = { limit: 'PR上限超過', rule: 'PR要対応', info: '情報待ち', next: '次にレビュー' };
+export const Labels = { limit: 'PR上限超過', rule: 'PR要対応', info: '情報待ち' };
 export const WaitMs = 14 * 24 * 60 * 60 * 1000;
 // 件数の超過は 14 日で閉じる通知 (版 1)、24 時間で Draft にする通知 (版 2) から、順番待ちの通知 (版 3) に変えた。
 // 前の版の通知は、順番待ちの通知に書き直す。
@@ -20,14 +19,13 @@ const names = item => new Set((item?.labels ?? []).map(l => l.name ?? l));
 const hash = body => createHash('sha256').update(body ?? '').digest('hex');
 const trusted = comment => comment.user?.type === 'Bot' && BotLogins.has(comment.user.login);
 
-/** メンテナー・Bot の PR を除き (Draft は含める)、作者ごとに 2 件を残す。「次にレビュー」の PR を先に、次に作成が古い順、同時刻なら番号順。 */
+/** メンテナー・Bot の PR を除き (Draft は含める)、作者ごとに 2 件を残す。作成が古い順、同時刻なら番号順。 */
 export function excessPulls(pulls) {
   const counts = new Map();
   return new Set(pulls.filter(p => p.state === 'open'
     && p.user.type !== 'Bot'
     && !['OWNER', 'MEMBER', 'COLLABORATOR'].includes(p.author_association))
-    .sort((a, b) => names(b).has(Labels.next) - names(a).has(Labels.next)
-      || a.created_at.localeCompare(b.created_at) || a.number - b.number)
+    .sort((a, b) => a.created_at.localeCompare(b.created_at) || a.number - b.number)
     .filter(p => {
       const author = p.user.login.toLowerCase();
       const count = (counts.get(author) ?? 0) + 1;
@@ -87,7 +85,7 @@ function render(state) {
   if (state.kind === 'limit' && state.status === 'waiting') {
     return `${Marker}\n<!-- policy-state:${JSON.stringify(state)} -->\n`
       + `同時に開いている PR は、Draft も含めて 1 人 2 件までレビューします。この PR は \`${Labels.limit}\` を付けて順番待ちにしました (Draft にも、閉じもしません)。\n\n`
-      + `先の PR がマージ・クローズされて枠が空くと、bot がラベルを外してこの通知を解除します。メンテナーが \`${Labels.next}\` を付けた PR は、古い PR より先に枠へ入れます。`;
+      + '先の PR がマージ・クローズされて枠が空くと、bot がラベルを外してこの通知を解除します。';
   }
   const reason = {
     rule: 'メンテナーが、この PR に対応が必要と判断しました。メンテナーの指摘を確認し、返信または修正をお願いします。',
@@ -144,7 +142,6 @@ export async function runPolicy(api, event, eventName, now = Date.now()) {
   for (const [name, description] of [
     [Labels.limit, '同時オープン PR (Draft を含む) が 2 件を超えていて、枠が空くのを待っている'],
     [Labels.rule, '投稿者によるルールへの対応を待つ (14 日間無反応なら閉じる)'],
-    [Labels.next, '取り込めそうなので、上限の枠に古い PR より先に入れる (メンテナーが付ける)'],
   ]) {
     if (!labels.some(l => l.name === name)) {
       await request('POST', '/labels', { name, color: 'FBCA04', description });

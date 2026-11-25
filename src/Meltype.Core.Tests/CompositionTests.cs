@@ -3263,6 +3263,30 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void Marks_AfterBackspace_AreReadAsIfRetyped()
+    {
+        // 後ろの文字を消したら、, . は残った文字を打ち直したのと同じになる
+        Detector.UseJapanesePunctuationAfterEnglish = () => true;
+        try
+        {
+            foreach (var (typed, retyped) in new[] { (",,,\b", ",,"), ("...\b", ".."), ("x64,ka\b", "x64,"), ("google.a\b", "google."), ("google.1\b", "google.") })
+            {
+                var (erased, fresh) = (new Keyboard(), new Keyboard());
+                erased.Type(typed);
+                fresh.Type(retyped);
+                Assert.Equal(fresh.Showing, erased.Showing, typed + ": 表示");
+                erased.Type("\n");
+                fresh.Type("\n");
+                Assert.Equal(fresh.Host.Document, erased.Host.Document, typed + ": 確定");
+            }
+        }
+        finally
+        {
+            Detector.UseJapanesePunctuationAfterEnglish = null;
+        }
+    }
+
+    [Test]
     public static void Punctuation_FollowsSetting()
     {
         // 句読点の設定 (Microsoft IME と同じ 4 通り)。数字の間の . , (1.5、1,000) は半角のまま。
