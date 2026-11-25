@@ -6,6 +6,7 @@ using Meltype.Diagnostics;
 using Meltype.Engine;
 using Meltype.Input;
 using Meltype.Learning;
+using Meltype.Notation;
 
 namespace Meltype.Composition;
 
@@ -20,6 +21,18 @@ internal record TextEnv(CompositionDetector Detector, Config.Settings Settings, 
 
     /// <summary>入力欄の文脈。使うたびに、そのときの入力欄の文字と自分の確定の記録から決める (<see cref="CompositionContext.ContextOf"/>)。</summary>
     public required Func<TextContext> Context { get; init; }
+
+    /// <summary>
+    /// すべて小文字で打った英単語を、自動で正しい大文字小文字に直した形 (iphone → iPhone、iphone's → iPhone's)。直さないなら null。
+    /// コードの文字列の中 (require('jquery')) や、ユーザーが小文字で確定して覚えた語は直さない。
+    /// </summary>
+    internal string? ProperNoun(string raw)
+    {
+        if (CodeString) return null;
+        var stem = raw.EndsWith("'s", StringComparison.Ordinal) ? raw[..^2] : raw;
+        if (History?.Get(stem) == stem) return null;
+        return Detector.ProperNouns.AutoCanonical(raw);
+    }
 }
 
 /// <summary>
