@@ -118,7 +118,8 @@ internal sealed record CompositionEnv(CompositionDetector Detector, IKanjiConver
 
 internal enum ConversionTrigger { Other, Space, Tab }
 
-internal sealed record LastCommit(string Text, bool English);
+/// <summary>自分の確定の記録。Shown は確定したときにフロントが渡したキャレットの前の文字 (読めなければ null)、Text は確定した後のキャレットの前の文字 (末尾の 20 文字まで)。</summary>
+internal sealed record OwnCommit(string? Shown, string Text);
 
 /// <summary>1 回の変換 (Space などで始めてから、確定するか取り消すまで) の状態。</summary>
 internal sealed class Conversion(List<Clause> clauses, ConversionTrigger startedBy, bool preferJapanese)
@@ -181,14 +182,8 @@ internal sealed class CompositionState
     // 押したキー (離したことを受け取るまで。親指シフトの親指キーを、文字に使わずに離したかを見る)
     public readonly HashSet<int> Pressed = [];
 
-    /// <summary>自分が最後に確定した文字 (末尾の 20 文字まで) と、それが英語だったか。キャレットの前が読めないときの文脈に使う。分からなければ null。</summary>
-    public LastCommit? Last;
-
-    /// <summary>
-    /// 自分が最後に確定した時刻。この直後はアプリの文字がまだ更新されていないかもしれないので、アプリの文字より <see cref="Last"/> を信じる。
-    /// フォーカスが移って <see cref="Last"/> を消した直後も、アプリの文字は信じない (文脈が分からないものとして扱う)。
-    /// </summary>
-    public long LastCommitTime = long.MinValue / 2;
+    /// <summary>最後の確定の記録。キャレットの前が読めないときと、確定がまだ入っていないときの文脈に使う (<see cref="CompositionContext.ContextOf"/>)。キャレットが動いたら忘れる。</summary>
+    public OwnCommit? Own;
 
     /// <summary>入力を覚えないように求める入力欄か。</summary>
     public bool PrivateField;
