@@ -49,6 +49,8 @@ class NativeBoundaryTests(unittest.TestCase):
         cls.lib.meltype_ime_handle.restype = ctypes.c_void_p
         cls.lib.meltype_free.argtypes = [ctypes.c_void_p]
         cls.lib.meltype_shutdown.restype = None
+        cls.lib.meltype_typed_reading.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
+        cls.lib.meltype_typed_reading.restype = ctypes.c_void_p
         # Mozc のヘルパーを置かないフォルダー (変換はかなのまま)
         assert cls.lib.meltype_init(cls.data.name.encode()) == 0
         # 終了するときの解放は、2 回呼ばれても 1 回だけ止める (一時フォルダーを消す前に)
@@ -222,6 +224,28 @@ class NativeBoundaryTests(unittest.TestCase):
             self.assertEqual("sushi", self.key(0, vk=0x0D, host=other)["commits"][0]["text"])
         finally:
             self.lib.meltype_ime_destroy(other)
+
+    def typed_reading(self, text, directory=None):
+        """meltype_typed_reading: Android の設定画面のユーザー辞書の読み。"""
+        pointer = self.lib.meltype_typed_reading((directory or self.data.name).encode(), text.encode("utf-8"))
+        self.assertTrue(pointer, "C ABI returned NULL")
+        try:
+            return ctypes.string_at(pointer).decode("utf-8")
+        finally:
+            self.lib.meltype_free(pointer)
+
+    def test_typed_reading_converts_romaji_like_the_settings_app(self):
+        self.assertEqual("しの", self.typed_reading(" Shino "))
+        self.assertEqual("きごうとう", self.typed_reading("kigoutou"))
+        # かな・英字の無い読みは、前後の空白を除くだけ
+        self.assertEqual("しの", self.typed_reading("しの "))
+
+    def test_typed_reading_uses_the_users_romaji_table(self):
+        with tempfile.TemporaryDirectory(prefix="meltype-typed-reading-") as directory:
+            (Path(directory) / "dictionaries").mkdir()
+            (Path(directory) / "dictionaries" / "romaji.txt").write_text("qq\tくぅ\n", encoding="utf-8")
+            self.assertEqual("くぅ", self.typed_reading("qq", directory))
+        self.assertEqual("しの", self.typed_reading("shino"))
 
 
 if __name__ == "__main__":

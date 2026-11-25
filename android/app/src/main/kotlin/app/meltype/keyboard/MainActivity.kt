@@ -20,11 +20,14 @@ import android.window.OnBackInvokedDispatcher
 import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
+import android.text.Editable
+import android.text.TextWatcher
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Switch
 import android.widget.TextView
+import app.meltype.keyboard.dictionary.TypedReading
 import app.meltype.keyboard.dictionary.UserDictionaryFile
 import app.meltype.keyboard.dictionary.UserWord
 import app.meltype.keyboard.layout.LayoutId
@@ -494,7 +497,8 @@ class MainActivity : Activity() {
                 else -> null
             }
             if (empty != null) addView(text(empty, 14f, muted = true).apply { setPadding(dp(18), dp(18), dp(18), dp(18)) })
-            words.orEmpty().forEachIndexed { index, word ->
+            // 設定アプリ (Windows・Mac・Linux) と同じく、新しく登録したものから
+            words.orEmpty().asReversed().forEachIndexed { index, word ->
                 if (index > 0) divider()
                 entry(word.word, if (word.pos == UserWord.NOUN) word.reading else word.reading + "・" + word.pos) {
                     editingWord = word
@@ -539,7 +543,20 @@ class MainActivity : Activity() {
         lateinit var word: EditText
         card(content) {
             setPadding(0, 0, 0, dp(8))
-            reading = inputField(this, "読み", original?.reading.orEmpty(), "めるたいぷ")
+            reading = inputField(this, "読み", original?.reading.orEmpty(), "めるたいぷ (ローマ字でも可)")
+            // ローマ字で打ったら、登録する読み (ひらがな) を出す。設定アプリと同じ
+            val preview = text("", 13f, muted = true).apply { visibility = View.GONE }
+            addView(preview, LinearLayout.LayoutParams(-1, -2).apply { marginStart = dp(18) })
+            reading.addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+                override fun afterTextChanged(s: Editable?) {
+                    val typed = s?.toString().orEmpty()
+                    val hasLetters = typed.any { it in 'a'..'z' || it in 'A'..'Z' }
+                    preview.text = if (hasLetters) "→ " + TypedReading.toHiragana(this@MainActivity, typed) else ""
+                    preview.visibility = if (hasLetters) View.VISIBLE else View.GONE
+                }
+            })
             word = inputField(this, "単語", original?.word.orEmpty(), "Meltype")
         }
         val error = text("", 13f, muted = true).apply { visibility = View.GONE }
@@ -550,8 +567,9 @@ class MainActivity : Activity() {
         }
         button(content, "保存") {
             try {
-                val saved = if (original == null) userWords.add(reading.text.toString(), word.text.toString())
-                    else userWords.edit(original, reading.text.toString(), word.text.toString())
+                val kana = TypedReading.toHiragana(this@MainActivity, reading.text.toString())
+                val saved = if (original == null) userWords.add(kana, word.text.toString())
+                    else userWords.edit(original, kana, word.text.toString())
                 if (saved) navigate(Page.DICTIONARY)
                 else failed("読みと単語を入力してください。同じ読みと単語は 2 つ登録できません。")
             } catch (_: IOException) {

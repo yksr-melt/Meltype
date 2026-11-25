@@ -18,6 +18,7 @@ void* meltype_ime_create();
 unsigned char* meltype_ime_handle(void* host, unsigned char* json);
 void meltype_ime_destroy(void* host);
 void meltype_free(unsigned char* ptr);
+unsigned char* meltype_typed_reading(unsigned char* data_directory, unsigned char* input);
 }
 
 namespace {
@@ -198,4 +199,28 @@ Java_app_meltype_keyboard_core_NativeApi_handle(
     auto json = read_utf8(env, event);
     if (env->ExceptionCheck()) return nullptr;
     return return_utf8(env, meltype_ime_handle(as_handle(host), json.data()));
+}
+
+// The settings screen's user dictionary: the reading as typed (romaji allowed) in, hiragana out, both UTF-8.
+// The settings screen may run before the keyboard has started the Core in this process. The Core fixes
+// its data directory (MELTYPE_DATA_DIR) for the process on first use, so set the same directory the
+// keyboard will pass to init before calling in, and refuse a different one after init.
+extern "C" JNIEXPORT jbyteArray JNICALL
+Java_app_meltype_keyboard_core_NativeApi_typedReading(
+        JNIEnv* env, jobject, jbyteArray directory, jbyteArray input) {
+    if (!directory || !input) return nullptr;
+    auto path = read_utf8(env, directory);
+    if (env->ExceptionCheck() || path.size() <= 1) return nullptr;
+    const std::string requested(reinterpret_cast<const char*>(path.data()), path.size() - 1);
+    if (requested.empty() || requested.find('\0') != std::string::npos) return nullptr;
+    auto text = read_utf8(env, input);
+    if (env->ExceptionCheck()) return nullptr;
+    {
+        std::lock_guard<std::mutex> guard(init_mutex);
+        if (!data_dir.empty() && data_dir != requested) return nullptr;
+        const char* current = getenv("MELTYPE_DATA_DIR");
+        if (current && requested != current) return nullptr;
+        if (!current && setenv("MELTYPE_DATA_DIR", requested.c_str(), 1) != 0) return nullptr;
+    }
+    return return_utf8(env, meltype_typed_reading(path.data(), text.data()));
 }
