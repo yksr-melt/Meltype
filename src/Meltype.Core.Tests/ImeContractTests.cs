@@ -968,8 +968,10 @@ internal static class ImeContractTests
     [Test]
     public static void Private_StillSuppressesLearningAfterPartialCommit()
     {
+        var phrases = new PhraseHistory(null);
         var converter = new LearningConverter();
-        var front = new Front { Converter = converter };
+        var front = new Front { Converter = converter, Services = new CompositionServices { Predictor = new Predictor(phrases, null) } };
+        front.Settings.PredictiveCandidates = true;
         front.Settings.PartialCommit = true;
         front.Traits.Add("Private");
         front.Type("tanniwotoru ");
@@ -983,13 +985,16 @@ internal static class ImeContractTests
         Assert.True(View(front.Event("StateRequested")).GetProperty("converting").GetBoolean(), front.Trace);
         front.Key('\n');
         Assert.True(front.Document.Length > "単位を".Length, front.Trace);
+        Assert.Equal(0, phrases.Count, "Private で始めた入力は、途中で通常欄へ移っても学習しない\n" + front.Trace);
     }
 
     [Test]
     public static void Private_ReportedBeforeResumingDoesNotLearnOnLaterCommit()
     {
+        var phrases = new PhraseHistory(null);
         var converter = new LearningConverter();
-        var front = new Front { Converter = converter };
+        var front = new Front { Converter = converter, Services = new CompositionServices { Predictor = new Predictor(phrases, null) } };
+        front.Settings.PredictiveCandidates = true;
         front.Type("nihongo");
 
         // TSF はアプリが表示済みの文字を確定した時点で Private を読み、再開を保留する前に知らせる。
@@ -1000,8 +1005,10 @@ internal static class ImeContractTests
         Assert.Equal("日本語", front.Composition["t1"], front.Trace);
         front.Key('\n');
         Assert.Equal("日本語", front.Document, front.Trace);
+        Assert.Equal(0, phrases.Count, "途中で Private と分かった入力も学習しない\n" + front.Trace);
 
         front.Type("kyou \n");
+        Assert.Equal(1, phrases.Count, "次に始めた通常入力は学習する\n" + front.Trace);
     }
 
     [Test]

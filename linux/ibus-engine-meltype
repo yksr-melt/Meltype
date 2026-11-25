@@ -558,7 +558,7 @@ def main():
         component.add_engine(IBus.EngineDesc.new("meltype", "Meltype", "Meltype", "ja", "GPL-3.0-or-later", "Yukishiro", "", "default"))
         bus.register_component(component)
     loop.run()
-    # Zenzai の llama-server を終わらせ、Mozc の学習を保存する (呼ばずに終わると、次に起動した Meltype が終わらせるまで llama-server が残る)
+    # Zenzai の llama-server を含む変換エンジンを止める (呼ばずに終わると、次に起動した Meltype が終わらせるまで llama-server が残る)
     _lib.meltype_shutdown()
 
 

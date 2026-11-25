@@ -90,7 +90,7 @@ public static unsafe class Exports
     }
 
     /// <summary>
-    /// 終了するときに 1 回呼ぶ。変換エンジンを止める (Zenzai の llama-server を終わらせ、Mozc の学習を保存する)。
+    /// 終了するときに 1 回呼ぶ。変換エンジンを止める (Zenzai の llama-server を含む変換エンジンを止める)。
     /// 呼ばずに終わると llama-server が残り、次に起動した Meltype が終わらせるまで動き続ける。
     /// </summary>
     [UnmanagedCallersOnly(EntryPoint = "meltype_shutdown")]

@@ -123,7 +123,7 @@ final class NativeCore {
         }
     }
 
-    /// 終了する前に呼ぶ。変換エンジンを止める (Zenzai の llama-server を終わらせ、Mozc の学習を保存する)。
+    /// 終了する前に呼ぶ。変換エンジンを止める (Zenzai の llama-server を含む変換エンジンを止める)。
     func shutdown() {
         shutdownFunction?()
     }

@@ -429,7 +429,7 @@ public:
     ~MeltypeEngine() override {
         s_engine = nullptr;
         if (host_) native_.destroy(host_);
-        // Zenzai の llama-server を終わらせ、Mozc の学習を保存する (呼ばずに終わると、次に起動した Meltype が終わらせるまで llama-server が残る)
+        // Zenzai の llama-server を含む変換エンジンを止める (呼ばずに終わると、次に起動した Meltype が終わらせるまで llama-server が残る)
         if (loaded_) native_.shutdown();
     }
 
