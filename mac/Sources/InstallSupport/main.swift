@@ -55,7 +55,8 @@ do {
     }
 } catch let error as InputSelectionFailure {
     // 登録・起動済みで選択だけ失敗した場合は、呼び出し元で新版を維持できるよう区別する。
-    fputs("入力ソースを選択できませんでした: \(error.localizedDescription)。入力メニューから Meltype を選んでください。\n", stderr)
+    // --restore では戻す先が Meltype とは限らないので、選び直す入力ソースの案内は呼び出し元が出す。
+    fputs("入力ソースを切り替えられませんでした: \(error.localizedDescription)\n", stderr)
     exit(2)
 } catch {
     fputs("Installation operation failed: \(error.localizedDescription)\n", stderr)

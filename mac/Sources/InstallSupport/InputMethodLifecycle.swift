@@ -54,6 +54,8 @@ private func enabledSource(id: String) -> TISInputSource? {
     }
 }
 
+// --start・--stop と違い、LaunchServices でアプリを開いたり数えたりせず TIS だけを使う。
+// そのため、この補助ツールを外へコピーせず Meltype.app の中から直接動かしてよい。
 func selectJapaneseInputSource(at url: URL) throws {
     guard let bundleID = Bundle(url: url)?.bundleIdentifier else { throw Failure("Input method bundle has no identifier") }
     // 親と日本語モードは別々に登録され、入力メニューで選べるのは日本語モード。
