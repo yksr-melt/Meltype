@@ -63,7 +63,9 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         if let app, Self.authenticationApps.contains(app) {
             // ユーザー名は通常自動で入るため、SecurityAgent ではユーザー名欄も含めて打鍵を通す。
             // 未確定入力の取消に必要な属性だけを送り、打鍵の内容や周辺文字列は Core に渡さない。
+            // 打鍵は、今の状態だけを受け取る出来事 (StateRequested) にする。
             event["field"] = ["traits": ["Password"]]
+            if keyEvent != nil { event["type"] = "StateRequested" }
         } else {
             if let client {
                 event["field"] = field(of: client, app: app)
@@ -129,19 +131,22 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
     }
 
     override func recognizedEvents(_ sender: Any!) -> Int {
-        Int(NSEvent.EventTypeMask.keyDown.rawValue)
+        // CapsLock は keyDown にならず、flagsChanged だけで届く
+        Int(NSEvent.EventTypeMask.keyDown.rawValue | NSEvent.EventTypeMask.flagsChanged.rawValue)
     }
 
     override func handle(_ event: NSEvent!, client sender: Any!) -> Bool {
-        guard let event, event.type == .keyDown, let client = sender as? IMKTextInput else { return false }
+        guard let event, event.type == .keyDown || event.type == .flagsChanged && Int(event.keyCode) == kVK_CapsLock,
+              let client = sender as? IMKTextInput else { return false }
         return send("KeyPressed", client: client, keyEvent: event)?.result.consumed ?? false
     }
 
     private func key(of event: NSEvent) -> [String: Any] {
         let flags = event.modifierFlags
+        // flagsChanged (CapsLock) の isARepeat・characters は例外になる。characters は KeyMapping.text が読まない
         var key: [String: Any] = ["vk": KeyMapping.virtualKey(for: event),
                                   "shift": flags.contains(.shift), "ctrl": flags.contains(.control),
-                                  "alt": flags.contains(.option), "command": flags.contains(.command), "repeat": event.isARepeat]
+                                  "alt": flags.contains(.option), "command": flags.contains(.command), "repeat": event.type == .keyDown && event.isARepeat]
         // event.characters は「見た目の 1 文字」で、UTF-16 要素が複数のことがある
         // (補助面の文字・結合文字・ZWJ 絵文字・異体字セレクター)。1 スカラーならそのコードポイント、複数ならそのまま渡す
         let text = KeyMapping.text(for: event)

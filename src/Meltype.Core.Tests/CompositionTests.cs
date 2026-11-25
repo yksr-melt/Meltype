@@ -246,16 +246,12 @@ internal static class CompositionTests
         public bool CursorIntoBrackets { get => Settings.CursorIntoBrackets; set => Settings.CursorIntoBrackets = value; }
         public string ControlKeyBindings { get => Settings.ControlKeyBindings; set => Settings.ControlKeyBindings = value; }
         public bool CalculatorCandidates { get => Settings.CalculatorCandidates; set => Settings.CalculatorCandidates = value; }
-        public bool LaughterAfterKana { get => Settings.LaughterAfterKana; set => Settings.LaughterAfterKana = value; }
         public bool ContextualLearning { get => Settings.ContextualLearning; set => Settings.ContextualLearning = value; }
         public bool ShowCandidatesWhileTyping { get => Settings.ShowCandidatesWhileTyping; set => Settings.ShowCandidatesWhileTyping = value; }
         public string GitHubRepository { get => Settings.GitHubRepository; set => Settings.GitHubRepository = value; }
         public GitHubIssueTitles? GitHubTitles { get; set; }
         public bool ClipboardCandidates { get => Settings.ClipboardCandidates; set => Settings.ClipboardCandidates = value; }
         public bool NowPlayingCandidates { get => Settings.NowPlayingCandidates; set => Settings.NowPlayingCandidates = value; }
-        public string ClockTimeZone { get => Settings.ClockTimeZone; set => Settings.ClockTimeZone = value; }
-        public DateTime UtcNow { get; set; } = DateTime.UtcNow;
-        public TimeZoneInfo LocalTimeZone { get; set; } = TimeZoneInfo.Utc;
         public bool ContinueAfterConversion { get => Settings.ContinueAfterConversion; set => Settings.ContinueAfterConversion = value; }
         public bool Learning { get => Settings.LearningEnabled; set => Settings.LearningEnabled = value; }
         public bool SeparateKeyRoles { get => Settings.SeparateKeyRoles; set => Settings.SeparateKeyRoles = value; }
@@ -285,7 +281,7 @@ internal static class CompositionTests
         public bool Direct
         {
             get => !_state.ImeOpen;
-            set => Send(value ? ImeEventType.AlphanumericModeSelected : ImeEventType.JapaneseModeSelected);
+            set => Send(value ? new ImeEvent.AlphanumericModeSelected() : new ImeEvent.JapaneseModeSelected());
         }
 
         /// <summary>先頭か空白の直後の / $ @ で始まる語をそのまま入力するか (設定の SigilWordsDirect)。</summary>
@@ -304,7 +300,7 @@ internal static class CompositionTests
         public Keyboard(bool live = false, bool direct = false, ConversionHistory? history = null, IKanjiConverter? converter = null,
             Func<string, IReadOnlyList<string>>? moreCandidates = null, UserDictionary? userDictionary = null, LanguageMemory? languages = null,
             TranslationDictionary? translations = null, TranslationHistory? translationHistory = null, Predictor? predictor = null,
-            Func<DateTime>? now = null, bool showTypedKeys = false, bool tabConversion = false, bool englishNamePredictions = false,
+            Func<DateTime>? now = null, Meltype.Config.TypedKeysStyle typedKeys = Meltype.Config.TypedKeysStyle.Off, bool tabConversion = false, bool englishNamePredictions = false,
             CompositionDetector? detector = null)
         {
             detector ??= Detector;
@@ -312,7 +308,7 @@ internal static class CompositionTests
             {
                 Mode = Meltype.Config.InputMode.Keyboard,
                 LiveConversion = live,
-                ShowTypedKeys = showTypedKeys,
+                TypedKeys = typedKeys,
                 TabConversion = tabConversion,
                 PredictiveCandidates = predictor is not null,
                 EnglishNamePredictions = englishNamePredictions,
@@ -331,8 +327,6 @@ internal static class CompositionTests
                 TranslationHistory = translationHistory,
                 RomajiTypos = Typos,
                 GitHubTitles = () => GitHubTitles,
-                UtcNow = () => UtcNow,
-                LocalTimeZone = () => LocalTimeZone,
                 Predictor = predictor,
                 Now = now ?? (() => DateTime.Now),
             };
@@ -360,16 +354,11 @@ internal static class CompositionTests
         public string VersionCandidate => Composition.Utility.VersionConversion.Candidate(Settings, OtherTipVersion);
 
         /// <summary>出来事を送り、応答を入力欄に当てる。vk は、本体が使わなかったらアプリに入れるキー (0 ならなし)。</summary>
-        private SessionResult Send(ImeEventType type, ImeKey? key = null, ImeCaret? caret = null, int index = 0, int vk = 0, bool shift = false)
+        private SessionResult Send(ImeEvent e, int vk = 0, bool shift = false)
         {
-            var output = _ime.Handle(new ImeEvent
+            var output = _ime.Handle(e with
             {
-                Version = ImeHost.Version,
-                Type = type,
                 Instance = "keyboard",
-                Key = key,
-                Caret = caret,
-                Index = index,
                 Field = new ImeField
                 {
                     Before = Host.Before,
@@ -393,7 +382,7 @@ internal static class CompositionTests
             if (_composing) return true;
             if (VirtualKeys.IsModifier(vk) || !_state.HandlesInput) return false;
             var mods = (shift ? 1 : 0) | (_ctrlHeld ? 2 : 0);
-            if (_state.Capture.Shortcuts.Any(key => ToggleShortcut.NormalizeHankakuKey(key.Vk) == ToggleShortcut.NormalizeHankakuKey(vk) && key.Modifiers == mods)) return true;
+            if (_state.Capture.Shortcuts.Any(key => ToggleShortcut.NormalizeKey(key.Vk) == ToggleShortcut.NormalizeKey(vk) && key.Modifiers == mods)) return true;
             return !_ctrlHeld && Host.CharFromKey(vk, shift) is { } c && c is > ' ' and <= '~' && _state.Capture.PrintableAscii && !_state.Capture.PrintableAsciiExcept.Contains(c);
         }
 
@@ -402,13 +391,13 @@ internal static class CompositionTests
         {
             _now += 30;
             // 打つ前に入力欄にフォーカスが入る
-            if (_stale) Send(ImeEventType.CaretMoved, caret: new ImeCaret { Moved = true, PassedKey = 0, FocusEntered = true });
+            if (_stale) Send(new ImeEvent.CaretMoved(new ImeCaret { Moved = true, PassedKey = 0, FocusEntered = true }));
             var shift = _shiftHeld || Host.PhysicalShift;
             if (up)
             {
                 HoldModifier(vk, false);
                 _held.Remove(vk);
-                if (_releaseFollows.Remove(vk)) Send(ImeEventType.KeyReleased, new ImeKey { Vk = vk });
+                if (_releaseFollows.Remove(vk)) Send(new ImeEvent.KeyReleased(new ImeKeyRelease(vk)));
                 return false;
             }
             var repeat = !_held.Add(vk);
@@ -416,14 +405,14 @@ internal static class CompositionTests
             {
                 Host.Apply(new SessionResult(false, [], null), vk, shift, _ctrlHeld, captured: false);
                 // アプリに通したキーはキャレットを動かすかもしれない
-                if (!VirtualKeys.IsModifier(vk)) Send(ImeEventType.CaretMoved, caret: new ImeCaret { Moved = true, PassedKey = vk, Ctrl = _ctrlHeld });
+                if (!VirtualKeys.IsModifier(vk)) Send(new ImeEvent.CaretMoved(new ImeCaret { Moved = true, PassedKey = vk, Ctrl = _ctrlHeld }));
                 HoldModifier(vk, true);
                 return false;
             }
             var releaseFollows = _state.Capture.KeyReleases && !VirtualKeys.IsModifier(vk);
             if (releaseFollows) _releaseFollows.Add(vk);
             var ch = !_ctrlHeld && Host.CharFromKey(vk, shift) is { } c && !char.IsControl(c) ? c : 0;
-            var consumed = Send(ImeEventType.KeyPressed, new ImeKey { Vk = vk, Ch = ch, Shift = shift, Ctrl = _ctrlHeld, Repeat = repeat, ReleaseFollows = releaseFollows },
+            var consumed = Send(new ImeEvent.KeyPressed(new ImeKey { Vk = vk, Ch = ch, Shift = shift, Ctrl = _ctrlHeld, Repeat = repeat, ReleaseFollows = releaseFollows }),
                 vk: vk, shift: shift).Consumed;
             if (!consumed) HoldModifier(vk, true);
             return consumed;
@@ -440,10 +429,10 @@ internal static class CompositionTests
         }
 
         /// <summary>候補の一覧 (フロントに渡した一覧) の index 番目をクリックする。</summary>
-        public void SelectCandidate(int index) => Send(ImeEventType.CandidateClicked, index: index);
+        public void SelectCandidate(int index) => Send(new ImeEvent.CandidateClicked(index));
 
         /// <summary>入力欄をクリックした (キャレットが動いたかもしれない)。</summary>
-        public void Click() => Send(ImeEventType.CaretMoved, caret: new ImeCaret { Moved = true, PassedKey = 0 });
+        public void Click() => Send(new ImeEvent.CaretMoved(new ImeCaret { Moved = true, PassedKey = 0 }));
 
         /// <summary>変換ボックスに入力中か (本体がキーを受け取るか)。</summary>
         public bool Captured => _composing;
@@ -1178,7 +1167,7 @@ internal static class CompositionTests
     public static void TypedKeys_ShownWhenEnabled()
     {
         // #224: 設定「打ったキーを表示」が ON なら、変換ボックスに打ったキーを渡す (変換中も)
-        var k = new Keyboard(showTypedKeys: true);
+        var k = new Keyboard(typedKeys: Meltype.Config.TypedKeysStyle.Keys);
         k.Type("kyouha");
         Assert.Equal("kyouha", k.Host.View!.Typed);
         k.Type(" ");
@@ -1187,6 +1176,37 @@ internal static class CompositionTests
         var off = new Keyboard();
         off.Type("kyouha");
         Assert.True(off.Host.View!.Typed is null, "OFF なら出さない");
+    }
+
+    [Test]
+    public static void TypedKeys_KanaShowsReadingBeforeKanji()
+    {
+        // 「漢字変換前」は、英日に分けたあと・漢字にする前の形を出す (漢字になっても読みを確かめられる)
+        var k = new Keyboard(typedKeys: Meltype.Config.TypedKeysStyle.Kana);
+        k.Type("kyouha ");
+        Assert.True(k.Host.View!.Converting, "変換中");
+        Assert.Equal("きょうは", k.Host.View!.Typed, k.Host.View!.Text);
+        // 表示と同じなら出さない (かなのまま・語末の n・記号と数字だけ)
+        foreach (var keys in new[] { "kyouha", "hon", "hon ", "---", "2026-11-25" })
+        {
+            var same = new Keyboard(typedKeys: Meltype.Config.TypedKeysStyle.Kana);
+            same.Type(keys);
+            Assert.True(same.Host.View!.Typed is null, $"{keys}: {same.Host.View.Text} に {same.Host.View.Typed}");
+        }
+        // 区切りの別案・打ち間違いの直し・語末の n も、今の変換が使っている読みで出す
+        foreach (var (keys, typed) in new[]
+        {
+            ("bottoshuuseisita  ", null),
+            ("bottoshuuseisita   ", "ぼっとしゅうせいした"),
+            ("onegaisimsu", null),
+            ("onegaisimsu  ", "おねがいします"),
+            ("hon  ", "ほん"),
+        })
+        {
+            var reading = new Keyboard(typedKeys: Meltype.Config.TypedKeysStyle.Kana);
+            reading.Type(keys);
+            Assert.Equal(typed, reading.Host.View!.Typed, $"{keys}: {reading.Host.View.Text}");
+        }
     }
 
     [Test]
@@ -3037,26 +3057,6 @@ internal static class CompositionTests
         Assert.True(off.Host.View is null || !off.Host.View.Candidates.Contains("1024"), "OFF は候補に出さない");
     }
 
-    [Test]
-    public static void Issue713_SingleKanaThenWIsLaughter()
-    {
-        var k = new Keyboard { LaughterAfterKana = true };
-        k.Type("naruhodonew\n");
-        Assert.Equal("なるほどねw", k.Host.Document, "なるほどnew → なるほどねw");
-        var saw = new Keyboard { LaughterAfterKana = true };
-        saw.Type("saw\n");
-        Assert.Equal("さw", saw.Host.Document, "saw → さw");
-        // 1 回の入力に かな + w が 2 つ以上あっても、それぞれ分ける (2 つ目が別の区間を書き換えていた)
-        var twice = new Keyboard { LaughterAfterKana = true };
-        twice.Type("newtosaw\n");
-        Assert.Equal("ねwとさw", twice.Host.Document, "2 つとも笑いの w (2 つ目が別の区間を書き換えて ねwさsaww になっていた)");
-        var spread = new Keyboard { LaughterAfterKana = true };
-        spread.Type("ganbattenewdesunesaw\n");
-        Assert.Equal("がんばってねwですねさw", spread.Host.Document, "間に日本語があっても");
-        var normal = new Keyboard();
-        normal.Type("naruhodonew\n");
-        Assert.Equal("なるほどnew", normal.Host.Document, "OFF は今までどおり");
-    }
 
     [Test]
     public static void Laughter_IsShownAsWWhileTyping()
@@ -3521,11 +3521,12 @@ internal static class CompositionTests
         again.Type(", ");
         Assert.Equal("・", again.Showing, "句読点だけを変換すると覚えた候補");
 
-        foreach (var style in Enum.GetValues<Meltype.Config.PunctuationStyle>())
+        foreach (var (style, expected) in new[] { (Meltype.Config.PunctuationStyle.Japanese, "私は、"), (Meltype.Config.PunctuationStyle.FullWidthCommaPeriod, "私は，"),
+            (Meltype.Config.PunctuationStyle.FullWidthCommaKuten, "私は，"), (Meltype.Config.PunctuationStyle.ToutenFullWidthPeriod, "私は、") })
         {
             var live = new Keyboard(live: true, history: history, converter: new SymbolChangingConverter(split: true)) { Punctuation = style };
             live.Type("watasiha,");
-            Assert.Equal(CompositionOutput.ToSetting(style, "私は、"), live.Showing, style + ": かなと一緒に打った句読点は覚えた候補にしない");
+            Assert.Equal(expected, live.Showing, style + ": かなと一緒に打った句読点は覚えた候補にしない");
         }
     }
 
@@ -4643,24 +4644,33 @@ internal static class CompositionTests
     [Test]
     public static void TypedSymbols_StayAfterResizingClauses()
     {
-        // 文節の区切りを変えて変換し直した文節でも、かなと一緒に打った記号は打ったときの文字のまま (変換エンジン・変換履歴が 、 を ・ にしても)
+        // 文節の区切りを変えて変換し直した文節でも、かなと一緒に打った記号は打ったときの文字のまま (変換エンジン・変換履歴が 、 を ・ にしても)。
+        // 打った 、。 は、いつもそれだけの文節 (文節を伸ばしても入らず、縮めた分は 、 の前に新しい文節を作る)
         var history = new ConversionHistory(null);
         history.Remember("、", "・");
+        history.Remember("？", "⁉");
         var k = new Keyboard(history: history, converter: new SymbolChangingConverter(split: true));
         k.Type("watasiha,kyouha? ");
         Assert.Equal("私は|、|今日は|？", string.Join("|", k.Host.View!.Clauses!));
-        k.Press(VirtualKeys.Left);
-        k.Press(VirtualKeys.Left);
-        k.Press(VirtualKeys.Left);
         ShiftArrow(k, VirtualKeys.Right);
-        Assert.Equal("私は、|今日は|？", string.Join("|", k.Host.View!.Clauses!), "伸ばした文節");
+        Assert.Equal("私は|、|今日は|？", string.Join("|", k.Host.View!.Clauses!), "、 は前の文節に入らない");
+        k.Press(VirtualKeys.Right);
+        ShiftArrow(k, VirtualKeys.Right);
+        Assert.Equal("私は|、|今日は|？", string.Join("|", k.Host.View!.Clauses!), "、 は伸ばせない");
+        k.Press(VirtualKeys.Right);
+        ShiftArrow(k, VirtualKeys.Right);
+        Assert.Equal("私は|、|今日は？", string.Join("|", k.Host.View!.Clauses!), "伸ばした文節");
+        k.Press(VirtualKeys.Left);
+        k.Press(VirtualKeys.Left);
+        ShiftArrow(k, VirtualKeys.Left);
+        Assert.Equal("、", k.Host.View!.Clauses![2], "縮めた分は 、 の前の文節: " + string.Join("|", k.Host.View.Clauses));
 
         var end = new Keyboard(history: history, converter: new SymbolChangingConverter(split: true));
-        end.Type("kyouha, ");
+        end.Type("kyouha? ");
         end.Press(VirtualKeys.Left);
         ShiftArrow(end, VirtualKeys.Right);
         ShiftArrow(end, VirtualKeys.Left);
-        Assert.Equal("今日は|、", string.Join("|", end.Host.View!.Clauses!), "縮めてできた 、 だけの文節も、覚えた ・ にしない");
+        Assert.Equal("今日は|？", string.Join("|", end.Host.View!.Clauses!), "縮めてできた ？ だけの文節も、覚えた ⁉ にしない");
     }
 
     /// <summary>決めた文節に区切る変換エンジン。</summary>
@@ -6241,7 +6251,7 @@ internal static class CompositionTests
             ("I want to go", null, null, "I want to go"),          // 英文はそのまま
         })
         {
-            Assert.Equal(expected, CompositionController.AddSpacesAroundEnglish(text, before, after), text);
+            Assert.Equal(expected, CompositionCommit.AddSpacesAroundEnglish(text, before, after), text);
         }
     }
 
@@ -6264,7 +6274,7 @@ internal static class CompositionTests
             ("買う", null, "15Pro", false, "買う"),                     // キャレットの後ろの語も同じ
         })
         {
-            Assert.Equal(expected, CompositionController.AddSpacesAroundEnglish(text, before, after, english, numbers: true), text);
+            Assert.Equal(expected, CompositionCommit.AddSpacesAroundEnglish(text, before, after, english, numbers: true), text);
         }
     }
 
@@ -6534,13 +6544,6 @@ internal static class CompositionTests
                 Assert.Equal(withText, entry.Contains("google"), "打った文字は設定どおり: " + entry);
                 if (!withText) Assert.True(entry.Contains("EN(6)"), "文字の代わりに文字数: " + entry);
             }
-
-            // ログの区切りは、実際に確定した区切りと同じ計算から取る。区間分けの後の書き換え (笑いの w) もログに出る
-            Meltype.Diagnostics.Log.RecordText = true;
-            var laughter = new Keyboard { LaughterAfterKana = true };
-            var laughed = CommitLog(laughter, "naruhodonew\n");
-            Assert.Equal("なるほどねw", laughter.Host.Document, "笑いの w で確定");
-            Assert.True(laughed.Contains("かな + w に分けた"), "笑いの w に分けたことがログに出る: " + laughed);
 
             // 保護区間を含む入力も、保護区間以外の区切りの重みを出す
             var text = new Composition.CompositionTextState();

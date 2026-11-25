@@ -1222,6 +1222,9 @@ internal static class LanguageLearningTests
         Assert.True(!memory.Entries().Single().Active, "一覧では「2 回目を待っている」");
         memory.Remember("go", english: true);
         Assert.Equal(true, memory.Get("go"), "2 回目で英語として覚える");
+        memory.Remember("no", english: true, context: true);
+        Assert.Equal(null, memory.Get("no", context: true), "文脈ごとに分けても、1 回目はまだ覚えない");
+        Assert.True(!memory.Entries().Single(e => e.Word == "no").Active, "文脈ごとに分けても、一覧では「2 回目を待っている」");
         memory.Remember("to", english: true, explicitChoice: true);
         Assert.Equal(true, memory.Get("to"), "F10 ではっきり直したら 1 回で覚える");
         memory.Remember("api", english: true);
@@ -1548,5 +1551,25 @@ internal static class RomajiTypoTests
             ("vitamin", "vitamin"), ("paranoia", "paranoia"), ("veteran", "veteran"), ("shuppnbutsu", "しゅっぱんぶつ"),
             // katakana.txt にもある読みは、katakana.txt の重みのまま
             ("oneshasu", "おねしゃす"));
+    }
+
+    [Test]
+    public static void RareReadings_IncludeShortReadings()
+    {
+        // Issue #2015・#2016・#2024: よく使う語でない 3〜4 文字の読み (ごびゅう・ろんぱ・おんぱ・うちどめ) が無く、後ろを英単語にしていた (ろんpa・うちdome)。
+        // 日本語の後ろに打った英単語 (いとてきなbug・うちのdomain) は英語のまま。使わない語の読み (これしゃ = 此れ者) では割らない
+        foreach (var (typed, expected) in new[]
+        {
+            ("itotekinagobyuu", "いとてきなごびゅう"), ("ronpa", "ろんぱ"), ("onpa", "おんぱ"), ("uchidome", "うちどめ"), ("ronpasuru", "ろんぱする"),
+            ("itotekinabug", "いとてきなbug"), ("uchinodomain", "うちのdomain"), ("koreshasuru", "これshaする"),
+            ("konocubekudasai", "このcubeください"), ("zenbutimenisuru", "ぜんぶtimeにする"),
+            ("aduchimomoyamajidai", "あづちももやまじだい"), ("godaijikkoku", "ごだいじっこく"),
+            ("ushiguruma", "うしぐるま"), ("akkanbee", "あっかんべえ"), ("messhiboukou", "めっしぼうこう"),
+        })
+        {
+            var k = new CompositionTests.Keyboard();
+            k.Type(typed + "\n");
+            Assert.Equal(expected, k.Host.Document, typed);
+        }
     }
 }

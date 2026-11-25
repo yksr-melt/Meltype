@@ -114,27 +114,36 @@ internal sealed class ConversionHistory
         public DateTime Used { get; set; }
     }
 
+    /// <summary>
+    /// 覚える読みか。1 文字のかな・英字 (き → 記) を覚えると、関係ない変換 (き + ごうとう) まで巻き込むので 2 文字以上だけ。
+    /// ただし数字・記号の 1 文字 (1 → ①、( → （) は、かなの途中に巻き込まれないので覚える (issue #672)。
+    /// 読み込むときも同じ条件で選ぶ (違うと、覚えた 1 → ① が再起動で消える: issue #2267)。
+    /// </summary>
+    internal static bool IsLearnableReading(string reading) =>
+        reading.Length >= 2 || reading.Length == 1 && reading[0] is < 'ぁ' or > 'ヿ' && !char.IsAsciiLetter(reading[0]);
+
     public ConversionHistory(string? path)
     {
         _saver = new DeferredSaver(Write);
         _path = path;
         _stamp = new FileStamp(path);
-        _entries = Load(path);
+        _entries = new(StringComparer.Ordinal);
+        Reload();
     }
 
-    private static Dictionary<string, Entry> Load(string? path)
+    private static Dictionary<string, Entry>? Load(string? path, Config.FileStamp stamp)
     {
         var entries = new Dictionary<string, Entry>(StringComparer.Ordinal);
-        Config.DataFile.Load(path, "変換の学習データ", content =>
+        var read = Config.DataFile.Load(path, "変換の学習データ", content =>
         {
             var loaded = JsonSerializer.Deserialize(content, Config.ConversionJsonContext.Default.Conversions);
-            // 1 文字の読み (き → 記) は、以前の版で覚えてしまったものも使わない (関係ない変換を巻き込むため)。
-            // 日時・版から作る語なども、以前の版で覚えてしまったものを使わない (StaleWords.IsStale)。
+            // 覚えない読み・日時や版から作る語 (StaleWords.IsStale) は、以前の版で覚えてしまったものも使わない。
+            // 値・Text が null の読みは捨てる (手で書き換えたファイル・細工したバックアップ。System.Text.Json は辞書の値の null を拒まない)
             if (loaded is not null)
                 foreach (var (reading, entry) in loaded)
-                    if (reading.Length >= 2 && !StaleWords.IsStale(reading, entry.Text)) entries[reading] = entry;
-        });
-        return entries;
+                    if (entry?.Text is not null && IsLearnableReading(reading) && !StaleWords.IsStale(reading, entry.Text)) entries[reading] = entry;
+        }, stamp);
+        return read ? entries : null;
     }
 
     /// <summary>ほかのプロセス (設定アプリ) が conversions.json を書き換えていたら読み直す (<see cref="FileStamp"/>)。</summary>
@@ -150,7 +159,8 @@ internal sealed class ConversionHistory
     private void Reload()
     {
         _stamp.Synced();
-        var entries = Load(_path);
+        // 読めなかったら前の中身のまま (Config.DataFile.Load)
+        if (Load(_path, _stamp) is not { } entries) return;
         lock (_gate)
         {
             _entries = entries;

@@ -193,9 +193,11 @@
 (defun copy-install-script (work)
   (write-file (merge-pathnames "install-app.sh" work)
               (replace-text
-               (uiop:read-file-string (merge-pathnames "mac/install-app.sh" *root*))
-               "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
-               "lsregister"))
+               (replace-text
+                (uiop:read-file-string (merge-pathnames "mac/install-app.sh" *root*))
+                "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+                "lsregister")
+               "/usr/sbin/sysctl" "sysctl"))
   (fake-tool work "lsregister" "exit 0")
   (fake-tool work "pgrep" "exit 1")
   (fake-tool work "pkill" "echo UNEXPECTED_KILL >> \"$MELTYPE_TEST_LOG\"; exit 99")
@@ -237,6 +239,7 @@
   (copy-install-script work)
   (fake-tool work "ditto" "cp -R \"$1\" \"$2\"")
   (fake-tool work "codesign" "exit 0")
+  (fake-tool work "install-settings-app.sh" "echo settings >> \"$MELTYPE_TEST_LOG\"")
   (write-file (merge-pathnames "select-input-source.swift" work) "// fake selector")
   (fake-tool work "swift" "echo selected >> \"$MELTYPE_TEST_LOG\"")
   (dolist (name '("pkill" "killall" "xattr" "lsregister"))
@@ -244,7 +247,7 @@
   (fake-tool work "killall" "echo UNEXPECTED_MENU_REFRESH >> \"$MELTYPE_TEST_LOG\"")
   (fake-tool work "open" "echo UNEXPECTED_OPEN >> \"$MELTYPE_TEST_LOG\"; exit 1")
   (run-script work "install.sh" nil)
-  (assert (equal '("app:--register-input-source" "started" "selected")
+  (assert (equal '("app:--register-input-source" "started" "settings" "selected")
                  (uiop:read-file-lines (merge-pathnames "calls" work)))))
 
 (defun test-update-keeps-input-menu (work)
@@ -438,7 +441,10 @@
     (write-file (merge-pathnames "Contents/Info.plist" source)
                 "<?xml version=\"1.0\"?><plist version=\"1.0\"><dict><key>CFBundleIdentifier</key><string>local.meltype.SwapTests</string><key>CFBundleExecutable</key><string>Meltype</string><key>CFBundlePackageType</key><string>APPL</string><key>CFBundleVersion</key><string>1</string></dict></plist>")
     (write-file (merge-pathnames "Contents/Resources/version" source) "A")
-    (uiop:run-program (list "cp" "/usr/bin/true" (namestring (merge-pathnames "Contents/MacOS/Meltype" source))))
+    ;; /usr/bin/true は arm64e で、署名し直すと Apple シリコンでは起動時に kill される。
+    (write-file (merge-pathnames "true.c" work) (format nil "int main(void) { return 0; }~%"))
+    (uiop:run-program (list "xcrun" "clang" "-o" (namestring (merge-pathnames "Contents/MacOS/Meltype" source))
+                           (namestring (merge-pathnames "true.c" work))))
     (uiop:run-program (list "/usr/bin/codesign" "--force" "--deep" "--sign" "-" (namestring source)))
     (run-script work "install-app.sh" arguments)
     (let ((first-hash (bundle-hash target))
@@ -488,6 +494,39 @@
         (assert failed))
       (assert (null (uiop:read-file-lines (merge-pathnames "calls" work)))))
     (assert (equal "B" (uiop:read-file-string (merge-pathnames "Contents/Resources/version" target))))))
+
+(defun test-unsupported-cpu-rejected (work)
+  (copy-install-script work)
+  (write-file (merge-pathnames "helper.c" work) (format nil "int main(void) { return 0; }~%"))
+  (ensure-directories-exist (merge-pathnames "source.app/Contents/MacOS/" work))
+  (fake-tool work "ditto" "cp -R \"$1\" \"$2\"")
+  ;; Reaching signature verification (23) means the CPU was accepted.
+  (fake-tool work "codesign" "exit 23")
+  (dolist (case '(("" ("arm64") 1)
+                  ("" ("x86_64") 23)
+                  ("" ("arm64" "x86_64") 23)
+                  ("1" ("arm64") 23)
+                  ("1" ("x86_64") 23)))
+    (destructuring-bind (apple-silicon architectures expected) case
+      (uiop:run-program
+       (append '("xcrun" "clang")
+               (loop for architecture in architectures append (list "-arch" architecture))
+               (list "-o" (namestring (merge-pathnames "source.app/Contents/MacOS/MeltypeInstallSupport" work))
+                     (namestring (merge-pathnames "helper.c" work)))))
+      (fake-tool work "sysctl" (format nil "echo ~A" apple-silicon))
+      (let ((status nil) (output (make-string-output-stream)))
+        (let ((*standard-output* output) (*error-output* output))
+          (handler-case (run-script work "install-app.sh"
+                                    (list (namestring (merge-pathnames "source.app" work))
+                                          (namestring (merge-pathnames "installed/Meltype.app" work))))
+            (uiop:subprocess-error (condition) (setf status (uiop:subprocess-error-code condition)))))
+        (assert (eql expected status))
+        (assert (eq (eql expected 1)
+                    (not (null (search "Apple シリコン用" (get-output-stream-string output))))))
+        ;; Nothing may be staged or left behind for an app that cannot run here.
+        (when (eql expected 1)
+          (assert (not (uiop:directory-exists-p (merge-pathnames "installed/" work)))))
+        (assert (null (directory (merge-pathnames ".meltype-install.*/" work))))))))
 
 (defun test-cross-volume-install-rejected (work)
   (test-install-rollback work)
@@ -1021,12 +1060,14 @@
     (format t "PASS read-only payload prepared before helper invocation without changing source~%")
     (call-with-work-directory #'test-refused-helper-preserved)
     (format t "PASS refused helper retained without replacing app~%")
+    (call-with-work-directory #'test-unsupported-cpu-rejected)
+    (format t "PASS Apple silicon app rejected on Intel before staging~%")
     (call-with-work-directory #'test-register-without-menu-agent)
     (format t "PASS registrar separates registration failure, pending activation and menu refresh warning~%")
     (call-with-work-directory #'test-pending-activation-keeps-app)
     (format t "PASS pending activation keeps first install/update/Homebrew/source app~%")
     (call-with-work-directory #'test-selection-failure-keeps-update)
-    (format t "PASS selection-only failure retains the installed update~%34/34 passed~%")))
+    (format t "PASS selection-only failure retains the installed update~%35/35 passed~%")))
 
 (handler-case (call-with-work-directory #'run-tests)
   (error (condition)

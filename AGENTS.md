@@ -22,6 +22,8 @@
 
 `src/Meltype.Core` の namespace は `Ime` → `Composition` (と `Composition.Utility`) → `Detection`・`Learning`・`Engine`・`Dictionary` → `Libraries.Chars`・`Libraries.Lexicon` の向きにだけ参照する。`Detection`・`Learning`・`Engine`・`Dictionary` どうしと、`Libraries` の中どうしは参照しない。どこからでも使えるのは `Config`・`Input`・`Diagnostics`。
 
+`CompositionController` は出来事の入口だけを受け持ち、キー・変換・確定・表示を別の class に分ける。
+
 ## 暗黙知
 
 - Mac・Linux 版の Core は NativeAOT で動き、テストは JIT で動く。reflection に頼るコードはテストが通っても配布版で動かないので、JSON はソース生成の `JsonSerializerContext` (`CoreJsonContext` など) で読み書きする。
