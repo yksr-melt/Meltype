@@ -13,9 +13,6 @@ on:
       - 'src/Meltype.Settings/**'
       - 'native/mozc/**'
       - 'native/zenzai/**'
-      - 'tools/test-native-boundaries.py'
-      - 'tools/test-mac-boundaries.*'
-      - 'tools/test-mac-events.*'
       - 'tests/test_mac_scripts.lisp'
       - '.github/workflows/mac.yml'
   push:
@@ -28,9 +25,6 @@ on:
       - 'dictionaries/**'
       - 'native/mozc/**'
       - 'native/zenzai/**'
-      - 'tools/test-native-boundaries.py'
-      - 'tools/test-mac-boundaries.*'
-      - 'tools/test-mac-events.*'
       - 'tests/test_mac_scripts.lisp'
       - '.github/workflows/mac.yml'
   workflow_dispatch:
@@ -127,9 +121,9 @@ jobs:
         run: ./build.sh --no-install
       - name: NativeAOT and Swift boundary tests
         run: |
-          python3 tools/test-native-boundaries.py mac/build/Meltype.app/Contents/Frameworks/libMeltypeNative.dylib
-          python3 tools/test-mac-boundaries.py mac/build/Meltype.app/Contents/Frameworks/libMeltypeNative.dylib
-          python3 tools/test-mac-events.py mac/build/Meltype.app/Contents/Frameworks/libMeltypeNative.dylib
+          python3 src/Meltype.Core.CApi/tests/test-native-boundaries.py mac/build/Meltype.app/Contents/Frameworks/libMeltypeNative.dylib
+          python3 mac/Tests/test-mac-boundaries.py mac/build/Meltype.app/Contents/Frameworks/libMeltypeNative.dylib
+          python3 mac/Tests/test-mac-events.py mac/build/Meltype.app/Contents/Frameworks/libMeltypeNative.dylib
       # 公証 (notarization): 署名したときだけ。秘密 NOTARY_APPLE_ID・NOTARY_TEAM_ID・NOTARY_PASSWORD (App 用パスワード)
       - name: Notarize
         if: env.MELTYPE_MAC_IDENTITY != ''

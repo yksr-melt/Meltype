@@ -3,7 +3,7 @@
 # Copyright (C) 2026 0924haruto12
 """NativeAOT の C ABI を検証する。変換コールバックはスタブ、設定・学習は一時ディレクトリ。
 
-python3 tools/test-native-boundaries.py path/to/MeltypeNative.dylib
+python3 src/Meltype.Core.CApi/tests/test-native-boundaries.py path/to/MeltypeNative.dylib
 Linux の libMeltypeNative.so でも同じテストを実行できる。
 """
 
