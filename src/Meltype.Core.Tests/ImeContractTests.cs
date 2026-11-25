@@ -970,7 +970,7 @@ internal static class ImeContractTests
     {
         var phrases = new PhraseHistory(null);
         var converter = new LearningConverter();
-        var front = new Front { Converter = converter, Services = new CompositionServices { Predictor = new Predictor(phrases, null) } };
+        var front = new Front { Converter = converter, Services = new CompositionServices { Predictor = new Predictor(phrases, null, null) } };
         front.Settings.PredictiveCandidates = true;
         front.Settings.PartialCommit = true;
         front.Traits.Add("Private");
@@ -993,7 +993,7 @@ internal static class ImeContractTests
     {
         var phrases = new PhraseHistory(null);
         var converter = new LearningConverter();
-        var front = new Front { Converter = converter, Services = new CompositionServices { Predictor = new Predictor(phrases, null) } };
+        var front = new Front { Converter = converter, Services = new CompositionServices { Predictor = new Predictor(phrases, null, null) } };
         front.Settings.PredictiveCandidates = true;
         front.Type("nihongo");
 
