@@ -172,18 +172,19 @@ internal static class LineContext
         (index + 2 == text.Length || text[index + 2] is > '~' || char.IsWhiteSpace(text[index + 2]));
 
     /// <summary>
-    /// 行コメントの // にすぐ続けて打った記号 c か (C# の ///、Rust の //!、区切りの //----)。
-    /// コメントの記号の一部なので、日本語の記号にしない。英数字・日本語・空白を打ったら本文。
+    /// 行コメントの // にすぐ続けて打った記号 c か (C# の ///、Rust の //!、区切りの //---- //==== //****)。
+    /// コメントの記号の一部なので、日本語の記号にしない。ほかの記号・英数字・日本語・空白を打ったら本文。
     /// </summary>
     public static bool ContinuesSlashCommentMarker(string before, char c)
     {
-        if (!IsAsciiSymbol(c)) return false;
+        if (!IsSlashCommentMarker(c)) return false;
         var start = before.Length;
-        while (start > 0 && IsAsciiSymbol(before[start - 1])) start--;
+        while (start > 0 && IsSlashCommentMarker(before[start - 1])) start--;
         return StartsWith(before, start, "//");
     }
 
-    private static bool IsAsciiSymbol(char c) => c is > ' ' and <= '~' && !char.IsAsciiLetterOrDigit(c);
+    // コメントの記号に使うものだけにする。[ ( " などは「せつめい」のように本文の始まりで、日本語の記号にする。
+    private static bool IsSlashCommentMarker(char c) => c is '/' or '!' or '-' or '=' or '*';
 
     /// <summary>
     /// ターミナルで動く AI・チャットの入力行か (Claude Code・Gemini CLI の「&gt; 」、Codex の「› 」。枠線の │ は飛ばす)。

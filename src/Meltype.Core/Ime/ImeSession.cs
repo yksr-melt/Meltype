@@ -709,9 +709,11 @@ internal static class ImeSession
         // 先頭か空白の直後の /command・$skill・@ファイル名 は、変換せずにそのままアプリへ渡す (#193)。
         // 文章の入力欄の / は、変換ボックスに ・ として入れる。Space で / にすると、続く名前はそのまま渡す。
         var lineKind = CodeInput(state) && !CompositionController.IsComposing(state.Composition) ? CodeLineKind(before) : (LineKind?)null;
-        var slashComment = lineKind == LineKind.Comment;
+        // シェルに // のコメントは無く、//src/main:app (Bazel)・//c/work (Git Bash) のような引数なので、ターミナルでは補完名と同じく直接入力する。
+        var slashComment = lineKind == LineKind.Comment && !CodeTerminal(state);
         // ドキュメントコメントの /// や //! の記号は本文ではないので、日本語の記号 (・ ！) にしない。
-        if (slashComment && !modifier && before is { } commentLine && ch is { } mark && LineContext.ContinuesSlashCommentMarker(commentLine, mark))
+        // かな入力では記号のキーもかな (; は れ) を打つキーなので、本文として扱う。
+        if (slashComment && settings.InputStyle == InputStyle.Romaji && !modifier && before is { } commentLine && ch is { } mark && LineContext.ContinuesSlashCommentMarker(commentLine, mark))
         {
             return CompositionController.Pass(state.Composition, Env(state, env), now);
         }

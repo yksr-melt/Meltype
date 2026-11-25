@@ -1058,9 +1058,45 @@ internal static class SessionFacadeTests
     }
 
     [Test]
+    public static void CodeInput_SlashCommentBodyStartsWithBracket()
+    {
+        // // の直後に打った [ は本文の始まりなので、コメントの記号にせず 「 にする。
+        var session = Create();
+        session.CodeInput = true;
+        var field = new Field();
+        Type(session, "kome//[setumei]\n", field);
+        Assert.Equal("kome//「せつめい」", field.Text);
+    }
+
+    [Test]
+    public static void CodeInput_KanaInputAfterSlashCommentTypesKana()
+    {
+        // かな入力では、// の直後の記号のキーもかなを打つ (; は れ)。
+        var session = new TestSession(() => new Settings { LiveConversion = false, InputStyle = InputStyle.Kana }) { CodeInput = true };
+        var field = new Field("kome//");
+        // JIS 配列の ; のキー (VK_OEM_PLUS)
+        var next = session.HandleKey(0xBB, ';', false, false, false, false, field.Text);
+        Assert.True(next.Consumed, field.Text);
+        Assert.Equal("れ", next.View?.Text);
+    }
+
+    [Test]
+    public static void CodeInput_TerminalSlashArgumentsRemainDirect()
+    {
+        // シェルの // から始まる引数 (Bazel のラベル・Git Bash のパス) は、コメントではないので直接入力する。
+        foreach (var command in new[] { "bazel build //src/main:app\n", "bazel test //tools:koko\n", "docker run -v //c/work\n" })
+        {
+            var session = Create();
+            session.CodeInput = true;
+            session.CodeTerminal = true;
+            Assert.True(Type(session, command).All(r => !r.Consumed && r.View is null), command);
+        }
+    }
+
+    [Test]
     public static void CodeInput_TerminalWithoutSurroundingTextContinuesLineComments()
     {
-        foreach (var marker in new[] { "//", "#" })
+        foreach (var marker in new[] { "#" })
         {
             var session = Create();
             session.CodeInput = true;
