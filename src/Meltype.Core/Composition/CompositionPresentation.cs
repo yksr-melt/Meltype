@@ -149,10 +149,12 @@ internal static class CompositionPresentation
     private static List<Prediction> BuildPredictions(CompositionState state, CompositionEnv env)
     {
         if (env.Services.Predictor is not { } predictor || !env.Settings.PredictiveCandidates || state.Text.Mode != DisplayMode.Auto) return [];
+        var raw = CompositionText.Raw(state.Text);
+        IEnumerable<string> PredictEnglish() => predictor.PredictEnglish(raw).Select(w => CompositionText.AutoCanonical(env, w) ?? w);
         if (CompositionText.IsAlphanumeric(state.Text, env))
         {
             // 英単語 1 語の打ちかけ (decis → decisions)
-            return CompositionText.Raw(state.Text).All(char.IsAsciiLetter) ? predictor.PredictEnglish(CompositionText.Raw(state.Text)).Select(w => new Prediction(w, "", CompositionText.Raw(state.Text))).ToList() : [];
+            return raw.All(char.IsAsciiLetter) ? PredictEnglish().Select(w => new Prediction(w, "", raw)).ToList() : [];
         }
         var kana = CompositionText.AllKana(state.Text, env, final: false);
         var predictions = new List<Prediction>();
@@ -176,7 +178,7 @@ internal static class CompositionPresentation
             }
         }
         // 長い英単語は、打ち終わるまでローマ字として見えていることがある (decis → でしs)。英字だけを 4 文字以上打っていれば英単語の続きも出す
-        if (CompositionText.Raw(state.Text).Length >= 4 && CompositionText.Raw(state.Text).All(char.IsAsciiLetter)) Add(predictor.PredictEnglish(CompositionText.Raw(state.Text)), "", CompositionText.Raw(state.Text));
+        if (raw.Length >= 4 && raw.All(char.IsAsciiLetter)) Add(PredictEnglish(), "", raw);
         return predictions;
     }
 

@@ -74,8 +74,9 @@ internal static class CompositionConversion
             var typedEnv = CompositionText.FragmentEnv(state.Text, env) with { Context = () => context };
             foreach (var c in word) CompositionText.Append(typed, typedEnv, c);
             var segments = CompositionText.Segments(typed, typedEnv);
-            foreach (var segment in segments)
+            for (var i = 0; i < segments.Count; i++)
             {
+                var segment = segments[i];
                 if (!segment.IsEnglish)
                 {
                     kana.Append(segment.Kana);
@@ -85,7 +86,7 @@ internal static class CompositionConversion
                 if (kana.Length > 0) output.Append(Convert(env, kana.ToString(), SegmentBefore(env, output.ToString()), zenzai: true));
                 kana.Clear();
                 if (output.Length > 0 && output[^1] != ' ') output.Append(' ');
-                output.Append(segment.Raw).Append(' ');
+                output.Append(CompositionText.DisplayEnglishSegment(segments, i, env)).Append(' ');
             }
             englishWords = segments.Count > 0 && segments[^1].IsEnglish ? (segments.Count == 1 ? englishWords + 1 : 1) : 0;
         }
@@ -130,7 +131,7 @@ internal static class CompositionConversion
             List<string> registered = [.. env.Services.UserDictionary?.Lookup(lower) ?? [], .. env.Settings.ConsonantAbbreviations ? env.Services.Candidates?.Lookup(lower) ?? [] : []];
             var reading = RomajiReading(state, env, typedRaw);
             List<string> romaji = reading is null ? [] : JapaneseCandidates(state, env, reading, null, SegmentBefore(env, ""), zenzai: true);
-            List<string> english = [typedRaw, .. EnglishCandidates(state, env, typedRaw)];
+            var english = EnglishCandidates(state, env, typedRaw, allowAuto: true);
             return new Conversion([new Clause(typedRaw, true, preferJapanese
                 ? Distinct([.. registered, .. romaji, .. english])
                 : Distinct([.. registered, .. english, .. romaji])) { Raw = typedRaw, Kana = reading }], trigger, preferJapanese);
@@ -171,7 +172,7 @@ internal static class CompositionConversion
                     clauses.Add(new Clause(segment.Raw, true, [segment.Raw]));
                     continue;
                 }
-                var english = Distinct([.. env.Services.UserDictionary?.Lookup(segment.Raw.ToLowerInvariant()) ?? [], .. EnglishCandidates(state, env, segment.Raw)]);
+                var english = Distinct([.. env.Services.UserDictionary?.Lookup(segment.Raw.ToLowerInvariant()) ?? [], .. EnglishCandidates(state, env, segment.Raw, allowAuto: !CompositionText.IsDotConnected(segments, s))]);
                 // 子音の略入力 (ast → 明日): 英字のまま見える語にも、candidates.txt の英字の読みの候補を足す (issue #62)
                 if (env.Settings.ConsonantAbbreviations && segment.Raw.Length >= 2 && segment.Raw.All(char.IsAsciiLetter) && env.Services.Candidates is { } abbreviations)
                 {
@@ -782,12 +783,14 @@ internal static class CompositionConversion
         clause.Index = Math.Max(0, clause.Candidates.IndexOf(current));
     }
 
-    /// <summary>英語の文節の候補: 打ったまま → 固有名詞の正しい形 (GitHub) → 先頭だけ大文字 → すべて大文字 → 全角。</summary>
-    private static List<string> EnglishCandidates(CompositionState state, CompositionEnv env, string raw)
+    /// <summary>英語の文節の候補: 自動で大文字小文字を直す固有名詞 (iPhone・GitHub) はその形を先頭に、それ以外は打ったまま → 固有名詞の正しい形 → 先頭だけ大文字 → すべて大文字 → 全角。</summary>
+    private static List<string> EnglishCandidates(CompositionState state, CompositionEnv env, string raw, bool allowAuto)
     {
         var lower = raw.ToLowerInvariant();
+        var canonical = env.Detector.ProperNouns.Canonical(lower);
+        var auto = allowAuto ? CompositionText.AutoCanonical(env, raw) : null;
         var capitalized = raw.Length > 0 ? char.ToUpperInvariant(raw[0]) + raw[1..] : raw;
-        return Distinct(raw, env.Detector.ProperNouns.Canonical(lower), capitalized, raw.ToUpperInvariant(), CompositionText.ToFullWidth(raw));
+        return Distinct(auto, raw, canonical, capitalized, raw.ToUpperInvariant(), CompositionText.ToFullWidth(raw));
     }
 
     /// <summary>英語と判定した語を、ローマ字として読んだかな (go → ご)。読み切れなければ null。</summary>

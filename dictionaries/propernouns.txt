@@ -1,6 +1,6 @@
 # Meltype 英語の固有名詞 (正しい大文字小文字で書く)
 # ローマ字としても読めてしまう固有名詞 (amazon → あまぞん、adobe → あどべ) を英語として扱うための辞書。
-# 変換中の候補には、ここに書いた大文字小文字の形 (GitHub, iPhone) も出る。
+# 変換中の候補には、ここに書いた大文字小文字の形 (GitHub, iPhone) も出る。本来は空白や記号が入る語 (cocacola, mcdonalds, newyork) は、空白・記号なしの 1 語に自動で直さないよう小文字で書く。
 # 日本語の語 (hana, sakura …) と同じ綴りのものや、日本語で書くことが多い日本の社名・作品名 (suzuki, rakuten, mario) は入れない。
 # %LOCALAPPDATA%\Meltype\dictionaries\propernouns.txt に同じ形式で書くと追加できる。
 
@@ -27,7 +27,7 @@ Adidas Nike Puma Reebok Converse Vans Gucci Prada Chanel Hermes Rolex Omega Citi
 Sony Panasonic Sharp Canon Nikon Fujifilm Olympus Epson Brother
  Lexus Mercedes BMW Audi Volkswagen Porsche Ferrari Lamborghini Volvo Hyundai Kia
 Samsung LG Huawei Xiaomi Lenovo Dell HP Asus Acer Intel AMD Nvidia Qualcomm Arm IBM Cisco
-CocaCola Pepsi Starbucks McDonalds Burger KFC Subway Domino Nestle Kellogg Lego IKEA Costco Walmart Target
+cocacola Pepsi Starbucks mcdonalds Burger KFC Subway Domino Nestle Kellogg Lego IKEA Costco Walmart Target
 Boeing Airbus Disney Pixar Marvel DC Netflix Warner Paramount Universal
 
 # 地名
@@ -36,7 +36,7 @@ Spain Madrid Barcelona Portugal Lisbon Netherlands Amsterdam Belgium Brussels Sw
 Russia Moscow Ukraine Kyiv Turkey Istanbul Greece Athens Egypt Cairo Kenya Nigeria Africa Europe Asia Oceania
 India Delhi Mumbai China Beijing Shanghai Korea Seoul Taiwan Taipei Hongkong Singapore Malaysia Thailand Bangkok Vietnam Hanoi
 Indonesia Jakarta Bali Philippines Manila Australia Sydney Melbourne Zealand Auckland Hawaii Honolulu Guam Alaska
-California Texas Florida NewYork Manhattan Brooklyn Boston Chicago Seattle Portland Denver Vegas Hollywood Washington Atlanta Miami
+California Texas Florida newyork Manhattan Brooklyn Boston Chicago Seattle Portland Denver Vegas Hollywood Washington Atlanta Miami
 Dallas Houston Phoenix Detroit Philadelphia Toronto Vancouver Montreal Dubai Doha Riyadh Tehran Jerusalem
 
 # 人名 (英語圏の名前。日本語の語と同じ綴りのものは除く)
@@ -53,7 +53,7 @@ OpenAI ChatGPT Anthropic Claude Gemini Copilot Perplexity Midjourney HuggingFace
 Cursor Windsurf Replit CodeSandbox StackBlitz Postman Insomnia Sentry Datadog Grafana Prometheus Kibana Splunk
 Jenkins CircleCI TravisCI Terraform Ansible Pulumi Vagrant Nginx Apache Tomcat Redis MongoDB PostgreSQL MySQL MariaDB SQLite Oracle Snowflake Databricks BigQuery Elasticsearch Kafka RabbitMQ
 React Vue Angular Svelte Nextjs Nuxt Remix Astro Gatsby Vite Webpack Rollup Parcel Babel TypeScript JavaScript CoffeeScript Deno Bun Nodejs
-Django Flask FastAPI Rails Laravel Symfony Spring Express NestJS Electron Tauri Flutter Kotlin Swift SwiftUI Xamarin Unity Unreal Godot Blender
+Django Flask FastAPI Rails Laravel Symfony Spring Express NestJS Electron Tauri Flutter Kotlin Swift SwiftUI UIKit Xamarin Unity Unreal Godot Blender
 Python Ruby Rust Golang Haskell Scala Clojure Elixir Erlang Julia Fortran COBOL Perl Lua Dart Zig Crystal Nim OCaml
 PyTorch TensorFlow Keras NumPy Pandas SciPy Jupyter Anaconda Matplotlib OpenCV
 # 会社・サービス
@@ -61,7 +61,7 @@ Salesforce Shopify Stripe PayPal Square Adyen Klarna Airbnb Uber Lyft DoorDash I
 Samsung Intel AMD Nvidia Qualcomm Broadcom Cisco IBM Dell Asus Acer Logitech Razer Corsair Seagate Kingston
 Adobe Photoshop Illustrator Premiere Lightroom Acrobat InDesign Dropbox Evernote Slack Asana Monday ClickUp Airtable Zapier Calendly Typeform Mailchimp HubSpot Zendesk Intercom
 Tesla SpaceX Starlink Boeing Airbus Porsche Ferrari Lamborghini Volkswagen Audi BMW Mercedes Volvo Jaguar Hyundai Kia Peugeot Renault Chevrolet Cadillac
-Starbucks McDonalds KFC Subway Dominos Costco Walmart Target IKEA Uniqlo Nike Adidas Puma Reebok Gucci Prada Chanel Hermes Louis Vuitton Rolex Cartier Tiffany
+Starbucks mcdonalds KFC Subway Dominos Costco Walmart Target IKEA Uniqlo Nike Adidas Puma Reebok Gucci Prada Chanel Hermes Louis Vuitton Rolex Cartier Tiffany
 Coca Pepsi Nestle Danone Heineken Budweiser
 Microsoft Excel Word PowerPoint Outlook OneDrive OneNote SharePoint Bing Edge Chrome Firefox Safari Opera Brave Vivaldi Thunderbird
 Wikipedia Quora Medium Discord Mastodon Bluesky Threads Snapchat Pinterest Vimeo Dailymotion SoundCloud Bandcamp Deezer Tidal

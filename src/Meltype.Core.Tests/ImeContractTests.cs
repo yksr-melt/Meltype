@@ -1346,6 +1346,30 @@ internal static class ImeContractTests
     }
 
     [Test]
+    public static void CodeApps_KeepCommandNamesLowercase()
+    {
+        // 固有名詞の自動の大文字小文字 (mysql → MySQL、jquery → jQuery) は、コードの行や文字列リテラルの中では効かせない
+        foreach (var (app, before, typed) in new[]
+        {
+            ("Code.exe", "import ", "numpy"),
+            ("Code.exe", "db = ", "mysql"),
+            ("WindowsTerminal.exe", "$ ", "mysql"),
+            ("Code.exe", "require('", "jquery"),
+            ("Code.exe", "image = \"", "mysql"),
+        })
+        {
+            var front = new Front { App = app, Document = before };
+            front.Type(typed);
+            if (front.Composition.GetValueOrDefault("t1") is not null) front.Key('\n');
+            Assert.Equal(before + typed, front.Document, $"{app}: {before}{typed}\n" + front.Trace);
+        }
+        // コードのコメントの中は文章なので、通常どおり自動で直す
+        var comment = new Front { App = "Code.exe", Document = "// " };
+        comment.Type("iphone\n");
+        Assert.Equal("// iPhone", comment.Document, comment.Trace);
+    }
+
+    [Test]
     public static void Snippets_ExpandFromTheTextBeforeTheCaret()
     {
         // 何も打っていないときの Space・Tab・Esc は受け取らないキーなので、定型文に使うときだけ capture に入れる (TSF・Meltype キーボードはほかを通す)
