@@ -357,9 +357,10 @@ internal static class CompositionConversion
     private static string? EnglishSplit(CompositionEnv env, string raw)
     {
         CompositionTextState typed = new CompositionTextState();
-        foreach (var c in raw) CompositionText.Append(typed, CompositionText.FragmentEnv(env), c);
+        var typedEnv = CompositionText.FragmentEnv(env);
+        foreach (var c in raw) CompositionText.Append(typed, typedEnv, c);
         if (CompositionText.Pending(typed).Length > 0) return null;
-        var segments = env.Detector.SegmentLeaningEnglish(CompositionText.LearningContext(env), CompositionText.Units(typed));
+        var segments = env.Detector.SegmentLeaningEnglish(CompositionText.LearningContext(env), TypedMarks.Read(typed, typedEnv));
         if (!segments.Any(s => s.IsEnglish) || segments.All(s => s.IsEnglish)) return null;
         return string.Concat(segments.Select(s => s.IsEnglish ? s.Raw : s.Kana));
     }
@@ -607,7 +608,7 @@ internal static class CompositionConversion
     }
 
     /// <summary>
-    /// かなと一緒に打った記号 (読みの 、。？「 など。CompositionText.Symbol が決めた文字) は、最初の候補でも読みの文字のままにする。
+    /// かなと一緒に打った記号 (読みの 、。？「 など。CompositionText.Symbol と TypedMarks が決めた文字) は、最初の候補でも読みの文字のままにする。
     /// 変換エンジンの答え・Mozc の学習・変換履歴は、記号を別の文字にすることがある
     /// (ライブ変換で 例文？ が 例文? に: issue #519、「今日は が ［今日は に: issue #1669、わたしは、 が 私は・ に)。別の候補は一覧に残す。
     /// 記号だけを打って変換したとき (、 だけ・( だけ) は、選んで覚えた候補を使う (issue #672)。記号だけかは、文節や

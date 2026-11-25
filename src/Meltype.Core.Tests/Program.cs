@@ -41,7 +41,7 @@ internal static class Program
                     var env = TestSupport.Env(CompositionTests.Detector);
                     foreach (var c in args.ElementAtOrDefault(1) ?? "") Composition.CompositionText.Append(text, env, c);
                     Console.OutputEncoding = new System.Text.UTF8Encoding(false);
-                    Console.WriteLine("units: " + string.Join(" ", Composition.CompositionText.Units(text).Select(u => $"{u.Raw}={u.Kana}")) + (Composition.CompositionText.Pending(text).Length > 0 ? $" +{Composition.CompositionText.Pending(text)}" : ""));
+                    Console.WriteLine("units: " + string.Join(" ", Composition.TypedMarks.Read(text, env).Select(u => $"{u.Raw}={u.Kana}")) + (Composition.CompositionText.Pending(text).Length > 0 ? $" +{Composition.CompositionText.Pending(text)}" : ""));
                     CompositionTests.Detector.LatticeTrace = Console.WriteLine;
                     var segments = Composition.CompositionText.Segments(text, env);
                     CompositionTests.Detector.LatticeTrace = null;
