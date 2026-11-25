@@ -259,22 +259,6 @@ internal static class ZenzaiConverterTests
     }
 
     [Test]
-    public static void TypingCandidates_AskZenzaiWithTheSameContext_AsLiveConversion()
-    {
-        // 入力中の候補 (その読みだけの変換) を、ライブ変換と別の文脈で頼むと、Zenzai は最後に頼まれた 1 件だけを処理するので、ライブ変換の依頼が消える
-        using var server = new FakeServer { Answer = p => p.Contains("アシタ") ? "明日</s>" : ReadingIn(p) };
-        using var zenzai = new ZenzaiConverter(server.Endpoint, timeoutMs: 5000);
-        using var mozc = MozcConverterTests.Fake();
-        var hybrid = new HybridConverter(mozc, () => zenzai);
-        var session = new TestSession(() => new Settings { LiveConversion = true, ShowCandidatesWhileTyping = true }, hybrid);
-        foreach (var c in "asita") session.HandleKey(char.ToUpperInvariant(c), c, false, false, false, false, before: "昨日");
-        SpinWait.SpinUntil(() => server.Prompts.Any(p => p.Contains("アシタ")), 5000);
-        Thread.Sleep(200);
-        var asked = server.Prompts.Where(p => p.Contains("アシタ")).ToList();
-        Assert.True(asked.Count > 0 && asked.All(p => p.Contains("昨日")), "あした はどれもキャレットの前 (昨日) を文脈にして頼む: " + string.Join(" / ", asked));
-    }
-
-    [Test]
     public static void Converts_ThroughCompletionEndpoint()
     {
         using var server = new FakeServer { Answer = p => p.Contains("キョウ") ? "今日</s>" : "" };

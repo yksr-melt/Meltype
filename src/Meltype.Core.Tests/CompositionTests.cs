@@ -247,7 +247,6 @@ internal static class CompositionTests
         public string ControlKeyBindings { get => Settings.ControlKeyBindings; set => Settings.ControlKeyBindings = value; }
         public bool CalculatorCandidates { get => Settings.CalculatorCandidates; set => Settings.CalculatorCandidates = value; }
         public bool ContextualLearning { get => Settings.ContextualLearning; set => Settings.ContextualLearning = value; }
-        public bool ShowCandidatesWhileTyping { get => Settings.ShowCandidatesWhileTyping; set => Settings.ShowCandidatesWhileTyping = value; }
         public string GitHubRepository { get => Settings.GitHubRepository; set => Settings.GitHubRepository = value; }
         public GitHubIssueTitles? GitHubTitles { get; set; }
         public bool ClipboardCandidates { get => Settings.ClipboardCandidates; set => Settings.ClipboardCandidates = value; }
@@ -498,20 +497,6 @@ internal static class CompositionTests
         Assert.Equal("Hello, this is a pen.", EngineContext.Passage("Hello, this is a pen. ") ?? "(なし)", "英文もそのまま渡す");
         // Mozc の文脈は、同じ文の日本語 (最大 10 文字)
         Assert.Equal("今日は", EngineContext.Sentence("昨日は雨でした。今日は") ?? "(なし)");
-    }
-
-    [Test]
-    public static void Issue666_ClickingATypingCandidate_SelectsThatWord()
-    {
-        // 入力中の候補は読み全体の候補。クリックしたとき、文節に分かれて一覧が変わっても、見えていた語が選ばれる
-        var k = new Keyboard(live: true) { ShowCandidatesWhileTyping = true };
-        k.Type("tanniwotoru");
-        var shown = k.Host.View!.Candidates.ToList();
-        Assert.True(shown.Count >= 2, "候補が出ている: " + string.Join(",", shown));
-        k.SelectCandidate(1);
-        Assert.Equal(shown[1], k.Showing, "クリックした語が選ばれる");
-        k.Type("\n");
-        Assert.Equal(shown[1], k.Host.Document, "その語で確定");
     }
 
     [Test]
@@ -3065,18 +3050,6 @@ internal static class CompositionTests
         k.Key(VirtualKeys.LShift, up: true);
         k.Host.PhysicalShift = false;
         Assert.Equal("たなか　たろう ", k.Host.Document, "Shift+Space が半角");
-    }
-
-    [Test]
-    public static void Issue666_CandidatesCanBeShownWhileTyping()
-    {
-        var k = new Keyboard { ShowCandidatesWhileTyping = true };
-        k.Type("kyouha");
-        Assert.True(!k.Host.View!.Converting, "変換はまだ始めていない");
-        Assert.True(k.Host.View.Candidates.Count >= 2, "入力中も候補を出す: " + string.Join(",", k.Host.View.Candidates));
-        var off = new Keyboard();
-        off.Type("kyouha");
-        Assert.Equal(0, off.Host.View!.Candidates.Count, "OFF は出さない");
     }
 
     [Test]
