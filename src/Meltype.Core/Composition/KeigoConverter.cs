@@ -285,11 +285,23 @@ internal static class KeigoConverter
         ("いました", "いらっしゃいました"),
     ];
 
-    private static readonly string[] OtherSubjectMarkers =
-        ["お客様", "皆様", "皆さん", "先方", "御社", "貴社", "先生", "社長", "部長", "課長", "係長", "専務", "常務", "取締役", "担当者", "相手", "そちら", "あなた", "様", "さん"];
+    private static readonly string[] OtherSubjectTokens = BuildSubjectTokens(
+        ["お客様", "皆様", "皆さん", "先方", "御社", "貴社", "先生", "社長", "部長", "課長", "係長", "専務", "常務", "取締役", "担当者", "相手", "そちら", "あなた", "様", "さん"]);
 
-    private static readonly string[] SelfSubjectMarkers =
-        ["私ども", "弊社", "当社", "こちら", "私", "僕", "俺", "自分"];
+    private static readonly string[] SelfSubjectTokens = BuildSubjectTokens(
+        ["私ども", "弊社", "当社", "こちら", "私", "僕", "俺", "自分"]);
+
+    private static string[] BuildSubjectTokens(string[] markers)
+    {
+        var list = new List<string>(markers.Length * 3);
+        foreach (var marker in markers)
+        {
+            list.Add(marker + "は");
+            list.Add(marker + "が");
+            list.Add(marker + "も");
+        }
+        return [.. list];
+    }
 
     // 疑問文 (？ / ?) のときの読み完全一致
     private static readonly Dictionary<string, string> QuestionReadingMap = new(StringComparer.Ordinal)
@@ -807,6 +819,63 @@ internal static class KeigoConverter
         ("探す", "お探しいたします"),
         ("探しました", "お探しいたしました"),
         ("探した", "お探しいたしました"),
+        ("書く", "書きます"),
+        ("書いた", "書きました"),
+        ("届く", "届きます"),
+        ("届いた", "届きました"),
+        ("動く", "動きます"),
+        ("動いた", "動きました"),
+        ("開く", "開きます"),
+        ("開いた", "開きました"),
+        ("進む", "進みます"),
+        ("進んだ", "進みました"),
+        ("進める", "進めます"),
+        ("進めた", "進めました"),
+        ("選ぶ", "選びます"),
+        ("選んだ", "選びました"),
+        ("まとめる", "取りまとめます"),
+        ("まとめた", "取りまとめました"),
+        ("戻る", "戻ります"),
+        ("戻った", "戻りました"),
+        ("閉じる", "閉じます"),
+        ("閉じた", "閉じました"),
+        ("残す", "残します"),
+        ("残した", "残しました"),
+        // 補助動詞・助動詞
+        ("てもらえますか", "ていただけますでしょうか"),
+        ("てもらえる", "ていただけますでしょうか"),
+        ("てもらいました", "ていただきました"),
+        ("てもらった", "ていただきました"),
+        ("てもらいます", "ていただきます"),
+        ("てもらう", "ていただきます"),
+        ("てくれますか", "ていただけますでしょうか"),
+        ("てくれました", "てくださいました"),
+        ("てくれた", "てくださいました"),
+        ("てくれます", "てくださいます"),
+        ("てくれる", "てくださいます"),
+        ("てもいいですか", "てもよろしいでしょうか"),
+        ("てもいい", "てもよろしいでしょうか"),
+        ("ていいですか", "てもよろしいでしょうか"),
+        ("ていい", "てもよろしいでしょうか"),
+        ("てみる", "てみます"),
+        ("てみた", "てみました"),
+        ("ておく", "ておきます"),
+        ("ておいた", "ておきました"),
+        ("てきます", "てまいります"),
+        ("てくる", "てまいります"),
+        ("てきました", "てまいりました"),
+        ("てきた", "てまいりました"),
+        ("ていきます", "てまいります"),
+        ("ていく", "てまいります"),
+        ("してほしいです", "していただけますでしょうか"),
+        ("してほしい", "していただけますでしょうか"),
+        ("して欲しい", "していただけますでしょうか"),
+        ("てほしいです", "ていただけますでしょうか"),
+        ("てほしい", "ていただけますでしょうか"),
+        ("て欲しい", "ていただけますでしょうか"),
+        ("でほしいです", "でいただけますでしょうか"),
+        ("でほしい", "でいただけますでしょうか"),
+        ("で欲しい", "でいただけますでしょうか"),
         ("しています", "しております"),
         ("している", "しております"),
         ("してる", "しております"),
@@ -828,6 +897,8 @@ internal static class KeigoConverter
         ("ていました", "ておりました"),
         ("ていた", "ておりました"),
         ("てた", "ておりました"),
+        ("かもしれない", "かもしれません"),
+        ("かも", "かもしれません"),
         ("ではありません", "ではございません"),
         ("じゃありません", "ではございません"),
         ("ではない", "ではございません"),
@@ -877,50 +948,78 @@ internal static class KeigoConverter
             }
         }
 
+        var lastContentIndex = clauses.Count - 1;
+        while (lastContentIndex >= 0 && IsPunctuationOnly(clauses[lastContentIndex].Text))
+            lastContentIndex--;
+
+        // 直前の確定済みテキストからは「最後の文」だけを引き継ぐ (前の文の主語が改行や句点をまたいで残らないようにする)
+        var currentSentence = new System.Text.StringBuilder().Append(LastSentenceOf(before));
+
         for (var i = 0; i < clauses.Count; i++)
         {
-            if (IsPunctuationOnly(clauses[i].Text) && IsPunctuationOnly(clauses[i].Reading)) continue;
+            var clauseText = clauses[i].Text;
+            var clauseReading = clauses[i].Reading;
+            currentSentence.Append(clauseText);
 
-            var hasClauseEnd = HasClauseEnd(clauses[i].Text) || HasClauseEnd(clauses[i].Reading);
+            if (IsPunctuationOnly(clauseText) && IsPunctuationOnly(clauseReading))
+            {
+                if (HasSentenceBreak(clauseText)) currentSentence.Clear();
+                continue;
+            }
+
+            var hasClauseEnd = HasClauseEnd(clauseText) || HasClauseEnd(clauseReading);
             var nextIsPunct = i + 1 < clauses.Count && IsPunctuationOnly(clauses[i + 1].Text);
-            var hasNextContent = clauses.Skip(i + 1).Any(c => !IsPunctuationOnly(c.Text));
+            var hasNextContent = i < lastContentIndex;
             var isSentenceEnd = !hasNextContent || hasClauseEnd || nextIsPunct;
-            var nextIsQuestion = i + 1 < clauses.Count && IsPunctuationOnly(clauses[i + 1].Text) && IsQuestion(clauses[i + 1].Text);
+            var nextIsQuestion = nextIsPunct && IsQuestion(clauses[i + 1].Text);
 
             var prevReading = i > 0 ? clauses[i - 1].Reading : "";
             var nextReading = i + 1 < clauses.Count ? clauses[i + 1].Reading : "";
             var nextText = i + 1 < clauses.Count ? clauses[i + 1].Text : "";
 
             // 次の文節と合わせてすでに敬語になっている場合は二重敬語を防ぐ
-            if (!nextIsPunct && IsAlreadyFollowedByPolite(clauses[i].Reading, nextReading, nextText)) continue;
+            if (!nextIsPunct && IsAlreadyFollowedByPolite(clauseReading, nextReading, nextText)) continue;
 
-            var contextText = (before ?? "") + string.Concat(clauses.Take(i + 1).Select(c => c.Text));
-            var respectfulSubject = IsOtherSubject(contextText);
+            var respectfulSubject = IsOtherSubject(currentSentence.ToString());
 
-            if (ConvertClause(clauses[i].Reading, clauses[i].Text, isSentenceEnd, nextIsQuestion, respectfulSubject, prevReading, hasNextContent) is { } converted && converted != clauses[i].Text)
+            if (ConvertClause(clauseReading, clauseText, isSentenceEnd, nextIsQuestion, respectfulSubject, prevReading, hasNextContent) is { } converted && converted != clauseText)
             {
                 SetKeigo(clauses[i], converted);
             }
+
+            if (HasSentenceBreak(clauseText) || HasSentenceBreak(clauseReading))
+                currentSentence.Clear();
         }
     }
 
-    /// <summary>直近の主語手がかりから、相手・目上の人の動作 (尊敬語) か、自分の動作 (謙譲語) かを判別する。</summary>
+    private static ReadOnlySpan<char> LastSentenceOf(string? before)
+    {
+        if (string.IsNullOrEmpty(before)) return [];
+        var lastBreak = before.LastIndexOfAny(['\r', '\n', '。', '！', '？', '!', '?']);
+        return lastBreak >= 0 ? before.AsSpan(lastBreak + 1) : before.AsSpan();
+    }
+
+    private static bool HasSentenceBreak(string text) =>
+        text.Length > 0 && text[^1] is '。' or '！' or '？' or '!' or '?';
+
+    /// <summary>現在の文の直近の主語手がかりから、相手・目上の人の動作 (尊敬語) か、自分の動作 (謙譲語) かを判別する。</summary>
     private static bool IsOtherSubject(string text)
     {
-        var lastOther = LastSubjectIndex(text, OtherSubjectMarkers);
-        var lastSelf = LastSubjectIndex(text, SelfSubjectMarkers);
+        var lastOther = LastTokenEnd(text, OtherSubjectTokens);
+        var lastSelf = LastTokenEnd(text, SelfSubjectTokens);
         return lastOther > lastSelf;
     }
 
-    private static int LastSubjectIndex(string text, string[] markers)
+    private static int LastTokenEnd(string text, string[] tokens)
     {
         var best = -1;
-        foreach (var marker in markers)
+        foreach (var token in tokens)
         {
-            foreach (var particle in (string[])["は", "が", "も"])
+            var idx = text.LastIndexOf(token, StringComparison.Ordinal);
+            if (idx >= 0)
             {
-                var idx = text.LastIndexOf(marker + particle, StringComparison.Ordinal);
-                if (idx > best) best = idx;
+                var end = idx + token.Length;
+                if (end > best) best = end;
             }
         }
         return best;

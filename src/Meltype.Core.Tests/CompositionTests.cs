@@ -6762,6 +6762,14 @@ internal static class CompositionTests
         KeigoConverter.Apply(kenjougo);
         Assert.Equal("私が拝見いたします", string.Concat(kenjougo.Select(c => c.Text)), "自分が主語のときは謙譲語");
 
+        var afterSentenceBreak = new List<Clause> { new("いきます", false, ["行きます"]) };
+        KeigoConverter.Apply(afterSentenceBreak, before: "お客様が来ました。");
+        Assert.Equal("伺います", afterSentenceBreak[0].Text, "句点で文が切れたら前の文の相手主語を引きずらない");
+
+        var teHoshii = new List<Clause> { new("みてほしい", false, ["見てほしい"]) };
+        KeigoConverter.Apply(teHoshii);
+        Assert.Equal("ご覧いただけますでしょうか", teHoshii[0].Text, "てほしい系も正しく敬語になる");
+
         // OFF (既定) なら通常のまま
         var off = new Keyboard(live: true);
         off.Type("ryoukai");
