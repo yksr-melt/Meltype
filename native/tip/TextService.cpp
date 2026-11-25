@@ -1739,7 +1739,8 @@ void TextService::RewriteBeforeCaret(ITfContext* context, ITfRange* end, LONG co
 }
 
 bool TextService::WriteCommit(TfEditCookie ec, ITfContext* context, ITfRange* range, const std::wstring& text, int caretBack, ITfRange** movedCaret) {
-    // Tk には、変換中の文字を消して変換を終えてから、文字を送る (上の IsTkWindow のワークアラウンド)
+    // Tk には、変換中の文字を消して変換を終えてから、文字を送る (上の IsTkWindow のワークアラウンド)。
+    // キャレットは送った文字の後ろに残る。caretBack (設定「カッコを打ったら中にカーソルを移動」) は Tk では効かない
     if (const HWND window = ContextWindow(context); IsTkWindow(window)) {
         if (composition_ != nullptr) {
             ITfRange* composing = nullptr;
