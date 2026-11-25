@@ -172,7 +172,7 @@ public sealed class MeltypeRuntime : IDisposable
     }
 
     // 前の版は keycount.json に書いていた。config.json に書けなければ、次に起動したときに移す
-    private void MoveLegacyKeyCountMode(KeyCounter counter)
+    internal void MoveLegacyKeyCountMode(KeyCounter counter)
     {
         if (counter.LegacyMode is not { } mode) return;
         try

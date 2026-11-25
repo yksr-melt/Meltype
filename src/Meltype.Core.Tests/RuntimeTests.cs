@@ -6,6 +6,7 @@ using Meltype.Config;
 using Meltype.Dictionary;
 using Meltype.Engine;
 using Meltype.Ime;
+using Meltype.Input;
 
 namespace Meltype.Tests;
 
@@ -197,7 +198,10 @@ internal static class RuntimeTests
             {
                 var path = Path.Combine(directory, "keycount.json");
                 File.WriteAllText(path, json);
-                Assert.Equal(5L, runtime.StartKeyCount().Total);
+                // StartKeyCount は「数えて Discord に表示する」で、動いている Discord につなぐ
+                var counter = new KeyCounter(path);
+                runtime.MoveLegacyKeyCountMode(counter);
+                Assert.Equal(5L, new KeyCounter(path).Total);
                 Assert.Equal(expected, runtime.Settings.Current.KeyCount, json);
                 // 移したあとで変えた設定を、次に起動したときに戻さない
                 Assert.True(!File.ReadAllText(path).Contains("Enabled", StringComparison.Ordinal), json);

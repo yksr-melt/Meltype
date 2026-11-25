@@ -23,6 +23,8 @@ public sealed class DiscordPresence : IDisposable
 
     public static readonly TimeSpan UpdateInterval = TimeSpan.FromSeconds(20);
     private static readonly TimeSpan IoTimeout = TimeSpan.FromSeconds(5);
+    // 終わるときは、Discord が応答しなくても入力メソッドの終了を遅らせない
+    private static readonly TimeSpan ExitTimeout = TimeSpan.FromSeconds(1);
 
     /// <summary>出す打鍵数。</summary>
     public readonly record struct Stats(long Today, long Total);
@@ -67,7 +69,7 @@ public sealed class DiscordPresence : IDisposable
             try { await Task.Delay(UpdateInterval, _stop.Token); }
             catch (OperationCanceledException) { break; }
         }
-        await ClearAsync();
+        using (var exit = new CancellationTokenSource(ExitTimeout)) await ClearAsync(exit.Token);
         Disconnect();
     }
 
@@ -77,7 +79,7 @@ public sealed class DiscordPresence : IDisposable
         if (!_enabled())
         {
             // OFF にしたら表示を消して切る
-            await ClearAsync();
+            await ClearAsync(token);
             Disconnect();
             _last = null;
             return;
@@ -103,10 +105,10 @@ public sealed class DiscordPresence : IDisposable
             or UnauthorizedAccessException or System.Text.Json.JsonException;
 
     /// <summary>OFF にした・終わるときに、出していた表示を消す (失敗してもかまわない)。</summary>
-    private async Task ClearAsync()
+    private async Task ClearAsync(CancellationToken token)
     {
         if (_stream is null || _sent is null) return;
-        try { await SendAsync(1, SetActivityJson(null), CancellationToken.None); }
+        try { await SendAsync(1, SetActivityJson(null), token); }
         catch (Exception ex) when (IsConnectionFailure(ex)) { }
         _sent = null;
     }
@@ -281,7 +283,7 @@ public sealed class DiscordPresence : IDisposable
     {
         if (_stop.IsCancellationRequested) return;
         _stop.Cancel();
-        try { _loop.Wait(IoTimeout * 2); }
+        try { _loop.Wait(ExitTimeout * 2); }
         catch (AggregateException) { }
         _stop.Dispose();
     }
