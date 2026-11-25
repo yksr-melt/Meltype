@@ -62,6 +62,7 @@ func selectJapaneseInputSource(at url: URL) throws {
     let id = bundleID + ".Japanese"
     var failure = Failure("Meltype's Japanese input source is not enabled")
     // 登録・メニューの再起動直後は、選択できるようになるまで最大 3 秒待つ。
+    // 間隔と上限は、前の select-input-source.swift (0.3 秒ごとに 10 回) を引き継いだもので、測って決めた値ではない。
     let deadline = ProcessInfo.processInfo.systemUptime + 3
     repeat {
         if let source = enabledSource(id: id) {
