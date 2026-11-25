@@ -39,20 +39,22 @@ internal static class LineContext
     /// キャレットより前の文字列 (前の行も含んでよい) から、キャレットの位置の種類を調べる。
     /// 前の行から続く複数行の文字列・コメント (Python の """ … """、/* … */、&lt;!-- … --&gt;) の中なら、その種類。
     /// それ以外は、今の行 (最後の改行より後ろ) だけで調べる。
+    /// terminal はターミナルか。シェルに // のコメントは無く、//src/main:app (Bazel)・//c/work (Git Bash) のような引数なので、
+    /// ターミナルでは // をコメントの始まりとみなさない。
     /// </summary>
-    public static LineKind ClassifyText(string text)
+    public static LineKind ClassifyText(string text, bool terminal = false)
     {
         var lastNewline = text.LastIndexOfAny(['\r', '\n']);
         var line = lastNewline >= 0 ? text[(lastNewline + 1)..] : text;
-        if (lastNewline >= 0 && OpenBlock(text) is { } block) return block;
-        return Classify(line);
+        if (lastNewline >= 0 && OpenBlock(text, terminal) is { } block) return block;
+        return Classify(line, terminal);
     }
 
     /// <summary>
     /// 前の行から始まって、まだ閉じていない複数行の文字列・コメントがあれば、その種類 (無ければ null)。
     /// 1 行のコメント (# //) と 1 行の文字列 ("…" '…') の中の """ /* は数えない。
     /// </summary>
-    private static LineKind? OpenBlock(string text)
+    private static LineKind? OpenBlock(string text, bool terminal)
     {
         string? close = null; // 閉じる記号 (""" ''' */ -->)
         var kind = LineKind.Code;
@@ -91,7 +93,7 @@ internal static class LineContext
                 continue;
             }
             // 1 行のコメント: 行の終わりまで飛ばす
-            if (StartsWith(text, i, "//") || IsHashComment(text, i) || IsDashComment(text, i, atStart) ||
+            if (!terminal && StartsWith(text, i, "//") || IsHashComment(text, i) || IsDashComment(text, i, atStart) ||
                 (atStart && StartsWithIgnoreCase(text, i, "rem ")))
             {
                 while (i + 1 < text.Length && text[i + 1] is not ('\r' or '\n')) i++;
@@ -111,7 +113,7 @@ internal static class LineContext
         return close is not null && startedBeforeLastLine ? kind : null;
     }
 
-    public static LineKind Classify(string line)
+    public static LineKind Classify(string line, bool terminal = false)
     {
         if (IsChatPrompt(line)) return LineKind.Prompt;
         char? quote = null;
@@ -135,7 +137,7 @@ internal static class LineContext
                 quote = c;
                 continue;
             }
-            if (StartsWith(line, i, "//")) return LineKind.Comment;
+            if (!terminal && StartsWith(line, i, "//")) return LineKind.Comment;
             if (StartsWith(line, i, "/*"))
             {
                 var close = line.IndexOf("*/", i + 2, StringComparison.Ordinal);

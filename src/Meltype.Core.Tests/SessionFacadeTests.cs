@@ -1079,14 +1079,22 @@ internal static class SessionFacadeTests
     [Test]
     public static void CodeInput_TerminalSlashArgumentsRemainDirect()
     {
-        // シェルの // から始まる引数 (Bazel のラベル・Git Bash のパス) は、コメントではないので直接入力する。
-        foreach (var command in new[] { "bazel build //src/main:app\n", "bazel test //tools:koko\n", "docker run -v //c/work\n" })
+        // シェルの // から始まる引数 (Bazel のラベル・Git Bash のパス) はコメントではないので、引数も後ろに続けて打つ語もコードとして直接入力する。
+        foreach (var command in new[] { "bazel build //src/main:app ima", "bazel test //tools:koko", "docker run -v //c/work ima", "// komento" })
         {
             var session = Create();
             session.CodeInput = true;
             session.CodeTerminal = true;
-            Assert.True(Type(session, command).All(r => !r.Consumed && r.View is null), command);
+            var field = new Field();
+            Assert.True(Type(session, command, field).All(r => !r.Consumed && r.View is null), command);
+            Assert.Equal(command, field.Text);
+            Assert.True(!Type(session, "\n", field).Single().Consumed, "Enter はアプリに届く: " + command);
         }
+        // シェルの # コメントの中の // は、コメントの本文
+        var hash = Create();
+        hash.CodeInput = true;
+        hash.CodeTerminal = true;
+        Assert.Equal("いま", Type(hash, "ima", new Field("# //"))[^1].View?.Text);
     }
 
     [Test]
