@@ -6965,6 +6965,15 @@ internal static class CompositionTests
         KeigoConverter.Apply(sitDown);
         Assert.Equal("お掛けください", sitDown[0].Text, "座って → お掛けください");
 
+        // どこに行くの / どこに行くの？ (どこ→どちら & 〜の疑問・確認)
+        var dokoNiIkuno = new List<Clause> { new("どこに", false, ["どこに"]), new("いくの", false, ["行くの"]) };
+        KeigoConverter.Apply(dokoNiIkuno);
+        Assert.Equal("どちらに行かれますか", string.Concat(dokoNiIkuno.Select(c => c.Text)), "どこに行くの → どちらに行かれますか");
+
+        var dokoNiIkunoQuest = new List<Clause> { new("どこに", false, ["どこに"]), new("いくの？", false, ["行くの？"]) };
+        KeigoConverter.Apply(dokoNiIkunoQuest);
+        Assert.Equal("どちらに行かれますでしょうか？", string.Concat(dokoNiIkunoQuest.Select(c => c.Text)), "どこに行くの？ → どちらに行かれますでしょうか？");
+
         // OFF (既定) なら通常のまま
         var off = new Keyboard(live: true);
         off.Type("ryoukai");
