@@ -723,7 +723,7 @@ internal static class SessionFacadeTests
     [Test]
     public static void Json_HasTypedKeys_WhenSettingIsOn()
     {
-        var session = new TestSession(() => new Settings { ShowTypedKeys = true });
+        var session = new TestSession(() => new Settings { TypedKeys = TypedKeysStyle.Keys });
         var json = Type(session, "kyou")[^1].ToJson();
         Assert.True(json.Contains("\"typedKeys\":\"kyou\""), json);
     }
