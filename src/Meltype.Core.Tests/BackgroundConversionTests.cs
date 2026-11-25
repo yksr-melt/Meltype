@@ -277,7 +277,7 @@ internal static class BackgroundConversionTests
             Assert.Equal("日本語", string.Concat(committed.Commits.Select(c => c.Text)), $"確定: {focusCommit}");
 
             converter.Clauses = [new("にほんご", "二本語")];
-            var arrived = session.Send(ImeEventType.ConversionFinished);
+            var arrived = session.Send(new ImeEvent.ConversionFinished());
             Assert.True(arrived.View is null && arrived.Commits.Count == 0, "確定後の答えで未確定入力を復活させず、二重に確定しない");
 
             converter.Clauses = [new("きょう", "今日")];
@@ -302,7 +302,7 @@ internal static class BackgroundConversionTests
             else session.HandleKey(VirtualKeys.Escape, null, false, false, false, false);
 
             converter.Clauses = [new("にほんご", "二本語")];
-            var arrived = session.Send(ImeEventType.ConversionFinished);
+            var arrived = session.Send(new ImeEvent.ConversionFinished());
             Assert.True(arrived.View is null && arrived.Commits.Count == 0, $"取り消した入力を後から表示・確定しない: {deleteAll}");
             Assert.True(!session.IsComposing, "入力は終わっている");
         }

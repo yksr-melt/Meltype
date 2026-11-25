@@ -660,7 +660,7 @@ internal static class ImeContractTests
             {
                 AssertPasswordPass(front, front.Event("KeyPressed", extra: $",\"key\":{{\"vk\":{vk},\"ch\":{ch}}}"));
             }
-            AssertPasswordPass(front, front.Event("CandidateClicked"));
+            AssertPasswordPass(front, front.Event("CandidateClicked", extra: ",\"index\":0"));
             AssertPasswordPass(front, front.Event("AlphanumericModeSelected"));
             Assert.Equal(0, front.Sessions, front.Trace);
             front.Traits.Clear();
@@ -724,7 +724,7 @@ internal static class ImeContractTests
         foreach (var (type, extra) in new[]
                  {
                      ("KeyPressed", ",\"key\":{\"vk\":13}"), ("CaretMoved", Entered), ("CommitRequested", ""),
-                     ("CommittedByApp", ""), ("CandidateClicked", ",\"index\":0"), ("ModeToggleRequested", ""),
+                     ("CommittedByApp", Entered), ("CandidateClicked", ",\"index\":0"), ("ModeToggleRequested", ""), ("StateRequested", ""),
                  })
         {
             var languages = new LanguageMemory(null);
@@ -737,9 +737,9 @@ internal static class ImeContractTests
             AssertPasswordPass(front, front.Event(type, extra: extra));
             AssertPasswordPass(front, front.Event("CaretMoved", extra: Entered));
             AssertPasswordPass(front, front.Event("CommitRequested", omitField: true));
-            AssertPasswordPass(front, front.Event("CandidateHighlighted", omitField: true));
-            AssertPasswordPass(front, front.Event("CandidateClicked", omitField: true));
-            AssertPasswordPass(front, front.Event("CommittedByApp", omitField: true));
+            AssertPasswordPass(front, front.Event("CandidateHighlighted", extra: ",\"index\":0", omitField: true));
+            AssertPasswordPass(front, front.Event("CandidateClicked", extra: ",\"index\":0", omitField: true));
+            AssertPasswordPass(front, front.Event("CommittedByApp", extra: ",\"caret\":{\"moved\":true,\"passedKey\":0}", omitField: true));
             Assert.Equal("", front.Document, front.Trace);
             Assert.Equal(0, languages.Count, front.Trace);
             front.Traits.Clear();
@@ -1377,7 +1377,7 @@ internal static class ImeContractTests
         var front = new Front();
         front.Type("ka\n");
         front.Open = false;
-        var closed = front.Event("CaretMoved");
+        var closed = front.Event("CaretMoved", extra: ",\"caret\":{}");
         Assert.True(!Japanese(closed) && !Indicator(closed), "合わせるだけで表示はしない\n" + front.Trace);
         Assert.True(!Consumed(front.Key('a')), front.Trace);
         front.Open = true;
