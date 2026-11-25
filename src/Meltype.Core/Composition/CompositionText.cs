@@ -24,17 +24,19 @@ internal static partial class CompositionText
 {
     /// <summary>
     /// 英語 / 日本語の学習を引く文脈: 前が英語か (true)・日本語か (false)。設定「英語 / 日本語の学習を前の文脈ごとに分ける」が OFF なら null。
-    /// 打った英字を読み直す断片は、読み直す元の入力の文脈を使う。
     /// </summary>
-    public static bool? LearningContext(TextEnv env) =>
-        env.Fragment is { } origin ? origin.LearningContext : env.Settings.ContextualLearning ? env.Context().PrecedingEnglish : null;
+    public static bool? LearningContext(TextEnv env) => LearnedLanguages(env).Context;
+
+    /// <summary>判定に使う英語 / 日本語の学習。打った英字を読み直す断片は、読み直す元の入力のものを使う。</summary>
+    public static LanguageLearning LearnedLanguages(TextEnv env) =>
+        env.Fragment is { } origin ? origin.Languages : new(env.Languages, env.Settings.ContextualLearning ? env.Context().PrecedingEnglish : null);
 
     /// <summary>
     /// 打った英字の一部を読み直すために作る断片に渡すもの。env は読み直す元の入力のもの。
-    /// 断片は設定によらず既定の設定 (自動判定・z の記号・/ のまま) で読み、打ち間違いを直さない。学習の文脈は元の入力のもの。
+    /// 断片は設定によらず既定の設定 (自動判定・z の記号・/ のまま) で読み、打ち間違いを直さない。英語 / 日本語の学習は元の入力のもの。
     /// </summary>
     public static TextEnv FragmentEnv(TextEnv env) =>
-        new(env.Detector, FragmentSettings, null) { Fragment = new FragmentOrigin(LearningContext(env)), Context = () => TextContext.None };
+        new(env.Detector, FragmentSettings, null) { Fragment = new FragmentOrigin(LearnedLanguages(env)), Context = () => TextContext.None };
 
     private static readonly Config.Settings FragmentSettings = new();
 

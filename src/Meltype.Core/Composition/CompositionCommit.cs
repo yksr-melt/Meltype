@@ -160,7 +160,7 @@ internal static class CompositionCommit
         if (!english && CompositionLifecycle.Learning(state, input, env) && env.Settings.PredictiveCandidates) env.Learning.RememberPhrase(reading, text);
     }
 
-    /// <summary>確定した文節を学習する。設定「ユーザー学習を使う」が OFF なら、新しく覚えない (issue #277)</summary>
+    /// <summary>確定した文節を学習する。設定「ユーザー学習を使う」が OFF なら覚えない (issue #277)</summary>
     internal static void LearnClauses(CompositionState state, CompositionInput input, IReadOnlyList<Clause> clauses, CompositionEnv env)
     {
         if (CompositionLifecycle.Learning(state, input, env)) env.Learning.Learn(clauses, env.Context().PrecedingText, CompositionText.LearningContext(env));
@@ -229,7 +229,7 @@ internal static class CompositionCommit
             if (env.Services.RomajiTypos is { } lexicon && !lexicon.IsWord(replacement.Text)) return null;
         }
         // ユーザーが英字 / かなに直して覚えた語 (F10 で英字にした api) は、覚えたとおりなら書き換えない (issue #124)。
-        if (targets.Any(t => env.Services.Languages?.Get(t.Raw.ToLowerInvariant(), CompositionText.LearningContext(env)) == t.English)) return null;
+        if (targets.Any(t => CompositionText.LearnedLanguages(env).Get(t.Raw.ToLowerInvariant()) == t.English)) return null;
         var original = string.Concat(targets.Select(t => t.Text.Text));
         if (replacement is null || replacement.Text == original) return null;
         // 直前に確定した語が、今のキャレットの位置に無い (別の場所をクリックした等) ときは書き換えない。
