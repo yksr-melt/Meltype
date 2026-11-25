@@ -6893,6 +6893,19 @@ internal static class CompositionTests
         KeigoConverter.Apply(thanksBiz);
         Assert.Equal("ご確認いただきありがとうございます", thanksBiz[0].Text, "〜してくれてありがとう → ご〜いただきありがとうございます");
 
+        // 客 → お客様、客室誤爆防止、来るのでの自他判別
+        var kyakuKuru = new List<Clause> { new("きゃくが", false, ["客が"]), new("くるので、", false, ["来るので、"]), new("じゅんびする", false, ["準備する"]) };
+        KeigoConverter.Apply(kyakuKuru);
+        Assert.Equal("お客様がお越しになりますので、準備いたします", string.Concat(kyakuKuru.Select(c => c.Text)), "客→お客様 & 相手主語の来るので→お越しになりますので");
+
+        var selfKuru = new List<Clause> { new("くるので、", false, ["来るので、"]), new("まって", false, ["待って"]) };
+        KeigoConverter.Apply(selfKuru);
+        Assert.Equal("参りますので、少々お待ちください", string.Concat(selfKuru.Select(c => c.Text)), "自分主語の来るので→参りますので");
+
+        var kyakushitsu = new List<Clause> { new("きゃくしつを", false, ["客室を"]), new("かくにんする", false, ["確認する"]) };
+        KeigoConverter.Apply(kyakushitsu);
+        Assert.Equal("客室を確認いたします", string.Concat(kyakushitsu.Select(c => c.Text)), "「客室」を「お客様室」に誤爆しない");
+
         // OFF (既定) なら通常のまま
         var off = new Keyboard(live: true);
         off.Type("ryoukai");

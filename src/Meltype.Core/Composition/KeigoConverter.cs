@@ -195,7 +195,11 @@ internal static class KeigoConverter
         ["わたしたち"] = "私ども",
         ["うちのかいしゃ"] = "弊社",
         ["そっちのかいしゃ"] = "貴社",
+        ["おきゃく"] = "お客様",
         ["おきゃくさん"] = "お客様",
+        ["きゃく"] = "お客様",
+        ["あいて"] = "先方",
+        ["むこう"] = "先方",
         ["みなさん"] = "皆様",
         ["こっち"] = "こちら",
         ["そっち"] = "そちら",
@@ -205,6 +209,7 @@ internal static class KeigoConverter
         ["だれか"] = "どなたか",
         ["どこ"] = "どちら",
         ["みんな"] = "皆様",
+        ["みな"] = "皆様",
     };
 
     // 助詞付きまたは文頭接頭辞として置き換える読み (長い順)
@@ -545,7 +550,7 @@ internal static class KeigoConverter
 
     private static readonly string[] OtherSubjectTokens = BuildSubjectTokens(
         [
-            "ご担当者様", "ご担当者", "担当者", "お客様", "皆様", "皆さん", "先方", "御社", "貴社",
+            "ご担当者様", "ご担当者", "担当者", "お客様", "お客さん", "お客", "客", "皆様", "皆さん", "先方", "御社", "貴社",
             "取引先", "クライアント", "代表", "社長", "副社長", "専務", "常務", "取締役",
             "部長", "次長", "課長", "係長", "主任", "マネージャー", "リーダー", "オーナー",
             "先生", "上司", "先輩", "相手", "そちら", "あなた", "様", "さん",
@@ -982,6 +987,19 @@ internal static class KeigoConverter
         ("行ったので", "伺いましたので"),
         ("行ったから", "伺いましたので"),
         ("行ったけど", "伺いましたが"),
+        ("来るので", "参りますので"),
+        ("来るから", "参りますので"),
+        ("来るけど", "参りますが"),
+        ("来ますので", "参りますので"),
+        ("来ますけど", "参りますが"),
+        ("来たので", "参りましたので"),
+        ("来たから", "参りましたので"),
+        ("来たけど", "参りましたが"),
+        ("行くので", "伺いますので"),
+        ("行くから", "伺いますので"),
+        ("行くけど", "伺いますが"),
+        ("行きますので", "伺いますので"),
+        ("行きますけど", "伺いますが"),
         ("思うので", "存じますので"),
         ("思うから", "存じますので"),
         ("思うけど", "存じますが"),
@@ -1005,64 +1023,124 @@ internal static class KeigoConverter
     private static readonly Dictionary<char, (string Suffix, string Replacement)[]> MidClauseSuffixBuckets =
         MidClauseSuffixes.GroupBy(x => x.Suffix[^1]).ToDictionary(g => g.Key, g => g.ToArray());
 
-    // 変換後テキスト内の語彙置き換え (単語境界チェック付きで「午後で」「早急に」等の誤爆を防ぐ)
-    private static readonly (string From, string To)[] InTextReplacements =
+    // 相手・目上が主語のときの複文途中節ルール (例: お客様が来るので → お越しになりますので)
+    private static readonly (string Suffix, string Replacement)[] RespectfulMidClauseSuffixes =
     [
-        ("問題ないですか", "問題ございませんでしょうか"),
-        ("大丈夫ですか", "問題ございませんでしょうか"),
-        ("問題ないです", "問題ございません"),
-        ("大丈夫です", "問題ございません"),
-        ("問題ない", "問題ございません"),
-        ("大丈夫", "問題ございません"),
-        ("うちの会社", "弊社"),
-        ("そっちの会社", "貴社"),
-        ("お客さん", "お客様"),
-        ("皆さん", "皆様"),
-        ("今のところ", "現在のところ"),
-        ("なるべく", "可能な限り"),
-        ("できるだけ", "可能な限り"),
-        ("もう一回", "今一度"),
-        ("もう1回", "今一度"),
-        ("もう一度", "改めて"),
-        ("前もって", "事前に"),
-        ("こないだ", "先日"),
-        ("この前", "先日"),
-        ("誰か", "どなたか"),
-        ("今日は", "本日は"),
-        ("今日の", "本日の"),
-        ("今日中", "本日中"),
-        ("今日から", "本日から"),
-        ("今日まで", "本日まで"),
-        ("今日も", "本日も"),
-        ("さっき", "先ほど"),
-        ("後から", "後ほど"),
-        ("あとから", "後ほど"),
-        ("後で", "後ほど"),
-        ("あとで", "後ほど"),
-        ("この後", "追って"),
-        ("今から", "これより"),
-        ("いまから", "これより"),
-        ("もうすぐ", "まもなく"),
-        ("そろそろ", "まもなく"),
-        ("だいたい", "概ね"),
-        ("大体", "概ね"),
-        ("ざっくり", "大まかに"),
-        ("ちゃんと", "確実に"),
-        ("しっかり", "入念に"),
-        ("いきなり", "突然"),
-        ("急に", "急遽"),
-        ("ものすごく", "大変"),
-        ("めちゃくちゃ", "大変"),
-        ("めっちゃ", "大変"),
-        ("すごく", "大変"),
-        ("ちょっと", "少々"),
-        ("本当に", "誠に"),
-        ("ほんとに", "誠に"),
-        ("マジで", "誠に"),
-        ("まじで", "誠に"),
-        ("ガチで", "誠に"),
-        ("とりあえず", "取り急ぎ"),
-        ("ひとまず", "取り急ぎ"),
+        ("来るので", "お越しになりますので"),
+        ("来るから", "お越しになりますので"),
+        ("来るけど", "お越しになりますが"),
+        ("来ますので", "お越しになりますので"),
+        ("来ますけど", "お越しになりますが"),
+        ("来たので", "お越しになりましたので"),
+        ("来たから", "お越しになりましたので"),
+        ("来たけど", "お越しになりましたが"),
+        ("来ているので", "お越しになっていますので"),
+        ("来ているけど", "お越しになっていますが"),
+        ("行くので", "いらっしゃいますので"),
+        ("行くから", "いらっしゃいますので"),
+        ("行くけど", "いらっしゃいますが"),
+        ("行ったので", "いらっしゃいましたので"),
+        ("行ったから", "いらっしゃいましたので"),
+        ("行ったけど", "いらっしゃいましたが"),
+        ("見るので", "ご覧になりますので"),
+        ("見るから", "ご覧になりますので"),
+        ("見るけど", "ご覧になりますが"),
+        ("見たので", "ご覧になりましたので"),
+        ("見たから", "ご覧になりましたので"),
+        ("見たけど", "ご覧になりましたが"),
+        ("確認するので", "ご確認になりますので"),
+        ("確認するから", "ご確認になりますので"),
+        ("確認するけど", "ご確認になりますが"),
+        ("確認したので", "ご確認になりましたので"),
+        ("確認したから", "ご確認になりましたので"),
+        ("確認したけど", "ご確認になりましたが"),
+        ("送るので", "お送りになりますので"),
+        ("送るから", "お送りになりますので"),
+        ("送るけど", "お送りになりますが"),
+        ("送ったので", "お送りになりましたので"),
+        ("送ったから", "お送りになりましたので"),
+        ("送ったけど", "お送りになりましたが"),
+        ("言うので", "おっしゃいますので"),
+        ("言うから", "おっしゃいますので"),
+        ("言うけど", "おっしゃいますが"),
+        ("言ったので", "おっしゃいましたので"),
+        ("言ったから", "おっしゃいましたので"),
+        ("言ったけど", "おっしゃいましたが"),
+        ("いるので", "いらっしゃいますので"),
+        ("いるから", "いらっしゃいますので"),
+        ("いるけど", "いらっしゃいますが"),
+    ];
+
+    // 変換後テキスト内の語彙置き換え (単語境界チェック付きで「午後で」「早急に」「客室」等の誤爆を防ぐ)
+    // RequireEndBoundary = true のものは、後ろも助詞・句読点・文末のときだけ置換する
+    private static readonly (string From, string To, bool RequireEndBoundary)[] InTextReplacements =
+    [
+        ("問題ないですか", "問題ございませんでしょうか", false),
+        ("大丈夫ですか", "問題ございませんでしょうか", false),
+        ("問題ないです", "問題ございません", false),
+        ("大丈夫です", "問題ございません", false),
+        ("問題ない", "問題ございません", false),
+        ("大丈夫", "問題ございません", false),
+        ("うちの会社", "弊社", false),
+        ("そっちの会社", "貴社", false),
+        ("お客さん", "お客様", false),
+        ("お客", "お客様", true),
+        ("客", "お客様", true),
+        ("皆さん", "皆様", true),
+        ("皆", "皆様", true),
+        ("相手", "先方", true),
+        ("向こう", "先方", true),
+        ("僕ら", "私ども", true),
+        ("俺たち", "私ども", true),
+        ("私たち", "私ども", true),
+        ("僕", "私", true),
+        ("俺", "私", true),
+        ("今のところ", "現在のところ", false),
+        ("なるべく", "可能な限り", false),
+        ("できるだけ", "可能な限り", false),
+        ("もう一回", "今一度", false),
+        ("もう1回", "今一度", false),
+        ("もう一度", "改めて", false),
+        ("前もって", "事前に", false),
+        ("こないだ", "先日", false),
+        ("この前", "先日", false),
+        ("誰か", "どなたか", false),
+        ("誰", "どなた", true),
+        ("今日は", "本日は", false),
+        ("今日の", "本日の", false),
+        ("今日中", "本日中", false),
+        ("今日から", "本日から", false),
+        ("今日まで", "本日まで", false),
+        ("今日も", "本日も", false),
+        ("さっき", "先ほど", false),
+        ("後から", "後ほど", false),
+        ("あとから", "後ほど", false),
+        ("後で", "後ほど", false),
+        ("あとで", "後ほど", false),
+        ("この後", "追って", false),
+        ("今から", "これより", false),
+        ("いまから", "これより", false),
+        ("もうすぐ", "まもなく", false),
+        ("そろそろ", "まもなく", false),
+        ("だいたい", "概ね", false),
+        ("大体", "概ね", false),
+        ("ざっくり", "大まかに", false),
+        ("ちゃんと", "確実に", false),
+        ("しっかり", "入念に", false),
+        ("いきなり", "突然", false),
+        ("急に", "急遽", false),
+        ("ものすごく", "大変", false),
+        ("めちゃくちゃ", "大変", false),
+        ("めっちゃ", "大変", false),
+        ("すごく", "大変", false),
+        ("ちょっと", "少々", false),
+        ("本当に", "誠に", false),
+        ("ほんとに", "誠に", false),
+        ("マジで", "誠に", false),
+        ("まじで", "誠に", false),
+        ("ガチで", "誠に", false),
+        ("とりあえず", "取り急ぎ", false),
+        ("ひとまず", "取り急ぎ", false),
     ];
 
     // 1 回の SIMD スキャンで InTextReplacements のヒット有無を判定 (大半の文節を 0 アロケーションで素通りさせる)
@@ -1488,9 +1566,25 @@ internal static class KeigoConverter
                 SetKeigo(clauses[i], converted);
             }
 
-            if (HasSentenceBreak(clauseText) || HasSentenceBreak(clauseReading))
+            if (HasSentenceBreak(clauseText) || HasSentenceBreak(clauseReading) ||
+                (HasClauseComma(clauseText) && !EndsWithSubjectToken(clauseText)))
+            {
                 currentSentence.Clear();
+            }
         }
+    }
+
+    private static bool HasClauseComma(string text) =>
+        text.Length > 0 && text[^1] is '、' or '，' or ',';
+
+    private static bool EndsWithSubjectToken(string text)
+    {
+        var core = text.TrimEnd('、', '，', ',');
+        foreach (var token in OtherSubjectTokens)
+            if (core.EndsWith(token, StringComparison.Ordinal)) return true;
+        foreach (var token in SelfSubjectTokens)
+            if (core.EndsWith(token, StringComparison.Ordinal)) return true;
+        return false;
     }
 
     private static void MergeMultiClauseIdioms(List<Clause> clauses)
@@ -1646,7 +1740,7 @@ internal static class KeigoConverter
         var hasTrailingComma = punct is "、" or "，" or ",";
         if ((!isSentenceEnd || hasTrailingComma) && rewritten.Length >= 2)
         {
-            rewritten = ApplyMidClausePolite(rewritten);
+            rewritten = ApplyMidClausePolite(rewritten, subjectRole);
         }
 
         if (isSentenceEnd && !hasTrailingComma)
@@ -1699,8 +1793,16 @@ internal static class KeigoConverter
         return rewritten != textCore ? rewritten + punct : null;
     }
 
-    private static string ApplyMidClausePolite(string text)
+    private static string ApplyMidClausePolite(string text, SubjectRole subjectRole)
     {
+        if (subjectRole == SubjectRole.Other)
+        {
+            foreach (var (suffix, replacement) in RespectfulMidClauseSuffixes)
+            {
+                if (text.EndsWith(suffix, StringComparison.Ordinal))
+                    return AppendWithoutDuplicatePrefix(text[..^suffix.Length], replacement);
+            }
+        }
         if (MidClauseSuffixBuckets.TryGetValue(text[^1], out var bucket))
         {
             foreach (var (suffix, replacement) in bucket)
@@ -1847,14 +1949,14 @@ internal static class KeigoConverter
             return text;
 
         var rewritten = text;
-        foreach (var (from, to) in InTextReplacements)
+        foreach (var (from, to, requireEndBoundary) in InTextReplacements)
         {
             var searchFrom = 0;
             while (searchFrom <= rewritten.Length - from.Length)
             {
                 var idx = rewritten.IndexOf(from, searchFrom, StringComparison.Ordinal);
                 if (idx < 0) break;
-                if (IsReplacementBoundary(rewritten, idx))
+                if (IsReplacementBoundary(rewritten, idx) && (!requireEndBoundary || IsReplacementEndBoundary(rewritten, idx + from.Length)))
                 {
                     rewritten = string.Concat(rewritten.AsSpan(0, idx), to, rewritten.AsSpan(idx + from.Length));
                     searchFrom = idx + to.Length;
@@ -1875,6 +1977,15 @@ internal static class KeigoConverter
         var prev = text[index - 1];
         return prev is '、' or '。' or '，' or '．' or ',' or '.' or '！' or '？' or '!' or '?' or ' ' or '　' or '「' or '（' or '('
             or 'は' or 'が' or 'を' or 'に' or 'で' or 'と' or 'も' or 'の' or 'へ' or 'か' or 'て';
+    }
+
+    /// <summary>「客室」「観客」「皆既日食」のように後ろに別の漢字が続く熟語への誤爆を防ぐ。</summary>
+    private static bool IsReplacementEndBoundary(string text, int endIndex)
+    {
+        if (endIndex >= text.Length) return true;
+        var next = text[endIndex];
+        return next is '、' or '。' or '，' or '．' or ',' or '.' or '！' or '？' or '!' or '?' or ' ' or '　' or '」' or '）' or ')'
+            or 'は' or 'が' or 'を' or 'に' or 'で' or 'と' or 'も' or 'の' or 'へ' or 'か' or 'だ' or 'で';
     }
 
     private static string? TryPoliteAdjective(string text)
