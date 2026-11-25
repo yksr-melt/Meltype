@@ -20,7 +20,7 @@ internal static partial class CompositionText
         if (state.KanaInput) return null;
         if (segmentIndex < 0 || segmentIndex >= segments.Count) return null;
         var from = segments.Take(segmentIndex).Sum(s => s.Raw.Length);
-        var units = CompositionText.UnitsInRawRange(state, env, state.Units, from, from + segments[segmentIndex].Raw.Length, out var pending);
+        var units = CompositionText.UnitsInRawRange(state, env, TypedMarks.Read(state, env), from, from + segments[segmentIndex].Raw.Length, out var pending);
         var pieces = new List<(string Kana, string Raw)>();
         foreach (var unit in units) pieces.Add((unit.Kana, unit.Raw));
         if (pending.Length > 0) pieces.Add((env.Detector.Romaji.ConvertLenient(pending.ToLowerInvariant(), final: true), pending));
@@ -55,7 +55,7 @@ internal static partial class CompositionText
     {
         var none = new string?[kanas.Count];
         if (state.KanaInput) return none;
-        var units = CompositionText.UnitsInRawRange(state, env, state.Units, 0, CompositionText.Raw(state).Length, out var pending);
+        var units = CompositionText.UnitsInRawRange(state, env, TypedMarks.Read(state, env), 0, CompositionText.Raw(state).Length, out var pending);
         var pieces = new List<(string Kana, string Raw)>();
         foreach (var unit in units) pieces.Add((unit.Kana, unit.Raw));
         if (pending.Length > 0) pieces.Add((env.Detector.Romaji.ConvertLenient(pending.ToLowerInvariant(), final: true), pending));
@@ -84,7 +84,7 @@ internal static partial class CompositionText
         var builder = new StringBuilder();
         if (CompositionText.UnitIndexAt(state, start) is int first && CompositionText.UnitIndexAt(state, Math.Min(end, unitsEnd)) is int last)
         {
-            for (var unit = first; unit < last; unit++) builder.Append(state.Units[unit].Kana);
+            foreach (var unit in TypedMarks.Read(state, env).Take(first..last)) builder.Append(unit.Kana);
             if (end > unitsEnd) builder.Append(CompositionText.PendingText(state, env, final: true));
         }
         else
@@ -93,7 +93,7 @@ internal static partial class CompositionText
             CompositionTextState fragment = new CompositionTextState();
             var fragmentEnv = FragmentEnv(env);
             foreach (var c in CompositionText.Raw(state)[start..end]) CompositionText.Append(fragment, fragmentEnv, c);
-            foreach (var unit in fragment.Units) builder.Append(unit.Kana);
+            foreach (var unit in TypedMarks.Read(fragment, fragmentEnv)) builder.Append(unit.Kana);
             builder.Append(CompositionText.PendingText(fragment, fragmentEnv, final: true));
         }
         return builder.Length > 0 ? builder.ToString() : null;
@@ -199,7 +199,7 @@ internal static partial class CompositionText
     }
 
     /// <summary>英語判定を無視してすべてかなにしたもの (F6)。</summary>
-    public static string AllKana(CompositionTextState state, TextEnv env, bool final) => string.Concat(state.Units.Select(u => u.Kana)) + CompositionText.PendingText(state, env, final);
+    public static string AllKana(CompositionTextState state, TextEnv env, bool final) => string.Concat(TypedMarks.Read(state, env).Select(u => u.Kana)) + CompositionText.PendingText(state, env, final);
 
     /// <summary>
     /// 日本語の部分の読みに書き間違い (ブレスレッド) があれば、その位置 (単位の範囲) と正しい読みを返す。
@@ -222,6 +222,7 @@ internal static partial class CompositionText
             rawOffset = end;
         }
         // 日本語の単位が続く範囲ごとに探す。
+        var units = TypedMarks.Read(state, env);
         var start = 0;
         while (start < state.Units.Count)
         {
@@ -237,7 +238,7 @@ internal static partial class CompositionText
             for (var i = start; i < end; i++)
             {
                 offsets.Add(reading.Length);
-                reading.Append(state.Units[i].Kana);
+                reading.Append(units[i].Kana);
             }
             offsets.Add(reading.Length);
             // 語末の n (まだ ん になっていない) も ん として読む (しゅみれーしょn)。
