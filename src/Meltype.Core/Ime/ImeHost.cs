@@ -37,14 +37,17 @@ public sealed class ImeHost
     private readonly IImeEnvironment _environment;
     private readonly SessionParts _parts;
     private readonly Func<Settings> _settings;
+    private readonly Action<ImeKey>? _keyPressed;
 
     /// <param name="parts">入力欄の本体を作る部品 (<see cref="MeltypeRuntime.SessionParts"/>)。辞書・学習データ・変換エンジンは入力欄で共有する。</param>
     /// <param name="settings">設定 (config.json)。アプリ別設定は ImeSession が ImeField.App で反映する。フロントは読まない。</param>
-    internal ImeHost(IImeEnvironment environment, SessionParts parts, Func<Settings> settings)
+    /// <param name="keyPressed">受け持つ入力欄で押したキー (打鍵数)。</param>
+    internal ImeHost(IImeEnvironment environment, SessionParts parts, Func<Settings> settings, Action<ImeKey>? keyPressed = null)
     {
         _environment = environment;
         _parts = parts;
         _settings = settings;
+        _keyPressed = keyPressed;
     }
 
     public const int Version = 1;
@@ -96,6 +99,13 @@ public sealed class ImeHost
     }
 
     public ImeOutput Handle(ImeEvent e)
+    {
+        var output = Respond(e);
+        if (e is ImeEvent.KeyPressed pressed && output.State.HandlesInput) _keyPressed?.Invoke(pressed.Key);
+        return output;
+    }
+
+    private ImeOutput Respond(ImeEvent e)
     {
         if (e.Version != Version)
         {
