@@ -58,6 +58,7 @@ jobs:
         with:
           files: |
             dist/Meltype-*.zip
+            dist/Meltype-*-mac.dmg
             dist/Meltype-*-setup.exe
             dist/meltype_*.deb
             dist/meltype-*.rpm

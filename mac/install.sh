@@ -2,8 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Yukishiro
 #
-# テスト版の Meltype.app を ~/Library/Input Methods に入れる。zip を展開したフォルダーで実行する:
-#   bash install.sh
+# Meltype.app を ~/Library/Input Methods に入れる。DMG のインストーラーと ZIP の両方から使う。
 # 設定アプリ (Meltype Settings.app) は ~/Applications に入れる (install-settings-app.sh)。
 # Homebrew の cask からは --homebrew を付けて動かす。付けたときは:
 #   - 設定アプリは入れない (cask の app が /Applications に入れる)
@@ -23,11 +22,11 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ ! -d Meltype.app ]]; then
-    echo "Meltype.app が見つかりません。zip を展開したフォルダーで実行してください。" >&2
+    echo "Meltype.app が見つかりません。配布ファイルをダウンロードし直してください。" >&2
     exit 1
 fi
 for helper in install-app.sh install-settings-app.sh start-input-method.sh; do
-    [[ -f "$helper" ]] || { echo "必要なファイルがありません: ${helper}。zip 全体を展開してください。" >&2; exit 1; }
+    [[ -f "$helper" ]] || { echo "必要なファイルがありません: ${helper}。配布ファイルをダウンロードし直してください。" >&2; exit 1; }
 done
 
 TARGET="$HOME/Library/Input Methods"
