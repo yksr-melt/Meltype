@@ -1174,10 +1174,13 @@ internal static class CompositionTests
         k.Type("kyouha ");
         Assert.True(k.Host.View!.Converting, "変換中");
         Assert.Equal("きょうは", k.Host.View!.Typed, k.Host.View!.Text);
-        // 表示と同じなら出さない (かなのまま・英字だけ)
-        var same = new Keyboard(typedKeys: Meltype.Config.TypedKeysStyle.Kana);
-        same.Type("kyouha");
-        Assert.True(same.Host.View!.Typed is null, "表示と同じ");
+        // 表示と同じなら出さない (かなのまま・語末の n・記号と数字だけ)
+        foreach (var keys in new[] { "kyouha", "hon", "hon ", "---", "2026-11-25" })
+        {
+            var same = new Keyboard(typedKeys: Meltype.Config.TypedKeysStyle.Kana);
+            same.Type(keys);
+            Assert.True(same.Host.View!.Typed is null, $"{keys}: {same.Host.View.Text} に {same.Host.View.Typed}");
+        }
     }
 
     [Test]

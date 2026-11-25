@@ -120,15 +120,16 @@ internal static class CompositionPresentation
         return candidates.Count > 1 ? candidates : null;
     }
 
-    /// <summary>変換ボックスに出す、打ったもの (設定「打ったキーを表示」)。漢字変換前は、英日に分けたあとのかなと英字。</summary>
+    /// <summary>変換ボックスに出す、打ったもの (設定「打ったキーを表示」)。漢字変換前は、確定される形 (<see cref="CurrentComposed"/>) を漢字にせずに出す。</summary>
     private static string? TypedKeys(CompositionState state, CompositionEnv env)
     {
         if (CompositionText.IsEmpty(state.Text)) return null;
         return env.Settings.TypedKeys switch
         {
             TypedKeysStyle.Keys => CompositionText.Raw(state.Text),
-            TypedKeysStyle.Kana => CompositionText.RenderSegments(state.Text, env, final: false, convert: null).Text,
-            _ => null,
+            TypedKeysStyle.Kana => CompositionText.AsCommitted(state.Text, env, text => CompositionText.Compose(text, env, final: true)).Text,
+            TypedKeysStyle.Off => null,
+            var style => throw new InvalidOperationException($"不明な TypedKeysStyle: {style}"),
         };
     }
 

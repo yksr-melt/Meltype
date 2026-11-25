@@ -67,18 +67,26 @@ internal static class SettingsJsonTests
     [Test]
     public static void SettingsJson_ShowTypedKeysMovesToTheChoice()
     {
-        // v13: ShowTypedKeys (真偽値) を TypedKeys (選択肢) にした。OFF にしていた人だけ「表示しない」にする
-        foreach (var (json, expected) in new[]
+        // v13: ShowTypedKeys (真偽値) を TypedKeys (選択肢) にした。プロファイルごとの ON・OFF も残る
+        var path = Path.GetTempFileName();
+        try
         {
-            ("{\"ShowTypedKeys\":false}", "Off"),
-            ("{\"ShowTypedKeys\":true}", null),
-            ("{}", null),
-        })
+            foreach (var (json, expected) in new[]
+            {
+                ("{\"SettingsVersion\":12,\"ShowTypedKeys\":false}", TypedKeysStyle.Off),
+                ("{\"SettingsVersion\":12,\"ShowTypedKeys\":true}", TypedKeysStyle.Keys),
+                ("{\"SettingsVersion\":12}", TypedKeysStyle.Keys),
+            })
+            {
+                File.WriteAllText(path, json);
+                Assert.Equal(expected, Settings.Load(path).TypedKeys, json);
+            }
+            File.WriteAllText(path, "{\"SettingsVersion\":12,\"ShowTypedKeys\":false,\"Profiles\":[{\"Name\":\"別\",\"Values\":{\"ShowTypedKeys\":true}}]}");
+            Assert.Equal(TypedKeysStyle.Keys, Settings.Load(path).SwitchProfile("別").TypedKeys, "OFF のプロファイルから ON のプロファイルに切り替える");
+        }
+        finally
         {
-            var values = System.Text.Json.Nodes.JsonNode.Parse(json)!.AsObject();
-            Settings.MigrateToV13(values);
-            Assert.Equal(expected, values["TypedKeys"]?.GetValue<string>(), json);
-            Assert.True(!values.ContainsKey("ShowTypedKeys"), "消した項目は残さない: " + json);
+            File.Delete(path);
         }
     }
 

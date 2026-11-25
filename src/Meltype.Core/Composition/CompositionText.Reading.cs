@@ -138,7 +138,7 @@ internal static partial class CompositionText
     };
 
     /// <summary>英語区間は英字のまま、日本語区間はかな (または漢字)。保護範囲は打った原文のまま。</summary>
-    internal static ComposedText RenderSegments(CompositionTextState state, TextEnv env, bool final, Func<string, bool, string, ComposedText>? convert)
+    private static ComposedText RenderSegments(CompositionTextState state, TextEnv env, bool final, Func<string, bool, string, ComposedText>? convert)
     {
         // 保護範囲 (技術的な文字列) は、幅変換・かな化・漢字変換をせずに原文のまま出す (INV-01)。
         if (CompositionText.VerifyProtectedRaw(state)) return ComposedText.Of(SpanKind.Protected, CompositionText.Raw(state));

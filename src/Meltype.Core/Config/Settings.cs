@@ -1043,13 +1043,14 @@ public sealed class Settings
     }
 
     /// <summary>
-    /// v13: 「打ったキーを表示」を ON・OFF (ShowTypedKeys) から、何を出すかの選択肢 (TypedKeys) にした。OFF にしていた人は「表示しない」にする。
+    /// v13: 「打ったキーを表示」を ON・OFF (ShowTypedKeys) から、何を出すかの選択肢 (TypedKeys) にした。ON は「打ったキー」、OFF は「表示しない」にする。
+    /// プロファイルの切り替えは今の値に重ねるので (<see cref="SwitchProfile"/>)、既定と同じ ON も書く。
     /// config.json の一番上・プロファイルの値・書き出したプロファイルの値 (どれも config.json と同じ形) に使う。
     /// </summary>
     internal static void MigrateToV13(JsonObject values)
     {
-        if (values.Remove("ShowTypedKeys", out var shown) && shown is JsonValue value && value.TryGetValue<bool>(out var on) && !on)
-            values[nameof(TypedKeys)] = TypedKeysStyle.Off.ToString();
+        if (values.Remove("ShowTypedKeys", out var shown) && shown is JsonValue value && value.TryGetValue<bool>(out var on))
+            values[nameof(TypedKeys)] = (on ? TypedKeysStyle.Keys : TypedKeysStyle.Off).ToString();
     }
 
     private static bool IsKeyboardMode(JsonObject values) =>
