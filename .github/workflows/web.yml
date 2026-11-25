@@ -70,12 +70,14 @@ jobs:
     defaults:
       run:
         working-directory: web
-    env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    # Cloudflare のトークンは、使う手順 (Check token・Deploy) だけに渡す。
+    # ジョブ全体に渡すと、外から取ってきてビルドする Mozc・emsdk・wasm-tools の手順からも読めてしまう
     steps:
       - name: Check token
         working-directory: .
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
             echo "::error::環境 web-production に CLOUDFLARE_API_TOKEN と CLOUDFLARE_ACCOUNT_ID を入れてください (web/README.md の「デプロイ」)"
@@ -115,10 +117,20 @@ jobs:
         run: BAZEL="$HOME/tools/bazelisk" native/mozc/build-mozc-wasm.sh "$HOME/mozc-wasm" "$HOME/bazel-cache"
       - name: Install
         run: npm ci
-      # Mozc が無いと、かなのまま確定する版になるので、できたことを確かめる
+      # Mozc が無いと、かなのまま確定する版になるので、できたことを確かめる。
+      # Cloudflare Workers の静的なファイルは 1 つ 25 MiB まで (超えるとデプロイ全体が失敗する)。
+      # mozc.wasm (辞書を含む) がいちばん大きいので、デプロイの前に分かるように調べる
       - name: Build Web engine
         run: |
           npm run web-engine
           test -f public/web-engine/engine/mozc/mozc.wasm
+          too_large="$(find public -type f -size +25M)"
+          if [ -n "$too_large" ]; then
+            echo "::error::Cloudflare Workers に置けない 25 MiB を超えるファイルがあります: $too_large"
+            exit 1
+          fi
       - name: Deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npm run deploy
