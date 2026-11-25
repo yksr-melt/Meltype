@@ -87,8 +87,17 @@ static void CheckCaretNotifications(ITfContext* context, TfClientId client, melt
     const auto expect = [&](UINT key, const wchar_t* text, LONG position, UINT expectedKey, wchar_t expectedChar, const char* label) {
         caretEvents.clear();
         if (key != 0) {
+            // 小文字の l を打つ条件を固定する。Caps Lock や修飾キーの状態はこのスレッドのキー判定の間だけ変える。
+            BYTE savedKeys[256]{};
+            BYTE unmodifiedKeys[256]{};
+            if (!GetKeyboardState(savedKeys) || !SetKeyboardState(unmodifiedKeys)) {
+                check(false, "set unmodified keyboard state for the test key");
+                return;
+            }
             BOOL eaten = TRUE;
-            if (FAILED(service.OnTestKeyDown(context, key, 0, &eaten)) || eaten) {
+            const HRESULT keyResult = service.OnTestKeyDown(context, key, 0, &eaten);
+            const BOOL restored = SetKeyboardState(savedKeys);
+            if (FAILED(keyResult) || eaten || !restored) {
                 check(false, label);
                 return;
             }
