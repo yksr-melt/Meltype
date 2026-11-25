@@ -46,6 +46,35 @@ private func select(_ source: TISInputSource) throws {
     guard try currentSourceID() == sourceID(source) else { throw Failure("Input source selection did not change") }
 }
 
+private func enabledSource(id: String) -> TISInputSource? {
+    let sources = TISCreateInputSourceList(nil, false)?.takeRetainedValue() as? [TISInputSource] ?? []
+    return sources.first {
+        property($0, kTISPropertyInputSourceID) as? String == id &&
+            property($0, kTISPropertyInputSourceIsSelectCapable) as? Bool == true
+    }
+}
+
+func selectJapaneseInputSource(at url: URL) throws {
+    guard let bundleID = Bundle(url: url)?.bundleIdentifier else { throw Failure("Input method bundle has no identifier") }
+    // 親と日本語モードは別々に登録され、入力メニューで選べるのは日本語モード。
+    let id = bundleID + ".Japanese"
+    var failure = Failure("Meltype's Japanese input source is not enabled")
+    // 登録・メニューの再起動直後は、選択できるようになるまで最大 3 秒待つ。
+    let deadline = ProcessInfo.processInfo.systemUptime + 3
+    repeat {
+        if let source = enabledSource(id: id) {
+            do {
+                try select(source)
+                return
+            } catch let error as Failure {
+                failure = error
+            }
+        }
+        Thread.sleep(forTimeInterval: 0.3)
+    } while ProcessInfo.processInfo.systemUptime < deadline
+    throw InputSelectionFailure(message: failure.localizedDescription)
+}
+
 private func matchingApplications(_ url: URL, bundleID: String) -> [NSRunningApplication] {
     NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).filter {
         $0.processIdentifier != getpid() && $0.bundleURL?.resolvingSymlinksInPath() == url && !$0.isTerminated
@@ -183,8 +212,7 @@ func restoreInputMethod(at requestedURL: URL, stateFile: URL) throws {
     do {
         // 更新中に利用者が別の入力ソースへ切り替えていた場合は、その選択を優先する。
         if let temporary = state.temporarySourceID, try currentSourceID() == temporary {
-            let sources = TISCreateInputSourceList(nil, false).takeRetainedValue() as! [TISInputSource]
-            guard let source = sources.first(where: { (property($0, kTISPropertyInputSourceID) as? String) == state.originalSourceID }) else {
+            guard let source = enabledSource(id: state.originalSourceID) else {
                 throw Failure("Original input source is no longer available")
             }
             try select(source)

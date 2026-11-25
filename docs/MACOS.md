@@ -51,8 +51,9 @@ Meltype はアプリではなく「入力ソース」(日本語入力) です。
    - 「開発元が未確認のため開けません」と出たら、右クリック (control + クリック) →「開く」→「開く」
    - macOS 15 以降は、一度ダブルクリックしてから、システム設定 → プライバシーとセキュリティ → 下のほうの「このまま開く」を押す
    - それでも開けないときは、「ターミナル」で `bash ~/Downloads/Meltype-mac/install.sh` を実行する
-3. インストーラーが Meltype を登録・起動します。初回は Meltype の選択を試み、配布 ZIP の更新時は更新前の入力ソースへ戻します
+3. インストーラーが Meltype を登録・起動します。初回は同梱の補助ツールで Meltype の選択を試み、配布 ZIP の更新時は更新前の入力ソースへ戻します
 
+自動で切り替わらなかったときは、入力メニューから Meltype を選んでください。
 起動エラーが出たときは、入力メニューから ABC または標準の日本語入力を選んでください。入力メニューに Meltype が出てこないときは、[困ったとき](#困ったとき)を見てください。
 
 配布 ZIP からの更新も同じ手順です。`Meltype.app` を先に削除したり、手で上書きしたりせず、新しい ZIP 全体を展開してインストーラーを実行してください。ソースビルドからの更新も、外側のアプリを残して内容を交換します。更新時は入力メニューを再起動せず、更新前の入力ソースへ戻します。
@@ -126,6 +127,7 @@ macOS の「ユーザ辞書」の語は、次の手順で `userdict.txt` に取�
   ~/Library/Input\ Methods/Meltype.app/Contents/MacOS/MeltypeRegisterInputSource
   ```
   これで戻らなければ、システム設定 → キーボード →（テキスト入力の）入力ソース →「編集…」→「+」→ 日本語 → Meltype で追加する (macOS 27 では、この手順が必要になることがあります)。それでも出てこなければ、ログアウトしてログインし直し、`~/Library/Input Methods/Meltype.app` があるか確かめる。
+- **設定にはあるのに入力メニューに出ない**: システム設定 → キーボード →（テキスト入力の）入力ソース →「編集…」で Meltype を選び、「–」で外す。「+」→ 日本語 → Meltype から追加し直して、入力メニューから選ぶ。
 - **Meltype がいくつも並ぶ**: ターミナルで次を実行する
   ```bash
   "$HOME/Library/Input Methods/Meltype.app/Contents/MacOS/Meltype" --register-input-source
@@ -139,8 +141,8 @@ macOS の「ユーザ辞書」の語は、次の手順で `userdict.txt` に取�
 - **止まってしまった**: まず入力メニューで ABC または標準の日本語入力を選び、`pkill -x Meltype` (次にキーを打つと macOS が起動し直します)。zip を展開したフォルダーで次を実行しても再起動できます
   ```bash
   bash ./start-input-method.sh "$HOME/Library/Input Methods/Meltype.app"
-  swift ./select-input-source.swift
   ```
+  起動したら、入力メニューから Meltype を選んでください。
 
 不具合を報告するときは、どのアプリで・何と打って・どうなったか (できればスクリーンショットも) を教えてください。
 
