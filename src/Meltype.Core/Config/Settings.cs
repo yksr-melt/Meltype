@@ -91,6 +91,14 @@ public enum PunctuationStyle
     [Description("、．")] ToutenFullWidthPeriod,
 }
 
+/// <summary>変換ボックスに小さく出す、打ったもの (設定「打ったキーを表示」)。</summary>
+public enum TypedKeysStyle
+{
+    [Description("表示しない")] Off,
+    [Description("打ったキー (kyouhagoogle)")] Keys,
+    [Description("漢字変換前 (きょうはgoogle)")] Kana,
+}
+
 /// <summary>かなのすぐ後ろで打った / に出す文字。</summary>
 public enum SlashStyle
 {
@@ -434,8 +442,8 @@ public sealed class Settings
     public bool ConsonantAbbreviations { get; set; }
 
     [Category("9. 表示"), DisplayName("打ったキーを表示"), Platforms(Platform.Windows),
-     Description("打ったキー (ローマ字: kyouhagoogle) を小さく出します。Meltype キーボードでは変換ボックスの文字の下に、Meltype IME では候補の一覧の上に出します。打ち間違いに気づきやすくなります。")]
-    public bool ShowTypedKeys { get; set; } = true;
+     Description("打ったキーを小さく出します。Meltype キーボードでは変換ボックスの文字の下に、Meltype IME では候補の一覧の上に出します。「打ったキー」はローマ字のまま (kyouhagoogle) で、打ち間違いに気づきやすくなります。「漢字変換前」は英語と日本語に分けたあと・漢字にする前の形 (きょうはgoogle) で、ライブ変換の前に何と読んだかを確かめられます。")]
+    public TypedKeysStyle TypedKeys { get; set; } = TypedKeysStyle.Keys;
 
     [Browsable(false), DisplayName("固定の操作ガイドを表示"),
      Description("変換中の表示に Space 変換・F7 カタカナ などの固定ガイドを表示します。OFF でも英字・予測・訂正の提案は表示します。")]
@@ -707,6 +715,7 @@ public sealed class Settings
             if (fileVersion < 9) MigrateToV9(raw);
             if (fileVersion < 10) MigrateToV10(raw, OperatingSystem.IsWindows(), Mode == InputMode.Keyboard);
             if (fileVersion < 11) MigrateToV11(raw);
+            if (fileVersion < 13) MigrateToV13(raw);
             InitializeToggleShortcuts(raw, name.Length == 0 ? "読み込んだプロファイル" : name);
             // 既定の設定に、知っている項目だけを重ねてから読み直す (型の違う値はここで例外になる)
             var merged = JsonSerializer.SerializeToNode(new Settings().Normalize(), JsonType)!.AsObject();
@@ -781,7 +790,7 @@ public sealed class Settings
             if (profile is not null) InitializeToggleShortcuts(profile.Values, profile.Name, report);
     }
 
-    public const int CurrentVersion = 12;
+    public const int CurrentVersion = 13;
 
     [Category("10. 学習"), DisplayName("ユーザー学習を使う"),
      Description("OFF にすると、選び直した変換・英字 / かなに直した語・予測変換の語句・選んだ英訳を新しく覚えません (今まで覚えた分は使います)。今まで覚えた分を消すときは、トレイの「学習データを消す」を使います。")]
@@ -997,6 +1006,7 @@ public sealed class Settings
         // v8: 型を変えた項目は、読み込む前の JSON で移す (MigrateToV8)。
         // v9: Zenzai を既定 ON にした。プロファイルの値にも効くよう、読み込む前の JSON で移す (MigrateToV9)。
         // v11: GitHubIssueCandidates を消した。プロファイルの値にも効くよう、読み込む前の JSON で移す (MigrateToV11)。
+        // v13: ShowTypedKeys (真偽値) を TypedKeys (選択肢) にした。読み込む前の JSON で移す (MigrateToV13)。
         SettingsVersion = CurrentVersion;
         return true;
     }
@@ -1030,6 +1040,17 @@ public sealed class Settings
     {
         var on = values.Remove("GitHubIssueCandidates", out var flag) && flag is JsonValue value && value.TryGetValue<bool>(out var enabled) && enabled;
         if (!on) values.Remove(nameof(GitHubRepository));
+    }
+
+    /// <summary>
+    /// v13: 「打ったキーを表示」を ON・OFF (ShowTypedKeys) から、何を出すかの選択肢 (TypedKeys) にした。ON は「打ったキー」、OFF は「表示しない」にする。
+    /// プロファイルの切り替えは今の値に重ねるので (<see cref="SwitchProfile"/>)、既定と同じ ON も書く。
+    /// config.json の一番上・プロファイルの値・書き出したプロファイルの値 (どれも config.json と同じ形) に使う。
+    /// </summary>
+    internal static void MigrateToV13(JsonObject values)
+    {
+        if (values.Remove("ShowTypedKeys", out var shown) && shown is JsonValue value && value.TryGetValue<bool>(out var on))
+            values[nameof(TypedKeys)] = (on ? TypedKeysStyle.Keys : TypedKeysStyle.Off).ToString();
     }
 
     private static bool IsKeyboardMode(JsonObject values) =>
@@ -1175,6 +1196,12 @@ public sealed class Settings
             MigrateToV11(values);
             foreach (var profile in (values[nameof(Profiles)] as JsonArray ?? []).OfType<JsonObject>())
                 if (profile[nameof(SettingsProfile.Values)] is JsonObject profileValues) MigrateToV11(profileValues);
+        }
+        if (version < 13)
+        {
+            MigrateToV13(values);
+            foreach (var profile in (values[nameof(Profiles)] as JsonArray ?? []).OfType<JsonObject>())
+                if (profile[nameof(SettingsProfile.Values)] is JsonObject profileValues) MigrateToV13(profileValues);
         }
         var settings = values.Deserialize(JsonType) ?? new Settings();
         settings.SettingsVersion = version;

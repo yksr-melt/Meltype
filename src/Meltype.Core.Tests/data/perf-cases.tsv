@@ -1,4 +1,4 @@
-# 英単語の混じった文の変換の比較 (--mozc-compare)。1 行に「打ったもの<Tab>期待」
+# 変換エンジンの計測 (--perf) の既定の例文。英単語の混じった文。1 行に「打ったもの<Tab>期待」
 kyouhagoogledekennsakushita	今日はgoogleで検索した
 githubnipushshita	githubにpushした
 ashitanomeetingdehanashimasu	明日のmeetingで話します
