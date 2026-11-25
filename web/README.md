@@ -94,14 +94,12 @@ main に `web/` の変更が入ると、GitHub Actions (`.github/workflows/web.y
 
 トップページの Stars・ダウンロード数・リリースなど (`/api/github`) は、Workers KVの `CACHE` に入れて1時間使い回します。1時間を過ぎたら古いものを返しつつ裏で取り直し、KVの値そのものは1日 (`expirationTtl`) で消えます。GitHubが落ちていても 1日は古い値で表示でき、読めないときは数字の代わりに "-" で表示します。
 
-## Meltype のアプリから送信
+## URL で項目を埋める
 
 フォームはURLで項目を埋められます。`form` (bug / misdetection / dictionary / idea) か、GitHub のテンプレートの名前の `template` (1-bug.yml など) で種類を選び、他は項目の名前 (`os`・`version`・`environment`・`typed` など) で渡します。
 
-アプリの `ProjectInfo.ReportForm` に次の形で入れれば、今の置き換えの仕組み (`=Windows+11`・`=0.0.0`・`=ENV`) のまま使えます。
-
 ```text
-https://meltype.moe/report/?form=bug&os=Windows+11&version=0.0.0&environment=ENV
+https://meltype.moe/report/?form=bug&os=Windows+11&version=1.4.0
 ```
 
 ## Cloudflare Access
