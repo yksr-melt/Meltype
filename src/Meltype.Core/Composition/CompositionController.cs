@@ -160,4 +160,5 @@ internal static class CompositionController
 
     internal static void CancelPending(CompositionState state) => CompositionLifecycle.CancelPending(state);
 
+    internal static IReadOnlyList<int> ComposingControlKeys(CompositionState state, CompositionEnv env) => CompositionKeys.ComposingControlKeys(state, env);
 }
