@@ -178,6 +178,8 @@ internal static class LineContext
     // URL の中の // と /* (gs://bucket/* のワイルドカード) をコメントとみなさない。
     // :// はほぼ URL にしか出ないので、スキーム名は一覧にせず「英字で始まり英数字・+・-・. が続く名前 + :」で見分ける (s3://・git+ssh://)。
     // URL には空白と引用符が入らないので、そこを URL の終わりとする。後ろの // や # はコメントとして調べる。
+    // URL より前で開いた括弧を閉じる ) も URL の終わり (CSS の url(https://x/a.png);/* の /* はコメント)。
+    // URL の中で開いた括弧 (https://en.wikipedia.org/wiki/Foo_(bar)) は URL に含める。
     private static int UrlLength(string text, int index)
     {
         if (index < 2 || text[index - 1] != ':') return 0;
@@ -188,7 +190,12 @@ internal static class LineContext
         while (slashes < text.Length && text[slashes] == '/') slashes++;
         if (slashes - index is not (2 or 3)) return 0;
         var end = slashes;
-        while (end < text.Length && !char.IsWhiteSpace(text[end]) && text[end] is not ('"' or '\'' or '`')) end++;
+        var depth = 0; // URL の中で開いた括弧の数
+        for (; end < text.Length && !char.IsWhiteSpace(text[end]) && text[end] is not ('"' or '\'' or '`'); end++)
+        {
+            if (text[end] == '(') depth++;
+            else if (text[end] == ')' && depth-- == 0) break;
+        }
         return end - index;
     }
 
