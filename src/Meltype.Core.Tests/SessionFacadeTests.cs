@@ -837,7 +837,7 @@ internal static class SessionFacadeTests
         session.CodeInput = true;
         session.Toggle("echo ");
         Assert.True(!session.CodeEnglishAt("echo "), "明示的な日本語指定を有効にする");
-        session.Send(Ime.ImeEventType.CaretMoved, caret: new Ime.ImeCaret { Moved = true, PassedKey = 0, FocusEntered = true });
+        session.Send(new Ime.ImeEvent.CaretMoved(new Ime.ImeCaret { Moved = true, PassedKey = 0, FocusEntered = true }));
         Assert.True(session.CodeEnglishAt("echo "), "再有効化で明示的な日本語指定を初期化する");
         Assert.True(!Type(session, "k", "echo ").Single().Consumed, "コードの行に戻る");
     }
