@@ -33,11 +33,10 @@ final class InputSourceRegistrationTests: XCTestCase {
         }
     }
 
-    func testAppendsOnlyMissingRecord() {
-        let result = InputSourceRegistration.normalized([mode, google, mode])
-        XCTAssertTrue(NSArray(array: Array(result.prefix(2))).isEqual(to: [mode, google]))
-        XCTAssertEqual(result.count, 3)
-        XCTAssertEqual(result.last?["InputSourceKind"] as? String, "Keyboard Input Method")
+    // 書き足した項目は入力メニューに出ないまま選ばれてしまうので、片方だけでも足さない。
+    func testDoesNotAppendMissingRecord() {
+        XCTAssertTrue(NSArray(array: InputSourceRegistration.normalized([mode, google, mode])).isEqual(to: [mode, google]))
+        XCTAssertTrue(NSArray(array: InputSourceRegistration.normalized([parent, google, parent])).isEqual(to: [parent, google]))
     }
 
     func testPreservesUnrecognizedMeltypeModesAndSimilarIdentifiers() {

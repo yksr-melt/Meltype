@@ -35,6 +35,9 @@ enum InputSourceRegistration {
         (source["Input Mode"] as? String) == japaneseIdentifier
     }
 
+    // 重複を消すだけで、足りない項目は書き足さない。設定に日本語モードを書き足すと、TIS からは有効に見えて
+    // インストール時に選ばれるのに、入力メニューとシステム設定には出ず、一度切り替えると戻れなくなる。
+    // 有効にするのは TIS とシステム設定の「+」に任せる。
     static func normalized(_ sources: [[String: Any]]) -> [[String: Any]] {
         var seen = Set<String>()
         var result: [[String: Any]] = []
@@ -51,12 +54,6 @@ enum InputSourceRegistration {
             } else {
                 result.append(source)
             }
-        }
-        if !seen.contains("Input Mode") {
-            result.append(["Bundle ID": identifier, "Input Mode": japaneseIdentifier, "InputSourceKind": "Input Mode"])
-        }
-        if !seen.contains("Keyboard Input Method") {
-            result.append(["Bundle ID": identifier, "InputSourceKind": "Keyboard Input Method"])
         }
         return result
     }
