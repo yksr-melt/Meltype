@@ -280,7 +280,7 @@ internal static class Henkan
             : null);
     private static readonly Lazy<Dictionary.TranslationDictionary> Translations = new(Dictionary.TranslationDictionary.Load);
 
-    // bot の Windows の runner は CPU だけで計算するので、アプリより長く待つ (待ちきれなかった答えを ZenzaiConverter は捨てて、しばらく休む)
+    // bot の runner は CPU だけで計算するので、アプリより長く待つ (待ちきれなかった答えを ZenzaiConverter は捨てて、しばらく休む)
     private const int ZenzaiTimeoutMs = 30000;
     private static readonly Lazy<Engine.ZenzaiConverter?> Zenzai = new(() =>
         Environment.GetEnvironmentVariable("MELTYPE_ZENZAI_SERVER") is { Length: > 0 } server &&
