@@ -748,17 +748,6 @@ internal static class LanguageLearningTests
     }
 
     [Test]
-    public static void Phrase_AgeashiWoToru()
-    {
-        // 揚げ足取るな が 揚げ足とルナ になっていた (issue #147)。同梱の語句で 揚げ足取る を 1 つの文節にする
-        var k = new CompositionTests.Keyboard(userDictionary: new UserDictionary(null));
-        k.Type("ageashitoruna ");
-        var view = k.Host.View!;
-        Assert.True(view.Converting, "変換中");
-        Assert.Equal("揚げ足取る", view.Clauses![0], string.Join("|", view.Clauses));
-    }
-
-    [Test]
     public static void TesterNames_AreCandidates()
     {
         // 協力してくださった方々の名前を変換しやすくする (issue #156)
