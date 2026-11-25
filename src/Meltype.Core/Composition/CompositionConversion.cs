@@ -255,13 +255,13 @@ internal static class CompositionConversion
     /// </summary>
     internal static void SplitWholeSentence(CompositionState state)
     {
-        if (state.Clauses is not [{ Alternatives: not null } whole]) return;
+        if (state.Clauses is not [{ Alternatives: { } alternatives } whole]) return;
         if (SelectedAlternative(whole) is not { } clauses)
         {
             whole.NotLearned.Add(whole.Text);
             return;
         }
-        if (clauses is [var single] && single.Text != whole.Text)
+        if (!alternatives.ContainsKey(whole.Text) && clauses is [var single])
         {
             single.Index = single.Candidates.IndexOf(whole.Text);
             single.Changed = whole.Changed;
