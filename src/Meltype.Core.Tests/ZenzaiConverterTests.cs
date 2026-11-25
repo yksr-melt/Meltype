@@ -255,7 +255,7 @@ internal static class ZenzaiConverterTests
         SessionFacadeTests.Type(session, "githubnitsuitehanasu", before: "昨日は");
         SpinWait.SpinUntil(() => server.Prompts.Any(p => ReadingIn(p) == "についてはなす"), 5000);
         var asked = server.Prompts.Where(p => ReadingIn(p) == "についてはなす").ToList();
-        Assert.True(asked.Count > 0 && asked.All(p => p.StartsWith("昨日はgithub", StringComparison.Ordinal)), "依頼: " + string.Join(" / ", asked));
+        Assert.True(asked.Count > 0 && asked.All(p => p.StartsWith("昨日はGitHub", StringComparison.Ordinal)), "依頼: " + string.Join(" / ", asked));
     }
 
     [Test]
