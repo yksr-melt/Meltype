@@ -61,7 +61,8 @@ internal sealed class RomajiTypoCorrector
 
     // readings-rare.txt の語の活用した形 (かんれんづけ)
     private static readonly Lazy<PackedWordSet> RareForms = new(() =>
-        PackedWordSet.FromWords(Conjugations(CommonReadings.RareText()).Where(form => !CommonReadings.Rare.Contains(form))));
+        // 短い読みを足しても、そこから 2 文字以下の活用形 (くべる → くべ = cube) は作らない。
+        PackedWordSet.FromWords(Conjugations(CommonReadings.RareText()).Where(form => form.Length >= 3 && !CommonReadings.Rare.Contains(form))));
 
     public static RomajiTypoCorrector Load(RomajiDetector romaji) => new(romaji, CommonReadings.Words, CommonForms.Value);
 

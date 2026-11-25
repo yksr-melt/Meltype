@@ -161,6 +161,7 @@ internal static class ZenzaiConverterTests
             [
                 "なまえは\t名前は魚のは\t3\t0", "なまえは\t名前は\t3\t0", "きずくのがはやい\t気づくのが早い\t3\t0",
                 "おせわに\tお世話になっております\t3\t0", "おせわになっております\tお世話になっております\t3\t0",
+                "わたしは、いく\t私は，行く\t3\t0",
             ]);
             File.WriteAllText(Path.Combine(directory, "userdict.txt"), "おせわ\tお世話になっております\n");
             using var runtime = new MeltypeRuntime(directory);
@@ -174,6 +175,7 @@ internal static class ZenzaiConverterTests
             foreach (var e in conversions.Skip(2)) Assert.Equal(e[1], runtime.History.Get(e[0]), $"{e[0]} → {e[1]} は残す");
             Assert.Equal("名前は", string.Join(",", runtime.Phrases.StartingWith("なま")), "予測変換の語句も消す");
             Assert.Equal("気づくのが早い", string.Join(",", runtime.Phrases.StartingWith("きず")), "Mozc の候補で作れる語句は残す");
+            Assert.Equal("私は，行く", string.Join(",", runtime.Phrases.StartingWith("わたし")), "設定の句読点で覚えた語句は残す");
             Assert.Equal("おせわになっております", string.Join(",", runtime.Phrases.Entries().Where(e => e.Text == "お世話になっております").Select(e => e.Reading)),
                 "壊れた答えと同じ語句を正しい読みで覚えたものは残す");
 
@@ -253,7 +255,7 @@ internal static class ZenzaiConverterTests
         SessionFacadeTests.Type(session, "githubnitsuitehanasu", before: "昨日は");
         SpinWait.SpinUntil(() => server.Prompts.Any(p => ReadingIn(p) == "についてはなす"), 5000);
         var asked = server.Prompts.Where(p => ReadingIn(p) == "についてはなす").ToList();
-        Assert.True(asked.Count > 0 && asked.All(p => p.StartsWith("昨日はgithub", StringComparison.Ordinal)), "依頼: " + string.Join(" / ", asked));
+        Assert.True(asked.Count > 0 && asked.All(p => p.StartsWith("昨日はGitHub", StringComparison.Ordinal)), "依頼: " + string.Join(" / ", asked));
     }
 
     [Test]

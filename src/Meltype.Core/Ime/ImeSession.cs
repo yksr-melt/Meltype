@@ -95,7 +95,7 @@ internal static class ImeSession
         {
             if (!IsPassword(state.Field))
             {
-                CancelPending(state, ForField(state, env));
+                CancelPending(state);
                 state.LastSnippet = null;
                 state.ListedPredictions = false;
                 state.AltDown = 0;
@@ -571,6 +571,7 @@ internal static class ImeSession
     {
         var settings = env.App;
         var lateResults = env.Parts.LateResults();
+        var before = LineBefore(state, state.Field);
         CompositionEnv composition = null!;
         composition = new(env.Parts.Detector, env.Parts.Converter, env.Parts.Services, settings)
         {
@@ -583,20 +584,22 @@ internal static class ImeSession
             OtherTipVersion = () => env.Environment.OtherTipVersion,
             NowPlaying = env.Parts.NowPlaying,
             Corrected = env.Parts.Corrected,
-            Before = LineBefore(state, state.Field),
+            Before = before,
             EditableBefore = keyField is { CanRemove: true, Composing: false, Selection: null or "" } field ? field.Before : null,
             After = state.Field?.After,
+            CodeString = CodeInput(state) && CodeLineKind(before) == LineKind.String,
             LateResults = lateResults,
             Deadline = lateResults ? 0 : long.MaxValue,
+            LiveCache = state.Composition.LiveCache,
             Context = () => CompositionContext.ContextOf(state.Composition, composition),
         };
         return composition;
     }
 
     /// <summary>英数 (直接入力) か。true の間はキーをすべてアプリに渡す (Mac の「英数」キー、「かな」キーで戻す)。</summary>
-    public static bool Direct(ImeSessionState state) => state.Composition.Direct;
+    public static bool Direct(ImeSessionState state) => CompositionController.IsDirect(state.Composition);
 
-    public static bool DirectEnglishWord(ImeSessionState state) => state.Composition.DirectEnglishWord;
+    public static bool DirectEnglishWord(ImeSessionState state) => CompositionController.InEnglishWord(state.Composition);
 
     /// <summary>入力を覚えないように求める入力欄か。その欄で扱った未確定入力は、欄を離れて確定しても学習しない。</summary>
     public static bool Private(ImeSessionState state) => CompositionController.Private(state.Composition);
@@ -707,22 +710,19 @@ internal static class ImeSession
         // Ctrl・Option・Command と一緒のキーは、変換ボックスが空ならアプリの操作 (コピーなど) なので触らない。
         var modifier = control || alt || command;
         var settings = env.App;
-        if (Direct(state) && state.Composition.DirectEnglishWord &&
+        if (DirectEnglishWord(state) &&
             (ch is { } directChar && !char.IsAsciiLetterOrDigit(directChar) && directChar is not ('@' or '_') ||
              before is { Length: > 0 } && !char.IsAsciiLetterOrDigit(before[^1]) && before[^1] is not ('@' or '_')))
-            state.Composition.DirectEnglishWord = false;
-        if ((Direct(state) && (!settings.DirectModeAutoDetect || state.Composition.DirectEnglishWord)) || !settings.Enabled)
+            CompositionController.LeaveEnglishWord(state.Composition);
+        if ((Direct(state) && (!settings.DirectModeAutoDetect || DirectEnglishWord(state))) || !settings.Enabled)
         {
             return CompositionController.Pass(state.Composition, Env(state, env), now);
         }
         // 先頭か空白の直後の /command・$skill・@ファイル名 は、変換せずにそのままアプリへ渡す (#193)。
         // 文章の入力欄の / は、変換ボックスに ・ として入れる。Space で / にすると、続く名前はそのまま渡す。
-        if (!modifier && !CompositionController.IsComposing(state.Composition) && ch is '/' && !PassesSlash(state, before) && !SigilWord.InNameAfter(before) && settings.SigilWordsDirect &&
-            SigilWord.PassesAfter(before, '/'))
-        {
-            CompositionController.MarkSlashAtStart(state.Composition);
-        }
-        else if (!modifier && !CompositionController.IsComposing(state.Composition) && ch is { } c && settings.SigilWordsDirect && SigilWord.PassesAfter(before, c))
+        var slashAtStart = !modifier && !CompositionController.IsComposing(state.Composition) && ch is '/' && !PassesSlash(state, before) && !SigilWord.InNameAfter(before) && settings.SigilWordsDirect &&
+            SigilWord.PassesAfter(before, '/');
+        if (!slashAtStart && !modifier && !CompositionController.IsComposing(state.Composition) && ch is { } c && settings.SigilWordsDirect && SigilWord.PassesAfter(before, c))
         {
             return CompositionController.Pass(state.Composition, Env(state, env), now);
         }
@@ -736,7 +736,7 @@ internal static class ImeSession
             state.UserDictionaryCheckedMs = now;
             env.UserDictionary?.Refresh();
         }
-        var result = CompositionController.Press(state.Composition, Env(state, env, keyField), new KeyPress(vk, ch, shift, control, alt, command, now), releaseFollows);
+        var result = CompositionController.Press(state.Composition, Env(state, env, keyField) with { SlashAtStart = slashAtStart }, new KeyPress(vk, ch, shift, control, alt, command, now), releaseFollows);
         // アプリに渡したキー (変換していないときの BackSpace・矢印・Enter など) はキャレットを動かすかもしれない。
         // 前に確定した語を確定し直さない (消す位置がずれて関係ない文字を消さないように)
         if (!result.Consumed && !CompositionController.IsComposing(state.Composition)) ForgetLastCommit(state);
@@ -780,11 +780,7 @@ internal static class ImeSession
         CompositionController.ForgetLastCommit(state.Composition);
     }
 
-    public static void ForgetDirectInput(ImeSessionState state)
-    {
-        state.Composition.DirectEnglishWord = false;
-        CompositionController.AbandonDirectHold(state.Composition);
-    }
+    public static void ForgetDirectInput(ImeSessionState state) => CompositionController.ForgetDirectInput(state.Composition);
 
     /// <summary>フォーカスが外れたときなど。未確定の内容をそのまま確定する。</summary>
     public static SessionResult CommitPending(ImeSessionState state, ImeEnv env)
@@ -794,10 +790,9 @@ internal static class ImeSession
         return result;
     }
 
-    internal static void CancelPending(ImeSessionState state, ImeEnv env)
+    internal static void CancelPending(ImeSessionState state)
     {
-        CompositionController.CancelPending(state.Composition, Env(state, env));
-        state.Composition.DirectEnglishWord = false;
+        CompositionController.CancelPending(state.Composition);
         SetCodeInput(state, false);
         SetCodeTerminal(state, false);
     }

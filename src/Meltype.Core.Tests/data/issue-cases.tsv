@@ -23,7 +23,7 @@ ninatta	になった
 printenv	printenv
 mainnipushsuru	mainにpushする
 exe	exe
-dlsite	dlsite
+dlsite	DLsite
 meado	メアド
 siri-zu	シリーズ
 image	image
@@ -46,7 +46,7 @@ enumerate	enumerate
 holoX	holoX
 tmux	tmux
 oemnopasokonn	OEMのパソコン
-githubya	githubや
+githubya	GitHubや
 i18n	i18n
 yahoyaho	やほやほ
 featuresno	featuresの
@@ -151,7 +151,7 @@ sbisinnseiginnkou	sbi新生銀行
 supika	スピカ
 kennpa	検波
 syi	しぃ
-phsikennsi	ph試験紙
+phsikennsi	pH試験紙
 metyakutyagokaiunndeta	めちゃくちゃ誤解生んでた
 sumimasne	すみません
 omosiroine!nihongo?	面白いね！日本語？
@@ -174,7 +174,7 @@ pythonnara	pythonなら
 pythonsika	pythonしか
 pythongoto	pythonごと
 pythonnano	pythonなの
-pythonnaragithub	pythonならgithub
+pythonnaragithub	pythonならGitHub
 pythonniapi	pythonにapi
 kita	来た
 kitai	期待
@@ -232,8 +232,13 @@ beepon	beep音
 issuekakuka	issue書くか
 dounikasitaisunee	どうにかしたいすねえ
 ikukaikanaika	行くか行かないか
-subewomotanai	術を持たない
+itotekinagobyuu	意図的な誤謬
 ronpa	論破
+onpa	音波
+uchidome	打ち止め
+konocubekudasai	このcubeください
+zenbutimenisuru	全部timeにする
+subewomotanai	術を持たない
 hogezl	ほげ→
 hogezlfuga	ほげ→ふが
 kitya	きちゃ

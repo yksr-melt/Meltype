@@ -49,7 +49,7 @@ def main():
         data.mkdir()
         (data / 'config.json').write_text(json.dumps({
             'SpaceAroundEnglish': True, 'LiveConversion': False, 'SigilWordsDirect': False,
-            'ShowTypedKeys': True, 'PredictiveCandidates': True,
+            'TypedKeys': 'Keys', 'PredictiveCandidates': True,
         }))
         # 「こう」で予測候補が開き、「こうほ」まで打つと閉じるようにする。
         # ページ送りの検証用に、Mozc に頼らず 3 ページ分の候補を用意する。

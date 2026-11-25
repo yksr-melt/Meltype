@@ -27,12 +27,12 @@ internal static class CompositionKeys
     /// <summary>変換ボックスを開くキーか。変換キーは選んだ文字の再変換、親指シフトのかな配列の 無変換・変換 は親指キー。</summary>
     private static bool StartsComposition(CompositionState state, CompositionEnv env, KeyPress key)
     {
-        var direct = state.Direct;
+        var direct = CompositionLifecycle.IsDirect(state);
         if (key.Vk == VirtualKeys.Convert && env.Selection is { Length: > 0 }) return true;
-        if (key.Vk is VirtualKeys.Convert or VirtualKeys.NonConvert && !direct && CompositionLifecycle.KanaInput(state, env) &&
+        if (key.Vk is VirtualKeys.Convert or VirtualKeys.NonConvert && !direct && CompositionLifecycle.KanaInput(env) &&
             env.Settings.KanaLayout is KanaLayout.Nicola or KanaLayout.NakayubiNicola or KanaLayout.Tron) return true;
         // かな入力: かなのキーならすべて入力を始める (StartWith)
-        if (CompositionLifecycle.KanaInput(state, env) && !direct && Detection.KanaDetector.IsKanaKey(key.Vk)) return true;
+        if (CompositionLifecycle.KanaInput(env) && !direct && Detection.KanaDetector.IsKanaKey(key.Vk)) return true;
         // 日本語入力の Shift+Space・設定「スペースの幅」が全角の Space は、全角スペースにする (StartWith)
         if (key.Vk == VirtualKeys.Space) return key.Shift || !direct && env.Settings.SpaceWidth == Config.SpaceWidth.FullWidth;
         if (key.Ch is not { } c) return false;
@@ -47,7 +47,7 @@ internal static class CompositionKeys
         if (!CompositionLifecycle.IsComposing(state) && !state.KanaLayout.ThumbHeld) return;
         var kanaUp = state.KanaLayout.Up(vk);
         // 中指NICOLA: シフトのキーを押したまま先に離した文字キーを、シフト面で打ち直す
-        if (kanaUp.Stroke.Handled && CompositionLifecycle.IsComposing(state)) ApplyKanaStroke(state, env, kanaUp.Stroke);
+        if (kanaUp.Stroke.Handled && state.Scene is CompositionScene.WithInput) ApplyKanaStroke(state, env, kanaUp.Stroke);
         // 親指シフト: 文字に使わずに離した親指キーは、もとの働き (変換・無変換) をする
         if (kanaUp.ThumbTap && pressed)
         {
@@ -55,107 +55,94 @@ internal static class CompositionKeys
         }
     }
 
-    /// <summary>未確定文字を確定せず日本語／英字へ切り替える。未確定入力がなければ false。</summary>
-    private static bool TogglePendingInput(CompositionState state, CompositionEnv env)
-    {
-        // 英数状態の自動判定中の文字はすでにアプリへ渡しているので、未確定文字には含めない。
-        if (CompositionText.IsEmpty(state.Text))
-        {
-            CompositionLifecycle.ClearHeld(state);
-            return false;
-        }
-        SetMode(state, CompositionText.IsAlphanumeric(state.Text, env) ? DisplayMode.Hiragana : DisplayMode.HalfWidthAlphanumeric);
-        CompositionPresentation.UpdateView(state, env);
-        return true;
-    }
-
     private static void HandleKey(CompositionState state, CompositionEnv env, KeyEvent e)
     {
         var vk = e.Vk;
         if (!VirtualKeys.IsLetter(vk) || state.Shift || state.Modifier) CompositionDirectInput.ResumeNormalHold(state);
-        if (state.HeldLetters.Length > 0)
+        if (state.Scene is CompositionScene.Judging judging)
         {
             if (VirtualKeys.IsLetter(vk) && !state.Shift && !state.Modifier)
             {
-                CompositionDirectInput.Hold(state, env, e);
+                CompositionDirectInput.Hold(state, judging, env, e);
                 return;
             }
             // 母音の後の - は長音 (ro-maji → ろーまじ、de-ta → でーた)。英単語の途中にはまず出てこないので、ローマ字として
             // 読めれば日本語に戻す。英語の接頭辞 (e-mail、co-op) かもしれないときは - も送って判定を続け、- の後ろで決める
             // (e-mail → 英語、e-me-ru → えーめーる)。
-            var part = CompositionDirectInput.LastHyphenPart(state);
+            var part = CompositionDirectInput.LastHyphenPart(judging);
             if (vk == VirtualKeys.OemMinus && !state.Shift && !state.Modifier && part.Length > 0 &&
                 env.Detector.Romaji.AnalyzeFragment(part) is { IsValid: true, Partial: "" })
             {
-                var prefix = !state.HeldLetters.ToString().Contains('-') && CompositionDetector.IsHyphenPrefix(part);
-                state.HeldLetters.Append('-');
-                state.HeldLastKeyTime = e.TimeMs;
+                var prefix = !judging.Letters.ToString().Contains('-') && CompositionDetector.IsHyphenPrefix(part);
+                judging.Letters.Append('-');
+                judging.LastKeyTime = e.TimeMs;
                 if (prefix)
                 {
-                    CompositionDirectInput.SendHeld(state, e);
+                    CompositionDirectInput.Send(state, judging, e);
                     return;
                 }
-                Diagnostics.Log.Decision($"英数状態でローマ字を検知: {Diagnostics.Log.Text(state.HeldLetters.ToString())} (母音の後の長音)");
-                CompositionDirectInput.SwitchHeldToJapanese(state, env);
+                Diagnostics.Log.Decision($"英数状態でローマ字を検知: {Diagnostics.Log.Text(judging.Letters.ToString())} (母音の後の長音)");
+                CompositionDirectInput.SwitchToJapanese(state, judging, env);
                 return;
             }
             // 英字以外のキー・Shift・Ctrl で判定を打ち切り、英語として出してから、そのキーを普通に処理する。
             Diagnostics.Log.Info($"英数状態の判定を打ち切り: キー 0x{vk:X2} (Shift {state.Shift})");
-            CompositionDirectInput.ReleaseHeldAsEnglish(state, env);
+            CompositionDirectInput.ReleaseAsEnglish(state);
         }
 
         // 大文字・文節の区切りの変更に使う Shift は、ほかのキーと一緒に届く。Shift だけでは何もしない。
         if (IsShift(vk)) return;
         // 何も打っていないときのテンキーの数字・記号は、変換ボックスに入れず、そのまま通す (半角で入る。Excel・CAD などで数値を打つとき: issue #460)。
         // 入力中なら今までどおり変換ボックスに入れる (3 + ji → 3時 のように続けて変換できる)
-        if (CompositionText.IsEmpty(state.Text) && !state.Control && !state.Modifier && vk is >= 0x60 and <= 0x6F)
+        if (state.Scene is not CompositionScene.WithInput && !state.Control && !state.Modifier && vk is >= 0x60 and <= 0x6F)
         {
             PassKey(state);
             return;
         }
-        if (state.Control && !CompositionText.IsEmpty(state.Text))
+        if (state.Control && state.Scene is CompositionScene.WithInput withInput)
         {
+            var converting = withInput as CompositionScene.Converting;
             // 変換ボックスに入力中の Ctrl + キー (Ctrl+U/I/O/P はかな・英字の切り替え、Ctrl+H は BackSpace。それ以外は確定してから通す)。
             if (IsControl(vk)) return;
             // 設定「Control キーの割り当て」が ATOK 風: Ctrl + K / L で文節の長さを変える。変換中だけ (Shift + ← → と同じ。issue #599)
-            if (CompositionLifecycle.IsConverting(state) && env.Settings.ControlKeys == Config.ControlKeyLayout.Atok && vk is 'K' or 'L')
+            if (converting is not null && env.Settings.ControlKeys == Config.ControlKeyLayout.Atok && vk is 'K' or 'L')
             {
-                CompositionConversion.Resize(state, env, vk == 'L' ? +1 : -1);
+                CompositionConversion.Resize(converting, env, vk == 'L' ? +1 : -1);
                 return;
             }
             // 設定「Control キーの割り当て」: 組み込みの割り当てより先に見る (issue #63・#209)
-            if (!CompositionText.IsEmpty(state.Text) && BoundControlKey(env, vk) is { } bound)
+            if (BoundControlKey(env, vk) is { } bound)
             {
                 vk = bound;
             }
             // 設定「Control キーの割り当て」が macOS 風: 組み込みの Ctrl+U/I/O/P/H より先に見る (issue #643)
-            else if (!CompositionText.IsEmpty(state.Text) && env.Settings.ControlKeys == Config.ControlKeyLayout.Mac && MacControlShortcut(vk) is { } mac)
+            else if (env.Settings.ControlKeys == Config.ControlKeyLayout.Mac && MacControlShortcut(vk) is { } mac)
             {
                 if (mac is ResizeExtend or ResizeShrink)
                 {
-                    if (CompositionLifecycle.IsConverting(state)) CompositionConversion.Resize(state, env, mac == ResizeExtend ? +1 : -1);
+                    if (converting is not null) CompositionConversion.Resize(converting, env, mac == ResizeExtend ? +1 : -1);
                     return;
                 }
                 vk = mac;
             }
-            else if (!CompositionText.IsEmpty(state.Text) && ControlShortcut(vk) is { } function)
+            else if (ControlShortcut(vk) is { } function)
             {
                 // Ctrl+U/I/O/P: F6/F7/F10/F9 と同じ (ATOK と同じ割り当て。続けて押すと大文字・小文字も切り替わる)。Ctrl+H は BackSpace。
                 vk = function;
             }
-            else if (!CompositionText.IsEmpty(state.Text) && vk == VirtualKeys.Return)
+            else if (vk == VirtualKeys.Return)
             {
                 // 変換中の Ctrl+Enter (送信のショートカット) は確定だけを行う。キーはアプリへ渡さない。
                 // 渡すと、アプリが確定を反映する前に送信してしまい、確定した文字が欠けた内容が送られる
                 // (X のリプライで「田所工事」と「田所工事だよ」が二重に投稿された)。日本語 IME の通例どおり、
                 // 変換中の Enter は確定、送信は次の Enter にする。
-                CompositionCommit.CommitIfAny(state, env);
+                CompositionCommit.Commit(state, withInput, env);
                 return;
             }
             else
             {
                 // ほかのショートカット (Ctrl+C・Ctrl+Z …) は、確定してから Ctrl と一緒にアプリへ送る。
-                CompositionCommit.CommitIfAny(state, env);
+                CompositionCommit.Commit(state, withInput, env);
                 PassKey(state);
                 return;
             }
@@ -169,175 +156,177 @@ internal static class CompositionKeys
         }
         if (!env.BypassKanaLayout && HandleKanaLayout(state, env, e)) return;
 
-        if (state.Reconversion is not null && vk == VirtualKeys.Escape)
+        if (state.Scene is CompositionScene.WithInput scene) HandleInputKey(state, scene, env, e, vk);
+        else StartWith(state, env, e);
+    }
+
+    /// <summary>変換ボックスに入力があるときのキー。vk は、Ctrl のショートカットを読み替えたキー。</summary>
+    private static void HandleInputKey(CompositionState state, CompositionScene.WithInput scene, CompositionEnv env, KeyEvent e, int vk)
+    {
+        var input = scene.Input;
+        if (input.Reconversion is not null && vk == VirtualKeys.Escape)
         {
-            CompositionLifecycle.ClearComposition(state);
+            CompositionLifecycle.Finish(state);
             return;
         }
 
-        if (!CompositionLifecycle.IsComposing(state))
-        {
-            StartWith(state, env, e);
-            return;
-        }
-
-        if (CompositionLifecycle.IsConverting(state) && HandleConversionKey(state, env, vk)) return;
+        if (scene is CompositionScene.Converting converting && HandleConversionKey(state, converting, env, vk)) return;
 
         switch (vk)
         {
-            case VirtualKeys.Convert or VirtualKeys.Down when env.Settings.EnglishFirstInput && state.Text.Mode == DisplayMode.HalfWidthAlphanumeric && !state.ModeByKey && !CompositionLifecycle.IsProtectedInput(state):
+            case VirtualKeys.Convert or VirtualKeys.Down when env.Settings.EnglishFirstInput && input.Text.Mode == DisplayMode.HalfWidthAlphanumeric && !input.ModeByKey && !CompositionLifecycle.IsProtectedInput(scene):
                 // 設定「英字を主に入力」: 変換キー / ↓ で、打った英字をローマ字として読んで変換する (issue #839)
-                state.Text.Mode = DisplayMode.Hiragana;
-                CompositionText.FixTypos(state.Text, env);
-                CompositionConversion.StartConversion(state, env, preferJapanese: true);
+                input.Text.Mode = DisplayMode.Hiragana;
+                CompositionText.FixTypos(input.Text, env);
+                CompositionConversion.StartConversion(state, input, env, preferJapanese: true);
                 return;
-            case VirtualKeys.Space when env.Settings.EnglishFirstInput && state.Text.Mode == DisplayMode.HalfWidthAlphanumeric && !state.ModeByKey && !CompositionLifecycle.IsProtectedInput(state) &&
+            case VirtualKeys.Space when env.Settings.EnglishFirstInput && input.Text.Mode == DisplayMode.HalfWidthAlphanumeric && !input.ModeByKey && !CompositionLifecycle.IsProtectedInput(scene) &&
                                         !state.Shift:
                 // 設定「英字を主に入力」: Space は変換ではなく、ふつうの空白として入力中の文字に足す (ls -la)
-                CompositionText.Append(state.Text, env, ' ');
+                CompositionText.Append(input.Text, env, ' ');
                 return;
             case VirtualKeys.Convert:
-                CompositionText.FixTypos(state.Text, env);
-                CompositionConversion.StartConversion(state, env, preferJapanese: true);
+                CompositionText.FixTypos(input.Text, env);
+                CompositionConversion.StartConversion(state, input, env, preferJapanese: true);
                 return;
-            case VirtualKeys.Return when CompositionPresentation.SelectedPrediction(state) is { } prediction:
+            case VirtualKeys.Return when CompositionPresentation.SelectedPrediction(input) is { } prediction:
                 // 予測変換の候補を選んでいれば、それを確定する。
-                CompositionCommit.CommitPrediction(state, env, prediction);
+                CompositionCommit.CommitPrediction(state, input, env, prediction);
                 return;
             case VirtualKeys.Return:
-                if (CompositionLifecycle.IsProtectedInput(state)) { CompositionCommit.CommitProtected(state, env, ""); return; }
-                CompositionText.FixTypos(state.Text, env);
-                CompositionCommit.Commit(state, env);
+                if (CompositionLifecycle.IsProtectedInput(scene)) { CompositionCommit.CommitProtected(state, input, env, ""); return; }
+                CompositionText.FixTypos(input.Text, env);
+                CompositionCommit.Commit(state, scene, env);
                 return;
             case VirtualKeys.Space when state.Shift:
                 // Shift+Space: 英語と判定した語でも、ローマ字として読んで変換する (go → 語、camera → かめら)。
-                CompositionText.FixTypos(state.Text, env);
-                CompositionConversion.StartConversion(state, env, ConversionTrigger.Space, preferJapanese: true);
+                CompositionText.FixTypos(input.Text, env);
+                CompositionConversion.StartConversion(state, input, env, ConversionTrigger.Space, preferJapanese: true);
                 return;
-            case VirtualKeys.Space when env.Settings.SeparateKeyRoles && !CompositionLifecycle.IsProtectedInput(state):
+            case VirtualKeys.Space when env.Settings.SeparateKeyRoles && !CompositionLifecycle.IsProtectedInput(scene):
                 // 設定「入力中のキーの役割を分ける」: Space は英語・日本語の判定にかかわらず候補を開く (英字のまま確定して空白を入れない)。
                 // 英字で見えている語も、英字を最初の候補に残し、ローマ字として読めれば日本語の候補も選べる (issue #199)
-                CompositionText.FixTypos(state.Text, env);
-                CompositionConversion.StartConversion(state, env, ConversionTrigger.Space);
+                CompositionText.FixTypos(input.Text, env);
+                CompositionConversion.StartConversion(state, input, env, ConversionTrigger.Space);
                 return;
-            case VirtualKeys.NonConvert when env.Settings.NonConvertCyclesKana && !CompositionLifecycle.IsProtectedInput(state):
+            case VirtualKeys.NonConvert when env.Settings.NonConvertCyclesKana && !CompositionLifecycle.IsProtectedInput(scene):
                 // ひらがな → 全角カタカナ → 半角カタカナ → ひらがな の順に循環する。自動判定中は、表示中の文字列にひらがな (長音を含む) があれば全角カタカナにし、なければひらがなにする。
-                SetMode(state, NextKanaCycleMode(state, env));
-                state.ModeByKey = true;
+                SetMode(state, scene, NextKanaCycleMode(scene, env));
+                input.ModeByKey = true;
                 return;
             case VirtualKeys.NonConvert when env.Settings.SeparateKeyRoles:
                 // 無変換: 今までの入力を英字にする (F10 と同じ。続けて押すと大文字・小文字も切り替わる)
-                SetAlphanumericMode(state, env, DisplayMode.HalfWidthAlphanumeric);
-                state.ModeByKey = true;
+                SetAlphanumericMode(state, scene, env, DisplayMode.HalfWidthAlphanumeric);
+                input.ModeByKey = true;
                 return;
             case VirtualKeys.Kana when env.Settings.SeparateKeyRoles:
                 // ひらがな / カタカナ キー: 押すたびに ひらがな ⇔ カタカナ (漢字・英字の状態からは、まずひらがな)
-                SetMode(state, state.Text.Mode == DisplayMode.Hiragana && !CompositionLifecycle.IsConverting(state) ? DisplayMode.Katakana : DisplayMode.Hiragana);
-                state.ModeByKey = true;
+                SetMode(state, scene, input.Text.Mode == DisplayMode.Hiragana && scene is CompositionScene.Typing ? DisplayMode.Katakana : DisplayMode.Hiragana);
+                input.ModeByKey = true;
                 return;
             case VirtualKeys.Space:
                 // 保護区間 (メンション・URL・パス) の末尾は、自動変換せず原文のまま + 半角空白で確定する。
-                if (CompositionLifecycle.IsProtectedInput(state)) { CompositionCommit.CommitProtected(state, env, " "); return; }
-                CompositionText.FixTypos(state.Text, env);
+                if (CompositionLifecycle.IsProtectedInput(scene)) { CompositionCommit.CommitProtected(state, input, env, " "); return; }
+                CompositionText.FixTypos(input.Text, env);
                 // 英語と判定した語で終わっているなら、変換ではなく確定して空白を入れる
                 // (日本語の部分は、ライブ変換が ON なら漢字にして、OFF なら見えているかなのまま確定)。
                 // 数字だけ (1、12) は、前が英文なら確定して空白 (I have 2 cats)。それ以外は変換して ① 一 Ⅰ などの候補を出す。
                 // 打った英字全体を読みとして登録した語 (ユーザー辞書の zh → ←、略入力の ast → 明日) があれば、英語と判定しても変換する
-                if (CompositionConversion.HasRegisteredReading(state, env))
+                if (CompositionConversion.HasRegisteredReading(input, env))
                 {
-                    CompositionConversion.StartConversion(state, env, ConversionTrigger.Space);
+                    CompositionConversion.StartConversion(state, input, env, ConversionTrigger.Space);
                 }
-                else if (SpaceCommitsMarkdownMarker(state))
+                else if (SpaceCommitsMarkdownMarker(input))
                 {
                     // Markdown の記号だけは、変換せず打った半角 + 空白で確定する
-                    CompositionCommit.CommitText(state, env, ComposedText.English(CompositionText.Raw(state.Text) + " "), english: false, preserveText: true, rule: "Space: Markdown の記号なので打ったまま");
+                    CompositionCommit.CommitText(state, env, ComposedText.English(CompositionText.Raw(input.Text) + " "), english: false, preserveText: true, rule: "Space: Markdown の記号なので打ったまま");
                 }
-                else if (SpaceCommitsAlphanumeric(state, env))
+                else if (SpaceCommitsAlphanumeric(input, env))
                 {
-                    CompositionCommit.Commit(state, env, suffix: " ");
+                    CompositionCommit.Commit(state, scene, env, suffix: " ");
                 }
-                else if (CompositionCommit.EndsWithEnglish(state, env)) CompositionCommit.CommitText(state, env, CompositionPresentation.CommittedDisplay(state, env) + ComposedText.English(" "), english: true, CompositionText.Raw(state.Text), rule: "Space: 英語で終わるので変換せずに確定");
-                else if (SpaceCommitsAutoEnglish(state, env)) CompositionCommit.CommitText(state, env, ComposedText.English(CompositionText.Raw(state.Text) + " "), english: true, CompositionText.Raw(state.Text), rule: "Space: かなにならない子音で終わる英単語");
+                else if (CompositionCommit.EndsWithEnglish(input, env)) CompositionCommit.CommitText(state, env, CompositionPresentation.CommittedDisplay(input, env) + ComposedText.English(" "), english: true, CompositionText.Raw(input.Text), rule: "Space: 英語で終わるので変換せずに確定");
+                else if (SpaceCommitsAutoEnglish(input, env)) CompositionCommit.CommitText(state, env, ComposedText.English(CompositionText.Raw(input.Text) + " "), english: true, CompositionText.Raw(input.Text), rule: "Space: かなにならない子音で終わる英単語");
                 else
                 {
-                    CompositionConversion.StartConversion(state, env, ConversionTrigger.Space);
+                    CompositionConversion.StartConversion(state, input, env, ConversionTrigger.Space);
                 }
                 return;
             case VirtualKeys.Back:
-                CompositionText.RemoveLast(state.Text, env);
+                CompositionText.RemoveLast(input.Text, env);
+                CompositionLifecycle.FinishIfEmpty(state, input);
                 return;
-            case 0x2E /* Delete */ when CompositionPresentation.SelectedPrediction(state) is { } prediction && env.Services.Predictor?.Phrases is { } phrases:
+            case 0x2E /* Delete */ when CompositionPresentation.SelectedPrediction(input) is { } prediction && env.Services.Predictor?.Phrases is { } phrases:
                 // 予測の候補を選んでいる間の Delete: その語句を学習から消す (issue #349)
                 phrases.Forget(prediction.Text);
-                state.Predictions = null;
+                input.Predictions = null;
                 return;
-            case VirtualKeys.Escape when state.Predictions is { Index: >= 0 } selecting:
+            case VirtualKeys.Escape when input.Predictions is { Index: >= 0 } selecting:
                 // 予測の候補を選んでいたら、選ぶのをやめるだけ (打った内容は残す)。
                 selecting.Index = -1;
                 return;
-            case VirtualKeys.Escape when env.Settings.EscStepsBack && StepBack(state, env):
+            case VirtualKeys.Escape when env.Settings.EscStepsBack && StepBack(state, scene, env):
                 return;
             case VirtualKeys.Escape:
-                CompositionLifecycle.FinishText(state);
+                CompositionLifecycle.Finish(state);
                 return;
-            case VirtualKeys.Tab when CompositionSpelling.FindMisspelling(state, env) is { } typo:
+            case VirtualKeys.Tab when CompositionSpelling.FindMisspelling(input, env) is { } typo:
                 // もしかして: 書き間違いを直す。
-                CompositionSpelling.FixMisspelling(state, typo);
+                CompositionSpelling.FixMisspelling(input, typo);
                 return;
-            case VirtualKeys.Tab when CompositionText.Suggestion(state.Text, env) is not null:
+            case VirtualKeys.Tab when CompositionText.Suggestion(input.Text, env) is not null:
                 // 自動判定を使わないとき: 提案どおり英字にする。
-                state.Text.SuggestionAccepted = true;
+                input.Text.SuggestionAccepted = true;
                 return;
-            case VirtualKeys.Tab when CompositionPresentation.CurrentPredictions(state, env).Count > 0:
+            case VirtualKeys.Tab when CompositionPresentation.CurrentPredictions(input, env).Count > 0:
                 // 予測変換の候補を選ぶ (Tab で次、Shift+Tab で前。最後の次は選ばない状態に戻る)。
                 var step = state.Shift ? -1 : 1;
-                var list = state.Predictions!;
+                var list = input.Predictions!;
                 list.Index = (list.Index + 1 + step + list.Items.Count + 1) % (list.Items.Count + 1) - 1;
                 return;
-            case VirtualKeys.Tab when !CompositionLifecycle.IsConverting(state) && !state.Shift && env.Settings.TabConversion && TabStartsConversion(state, env):
+            case VirtualKeys.Tab when scene is CompositionScene.Typing && !state.Shift && env.Settings.TabConversion && TabStartsConversion(input, env):
                 // Space なら変換を始める場面の Tab は、Space と同じく変換を始める (Microsoft IME と同じ。空白を打とうとした意味ではない: issue #219)。
-                CompositionConversion.StartConversion(state, env, ConversionTrigger.Tab);
+                CompositionConversion.StartConversion(state, input, env, ConversionTrigger.Tab);
                 return;
-            case VirtualKeys.F6: SetMode(state, DisplayMode.Hiragana); state.ModeByKey = true; return;
-            case VirtualKeys.F7: SetMode(state, DisplayMode.Katakana); state.ModeByKey = true; return;
-            case VirtualKeys.F8: SetMode(state, DisplayMode.HalfWidthKatakana); state.ModeByKey = true; return;
-            case VirtualKeys.F9: SetAlphanumericMode(state, env, DisplayMode.FullWidthAlphanumeric); state.ModeByKey = true; return;
-            case VirtualKeys.F10: SetAlphanumericMode(state, env, DisplayMode.HalfWidthAlphanumeric); state.ModeByKey = true; return;
-            case VirtualKeys.Left or VirtualKeys.Right or VirtualKeys.Up or VirtualKeys.Down when !CompositionText.IsAlphanumeric(state.Text, env):
+            case VirtualKeys.F6: SetMode(state, scene, DisplayMode.Hiragana); input.ModeByKey = true; return;
+            case VirtualKeys.F7: SetMode(state, scene, DisplayMode.Katakana); input.ModeByKey = true; return;
+            case VirtualKeys.F8: SetMode(state, scene, DisplayMode.HalfWidthKatakana); input.ModeByKey = true; return;
+            case VirtualKeys.F9: SetAlphanumericMode(state, scene, env, DisplayMode.FullWidthAlphanumeric); input.ModeByKey = true; return;
+            case VirtualKeys.F10: SetAlphanumericMode(state, scene, env, DisplayMode.HalfWidthAlphanumeric); input.ModeByKey = true; return;
+            case VirtualKeys.Left or VirtualKeys.Right or VirtualKeys.Up or VirtualKeys.Down when !CompositionText.IsAlphanumeric(input.Text, env):
                 // 変換前でも矢印キーで文節の選択に入る (Mac のライブ変換と同じ)。
-                EnterClauseSelection(state, env, vk);
+                EnterClauseSelection(state, input, env, vk);
                 return;
         }
 
         if (VirtualKeys.IsHankakuZenkaku(vk))
         {
-            TogglePendingInput(state, env);
+            // 確定せずに日本語／英字へ切り替える
+            SetMode(state, scene, CompositionText.IsAlphanumeric(input.Text, env) ? DisplayMode.Hiragana : DisplayMode.HalfWidthAlphanumeric);
             return;
         }
 
-        if (state.Text.KanaInput && KanaOf(state, e) is { } key)
+        if (input.Text.KanaInput && KanaOf(state, e) is { } key)
         {
-            CommitBeforeTyping(state, env);
-            CompositionText.AppendKana(state.Text, key.Raw, key.Kana);
+            CompositionText.AppendKana(CommitBeforeTyping(state, scene, env).Text, key.Raw, key.Kana);
             return;
         }
 
         if (CharOf(e) is { } ch && !char.IsControl(ch) && ch != ' ')
         {
             // 打ち始めの ・ を Space で / にしてから打った名前 (/help) は、/ を確定して半角のままアプリへ渡す。
-            if (CompositionLifecycle.IsConverting(state) && CompositionText.IsSlashAtStart(state.Text) && state.Clauses is [{ Text: "/" }] && SigilWord.IsNameChar(ch))
+            if (scene is CompositionScene.Converting { Conversion.Clauses: [{ Text: "/" }] } && CompositionText.IsSlashAtStart(input.Text) && SigilWord.IsNameChar(ch))
             {
-                CompositionCommit.Commit(state, env);
+                CompositionCommit.Commit(state, scene, env);
                 PassKey(state);
                 return;
             }
-            CommitBeforeTyping(state, env);
-            CompositionText.Append(state.Text, env, ch);
+            CompositionText.Append(CommitBeforeTyping(state, scene, env).Text, env, ch);
             return;
         }
 
         // 矢印 (英字だけのとき)・Tab・Delete などは確定してから通す。
-        CompositionCommit.Commit(state, env);
+        CompositionCommit.Commit(state, scene, env);
         PassKey(state);
     }
 
@@ -347,9 +336,10 @@ internal static class CompositionKeys
     /// <summary>変換ボックスが空のときの最初の打鍵。英字・句読点なら入力を始め、それ以外はそのまま通す。</summary>
     private static void StartWith(CompositionState state, CompositionEnv env, KeyEvent e)
     {
+        var direct = CompositionLifecycle.IsDirect(state);
         if (e.Vk == VirtualKeys.Convert)
         {
-            if (CompositionConversion.ReconversionSelectionNow(state, env) is not { } selection || string.IsNullOrWhiteSpace(selection.Reading)) return;
+            if (CompositionConversion.ReconversionSelectionNow(env) is not { } selection || string.IsNullOrWhiteSpace(selection.Reading)) return;
             state.Correctable.Clear();
             // ローマ字のまま入った文は、日本語にする所が無ければ何もしない (英字をローマ字として読んだ候補を出さない)
             if (CompositionConversion.IsRomajiText(selection.Text))
@@ -357,17 +347,16 @@ internal static class CompositionKeys
                 CompositionConversion.StartRomajiReconversion(state, env, selection);
                 return;
             }
-            CompositionLifecycle.BeginComposition(state, env);
-            state.Reconversion = selection;
-            foreach (var kana in selection.Reading) CompositionText.AppendKana(state.Text, kana, kana);
-            state.Text.Mode = DisplayMode.Hiragana;
-            CompositionConversion.StartConversion(state, env, preferJapanese: true);
+            var input = CompositionLifecycle.Begin(state, env, reconversion: selection);
+            foreach (var kana in selection.Reading) CompositionText.AppendKana(input.Text, kana, kana);
+            input.Text.Mode = DisplayMode.Hiragana;
+            CompositionConversion.StartConversion(state, input, env, preferJapanese: true);
             return;
         }
         // 日本語入力のときの Shift+Space は全角スペース (Microsoft IME と同じ: issue #24)。英数状態では普通の空白のまま。
         // 設定「スペースの幅」が全角では、Space が全角で Shift+Space が半角 (issue #259)
         var spaceWidth = env.Settings.SpaceWidth;
-        if (e.Vk == VirtualKeys.Space && !state.Direct && (spaceWidth == Config.SpaceWidth.FullWidth || state.Shift))
+        if (e.Vk == VirtualKeys.Space && !direct && (spaceWidth == Config.SpaceWidth.FullWidth || state.Shift))
         {
             // 「スペースの幅」が半角なら Shift+Space も半角 (issue #708)
             var shifted = state.Shift;
@@ -382,77 +371,75 @@ internal static class CompositionKeys
             return;
         }
         // かな入力: かなのキーならすべて入力を始める (英数状態でなければ)。
-        if (CompositionLifecycle.KanaInput(state, env) && !state.Direct && KanaOf(state, e) is { } key)
+        if (CompositionLifecycle.KanaInput(env) && !direct && KanaOf(state, e) is { } key)
         {
-            CompositionLifecycle.BeginComposition(state, env);
-            CompositionText.AppendKana(state.Text, key.Raw, key.Kana);
+            CompositionText.AppendKana(CompositionLifecycle.Begin(state, env).Text, key.Raw, key.Kana);
             return;
         }
         var c = CharOf(e);
         var letter = VirtualKeys.IsLetter(e.Vk) && c is { } l && char.IsAsciiLetter(l);
-        if (letter && state.Direct)
+        if (letter && direct)
         {
             // 英数状態: ローマ字かどうか判定する (打鍵はすぐ送る)。大文字で始まる語は英語なのでそのまま通す。
             if (env.ClassifyDirect is null || state.Shift || char.IsAsciiLetterUpper(c!.Value))
             {
                 Diagnostics.Log.Info($"英数状態: {Diagnostics.Log.Text(c.ToString()!)}は大文字 / Shift なので英語のまま");
                 PassKey(state);
-                CompositionLifecycle.DirectDecided(state, false);
+                CompositionLifecycle.StartEnglishWord(state);
             }
-            else CompositionDirectInput.Hold(state, env, e);
+            else CompositionDirectInput.Hold(state, CompositionLifecycle.StartJudging(state), env, e);
             return;
         }
         // 句読点・かぎかっこ・長音・中黒・数字でも入力を始める (、。「」ー・)。英数状態ではそのまま通す。
-        if (letter || (c is { } symbol && StartsWithSymbol(symbol) && !state.Direct))
+        if (letter || (c is { } symbol && StartsWithSymbol(symbol) && !direct))
         {
-            CompositionLifecycle.BeginComposition(state, env);
-            CompositionText.Append(state.Text, env, c!.Value);
+            CompositionText.Append(CompositionLifecycle.Begin(state, env).Text, env, c!.Value);
             return;
         }
         PassKey(state);
     }
 
     /// <summary>
-    /// 新しい入力を始める。入力欄のキャレットの前後の確定済みの文字を読みに行き、
-    /// 英語とも日本語とも読める語の判定と、変換の文脈に使う。読めるまでは自分が最後に確定した文字列で代用する。
-    /// </summary>
-    /// <summary>
     /// 変換中に次の文字を打ったとき。普通は今の候補で確定して新しい入力を始める (Microsoft IME と同じ)。
     /// 設定「変換したあとに続けて打っても確定しない」が ON なら、変換をやめて打った文字を続けて入れる。選んでいた候補は覚えておき、
     /// もう一度変換したときに同じ読みの文節で使う (issue #123)。
     /// </summary>
-    private static void CommitOrKeepConversion(CompositionState state, CompositionEnv env)
+    private static CompositionInput CommitOrKeepConversion(CompositionState state, CompositionScene.Converting scene, CompositionEnv env)
     {
-        state.ModeByKey = false;
-        state.EscReverted = false;
-        if (!env.Settings.ContinueAfterConversion || state.Reconversion is not null)
+        var input = scene.Input;
+        if (!env.Settings.ContinueAfterConversion || input.Reconversion is not null)
         {
-            CompositionCommit.Commit(state, env);
-            CompositionLifecycle.BeginComposition(state, env);
-            return;
+            CompositionCommit.Commit(state, scene, env);
+            return CompositionLifecycle.Begin(state, env);
         }
-        foreach (var clause in state.Clauses.Where(c => !c.IsEnglish)) state.KeptChoices[clause.Reading] = clause.Text;
-        state.Conversion = null;
+        input.ModeByKey = false;
+        input.EscReverted = false;
+        foreach (var clause in scene.Conversion.Clauses.Where(c => !c.IsEnglish)) input.KeptChoices[clause.Reading] = clause.Text;
+        CompositionLifecycle.StopConverting(state, input);
+        return input;
     }
 
     /// <summary>
     /// 入力中に次の文字を打ったとき。変換中なら、今の候補で確定して新しい入力を始める (IME と同じ。設定で、確定せずに続けることもできる)。
     /// F6〜F10 でかな・英字にしたあとなら、見えているとおりに確定して新しい入力を始める (続けて打った文字までカタカナ・大文字にしない)。
+    /// 打った文字を入れる入力を返す。
     /// </summary>
-    private static void CommitBeforeTyping(CompositionState state, CompositionEnv env)
+    private static CompositionInput CommitBeforeTyping(CompositionState state, CompositionScene.WithInput scene, CompositionEnv env)
     {
-        if (CompositionLifecycle.IsConverting(state)) CommitOrKeepConversion(state, env);
-        else if (state.ModeByKey)
+        var input = scene.Input;
+        if (scene is CompositionScene.Converting converting) return CommitOrKeepConversion(state, converting, env);
+        if (input.ModeByKey)
         {
-            CompositionCommit.Commit(state, env);
-            CompositionLifecycle.BeginComposition(state, env);
+            CompositionCommit.Commit(state, scene, env);
+            return CompositionLifecycle.Begin(state, env);
         }
-        else if (CompositionPresentation.SelectedPrediction(state) is { } prediction)
+        if (CompositionPresentation.SelectedPrediction(input) is { } prediction)
         {
             // Tab で予測の候補を選んだあとに続けて打ったら、その候補で確定して新しい入力を始める (選ぶ前の打ちかけに戻さない)
-            CompositionCommit.CommitPrediction(state, env, prediction);
-            CompositionLifecycle.BeginComposition(state, env);
+            CompositionCommit.CommitPrediction(state, input, env, prediction);
+            return CompositionLifecycle.Begin(state, env);
         }
+        return input;
     }
 
     /// <summary>
@@ -461,17 +448,17 @@ internal static class CompositionKeys
     /// </summary>
     private static bool HandleKanaLayout(CompositionState state, CompositionEnv env, KeyEvent e)
     {
-        if (!CompositionLifecycle.KanaInput(state, env) && !state.Direct && env.Settings.RomajiLayout == RomajiLayout.Sky)
+        var direct = CompositionLifecycle.IsDirect(state);
+        if (!CompositionLifecycle.KanaInput(env) && !direct && env.Settings.RomajiLayout == RomajiLayout.Sky)
         {
             // SKY 配列: キーをローマ字の綴りにして足す。英語の判定はしない (ひらがなで見せる)
             if (state.Shift || SkyLayout.Romaji(e.Vk) is not { } romaji) return false;
-            if (!CompositionLifecycle.IsComposing(state)) CompositionLifecycle.BeginComposition(state, env);
-            else CommitBeforeTyping(state, env);
-            if (state.Text.Mode == DisplayMode.Auto) state.Text.Mode = DisplayMode.Hiragana;
-            foreach (var c in romaji) CompositionText.Append(state.Text, env, c);
+            var input = state.Scene is CompositionScene.WithInput scene ? CommitBeforeTyping(state, scene, env) : CompositionLifecycle.Begin(state, env);
+            if (input.Text.Mode == DisplayMode.Auto) input.Text.Mode = DisplayMode.Hiragana;
+            foreach (var c in romaji) CompositionText.Append(input.Text, env, c);
             return true;
         }
-        var layout = CompositionLifecycle.KanaInput(state, env) && !state.Direct ? env.Settings.KanaLayout : KanaLayout.Jis;
+        var layout = CompositionLifecycle.KanaInput(env) && !direct ? env.Settings.KanaLayout : KanaLayout.Jis;
         if (state.KanaLayout.Layout != layout) state.KanaLayout = new KanaLayoutEngine(layout);
         if (layout == KanaLayout.Jis) return false;
         // 親指キーは (入力していないとき・変換中も) 受け取っておき、文字に使わずに離したらもとの働き (再変換・変換・無変換) をする
@@ -498,10 +485,11 @@ internal static class CompositionKeys
     private static void ApplyKanaStroke(CompositionState state, CompositionEnv env, KanaStroke stroke)
     {
         if (stroke.Kana.Length == 0 && stroke.RemoveLast == 0) return;
-        if (!CompositionLifecycle.IsComposing(state)) CompositionLifecycle.BeginComposition(state, env);
-        else if (stroke.RemoveLast == 0) CommitBeforeTyping(state, env);
-        for (var i = 0; i < stroke.RemoveLast && !CompositionText.IsEmpty(state.Text); i++) CompositionText.RemoveLast(state.Text, env);
-        foreach (var kana in stroke.Kana) CompositionText.AppendKana(state.Text, kana, kana);
+        var input = state.Scene is not CompositionScene.WithInput scene ? CompositionLifecycle.Begin(state, env)
+            : stroke.RemoveLast == 0 ? CommitBeforeTyping(state, scene, env) : scene.Input;
+        for (var i = 0; i < stroke.RemoveLast && !CompositionText.IsEmpty(input.Text); i++) CompositionText.RemoveLast(input.Text, env);
+        foreach (var kana in stroke.Kana) CompositionText.AppendKana(input.Text, kana, kana);
+        CompositionLifecycle.FinishIfEmpty(state, input);
     }
 
     /// <summary>かな入力で、その打鍵が入力するかなと、そのキーの英字 (英語として見せるとき用)。かなのキーでなければ null。</summary>
@@ -520,92 +508,91 @@ internal static class CompositionKeys
     /// Space を押したときに、変換ではなく確定して空白を入れる場面か (英語で終わる 3 条件)。
     /// 例: hello (英語と判定) → true、kana → false。Tab で変換を始めるかの判定にも使う。
     /// </summary>
-    private static bool SpaceCommitsAsEnglish(CompositionState state, CompositionEnv env) => SpaceCommitsAlphanumeric(state, env) || CompositionCommit.EndsWithEnglish(state, env) || SpaceCommitsAutoEnglish(state, env);
+    private static bool SpaceCommitsAsEnglish(CompositionInput input, CompositionEnv env) => SpaceCommitsAlphanumeric(input, env) || CompositionCommit.EndsWithEnglish(input, env) || SpaceCommitsAutoEnglish(input, env);
 
-    private static bool SpaceCommitsMarkdownMarker(CompositionState state) => state.Text.Mode == DisplayMode.Auto && CompositionText.IsMarkdownMarker(state.Text);
+    private static bool SpaceCommitsMarkdownMarker(CompositionInput input) => input.Text.Mode == DisplayMode.Auto && CompositionText.IsMarkdownMarker(input.Text);
 
-    private static bool SpaceCommitsAlphanumeric(CompositionState state, CompositionEnv env) =>
-        CompositionText.IsAlphanumericAt(state.Text, env, final: true) && !(state.Text.Mode == DisplayMode.Auto && CompositionText.IsNumeric(state.Text) && CompositionText.Raw(state.Text).All(char.IsAsciiDigit) && env.Context().PrecedingEnglish != true);
+    private static bool SpaceCommitsAlphanumeric(CompositionInput input, CompositionEnv env) =>
+        CompositionText.IsAlphanumericAt(input.Text, env, final: true) && !(input.Text.Mode == DisplayMode.Auto && CompositionText.IsNumeric(input.Text) && CompositionText.Raw(input.Text).All(char.IsAsciiDigit) && env.Context().PrecedingEnglish != true);
 
-    private static bool SpaceCommitsAutoEnglish(CompositionState state, CompositionEnv env) => state.Text.Mode == DisplayMode.Auto && env.Detector.IsEnglishAtWordEnd(CompositionText.Raw(state.Text), !env.Settings.AutoDetection);
+    private static bool SpaceCommitsAutoEnglish(CompositionInput input, CompositionEnv env) => input.Text.Mode == DisplayMode.Auto && env.Detector.IsEnglishAtWordEnd(CompositionText.Raw(input.Text), !env.Settings.AutoDetection);
 
     /// <summary>
     /// Space の分岐で変換を始める (StartConversion に行く) 場面か。Tab で始めるときも同じ場面に限る (issue #219)。
     /// Space と同じ順で判定するため、英語かを見る前に打ち間違いを直す (Enter で確定するときと同じ直し)。
     /// </summary>
-    private static bool TabStartsConversion(CompositionState state, CompositionEnv env)
+    private static bool TabStartsConversion(CompositionInput input, CompositionEnv env)
     {
         // 保護区間が語の途中にあり、その後にかなが続く入力も Tab 変換しない。
         // IsProtectedInput は末尾が保護区間かだけを見るため、ここでは全区間を調べる。
-        if (state.Text.Mode == DisplayMode.Auto && CompositionText.ProtectedSpans(state.Text).Count > 0) return false;
-        CompositionText.FixTypos(state.Text, env);
-        return CompositionConversion.HasRegisteredReading(state, env) || !SpaceCommitsAsEnglish(state, env);
+        if (input.Text.Mode == DisplayMode.Auto && CompositionText.ProtectedSpans(input.Text).Count > 0) return false;
+        CompositionText.FixTypos(input.Text, env);
+        return CompositionConversion.HasRegisteredReading(input, env) || !SpaceCommitsAsEnglish(input, env);
     }
 
     /// <summary>変換中だけ意味を持つキー。処理したら true。</summary>
-    private static bool HandleConversionKey(CompositionState state, CompositionEnv env, int vk)
+    private static bool HandleConversionKey(CompositionState state, CompositionScene.Converting scene, CompositionEnv env, int vk)
     {
+        var (input, conversion) = (scene.Input, scene.Conversion);
         var shift = state.Shift;
         switch (vk)
         {
-            case VirtualKeys.Space when shift || state.Shift:
+            case VirtualKeys.Space when shift:
                 // Shift+Space: 前の候補へ (Microsoft IME と同じ。Mac でも Shift を押したまま Space で戻れるように: issue #140)
-                CompositionConversion.NextCandidate(state, env, -1);
+                CompositionConversion.NextCandidate(conversion, env, -1);
                 return true;
             case VirtualKeys.Convert:
             case VirtualKeys.Space:
             case VirtualKeys.Down:
-                CompositionConversion.NextCandidate(state, env, +1);
+                CompositionConversion.NextCandidate(conversion, env, +1);
                 return true;
             case VirtualKeys.Up:
-                CompositionConversion.NextCandidate(state, env, -1);
+                CompositionConversion.NextCandidate(conversion, env, -1);
                 return true;
             case VirtualKeys.PageDown:
                 // 候補の一覧のページ送り (Microsoft IME と同じ。アプリに通すと確定してしまっていた: issue #1016)
-                CompositionConversion.NextCandidatePage(state, env, +1);
+                CompositionConversion.NextCandidatePage(conversion, env, +1);
                 return true;
             case VirtualKeys.PageUp:
-                CompositionConversion.NextCandidatePage(state, env, -1);
+                CompositionConversion.NextCandidatePage(conversion, env, -1);
                 return true;
             case VirtualKeys.Right when shift:
-                CompositionConversion.Resize(state, env, +1);
+                CompositionConversion.Resize(scene, env, +1);
                 return true;
             case VirtualKeys.Left when shift:
-                CompositionConversion.Resize(state, env, -1);
+                CompositionConversion.Resize(scene, env, -1);
                 return true;
             case VirtualKeys.Right:
-                CompositionConversion.SplitWholeSentence(state);
-                state.SelectedClause = Math.Min(state.SelectedClause + 1, state.Clauses.Count - 1);
+                CompositionConversion.SplitWholeSentence(conversion);
+                conversion.Selected = Math.Min(conversion.Selected + 1, conversion.Clauses.Count - 1);
                 return true;
             case VirtualKeys.Left:
-                CompositionConversion.SplitWholeSentence(state);
-                state.SelectedClause = Math.Max(state.SelectedClause - 1, 0);
+                CompositionConversion.SplitWholeSentence(conversion);
+                conversion.Selected = Math.Max(conversion.Selected - 1, 0);
                 return true;
-            case VirtualKeys.Return when shift && env.Settings.PartialCommit && state.SelectedClause < state.Clauses.Count - 1:
-                CommitUpToSelectedClause(state, env);
+            case VirtualKeys.Return when shift && env.Settings.PartialCommit && conversion.Selected < conversion.Clauses.Count - 1:
+                CommitUpToSelectedClause(state, scene, env);
                 return true;
             case VirtualKeys.Return:
-                CompositionCommit.Commit(state, env);
+                CompositionCommit.Commit(state, scene, env);
                 return true;
             case VirtualKeys.F6 or VirtualKeys.F7 or VirtualKeys.F8 or VirtualKeys.F9 or VirtualKeys.F10
-                when env.Settings.FunctionKeysAffectSelectedClause && state.Clauses.Count > 1:
-                ApplyFunctionKeyToClause(state, vk);
+                when env.Settings.FunctionKeysAffectSelectedClause && conversion.Clauses.Count > 1:
+                ApplyFunctionKeyToClause(conversion.SelectedClause, vk);
                 return true;
-            case VirtualKeys.Tab when CompositionSpelling.FindMisspelling(state, env) is { } typo:
+            case VirtualKeys.Tab when CompositionSpelling.FindMisspelling(input, env) is { } typo:
                 // もしかして: 書き間違いを直して変換し直す。
-                state.Conversion = null;
-                CompositionSpelling.FixMisspelling(state, typo);
-                CompositionConversion.StartConversion(state, env);
+                CompositionSpelling.FixMisspelling(input, typo);
+                CompositionConversion.StartConversion(state, input, env);
                 return true;
-            case VirtualKeys.Tab when state.Conversion?.StartedBy == ConversionTrigger.Tab:
+            case VirtualKeys.Tab when conversion.StartedBy == ConversionTrigger.Tab:
                 // Tab で始めた変換の中では、Tab が次の候補、Shift+Tab が前の候補 (issue #219)。
-                CompositionConversion.NextCandidate(state, env, shift || state.Shift ? -1 : +1);
+                CompositionConversion.NextCandidate(conversion, env, shift ? -1 : +1);
                 return true;
-            case VirtualKeys.Escape when env.Settings.EscRevertsSelectedClause && state.Clauses.Count > 1 &&
-                                         !state.Clauses[state.SelectedClause].IsEnglish && state.Clauses[state.SelectedClause].Text != state.Clauses[state.SelectedClause].Reading:
+            case VirtualKeys.Escape when env.Settings.EscRevertsSelectedClause && conversion.Clauses.Count > 1 &&
+                                         conversion.SelectedClause is { IsEnglish: false } clause && clause.Text != clause.Reading:
                 // 設定「変換中の Esc は選んだ文節だけをかなに戻す」: 選んでいる文節だけをひらがなにして、変換は続ける (issue #670)
                 {
-                    var clause = state.Clauses[state.SelectedClause];
                     var index = clause.Candidates.IndexOf(clause.Reading);
                     if (index < 0)
                     {
@@ -619,14 +606,14 @@ internal static class CompositionKeys
             case VirtualKeys.Back:
             case VirtualKeys.Escape:
                 // 変換を取り消して、かなの入力に戻る。
-                state.Conversion = null;
+                CompositionLifecycle.StopConverting(state, input);
                 return true;
-            case >= 0x31 and <= 0x39 when !shift && !state.Text.KanaInput && env.Settings.NumberKeysSelectCandidates:
+            case >= 0x31 and <= 0x39 when !shift && !input.Text.KanaInput && env.Settings.NumberKeysSelectCandidates:
             case >= 0x61 and <= 0x69 when !shift && env.Settings.NumberKeysSelectCandidates:
                 // 候補の一覧の番号 (1〜9) で選ぶ。番号の無い候補 (一覧より後ろ) なら、普通に打った数字として扱う。
                 // かな入力では数字の段のキーは ぬふあうえおやゆよ なので、テンキーだけで選ぶ。
                 // 設定「変換中の数字キーで候補を選ぶ」が OFF なら、上の段もテンキーも普通に打った数字 (今の候補で確定して入力する: issue #989)。
-                return SelectByNumber(state, env, vk >= 0x61 ? vk - 0x61 : vk - 0x31);
+                return SelectByNumber(state, scene, env, vk >= 0x61 ? vk - 0x61 : vk - 0x31);
             default:
                 return false;
         }
@@ -636,58 +623,59 @@ internal static class CompositionKeys
     /// 数字キーで、今見えている候補の一覧のページから選ぶ (2 → そのページの 2 番目)。選んだら次の文節へ進み、
     /// 最後の文節なら確定する (Microsoft IME と同じく、番号で選んだ候補はそのまま使う)。
     /// </summary>
-    private static bool SelectByNumber(CompositionState state, CompositionEnv env, int row)
+    private static bool SelectByNumber(CompositionState state, CompositionScene.Converting scene, CompositionEnv env, int row)
     {
-        var clause = state.Clauses[state.SelectedClause];
-        if (!clause.Expanded) CompositionConversion.Expand(state, env, clause);
+        var conversion = scene.Conversion;
+        var clause = conversion.SelectedClause;
+        if (!clause.Expanded) CompositionConversion.Expand(env, clause);
         var index = Math.Max(0, clause.Index) / CompositionConversion.CandidatePageSize * CompositionConversion.CandidatePageSize + row;
         if (index >= clause.Candidates.Count) return false;
         clause.Index = index;
         clause.Changed = true;
-        if (state.SelectedClause + 1 < state.Clauses.Count) state.SelectedClause++;
-        else CompositionCommit.Commit(state, env);
+        if (conversion.Selected + 1 < conversion.Clauses.Count) conversion.Selected++;
+        else CompositionCommit.Commit(state, scene, env);
         return true;
     }
 
     /// <summary>変換前に矢印キーを押したとき: 文節に区切って、← なら最後の文節、→ なら最初の文節、↑ ↓ なら変換を始めたときの文節を選ぶ。</summary>
-    private static void EnterClauseSelection(CompositionState state, CompositionEnv env, int vk)
+    private static void EnterClauseSelection(CompositionState state, CompositionInput input, CompositionEnv env, int vk)
     {
-        CompositionConversion.StartConversion(state, env);
-        if (!CompositionLifecycle.IsConverting(state)) return;
-        CompositionConversion.SplitWholeSentence(state);
+        if (CompositionConversion.StartConversion(state, input, env) is not { Conversion: var conversion } scene) return;
+        CompositionConversion.SplitWholeSentence(conversion);
         var shift = state.Shift;
-        state.SelectedClause = vk switch
+        conversion.Selected = vk switch
         {
-            VirtualKeys.Left => state.Clauses.Count - 1,
+            VirtualKeys.Left => conversion.Clauses.Count - 1,
             VirtualKeys.Right => 0,
-            _ => CompositionConversion.InitialClause(env, state.Clauses.Count),
+            _ => CompositionConversion.InitialClause(env, conversion.Clauses.Count),
         };
-        if (shift && vk is VirtualKeys.Left or VirtualKeys.Right) CompositionConversion.Resize(state, env, vk == VirtualKeys.Left ? -1 : +1);
-        else if (vk == VirtualKeys.Up) CompositionConversion.NextCandidate(state, env, -1);
+        if (shift && vk is VirtualKeys.Left or VirtualKeys.Right) CompositionConversion.Resize(scene, env, vk == VirtualKeys.Left ? -1 : +1);
+        else if (vk == VirtualKeys.Up) CompositionConversion.NextCandidate(conversion, env, -1);
     }
 
     /// <summary>
     /// 設定「Esc で一段ずつ戻す」: 見えている内容を 漢字 → ひらがな → 打ったローマ字 の順に一段戻す。見た目が変わらない段は飛ばす。
     /// 戻せる段が無ければ false (そのまま全部消す)。戻した語は日本語 / 英語の判定として覚えない (issue #676)。
     /// </summary>
-    private static bool StepBack(CompositionState state, CompositionEnv env)
+    private static bool StepBack(CompositionState state, CompositionScene.WithInput scene, CompositionEnv env)
     {
-        var before = CompositionPresentation.CurrentDisplay(state, env, final: false);
+        var input = scene.Input;
+        var before = CompositionPresentation.CurrentDisplay(input, env, final: false);
         // 今のモードより先の段だけ (ひらがなの次はローマ字。カタカナなどはひらがなへ)
-        DisplayMode[] steps = state.Text.Mode switch
+        DisplayMode[] steps = input.Text.Mode switch
         {
             DisplayMode.Hiragana => [DisplayMode.HalfWidthAlphanumeric],
             DisplayMode.HalfWidthAlphanumeric => [],
             // 英字のまま見えている入力 (hello) は、かな (へっぉ) に変えても「一段戻す」にならない。戻せる段は無い (そのまま全部消す)
-            DisplayMode.Auto when CompositionText.IsAlphanumeric(state.Text, env) => [],
+            DisplayMode.Auto when CompositionText.IsAlphanumeric(input.Text, env) => [],
             _ => [DisplayMode.Hiragana, DisplayMode.HalfWidthAlphanumeric],
         };
         foreach (var mode in steps)
         {
-            SetMode(state, mode);
-            state.EscReverted = true;
-            state.ModeByKey = true;
-            if (CompositionPresentation.CurrentDisplay(state, env, final: false) != before) return true;
+            SetMode(state, scene, mode);
+            input.EscReverted = true;
+            input.ModeByKey = true;
+            if (CompositionPresentation.CurrentDisplay(input, env, final: false) != before) return true;
         }
         return false;
     }
@@ -697,9 +685,8 @@ internal static class CompositionKeys
     /// 英語の文節は、打った英字 (Reading) を英数に、ローマ字として読んだかな (Kana) をかなにする。
     /// 打った英字や読みが分からない文節 (かな入力、1 音の途中で区切れた文節) では、文全体に効かせずに何もしない。issue #678
     /// </summary>
-    private static void ApplyFunctionKeyToClause(CompositionState state, int vk)
+    private static void ApplyFunctionKeyToClause(Clause clause, int vk)
     {
-        var clause = state.Clauses[state.SelectedClause];
         var reading = clause.IsEnglish ? clause.Kana : clause.Reading;
         var raw = clause.IsEnglish ? clause.Reading : clause.Raw;
         var text = vk switch
@@ -726,82 +713,86 @@ internal static class CompositionKeys
     /// 設定「Shift + Enter で選んだ文節までを確定」: 選んでいる文節までを確定し、残りの文節は読み (英語の文節は打った英字) を
     /// 未確定の入力として残す (残りは選び直した候補を忘れ、変換前に戻る)。issue #493
     /// </summary>
-    private static void CommitUpToSelectedClause(CompositionState state, CompositionEnv env)
+    private static void CommitUpToSelectedClause(CompositionState state, CompositionScene.Converting scene, CompositionEnv env)
     {
-        var all = state.Clauses;
-        var done = all.Take(state.SelectedClause + 1).ToList();
-        var rest = all.Skip(state.SelectedClause + 1).ToList();
-        state.Conversion!.Clauses = done;
-        CompositionCommit.LearnClauses(state, env);
+        var conversion = scene.Conversion;
+        var all = conversion.Clauses;
+        var done = all.Take(conversion.Selected + 1).ToList();
+        var rest = all.Skip(conversion.Selected + 1).ToList();
+        conversion.Clauses = done;
+        CompositionCommit.LearnClauses(state, scene.Input, done, env);
         CompositionCommit.CommitText(state, env, CompositionPresentation.Composed(done), done.All(c => c.IsEnglish), "", chosen: true);
-        CompositionLifecycle.BeginComposition(state, env, state.PrivateComposition);
+        var input = CompositionLifecycle.Begin(state, env, scene.Input.Private, scene.Input.Reconversion);
         foreach (var clause in rest)
         {
             if (clause.IsEnglish)
             {
-                foreach (var letter in clause.Raw ?? clause.Reading) CompositionText.Append(state.Text, env, letter);
+                foreach (var letter in clause.Raw ?? clause.Reading) CompositionText.Append(input.Text, env, letter);
             }
             else
             {
-                foreach (var kana in clause.Reading) CompositionText.AppendKana(state.Text, kana, kana);
+                foreach (var kana in clause.Reading) CompositionText.AppendKana(input.Text, kana, kana);
             }
         }
     }
 
     /// <summary>無変換でのかなの循環の次の表示。ひらがな・全角カタカナ・半角カタカナで見えているときは輪の次へ進む。自動判定中は、表示中の文字列にひらがな (長音を含む) が含まれていれば全角カタカナにし、含まれていなければひらがなにする。</summary>
-    private static DisplayMode NextKanaCycleMode(CompositionState state, CompositionEnv env)
+    private static DisplayMode NextKanaCycleMode(CompositionScene.WithInput scene, CompositionEnv env)
     {
         // 変換中は、まずひらがなに戻す
-        if (CompositionLifecycle.IsConverting(state)) return DisplayMode.Hiragana;
-        switch (state.Text.Mode)
+        if (scene is CompositionScene.Converting) return DisplayMode.Hiragana;
+        var input = scene.Input;
+        switch (input.Text.Mode)
         {
             case DisplayMode.Hiragana: return DisplayMode.Katakana;
             case DisplayMode.Katakana: return DisplayMode.HalfWidthKatakana;
             case DisplayMode.HalfWidthKatakana: return DisplayMode.Hiragana;
             case DisplayMode.Auto:
                 // 自動判定中は、表示中の文字列にひらがな (長音を含む) が含まれているかで判定する。含まれていれば全角カタカナにし、含まれていなければひらがなにする。
-                var shown = CompositionPresentation.CurrentDisplay(state, env, final: false);
+                var shown = CompositionPresentation.CurrentDisplay(input, env, final: false);
                 return shown.Length > 0 && shown.Any(KanaChars.IsHiraganaOrLongMark) ? DisplayMode.Katakana : DisplayMode.Hiragana;
             default: return DisplayMode.Hiragana;
         }
     }
 
-    private static void SetMode(CompositionState state, DisplayMode mode)
+    private static void SetMode(CompositionState state, CompositionScene.WithInput scene, DisplayMode mode)
     {
-        LeaveConversion(state);
-        state.Text.Mode = mode;
-        state.Text.Case = LetterCase.AsTyped;
+        LeaveConversion(state, scene);
+        scene.Input.Text.Mode = mode;
+        scene.Input.Text.Case = LetterCase.AsTyped;
     }
 
     // 変換を抜けて表示の形を選ぶ。抜けた変換は確定の記録のために残す
-    private static void LeaveConversion(CompositionState state)
+    private static void LeaveConversion(CompositionState state, CompositionScene.WithInput scene)
     {
-        if (state.Conversion is { } conversion) state.LeftConversion = (conversion, CompositionText.Raw(state.Text));
-        state.Conversion = null;
+        if (scene is not CompositionScene.Converting { Input: var input, Conversion: var conversion }) return;
+        input.LeftConversion = (conversion, CompositionText.Raw(input.Text));
+        CompositionLifecycle.StopConverting(state, input);
     }
 
     /// <summary>
     /// F9 / F10: 英字にする。もう英字で見せているときに押すと、大文字・小文字を 打ったまま → すべて大文字 → 先頭だけ大文字 → … と切り替える
     /// (ai → AI → Ai → ai。Microsoft IME と同じ)。見た目の変わらない段 (打ったままが既にすべて大文字など) は飛ばす。
     /// </summary>
-    private static void SetAlphanumericMode(CompositionState state, CompositionEnv env, DisplayMode mode)
+    private static void SetAlphanumericMode(CompositionState state, CompositionScene.WithInput scene, CompositionEnv env, DisplayMode mode)
     {
-        var before = CompositionLifecycle.IsConverting(state) ? null : CompositionPresentation.CurrentDisplay(state, env, final: false);
-        var sameMode = !CompositionLifecycle.IsConverting(state) && state.Text.Mode == mode;
-        LeaveConversion(state);
+        var input = scene.Input;
+        var before = scene is CompositionScene.Converting ? null : CompositionPresentation.CurrentDisplay(input, env, final: false);
+        var sameMode = scene is CompositionScene.Typing && input.Text.Mode == mode;
+        LeaveConversion(state, scene);
         if (!sameMode)
         {
-            state.Text.Mode = mode;
-            state.Text.Case = LetterCase.AsTyped;
+            input.Text.Mode = mode;
+            input.Text.Case = LetterCase.AsTyped;
             // 設定「F9 / F10 の 1 回目は打ったまま」: 見えている内容にかかわらず、1 回目は打ったままにする (issue #515)
             if (env.Settings.AlphanumericKeyStartsAsTyped) return;
             // 英単語と判定して英字で見せていた (Auto) ときは、F10 を押した時点で見た目が変わるように次の段へ進める。
-            if (CompositionPresentation.CurrentDisplay(state, env, final: false) != before) return;
+            if (CompositionPresentation.CurrentDisplay(input, env, final: false) != before) return;
         }
         for (var i = 0; i < 3; i++)
         {
-            state.Text.Case = (LetterCase)(((int)state.Text.Case + 1) % 3);
-            if (CompositionPresentation.CurrentDisplay(state, env, final: false) != before) return;
+            input.Text.Case = (LetterCase)(((int)input.Text.Case + 1) % 3);
+            if (CompositionPresentation.CurrentDisplay(input, env, final: false) != before) return;
         }
     }
 
@@ -847,7 +838,7 @@ internal static class CompositionKeys
     /// </summary>
     internal static IReadOnlyList<int> ComposingControlKeys(CompositionState state, CompositionEnv env)
     {
-        if (CompositionText.IsEmpty(state.Text)) return [];
+        if (state.Scene is not CompositionScene.WithInput) return [];
         var keys = new HashSet<int>();
         if (CompositionLifecycle.IsConverting(state) && env.Settings.ControlKeys == Config.ControlKeyLayout.Atok) keys.UnionWith(['K', 'L']);
         if (!string.IsNullOrWhiteSpace(env.Settings.ControlKeyBindings)) keys.UnionWith(ControlKeyBindingParser.Parse(env.Settings.ControlKeyBindings).Keys);
