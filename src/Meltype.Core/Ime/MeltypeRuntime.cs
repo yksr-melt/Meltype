@@ -189,8 +189,7 @@ public sealed class MeltypeRuntime : IDisposable
                     // 後から変わった語をもう送った
                     if (version < _engineDictionarySent) return;
                     _engineDictionarySent = version;
-                    // userdict.txt は品詞を持たないので名詞にする
-                    converter.SetUserDictionary([.. words.Select(w => (w.Reading, w.Word, "名詞"))]);
+                    converter.SetUserDictionary([.. words.Select(w => (w.Reading, w.Word, w.Pos))]);
                 }
             });
         }
@@ -259,7 +258,8 @@ public sealed class MeltypeRuntime : IDisposable
             text.Any(c => KanaChars.IsHiragana(c) || KanaChars.IsKatakana(c)) && !ZenzaiConverter.IsPlausible(reading, text) &&
             !UserDictionary.Lookup(reading).Contains(text) && _shared.Candidates?.Lookup(reading).Contains(text) != true;
         var conversions = History.Entries().Where(e => Suspect(e.Reading, e.Text)).Select(e => (e.Reading, e.Text)).ToList();
-        var phrases = Phrases.Entries().Where(e => Suspect(e.Reading, e.Text)).ToList();
+        // 予測変換の語句は確定した文字のまま (設定の句読点) なので、読みと同じ 、。 にして比べる
+        var phrases = Phrases.Entries().Where(e => Suspect(e.Reading, e.Text.Replace('，', '、').Replace('．', '。'))).ToList();
         if (conversions.Count == 0 && phrases.Count == 0) return;
         ThreadPool.QueueUserWorkItem(_ =>
         {
