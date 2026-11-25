@@ -6919,6 +6919,35 @@ internal static class CompositionTests
         KeigoConverter.Apply(tekureteAction);
         Assert.Equal("部長がお送りくださり、確認いたしました", string.Concat(tekureteAction.Select(c => c.Text)), "相手主語＋一般動作が続くときは『〜くださり』");
 
+        // 拡充した語彙・ビジネス表現・依頼・疑問・尊敬語
+        var hisashiburi = new List<Clause> { new("ひさしぶり", false, ["ひさしぶり"]) };
+        KeigoConverter.Apply(hisashiburi);
+        Assert.Equal("ご無沙汰しております", hisashiburi[0].Text, "ひさしぶり → ご無沙汰しております");
+
+        var tsuideni = new List<Clause> { new("ついでに", false, ["ついでに"]), new("せつめいする", false, ["説明する"]) };
+        KeigoConverter.Apply(tsuideni);
+        Assert.Equal("併せてご説明いたします", string.Concat(tsuideni.Select(c => c.Text)), "ついでに → 併せて / 説明する → ご説明いたします");
+
+        var received = new List<Clause> { new("うけとった", false, ["受け取った"]) };
+        KeigoConverter.Apply(received);
+        Assert.Equal("拝受いたしました", received[0].Text, "受け取った → 拝受いたしました");
+
+        var bossApproved = new List<Clause> { new("ぶちょうが", false, ["部長が"]), new("しょうにんした", false, ["承認した"]) };
+        KeigoConverter.Apply(bossApproved);
+        Assert.Equal("部長がご承認なさいました", string.Concat(bossApproved.Select(c => c.Text)), "目上主語の承認した → ご承認なさいました");
+
+        var fixRequest = new List<Clause> { new("しゅうせいしてほしい？", false, ["修正してほしい？"]) };
+        KeigoConverter.Apply(fixRequest);
+        Assert.Equal("ご修正いただけますでしょうか？", fixRequest[0].Text, "修正してほしい？ → ご修正いただけますでしょうか？");
+
+        var reachableQuest = new List<Clause> { new("とどいた？", false, ["届いた？"]) };
+        KeigoConverter.Apply(reachableQuest);
+        Assert.Equal("届きましたでしょうか？", reachableQuest[0].Text, "届いた？ → 届きましたでしょうか？");
+
+        var tekureteExplain = new List<Clause> { new("せつめいしてくれて", false, ["説明してくれて"]), new("ありがとう", false, ["ありがとう"]) };
+        KeigoConverter.Apply(tekureteExplain);
+        Assert.Equal("ご説明いただきありがとうございます", string.Concat(tekureteExplain.Select(c => c.Text)), "説明してくれて＋ありがとう → ご説明いただきありがとうございます");
+
         // OFF (既定) なら通常のまま
         var off = new Keyboard(live: true);
         off.Type("ryoukai");
