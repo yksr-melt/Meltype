@@ -23,7 +23,7 @@ internal static class BackupPage
                 if (await Pages.SaveFile(owner, "Meltype のバックアップを書き出す", Type, Pattern, $"Meltype-{DateTime.Now:yyyyMMdd}.meltype-backup", content))
                     Pages.Show(message, $"設定・学習データ・ユーザー辞書を書き出しました ({files} 個のファイル)。");
             }
-            catch (IOException ex)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 Pages.Show(message, $"書き出せませんでした: {ex.Message}", error: true);
             }
@@ -33,16 +33,16 @@ internal static class BackupPage
             if (await Pages.OpenFile(owner, "Meltype のバックアップから戻す", Type, [Pattern]) is not { } content) return;
             try
             {
-                var (created, app, files) = Backup.Inspect(content);
+                var backup = Backup.Read(content);
                 if (!await Dialogs.Ask(owner, "Meltype のバックアップ",
-                        $"{created} に作ったバックアップ (Meltype {app}、{files.Count} 個のファイル) で、今の設定・学習データ・ユーザー辞書を置き換えます。よろしいですか？\n\n今のファイルは .before-restore という名前で残します。",
+                        $"{backup.Created} に作ったバックアップ (Meltype {backup.App}、{backup.Files.Count} 個のファイル) で、今の設定・学習データ・ユーザー辞書を置き換えます。よろしいですか？\n\n今のファイルは .before-restore という名前で残します。",
                         ok: "置き換える")) return;
-                var restored = Backup.Restore(content, AppPaths.DataDirectory);
+                var restored = backup.Restore(AppPaths.DataDirectory);
                 // 設定・ユーザー辞書・学習データ・定型文は、入力している Meltype が書き換えに気づいて読み直す。
                 // dictionaries/ の辞書・ローマ字の表は起動したときにだけ読む
                 Pages.Show(message, $"{restored} 個のファイルを戻しました。dictionaries フォルダーの辞書は、Meltype を起動し直すと使われます。");
             }
-            catch (Exception ex) when (ex is IOException or InvalidDataException or FormatException or System.Text.Json.JsonException or KeyNotFoundException)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
             {
                 Pages.Show(message, $"戻せませんでした: {ex.Message}", error: true);
             }
