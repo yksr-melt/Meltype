@@ -167,7 +167,7 @@ internal sealed class KanaLayoutEngine(KanaLayout layout)
     private sealed class Held(int vk, long time, int emitted)
     {
         public int Vk { get; } = vk;
-        public long Time { get; } = time;
+        public long Time { get; set; } = time;
         public int Emitted { get; set; } = emitted;
         /// <summary>組み合わせのシフトに使った (押している間は連続シフト)。</summary>
         public bool Shifting { get; set; }
@@ -223,6 +223,9 @@ internal sealed class KanaLayoutEngine(KanaLayout layout)
             foreach (var key in _held) key.OnRelease = null;
             var thumb = _held.FirstOrDefault(key => IsShiftOnly(key.Vk));
             var kana = thumb is not null ? _table.Chords.GetValueOrDefault(($"{thumb.Vk}", vk)) : _table.Sequences.GetValueOrDefault($"{vk}");
+            repeated.Time = time;
+            repeated.Emitted = kana?.Length ?? 0;
+            repeated.Target = thumb is not null;
             _lastOutput = repeated;
             return kana is null ? KanaStroke.Consumed : new KanaStroke(true, 0, kana);
         }
@@ -265,15 +268,18 @@ internal sealed class KanaLayoutEngine(KanaLayout layout)
                         key.Shifting = key != target;
                     }
                     _held.Add(group[2]);
+                    _lastOutput = target;
                     return new KanaStroke(true, remove, text);
                 }
             }
         if (IsShiftOnly(vk))
         {
+            // 左右が重なっても、最後に押した親指の面を使う。交代した親指の解放は単独タップにしない。
+            _held.RemoveAll(key => IsShiftOnly(key.Vk));
             var thumb = new Held(vk, time, 0);
             _held.Add(thumb);
             // 文字キーの直後 (押したまま ChordWindowMs 以内) の親指キー: その文字を打ち直す
-            if (_held.LastOrDefault(key => !IsShiftOnly(key.Vk) && !key.Target && !key.Shifting && key.Emitted > 0 && time - key.Time <= ChordWindowMs) is { } last &&
+            if (_lastOutput is { Target: false, Shifting: false, Emitted: > 0 } last && _held.Contains(last) && time - last.Time <= ChordWindowMs &&
                 table.Chords.TryGetValue(($"{vk}", last.Vk), out var shifted))
             {
                 var remove = last.Emitted;
@@ -285,13 +291,24 @@ internal sealed class KanaLayoutEngine(KanaLayout layout)
             return KanaStroke.Consumed;
         }
         var plain = table.Sequences.GetValueOrDefault($"{vk}");
+        // 親指キー・Space の面を使った文字は、離す前からその面で入力する。
+        if (_held.FirstOrDefault(key => IsShiftOnly(key.Vk)) is { } held)
+        {
+            held.Shifting = true;
+            var thumbKana = table.Chords.GetValueOrDefault(($"{held.Vk}", vk));
+            _lastOutput = new Held(vk, time, thumbKana?.Length ?? 0) { Target = true };
+            _held.Add(_lastOutput);
+            return thumbKana is not null ? new KanaStroke(true, 0, thumbKana) : KanaStroke.Consumed;
+        }
         // 中指NICOLA: D・K を押したままの文字キーは、ふつうの文字にしておき、先に離したら打ち直す
         if (layout == KanaLayout.NakayubiNicola)
         {
             // 次の文字が入ったら、前の打ち直しはもう末尾ではない。古い削除数で別の文字を消さない。
             foreach (var key in _held) key.OnRelease = null;
-            var press = new Held(vk, time, plain?.Length ?? 0);
-            if (_held.LastOrDefault(key => !key.Target) is { } shift && table.Chords.TryGetValue(($"{shift.Vk}", vk), out var middle))
+            // 中指のシフトは最初に押した D・K。重なった文字キーをシフトに選び直さない。
+            var shift = _held.FirstOrDefault(key => key.Vk is 0x44 or 0x4B && !key.Target);
+            var press = new Held(vk, time, plain?.Length ?? 0) { Target = vk is 0x44 or 0x4B && shift is not null };
+            if (shift is not null && table.Chords.TryGetValue(($"{shift.Vk}", vk), out var middle))
                 press.OnRelease = (middle, shift, press.Emitted + (ReferenceEquals(_lastOutput, shift) ? shift.Emitted : 0));
             _held.Add(press);
             _lastOutput = press;
@@ -308,18 +325,12 @@ internal sealed class KanaLayoutEngine(KanaLayout layout)
                 key.Emitted = 0;
                 if (!key.Target) key.Shifting = true;
             }
-            _held.Add(new Held(vk, time, kana.Length) { Target = true });
+            _lastOutput = new Held(vk, time, kana.Length) { Target = true };
+            _held.Add(_lastOutput);
             return new KanaStroke(true, remove, kana);
         }
-        // 押したままの親指キー・Space の面に無いキーは、何も入れない
-        if (_held.FirstOrDefault(key => IsShiftOnly(key.Vk)) is { } held)
-        {
-            held.Shifting = true;
-            _held.Add(new Held(vk, time, 0) { Target = true });
-            return KanaStroke.Consumed;
-        }
         // 後から押したこのキーがシフトで、直前の押したままの文字キーと組み合わせになる
-        if (_held.LastOrDefault(key => !key.Target && !key.Shifting && key.Emitted > 0 && time - key.Time <= ChordWindowMs) is { } previous &&
+        if (_lastOutput is { Target: false, Shifting: false, Emitted: > 0 } previous && _held.Contains(previous) && time - previous.Time <= ChordWindowMs &&
             table.Chords.TryGetValue(($"{vk}", previous.Vk), out var reversed))
         {
             var remove = previous.Emitted;
@@ -329,7 +340,8 @@ internal sealed class KanaLayoutEngine(KanaLayout layout)
             return new KanaStroke(true, remove, reversed);
         }
         if (plain is null) return KanaStroke.NotHandled;
-        _held.Add(new Held(vk, time, plain.Length));
+        _lastOutput = new Held(vk, time, plain.Length);
+        _held.Add(_lastOutput);
         return new KanaStroke(true, 0, plain);
     }
 

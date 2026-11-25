@@ -31,7 +31,32 @@ const kanaKey = String.raw`(?:[0-9\-^\\a-z@[;:\],./_LR]|Space|Shift)`;
 const kanaLayouts = {
   format: tabbed(3, 3, ([layout, keys, kana]) => [
     /^[A-Z][A-Za-z]+$/.test(layout) ? null : `配列「${layout}」が KanaLayout の名前でない`,
-    new RegExp(`^${kanaKey}(?:[ +]${kanaKey})*$`).test(keys) ? null : `打つキー「${keys}」の書き方が違う`,
+    new RegExp(`^${kanaKey}(?:[ +]${kanaKey})*// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Yukishiro
+//
+// dictionaries/*.txt の形式を確かめる (Pull Request のチェック「辞書の形式」で使う)。
+//   node tools/check-dictionaries.mjs [ファイル …]   … 省略するとすべての辞書
+// 読み込めない行 (エラー) があれば終了コード 1。直した方がよい行 (警告) は表示だけ。
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const self = fileURLToPath(import.meta.url);
+const root = path.join(path.dirname(self), '..', 'dictionaries');
+const hiragana = /^[ぁ-ゖー゛゜ゔ]+$/;
+const kana = /^[ぁ-ゖァ-ヺー・ゔヴ]+$/;
+const ascii = /^[\x21-\x7e]+$/;
+// Core (WordList.ParseWords・ProperNouns.AddText) の語の区切り。全角空白は区切りでない (含むトークンは語にならず捨てられる)
+const coreTokens = line => line.split(/[ \t\r,]+/).filter(Boolean);
+
+/**
+ * 辞書ごとの扱い。各辞書には既定 (checkDictionary) と違う項目だけを書く。
+ *   format    … # 以降を除いた行を渡すと、エラーの並び (null は問題なし) を返す。必須
+ *   commentAt … コメントの始まり (無ければ -1)。Core の読み方に合わせる。既定は # から行末まで
+ *   untrimmed … 前後の空白を除かずに format に渡すか。既定は除く
+ *   keysOf    … 重複を見る単位 ([キー, 中身] の並び)。既定は行全体。
+ *               キーが同じで中身が違えば、後の行が前の行を上書きするか、どちらが効くか決まらないのでエラー。中身まで同じなら警告
+).test(keys) ? null : `打つキー「${keys}」の書き方が違う`,
     kana.length > 0 ? null : 'かなが空',
   ]),
   keysOf: line => { const [layout, keys] = line.split('\t'); return [[`${layout}\t${keys}`, line]]; },

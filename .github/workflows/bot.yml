@@ -7,7 +7,7 @@
 #     管理者: /release <版> /pre-release <版> (コメントの 1 行目だけ。タグとリリースの下書きを作り、配布物のビルドを始める)
 # Issue・コメントの文は誰でも書けるので、run: の中に ${{ }} で埋め込まず、環境変数で値として渡す。
 # Pull Request のコードは、書き込みの権限を持たない job (run・pr) でだけ動かす。結果のコメントは別の job (report) が書く。
-# 漢字変換には最新リリースの meltype_mozc_helper を使う (毎回 Bazel ビルドしない)。
+# 漢字変換には、main からビルドした meltype_mozc_helper (job mozc) を使う。Pull Request のコードを動かす job では、Bazel のキャッシュを書き換えられないよう、ビルドしない。
 name: bot
 
 on:
@@ -94,11 +94,31 @@ jobs:
           BOT_RELEASE_COMMAND: ${{ needs.parse.outputs.release_command }}
           BOT_RELEASE_VERSION: ${{ needs.parse.outputs.release_version }}
 
+  mozc:
+    needs: parse
+    if: contains(fromJSON('["repro","ca","jht","test-jht"]'), needs.parse.outputs.action)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/linux-mozc
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bot-mozc
+          path: native/mozc/bin/linux/meltype_mozc_helper
+          if-no-files-found: error
+          retention-days: 1
+
   # main 上での repro / explain / ca / jht。/repro <SHA> は PR のコードも動かす (メンテナーのみ。parse で author_association と SHA を確認済み)
   run:
-    needs: parse
-    if: needs.parse.outputs.action == 'repro' || needs.parse.outputs.action == 'explain' || needs.parse.outputs.action == 'ca' || needs.parse.outputs.action == 'jht'
-    runs-on: windows-latest
+    needs: [parse, mozc]
+    # explain では job mozc が skipped になる
+    if: ${{ !cancelled() && contains(fromJSON('["success","skipped"]'), needs.mozc.result) && contains(fromJSON('["repro","explain","ca","jht"]'), needs.parse.outputs.action) }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
       contents: read
@@ -110,31 +130,31 @@ jobs:
       - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: 10.0.x
-      - name: Mozc helper from latest release
-        if: needs.parse.outputs.action == 'repro' || needs.parse.outputs.action == 'ca' || needs.parse.outputs.action == 'jht'
+      - if: needs.mozc.result == 'success'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: bot-mozc
+          path: native/mozc/bin/linux
+      - name: Mozc helper
+        if: needs.mozc.result == 'success'
         run: &mozc-helper |
-          $bin = 'native/mozc/bin'
-          New-Item -ItemType Directory -Force -Path $bin | Out-Null
-          $api = 'https://api.github.com/repos/yksr-melt/Meltype/releases/latest'
-          $rel = Invoke-RestMethod -Uri $api -Headers @{ 'User-Agent' = 'meltype-bot' }
-          $asset = $rel.assets | Where-Object { $_.name -like 'Meltype-*-windows-portable.zip' } | Select-Object -First 1
-          if (-not $asset) { Write-Host 'Windows リリースが見つかりません (Mozc なしで続行)'; exit 0 }
-          $zip = Join-Path $env:RUNNER_TEMP 'meltype-win.zip'
-          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $zip
-          $extract = Join-Path $env:RUNNER_TEMP 'meltype-win'
-          Expand-Archive -LiteralPath $zip -DestinationPath $extract -Force
-          $helper = Get-ChildItem -Path $extract -Recurse -Filter 'meltype_mozc_helper.exe' | Select-Object -First 1
-          if (-not $helper) { Write-Host 'zip に meltype_mozc_helper.exe がありません'; exit 0 }
-          Copy-Item $helper.FullName (Join-Path $bin 'meltype_mozc_helper.exe') -Force
-          $full = (Resolve-Path (Join-Path $bin 'meltype_mozc_helper.exe')).Path
-          "MELTYPE_MOZC=$full" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          Write-Host "MELTYPE_MOZC=$full"
-          # /repro は Zenzai (zip の zenzai\ の llama-server とモデル) も使った結果を返す。zip に無ければ Repro.cs が zenzai に理由を出す
-          $zenzai = Join-Path $extract 'zenzai'
-          $model = Get-ChildItem -Path $zenzai -Filter '*.gguf' -ErrorAction SilentlyContinue | Select-Object -First 1
-          $modelPath = if ($model) { $model.FullName } else { Join-Path $zenzai 'model.gguf' }
-          "MELTYPE_ZENZAI_SERVER=$(Join-Path $zenzai 'llama-server.exe')" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "MELTYPE_ZENZAI_MODEL=$modelPath" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          $helper = (Resolve-Path 'native/mozc/bin/linux/meltype_mozc_helper').Path
+          chmod +x $helper
+          "MELTYPE_MOZC=$helper" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      # /repro は Zenzai (最新のリリースの zip の zenzai/ の llama-server とモデル) も使った結果を返す
+      - name: Zenzai from latest release
+        if: needs.parse.outputs.action == 'repro'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # フォークにはリリースが無いことがあるので、upstream から取る。'Meltype-*-linux.zip' は端末版の zip にも当たるので、タグから名前を作る
+          $tag = gh release view --repo yksr-melt/Meltype --json tagName --jq .tagName
+          $zip = "Meltype-$($tag.TrimStart('v'))-linux.zip"
+          gh release download $tag --repo yksr-melt/Meltype --pattern $zip --dir $env:RUNNER_TEMP
+          unzip -q "$env:RUNNER_TEMP/$zip" 'Meltype-linux/zenzai/*' -d $env:RUNNER_TEMP
+          $zenzai = "$env:RUNNER_TEMP/Meltype-linux/zenzai"
+          "MELTYPE_ZENZAI_SERVER=$zenzai/llama-server" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "MELTYPE_ZENZAI_MODEL=$((Get-Item "$zenzai/*.gguf").FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: Run
         env:
           ACTION: ${{ needs.parse.outputs.action }}
@@ -155,8 +175,6 @@ jobs:
             exit 0
           }
           # repro と ca (Mozc があれば漢字も。ca も repro と同じく打つ。last は space)。REPROS の i 番目の結果は results/<i>/repro-<版の名前>.json
-          # Zenzai の結果を返すのは repro だけ (ca は Mozc の候補だけを返すので、Zenzai を起動しない)
-          if ($env:ACTION -ne 'repro') { Remove-Item Env:MELTYPE_ZENZAI_SERVER, Env:MELTYPE_ZENZAI_MODEL -ErrorAction SilentlyContinue }
           # 打つ版は VERSIONS (/repro <SHA> の PR の前・PR・main)。無ければ main と最新のリリース。同じ commit の版は 1 度だけ打つ。
           # PR は最後に打つ (PR のビルドが失敗してもほかの版の結果を返す。PR のコードが動く前に、ほかの版を打ち終える)。
           # 表の並びは report (meltype-bot.mjs) が VERSIONS の順に決める
@@ -176,15 +194,13 @@ jobs:
               git fetch --quiet --no-tags origin $v.sha
               git worktree add --quiet --detach $root $v.sha
             }
-            # src/Meltype.Windows.Tests に名前を変える前の版は、Windows のテストが src/Meltype.Tests にある
-            $tests = if (Test-Path "$root/src/Meltype.Windows.Tests") { "$root/src/Meltype.Windows.Tests" } else { "$root/src/Meltype.Tests" }
             $i = 0
             foreach ($r in ($env:REPROS | ConvertFrom-Json)) {
               $build = if ($i -gt 0) { '--no-build' }
               New-Item -ItemType Directory -Force "results/$i" | Out-Null
               # /learn の手順 (学習に対応する前の版は --learn を読まない。結果に learned が無いことで report が見分ける)
               $learn = @($r.learn | Where-Object { $_ } | ForEach-Object { '--learn'; $_ })
-              dotnet run --project $tests -c Release $build -- --repro "$($r.keys)" "$($r.last)" @learn | Out-File "results/$i/repro-$($v.name).json" -Encoding utf8
+              dotnet run --project "$root/src/Meltype.Core.Tests" -c Release $build -- --repro "$($r.keys)" "$($r.last)" @learn | Out-File "results/$i/repro-$($v.name).json" -Encoding utf8
               $i++
             }
           }
@@ -198,9 +214,10 @@ jobs:
 
   # PR のコードで test / pack / test-jht / test-explain (メンテナーのみ。parse で author_association と SHA を確認済み)
   pr:
-    needs: parse
-    if: contains(fromJSON('["test","pack","test-jht","test-explain"]'), needs.parse.outputs.action)
-    runs-on: windows-latest
+    needs: [parse, mozc]
+    # job mozc は、test-jht のほかでは skipped になる
+    if: ${{ !cancelled() && contains(fromJSON('["success","skipped"]'), needs.mozc.result) && contains(fromJSON('["test","pack","test-jht","test-explain"]'), needs.parse.outputs.action) }}
+    runs-on: ${{ contains(fromJSON('["test","pack"]'), needs.parse.outputs.action) && 'windows-latest' || 'ubuntu-24.04' }}
     timeout-minutes: 45
     permissions:
       contents: read
@@ -212,8 +229,13 @@ jobs:
       - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: 10.0.x
-      - name: Mozc helper from latest release
-        if: needs.parse.outputs.action == 'test-jht'
+      - if: needs.mozc.result == 'success'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: bot-mozc
+          path: native/mozc/bin/linux
+      - name: Mozc helper
+        if: needs.mozc.result == 'success'
         run: *mozc-helper
       - name: Test
         if: needs.parse.outputs.action == 'test'
