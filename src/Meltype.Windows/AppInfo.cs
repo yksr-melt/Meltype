@@ -22,9 +22,6 @@ internal static class AppInfo
     public static string MisdetectionReportUrl(Meltype.Diagnostics.Correction correction, string environment) =>
         Config.ProjectInfo.MisdetectionReportUrl(correction, "Windows", Version, environment);
 
-    /// <summary>不具合報告を開く URL (OS・版・実行環境は今のものを入れる)。</summary>
-    public static string ReportUrl(string environment) => Config.ProjectInfo.ReportUrl(Diagnostics.ReportInfo.OsName, Version, environment);
-
     /// <summary>自動更新で最新のリリースを見に行く GitHub のリポジトリ (公開されている必要がある)。</summary>
     public const string UpdateRepository = "yksr-melt/Meltype";
     public const string Contact = "ibutya0319@gmail.com";

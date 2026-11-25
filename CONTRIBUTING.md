@@ -42,7 +42,7 @@
 <img src="docs/images/headings/contributing/01.svg" alt="不具合の報告" height="53"><br>
 
 
-GitHub のアカウントが無い場合は、Meltype のトレイのメニュー「不具合の報告・提案...」から開くフォームで送れます (送った内容は Issue になります。仕組みは [tools/report-form](tools/report-form/README.md))。
+GitHub のアカウントが無い場合は、[公式サイトの報告フォーム](https://meltype.moe/report/)から送れます。
 自動の判定を自分で直したとき (F6〜F10・変換の候補で英字 / かなを選び直したとき) は、トレイの「直した誤判定を報告...」から、打ったもの・出たもの・直した結果が入った状態で「変換・判定の間違い」の報告を始められます (Meltype キーボード。記録は Meltype を終了すると消え、押すまで送りません)。
 
 [Issue](https://github.com/yksr-melt/Meltype/issues/new/choose) のひな形 (不具合 / 変換・判定の間違い / 辞書 / 提案) から選んで書いてください。
