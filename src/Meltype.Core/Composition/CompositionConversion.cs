@@ -641,9 +641,9 @@ internal static class CompositionConversion
     /// 絵文字・顔文字は最後に逆順で並べるので、変換してすぐ ↑ を押すと、いちばんよく使う絵文字 (えがお → 😊) になる (issue #133)。
     /// </summary>
     /// <param name="before">文の中での変換結果 (inContext) が無いときに、その読みだけの変換に渡す文脈 (<see cref="SegmentBefore"/>)。inContext があれば null。</param>
-    internal static List<string> JapaneseCandidates(CompositionEnv env, string reading, string? inContext, string? before, bool zenzai)
+    private static List<string> JapaneseCandidates(CompositionEnv env, string reading, string? inContext, string? before, bool zenzai)
     {
-        // 文の中での変換結果が無いとき (文節の区切りを変えた・打っている途中の候補) は、その読みだけの変換が最初の候補になるので、Zenzai も使う (Convert)
+        // 文の中での変換結果が無いとき (文節の区切りを変えた・英語の文節をローマ字として読んだ) は、その読みだけの変換が最初の候補になるので、Zenzai も使う (Convert)
         var standalone = inContext is null ? Convert(env, reading, before, zenzai) : Standalone(env, reading);
         var katakana = CompositionText.ToKatakana(reading);
         // ユーザー辞書に登録した単語は、文の中での変換結果の次に出す (文節の区切りを変えて読みが一致したときなど)。
