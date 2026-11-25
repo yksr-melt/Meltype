@@ -2,6 +2,7 @@
 // Copyright (C) 2026 aster-void
 // Copyright (C) 2026 yksr-melt
 
+using Meltype.Config;
 using Meltype.Dictionary;
 using Meltype.Learning;
 using Meltype.Libraries.Chars;
@@ -119,8 +120,19 @@ internal static class CompositionPresentation
         return candidates.Count > 1 ? candidates : null;
     }
 
-    /// <summary>変換ボックスに出す、打ったキー (設定が ON のときだけ)。</summary>
-    private static string? TypedKeys(CompositionState state, CompositionEnv env) => env.Settings.ShowTypedKeys && CompositionText.Raw(state.Text) is { Length: > 0 } raw ? raw : null;
+    /// <summary>変換ボックスに出す、打ったもの (設定「打ったキーを表示」)。漢字変換前は、変換中なら文節の読み、変換していなければ確定される形 (<see cref="CurrentComposed"/>) を漢字にせずに出す。</summary>
+    private static string? TypedKeys(CompositionState state, CompositionEnv env)
+    {
+        if (CompositionText.IsEmpty(state.Text)) return null;
+        return env.Settings.TypedKeys switch
+        {
+            TypedKeysStyle.Keys => CompositionText.Raw(state.Text),
+            TypedKeysStyle.Kana when CompositionLifecycle.IsConverting(state) && state.Clauses.Count > 0 => string.Concat(state.Clauses.Select(CompositionConversion.Reading)),
+            TypedKeysStyle.Kana => CompositionText.AsCommitted(state.Text, env, text => CompositionText.Compose(text, env, final: true)).Text,
+            TypedKeysStyle.Off => null,
+            var style => throw new InvalidOperationException($"不明な TypedKeysStyle: {style}"),
+        };
+    }
 
     /// <summary>
     /// 予測変換の候補を、今の打ちかけから作り直す。打った内容が変わったら選んでいた候補は戻す。
