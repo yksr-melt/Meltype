@@ -13,6 +13,7 @@ on:
       - 'native/zenzai/**'
       - 'native/build-core-linux.sh'
       - '.github/actions/linux-native/**'
+      - '.github/actions/linux-mozc/**'
       - 'src/Meltype.Core.CApi/**'
       - '.github/workflows/tui.yml'
   push:
@@ -23,6 +24,7 @@ on:
       - 'native/zenzai/**'
       - 'native/build-core-linux.sh'
       - '.github/actions/linux-native/**'
+      - '.github/actions/linux-mozc/**'
       - 'src/Meltype.Core/**'
       - 'src/Meltype.Core.CApi/**'
       - 'dictionaries/**'
