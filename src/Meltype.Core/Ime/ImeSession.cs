@@ -114,7 +114,7 @@ internal static class ImeSession
         var settings = env.App;
         var active = IsActive(env.Environment, all, state.Field);
         var lastSnippet = state.LastSnippet;
-        if (e.Type == ImeEventType.KeyPressed || e.Caret?.Moved == true) state.LastSnippet = null;
+        if (e is ImeEvent.KeyPressed or ImeEvent.WithCaret { Caret.Moved: true }) state.LastSnippet = null;
         NoteAltInterruption(state, e);
         ApplyFacts(state, e, settings);
         // ゲームに入ったら英数にする (IsGame)
@@ -123,36 +123,37 @@ internal static class ImeSession
         state.Game = game;
         var before = LineBefore(state, e.Field);
         var wasJapanese = ShowsJapanese(state, before);
-        var explicitChange = false;
         var composing = IsComposing(state);
-        var result = WithPaste(state, Verify(state, e.Type switch
+        // view が null だと、フロントは変換中の表示を消す。表示を変えない出来事は今の表示を返す
+        var handled = e.Match(new ImeEvent.Cases<Handled>
         {
-            ImeEventType.KeyPressed when e.Key is { } key => active ? HandleKey(state, env, key, e.Field, before, settings, lastSnippet, ref explicitChange) : Leave(state, env),
-            ImeEventType.KeyReleased when active && e.Key is { Vk: VirtualKeys.LMenu or VirtualKeys.RMenu } alt => AltReleased(state, env, alt, before, settings, ref explicitChange),
-            ImeEventType.KeyReleased when active && e.Key is { } released =>
-                HandleKeyUp(state, env, ToggleShortcut.NormalizeKey(released.Vk)),
-            ImeEventType.ModeToggleRequested when active => Switch(state, env, !wasJapanese, before, ref explicitChange, toggle: true),
-            ImeEventType.JapaneseModeSelected when active => Switch(state, env, true, before, ref explicitChange, toggle: false),
-            ImeEventType.AlphanumericModeSelected when active => Switch(state, env, false, before, ref explicitChange, toggle: false),
-            ImeEventType.CommitRequested => CommitPending(state, env),
-            ImeEventType.CommittedByApp => CommittedOutside(state, env),
+            KeyPressed = pressed => active ? HandleKey(state, env, pressed.Key, e.Field, before, settings, lastSnippet) : Leave(state, env),
+            KeyReleased = released => !active ? Unchanged(state, env)
+                : released.Key.Vk is VirtualKeys.LMenu or VirtualKeys.RMenu ? AltReleased(state, env, released.Key, before, settings)
+                : HandleKeyUp(state, env, ToggleShortcut.NormalizeKey(released.Key.Vk)),
+            ModeToggleRequested = _ => active ? Switch(state, env, !wasJapanese, before, toggle: true) : Unchanged(state, env),
+            JapaneseModeSelected = _ => active ? Switch(state, env, true, before, toggle: false) : Unchanged(state, env),
+            AlphanumericModeSelected = _ => active ? Switch(state, env, false, before, toggle: false) : Unchanged(state, env),
+            CommitRequested = _ => CommitPending(state, env),
+            CommittedByApp = _ => CommittedOutside(state, env),
             // 番号は前の応答の一覧 (変換の候補か予測変換の候補か) で読む
-            ImeEventType.CandidateClicked when state.ListedPredictions => SelectPrediction(state, env, e.Index),
-            ImeEventType.CandidateHighlighted when state.ListedPredictions => Unchanged(state, env),
-            ImeEventType.CandidateClicked or ImeEventType.CandidateHighlighted => SelectCandidate(state, env, e.Index),
-            ImeEventType.ConversionFinished when active => RefreshConversion(state, env) ?? Unchanged(state, env),
-            // view が null だと、フロントは変換中の表示を消す。表示を変えない出来事は今の表示を返す
-            _ => Unchanged(state, env),
-        }, e.Field), settings);
+            CandidateClicked = clicked => state.ListedPredictions ? SelectPrediction(state, env, clicked.Index) : SelectCandidate(state, env, clicked.Index),
+            CandidateHighlighted = highlighted => state.ListedPredictions ? Unchanged(state, env) : SelectCandidate(state, env, highlighted.Index),
+            ConversionFinished = _ => active && RefreshConversion(state, env) is { } refreshed ? refreshed : Unchanged(state, env),
+            CaretMoved = _ => Unchanged(state, env),
+            StateRequested = _ => Unchanged(state, env),
+            InstanceDestroyed = _ => Unchanged(state, env),
+        });
+        var result = WithPaste(state, Verify(state, handled.Result, e.Field), settings);
         // ゲームでは、Enter で確定・Esc で取り消したら英数に戻す。ゲーム (Minecraft 26.2 までの GLFW など) はチャットを閉じたことを知らせてこないので、
         // 日本語のままだと閉じたあとの移動のキー (WASD) が変換中の文字になる。チャットを送る・閉じる前の Enter・Esc を区切りにする
-        if (game && composing && !IsComposing(state) && e.Key?.Vk is VirtualKeys.Return or VirtualKeys.Escape) CompositionController.SetDirect(state.Composition, true);
+        if (game && composing && !IsComposing(state) && e is ImeEvent.KeyPressed { Key.Vk: VirtualKeys.Return or VirtualKeys.Escape }) CompositionController.SetDirect(state.Composition, true);
         TrackLine(state, e, result);
         var snippetKeys = SnippetKeys(state, env, e, result, settings);
         // キーでアプリの文字が変わったあとの位置は、フロントが次の出来事 (caret) で知らせる
         var japanese = ShowsJapanese(state, before);
         state.ListedPredictions = result.View is { } shown && SessionResult.ListsPredictions(shown) == true;
-        var indicate = explicitChange && japanese != wasJapanese && settings.EffectiveModeIndicator != ModeIndicatorTiming.Never ||
+        var indicate = handled.ExplicitChange && japanese != wasJapanese && settings.EffectiveModeIndicator != ModeIndicatorTiming.Never ||
             AnnouncesFocus(e) && settings.EffectiveModeIndicator == ModeIndicatorTiming.OnSwitchAndFocus;
         return new(new ImeState
         {
@@ -163,6 +164,12 @@ internal static class ImeSession
             Capture = Capture(active, Direct(state), DirectEnglishWord(state), settings, game, ComposingControlKeys(state, env), snippetKeys),
             Revision = rev,
         }, result);
+    }
+
+    /// <param name="ExplicitChange">入力モードを明示的に切り替えた。</param>
+    private readonly record struct Handled(SessionResult Result, bool ExplicitChange = false)
+    {
+        public static implicit operator Handled(SessionResult result) => new(result);
     }
 
     private static void AltPressed(ImeSessionState state, ImeKey key, int vk)
@@ -177,12 +184,13 @@ internal static class ImeSession
     /// <summary>Alt を押している間のほかの出来事 (アプリに通したキー・クリック・フォーカスの移動など) があれば、単独押しにしない。</summary>
     private static void NoteAltInterruption(ImeSessionState state, ImeEvent e)
     {
-        if (state.AltDown == 0 || state.AltNotAlone is not null || e.Key?.Vk is VirtualKeys.LMenu or VirtualKeys.RMenu ||
-            e.Type is ImeEventType.StateRequested or ImeEventType.ConversionFinished) return;
-        state.AltNotAlone = $"押している間に {e.Type} があった";
+        if (state.AltDown == 0 || state.AltNotAlone is not null ||
+            e is ImeEvent.KeyPressed { Key.Vk: VirtualKeys.LMenu or VirtualKeys.RMenu } or ImeEvent.KeyReleased { Key.Vk: VirtualKeys.LMenu or VirtualKeys.RMenu } or
+                ImeEvent.StateRequested or ImeEvent.ConversionFinished) return;
+        state.AltNotAlone = $"押している間に {e.GetType().Name} があった";
     }
 
-    private static SessionResult AltReleased(ImeSessionState state, ImeEnv env, ImeKey key, string? before, Settings settings, ref bool explicitChange)
+    private static Handled AltReleased(ImeSessionState state, ImeEnv env, ImeKeyRelease key, string? before, Settings settings)
     {
         var vk = key.Vk;
         var notAlone = !settings.AltKeysSwitchKeyboard ? "設定が OFF"
@@ -197,7 +205,7 @@ internal static class ImeSession
             return PassThrough(state, env);
         }
         Diagnostics.Log.Decision($"{side} Alt の単独押しで{(vk == VirtualKeys.RMenu ? "日本語" : "英数")}にします");
-        return Switch(state, env, vk == VirtualKeys.RMenu, before, ref explicitChange, toggle: false);
+        return Switch(state, env, vk == VirtualKeys.RMenu, before, toggle: false);
     }
 
     /// <summary>
@@ -208,7 +216,7 @@ internal static class ImeSession
     {
         if (IsComposing(state)) return [];
         var before = Before(state, e.Field);
-        if (e.Type == ImeEventType.KeyPressed && !result.Consumed && e.Key is { Ch: > 0 and < 0x10000 } key) before += (char)key.Ch;
+        if (e is ImeEvent.KeyPressed { Key: { Ch: > 0 and < 0x10000 } key } && !result.Consumed) before += (char)key.Ch;
         var keys = new List<int>();
         if (SnippetUsable(state, env, before, settings) && SnippetTrigger.TypedBefore(settings.SnippetMark, before) is { } typed && env.Environment.Snippets.Get(typed[1..]) is not null)
             keys.AddRange([VirtualKeys.Space, VirtualKeys.Tab]);
@@ -220,7 +228,7 @@ internal static class ImeSession
     /// 入力欄に入ったことを、入力モードの表示で知らせるか。OS のシェルの画面 (GNOME のアプリ一覧の検索欄など) は、
     /// 開くアニメーションの途中のキャレットの位置しか知らせてこないので、入ったときは出さない。
     /// </summary>
-    public static bool AnnouncesFocus(ImeEvent e) => e.Caret?.FocusEntered == true && !ShellApps.Contains(e.Field?.App ?? "");
+    public static bool AnnouncesFocus(ImeEvent e) => e is ImeEvent.WithCaret { Caret.FocusEntered: true } && !ShellApps.Contains(e.Field?.App ?? "");
 
     private static readonly HashSet<string> ShellApps = new(StringComparer.Ordinal) { "gnome-shell" };
 
@@ -252,7 +260,7 @@ internal static class ImeSession
             CompositionController.SetDirect(state.Composition, !open);
             ForgetDirectInput(state);
         }
-        if (e.Caret is { } caret)
+        if (e is ImeEvent.WithCaret { Caret: var caret })
         {
             if (caret.Moved)
             {
@@ -313,13 +321,13 @@ internal static class ImeSession
 
     private static void TrackLine(ImeSessionState state, ImeEvent e, SessionResult result)
     {
-        if (e.Caret is { } caret && (caret.FocusEntered || caret.FocusLeft || caret.Moved && !TypesText(caret.PassedKey))) state.Line.Clear();
+        if (e is ImeEvent.WithCaret { Caret: var caret } && (caret.FocusEntered || caret.FocusLeft || caret.Moved && !TypesText(caret.PassedKey))) state.Line.Clear();
         foreach (var edit in result.Commits)
         {
             state.Line.Length = Math.Max(0, state.Line.Length - edit.DeleteBefore);
             AppendToLine(state, edit.Text);
         }
-        if (e.Type != ImeEventType.KeyPressed || e.Key is not { } key || result.Consumed) return;
+        if (e is not ImeEvent.KeyPressed { Key: var key } || result.Consumed) return;
         var vk = key.Vk != 0 ? ToggleShortcut.NormalizeKey(key.Vk) : VirtualKeyOf(key.Ch);
         if (key.Ctrl || key.Alt || key.Command) state.Line.Clear();
         else if (key.Text is { Length: > 0 } text) AppendToLine(state, text);
@@ -345,8 +353,7 @@ internal static class ImeSession
     private static bool TypesText(int? vk) =>
         vk is null or VirtualKeys.Back or VirtualKeys.Space or >= 0x30 and <= 0x5A or >= 0x60 and <= 0x6F or >= 0xBA and <= 0xE2;
 
-    private static SessionResult HandleKey(ImeSessionState state, ImeEnv env, ImeKey key, ImeField? field, string? before, Settings settings, (string Text, string Typed)? lastSnippet,
-        ref bool explicitChange)
+    private static Handled HandleKey(ImeSessionState state, ImeEnv env, ImeKey key, ImeField? field, string? before, Settings settings, (string Text, string Typed)? lastSnippet)
     {
         var composing = IsComposing(state);
         var modifiers = Modifiers(key);
@@ -361,13 +368,13 @@ internal static class ImeSession
         var toggle = settings.EffectiveToggleShortcuts.Any(shortcut => shortcut.Matches(vk, modifiers));
         // 押しっぱなしで、入力モードを何度も切り替えない
         if (key.Repeat && (toggle || plain && vk is ToggleShortcut.Hankaku or VirtualKeys.OemAttn or VirtualKeys.Kana)) return Consumed;
-        if (toggle && !composing) return Switch(state, env, !ShowsJapanese(state, before), before, ref explicitChange, toggle: true);
+        if (toggle && !composing) return Switch(state, env, !ShowsJapanese(state, before), before, toggle: true);
         // 入力中は変換ボックスの英字表示の切り替え。変換中は変換ボックスのキーとして使う (Shift+Space は「前の候補へ」)
         if (toggle && !IsConverting(state)) return ComposeKey(state, env, VirtualKeys.Kanji, null, false, false, false, false);
         // ロックのキーは文字を入れないので、打ちかけに触らずにアプリに通す (切り替えキーに登録したものは、上で切り替えに使った)
         if (IsLockKey(vk)) return PassThrough(state, env);
         if (vk == ToggleShortcut.Hankaku && !key.Ctrl && !key.Alt && !composing) return Consumed;
-        if (vk == VirtualKeys.OemAttn && plain) return Switch(state, env, false, before, ref explicitChange, toggle: false);
+        if (vk == VirtualKeys.OemAttn && plain) return Switch(state, env, false, before, toggle: false);
         if (vk is VirtualKeys.Kana or VirtualKeys.Convert or VirtualKeys.NonConvert && plain)
         {
             if (HandleRoleKey(state, env, vk) is { } role) return role;
@@ -375,7 +382,7 @@ internal static class ImeSession
             var switches = composing ? vk == VirtualKeys.NonConvert : !(vk == VirtualKeys.Convert && ShowsJapanese(state, before) && field?.Selection is { Length: > 0 });
             if (switches && !IsThumbKey(state, vk, settings))
             {
-                return key.Repeat ? Consumed : Switch(state, env, vk != VirtualKeys.NonConvert, before, ref explicitChange, toggle: false);
+                return key.Repeat ? Consumed : Switch(state, env, vk != VirtualKeys.NonConvert, before, toggle: false);
             }
         }
         if (!composing && !key.Ctrl && !key.Alt && !key.Command && Snippet(state, env, vk, key, Before(state, field), settings, lastSnippet) is { } snippet) return snippet;
@@ -490,9 +497,8 @@ internal static class ImeSession
     /// 英数にするとき、toggle (日本語 ⇔ 英数の切り替え) は、日本語にしていたコードの行を英数に戻すだけで IME を開いたままにする。
     /// そうでなければ (英数キー・無変換) 直接入力にする。
     /// </summary>
-    private static SessionResult Switch(ImeSessionState state, ImeEnv env, bool japanese, string? before, ref bool explicitChange, bool toggle)
+    private static Handled Switch(ImeSessionState state, ImeEnv env, bool japanese, string? before, bool toggle)
     {
-        explicitChange = true;
         var result = IsComposing(state) ? CommitPending(state, env) : Consumed;
         if (japanese)
         {
@@ -504,7 +510,7 @@ internal static class ImeSession
             var codeLineReset = SetCodeLine(state, false, before);
             if (!toggle || !codeLineReset) CompositionController.SetDirect(state.Composition, true);
         }
-        return result;
+        return new(result, ExplicitChange: true);
     }
 
     /// <summary>受け持たなくなった (一時停止・動作モードの変更): 変換中の内容は確定して、キーはアプリに通す。</summary>
@@ -680,7 +686,7 @@ internal static class ImeSession
     /// キーを 1 つ処理する。before / after は入力欄のキャレットの前後の文字列 (分かれば。英語とも日本語とも読める語の判定と変換の文脈に使う)。
     /// 入力モードを切り替えるキーの意味は ImeSession が決めるので、ここでは見ない。
     /// </summary>
-    /// <param name="releaseFollows">ワークアラウンド (ImeEventType.KeyReleased): 離したことは <see cref="HandleKeyUp"/> で届く。false なら押した直後に離したとみなす。</param>
+    /// <param name="releaseFollows">ワークアラウンド (ImeEvent.KeyReleased): 離したことは <see cref="HandleKeyUp"/> で届く。false なら押した直後に離したとみなす。</param>
     public static SessionResult ComposeKey(ImeSessionState state, ImeEnv env, int vk, char? ch, bool shift, bool control, bool alt, bool command, bool releaseFollows = false)
     {
         var before = LineBefore(state, state.Field);
@@ -735,7 +741,7 @@ internal static class ImeSession
     }
 
     /// <summary>
-    /// ワークアラウンド (ImeEventType.KeyReleased): releaseFollows を付けて押したキーを離した。親指シフトの親指キー・中指NICOLA のシフトのキーを離したことを、
+    /// ワークアラウンド (ImeEvent.KeyReleased): releaseFollows を付けて押したキーを離した。親指シフトの親指キー・中指NICOLA のシフトのキーを離したことを、
     /// かな配列に伝える (文字に使わずに離した親指キーは、もとの変換・無変換をする)。離したことをアプリに通すかはフロントが押下のとおりに決める。
     /// </summary>
     public static SessionResult HandleKeyUp(ImeSessionState state, ImeEnv env, int vk) => CompositionController.Release(state.Composition, Env(state, env), vk);
