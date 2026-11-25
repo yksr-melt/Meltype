@@ -61,7 +61,7 @@ internal static class CompositionCommit
         if (converting) LearnClauses(state, env);
         else if (CompositionLifecycle.Learning(state, env) && !state.EscReverted) env.Learning.LearnLanguage(state.Text, CompositionText.Segments(state.Text, env), CompositionText.LearningContext(state.Text, env));
         if (!converting || state.Clauses.All(CompositionLearning.Learnable))
-            RememberPhrase(state, env, converting ? string.Concat(state.Clauses.Select(c => c.IsEnglish ? "" : c.Reading)) : CompositionText.AllKana(state.Text, env, final: true), text.Text, english);
+            RememberPhrase(state, env, converting ? string.Concat(state.Clauses.Select(c => c.IsEnglish ? "" : c.Reading)) : CompositionText.AllKana(state.Text, env, final: true), CompositionOutput.Render(env, text), english);
         CommitText(state, env, text + ComposedText.English(suffix), english, CompositionText.Raw(state.Text), chosen, preserveText, string.Join("、", rules));
     }
 
@@ -233,7 +233,7 @@ internal static class CompositionCommit
         // 直前に確定した語が、今のキャレットの位置に無い (別の場所をクリックした等) ときは書き換えない。
         // 消すつもりの文字がそこに無いので、消すとキャレットの前の別の文字が消えてしまう。
         // 入力欄の文字をその場で読めるホストだけ確かめる (Windows は別のスレッドで後から読むので、古い値で誤って止めない)。
-        if (CompositionOutput.Before(state.Out, env) is { } caretBefore && !caretBefore.EndsWith(original, StringComparison.Ordinal))
+        if (CompositionOutput.RawBefore(state.Out, env) is { } caretBefore && !caretBefore.EndsWith(CompositionOutput.Render(env, ComposedText.Concat(targets.Select(t => t.Text))), StringComparison.Ordinal))
         {
             Diagnostics.Log.Decision($"キャレットの位置が変わっているので確定し直しません: {Diagnostics.Log.Text(original)}");
             state.Correctable.Clear();
