@@ -26,7 +26,7 @@ internal static class StatelessTests
     [Test]
     public static void States_AreDataOnly()
     {
-        foreach (var type in new[] { typeof(CompositionState), typeof(CompositionTextState), typeof(CompositionOutputState), typeof(ImeSessionState) })
+        foreach (var type in new[] { typeof(CompositionState), typeof(CompositionInput), typeof(CompositionTextState), typeof(CompositionOutputState), typeof(ImeSessionState) })
         {
             var methods = type.GetMethods(Declared).Where(m => !m.IsSpecialName && m.GetCustomAttribute<CompilerGeneratedAttribute>() is null).Select(m => m.Name).ToList();
             Assert.True(methods.Count == 0, $"{type.Name} の関数 (処理は CompositionController・CompositionText・CompositionOutput・ImeSession に置く): {string.Join(", ", methods)}");
