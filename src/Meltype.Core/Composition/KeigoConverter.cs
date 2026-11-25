@@ -1071,6 +1071,46 @@ internal static class KeigoConverter
         ("いるけど", "いらっしゃいますが"),
     ];
 
+    // 2文節に分かれた「〜てくれて」＋「ありがとう/助かる/嬉しい」などの感謝・恐縮先読みキーワード
+    private static readonly string[] GratitudeFollowingReadings =
+    [
+        "ありがとう", "ありがと", "さんきゅー", "あざす", "あざっす",
+        "たすかる", "たすかります", "たすかった", "たすかりました",
+        "うれしい", "うれしかった", "すみません", "すいません", "きょうしゅく",
+    ];
+
+    // 「〜てくれて」の個別変換 (対象動詞の語幹 → 接頭辞付き連用形)
+    private static readonly (string Suffix, string RespectfulStem)[] TekureteVerbs =
+    [
+        ("確認してくれて", "ご確認"),
+        ("教えてくれて", "ご教示"),
+        ("送ってくれて", "お送り"),
+        ("連絡してくれて", "ご連絡"),
+        ("共有してくれて", "ご共有"),
+        ("対応してくれて", "ご対応"),
+        ("見てくれて", "ご覧"),
+        ("来てくれて", "お越し"),
+        ("書いてくれて", "お書き"),
+        ("読んでくれて", "お読み"),
+        ("伝えてくれて", "お伝え"),
+        ("調べてくれて", "お調べ"),
+        ("直してくれて", "お直し"),
+        ("作ってくれて", "お作り"),
+        ("手伝ってくれて", "お手伝い"),
+        ("待ってくれて", "お待ち"),
+        ("選んでくれて", "お選び"),
+        ("決めてくれて", "お決め"),
+    ];
+
+    // 2 文節にまたがる「〜てくれて」の前の文節と、次の文節の接続チェック
+    private static bool IsGratitudeFollowing(string nextReading, string nextText)
+    {
+        if (nextReading.Length == 0) return false;
+        foreach (var g in GratitudeFollowingReadings)
+            if (nextReading.StartsWith(g, StringComparison.Ordinal)) return true;
+        return nextText.StartsWith("感謝", StringComparison.Ordinal) || nextText.StartsWith("恐縮", StringComparison.Ordinal);
+    }
+
     // 変換後テキスト内の語彙置き換え (単語境界チェック付きで「午後で」「早急に」「客室」等の誤爆を防ぐ)
     // RequireEndBoundary = true のものは、後ろも助詞・句読点・文末のときだけ置換する
     private static readonly (string From, string To, bool RequireEndBoundary)[] InTextReplacements =
@@ -1524,7 +1564,7 @@ internal static class KeigoConverter
             var c = clauses[0];
             if (IsPunctuationOnly(c.Text) && IsPunctuationOnly(c.Reading)) return;
             var role = DetectSubjectRole(c.Text);
-            if (ConvertClause(c.Reading, c.Text, isSentenceEnd: true, nextIsQuestion: false, role, prevReading: "", hasNextContent: false) is { } singleConverted && singleConverted != c.Text)
+            if (ConvertClause(c.Reading, c.Text, isSentenceEnd: true, nextIsQuestion: false, gratitudeFollows: false, role, prevReading: "", hasNextContent: false) is { } singleConverted && singleConverted != c.Text)
                 SetKeigo(c, singleConverted);
             return;
         }
@@ -1560,8 +1600,9 @@ internal static class KeigoConverter
             if (!nextIsPunct && IsAlreadyFollowedByPolite(clauseReading, nextReading, nextText)) continue;
 
             var subjectRole = DetectSubjectRole(currentSentence.ToString());
+            var gratitudeFollows = i + 1 < clauses.Count && IsGratitudeFollowing(nextReading, nextText);
 
-            if (ConvertClause(clauseReading, clauseText, isSentenceEnd, nextIsQuestion, subjectRole, prevReading, hasNextContent) is { } converted && converted != clauseText)
+            if (ConvertClause(clauseReading, clauseText, isSentenceEnd, nextIsQuestion, gratitudeFollows, subjectRole, prevReading, hasNextContent) is { } converted && converted != clauseText)
             {
                 SetKeigo(clauses[i], converted);
             }
@@ -1663,7 +1704,7 @@ internal static class KeigoConverter
         return false;
     }
 
-    private static string? ConvertClause(string reading, string text, bool isSentenceEnd, bool nextIsQuestion, SubjectRole subjectRole, string prevReading, bool hasNextContent)
+    private static string? ConvertClause(string reading, string text, bool isSentenceEnd, bool nextIsQuestion, bool gratitudeFollows, SubjectRole subjectRole, string prevReading, bool hasNextContent)
     {
         var (readingCore, readingPunct) = SplitTrailingPunctuation(reading);
         var (textCore, textPunct) = SplitTrailingPunctuation(text);
@@ -1676,6 +1717,13 @@ internal static class KeigoConverter
         // 0. 疑問文 (？ / ?) は主語に応じて切り替える (自分主語「私が送った？」→ お送りいたしましたでしょうか？ / それ以外 → 尊敬・相手への質問)
         if (isSentenceEnd && isQuestion)
             return ConvertQuestion(readingCore, textCore, punct, subjectRole);
+
+        // 0.3 「〜てくれて」の振り分け (後ろに感謝・助かりが続く → 「〜いただき」、目上主語や経過接続 → 「〜くださり / くださいまして」)
+        if (textCore.EndsWith("くれて", StringComparison.Ordinal) || readingCore.EndsWith("くれて", StringComparison.Ordinal))
+        {
+            if (TryConvertTekurete(textCore, gratitudeFollows, subjectRole) is { } tekurete)
+                return tekurete + punct;
+        }
 
         // 0.5 相手・目上が主語の文末は尊敬語を優先する (社長が見る → ご覧になります、お客様が来ている → お越しになっています)
         if (isSentenceEnd && subjectRole == SubjectRole.Other && !IsAlreadyKeigo(textCore))
@@ -1822,6 +1870,40 @@ internal static class KeigoConverter
                 return text[..^suffix.Length] + replacement;
         }
         return text;
+    }
+
+    /// <summary>
+    /// 「〜てくれて」を文脈に応じて振り分ける:
+    ///   - 後ろに感謝・恩恵 (ありがとう・助かった・嬉しい等) が続くとき → 「〜いただき」
+    ///   - 目上の主語が明示されている経過節のとき → 「〜くださいまして」(または「〜くださり」)
+    ///   - それ以外の途中節 → 「〜いただき」(主語を問わず自然で汎用性が高い)
+    /// </summary>
+    private static string? TryConvertTekurete(string textCore, bool gratitudeFollows, SubjectRole subjectRole)
+    {
+        var aux = gratitudeFollows ? "いただき" : (subjectRole == SubjectRole.Other ? "くださり" : "いただき");
+
+        foreach (var (suffix, respectfulStem) in TekureteVerbs)
+        {
+            if (textCore.EndsWith(suffix, StringComparison.Ordinal))
+            {
+                var head = textCore[..^suffix.Length];
+                return AppendWithoutDuplicatePrefix(head, respectfulStem) + aux;
+            }
+        }
+
+        // 汎用サ変動詞 (修正してくれて → 修正いただき / ご修正くださり 等)
+        if (textCore.EndsWith("してくれて", StringComparison.Ordinal))
+        {
+            var stem = textCore[..^"してくれて".Length];
+            if (IsVerbalNounStem(stem))
+                return stem + aux;
+        }
+        // 一般の「〜てくれて / 〜でくれて」(作ってくれて → 作っていただき / 作ってくださり)
+        if (textCore.Length > "くれて".Length && (textCore.EndsWith("てくれて", StringComparison.Ordinal) || textCore.EndsWith("でくれて", StringComparison.Ordinal)))
+        {
+            return textCore[..^"くれて".Length] + aux;
+        }
+        return null;
     }
 
     private static string? TrySuruOrGodanSa(string text)

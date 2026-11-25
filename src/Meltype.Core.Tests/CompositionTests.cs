@@ -6906,6 +6906,19 @@ internal static class CompositionTests
         KeigoConverter.Apply(kyakushitsu);
         Assert.Equal("客室を確認いたします", string.Concat(kyakushitsu.Select(c => c.Text)), "「客室」を「お客様室」に誤爆しない");
 
+        // 〜てくれて の文脈振り分け (感謝が続く → いただき / 相手主語の経過 → くださり)
+        var tekureteThanks = new List<Clause> { new("おしえてくれて", false, ["教えてくれて"]), new("たすかった", false, ["助かった"]) };
+        KeigoConverter.Apply(tekureteThanks);
+        Assert.Equal("ご教示いただき大変助かりました", string.Concat(tekureteThanks.Select(c => c.Text)), "感謝・恩恵が続くときは『〜いただき』");
+
+        var tekureteBoss = new List<Clause> { new("ぶちょうが", false, ["部長が"]), new("おくってくれて、", false, ["送ってくれて、"]), new("たすかった", false, ["助かった"]) };
+        KeigoConverter.Apply(tekureteBoss);
+        Assert.Equal("部長がお送りいただき大変助かりました", string.Concat(tekureteBoss.Select(c => c.Text)).Replace("いただき、", "いただき"), "助かった直前は『〜いただき』");
+
+        var tekureteAction = new List<Clause> { new("ぶちょうが", false, ["部長が"]), new("おくってくれて、", false, ["送ってくれて、"]), new("かくにんした", false, ["確認した"]) };
+        KeigoConverter.Apply(tekureteAction);
+        Assert.Equal("部長がお送りくださり、確認いたしました", string.Concat(tekureteAction.Select(c => c.Text)), "相手主語＋一般動作が続くときは『〜くださり』");
+
         // OFF (既定) なら通常のまま
         var off = new Keyboard(live: true);
         off.Type("ryoukai");
