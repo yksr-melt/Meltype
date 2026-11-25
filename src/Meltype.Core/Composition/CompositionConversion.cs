@@ -428,10 +428,7 @@ internal static class CompositionConversion
         return japanese;
     }
 
-    /// <summary>
-    /// ユーザー辞書の読みが含まれていれば、その部分は登録した単語の文節にし、残りだけを変換エンジンで変換する
-    /// (きごうとうふくめ → 記号等|含め)。含まれていなければ普通に変換する。
-    /// </summary>
+    /// <summary>日本語の区間を変換エンジンで変換する。英字・記号の部分はそのままの文節にする。</summary>
     private static List<Clause> ConvertJapanese(CompositionInput input, CompositionEnv env, string kana, string before, bool zenzai)
     {
         // ローマ字として読めずに残った英字 (こほぃc の c) と半角の記号 (... @) は、変換エンジンに渡すと別の記号 (© ．．． ＠) にされるので、
@@ -463,103 +460,7 @@ internal static class CompositionConversion
             }
             return result;
         }
-        if (env.Services.UserDictionary?.Split(kana) is not { } split) return ConvertWithEngine(input, env, kana, before, zenzai);
-        var pieces = AlignUserWords(input, env, kana, before, split, zenzai);
-        if (pieces.All(p => p.Word is null && p.Engine is null)) return ConvertWithEngine(input, env, kana, before, zenzai);
-        var clauses = new List<Clause>();
-        var registered = new List<Clause>();
-        var parts = new List<Clause>();
-        foreach (var (reading, word, aligned) in pieces)
-        {
-            if (word is null)
-            {
-                clauses.AddRange(ConvertWithEngine(input, env, reading, before + string.Concat(clauses.Select(c => c.Text)), zenzai, aligned));
-                continue;
-            }
-            // 同梱の語句に文節の区切りがあれば、その区切りで分ける (いちがっき → 一|学期)
-            var divided = env.Services.UserDictionary!.Clauses(reading, word);
-            foreach (var (part, text) in divided)
-            {
-                var clause = new Clause(part, false, [text]) { Engine = text };
-                clauses.Add(clause);
-                // 区切りで分けた文節 (一|学期 の 一) は、学習と文脈の手がかりで選び直さない (いち で 市 を選んだことがあっても 一|学期 のまま)
-                (divided.Count == 1 ? registered : parts).Add(clause);
-            }
-        }
-        // 同梱の語句 (しょせん → 所詮) も、文脈の手がかり (試合 → 初戦) と学習で選び直せるようにする。
-        // 変換エンジンの文節も、語句の文節を含めた前後で文脈の手がかりを見直す (甲斐性ない + こうかい → 後悔)。
-        foreach (var clause in clauses)
-        {
-            if (parts.Contains(clause)) continue;
-            var surrounding = (env.Context().PrecedingText ?? "") + EnglishInComposition(input, env) + string.Concat(clauses.Where(c => c != clause).Select(c => c.Text)) + (env.Context().FollowingText ?? "");
-            var preferred = env.Services.ContextRules?.Choose(clause.Reading, surrounding, clause.Text, text => Standalone(env, text)) ?? (registered.Contains(clause) ? env.Learning.LearnedConversion(clause.Reading) : null);
-            if (preferred is not null) Prefer(clause, preferred);
-        }
-        return clauses;
-    }
-
-    /// <summary>
-    /// 同梱の語句 (phrases.txt) は、変換エンジンが区切りを間違える語句を補うものなので、変換エンジンの文節の途中から始まっても使う。
-    /// 読みの頭に ^ を付けた語句は、ほかの語の一部になりやすいので、文節の頭から始まるときだけ使う。
-    ///
-    /// 語の始まりが変換エンジンの文節の境目に合い、そこからの文節の文字が語で始まる (変換エンジンが文の中でその語にできている) なら、
-    /// その語では区切らず、語から後ろは文全体を変換したときの変換エンジンの文節をそのまま使う (Engine)。
-    /// 語で区切ると、残りのかなを単独で変換することになり崩れる (あげあしとら → 揚げ足取ら で区切ると、ないで が 内で になる)。
-    /// 語より前は今までどおり別に変換する (文全体の変換エンジンの結果にすると、これほんあか が コレ本垢 になる)。
-    /// 始まりが文節の途中の語は、どの文字が語の読みに当たるか分からないので、今までどおり語で区切る。
-    /// </summary>
-    private static List<(string Reading, string? Word, IReadOnlyList<ConversionClause>? Engine)> AlignUserWords(CompositionInput input, CompositionEnv env, string kana, string before, List<(string Reading, string? Word)> pieces, bool zenzai)
-    {
-        var unchanged = pieces.Select(p => (p.Reading, p.Word, (IReadOnlyList<ConversionClause>?)null)).ToList();
-        if (env.Services.UserDictionary is not { } dictionary) return unchanged;
-        var engine = Engine(env, kana, before, zenzai);
-        if (engine is null || string.Concat(engine.Select(c => c.Reading)) != kana) return unchanged;
-        var starts = new HashSet<int>();
-        for (int i = 0, offset = 0; i < engine.Count; offset += engine[i].Reading.Length, i++) starts.Add(offset);
-        var aligned = new List<(string Reading, string? Word, IReadOnlyList<ConversionClause>? Engine)>();
-        var position = 0;
-        for (var p = 0; p < pieces.Count; p++)
-        {
-            var (reading, word) = pieces[p];
-            var midStart = word is not null && dictionary.IsHeadOnly(reading) && !starts.Contains(position);
-            if (midStart) Diagnostics.Log.Info($"同梱の語句は、変換エンジンの文節の途中から始まるので使いません: {Diagnostics.Log.Text(reading)}");
-            if (word is not null && !midStart && starts.Contains(position) && EngineStartsWith(position, word))
-            {
-                // 次に文節の境目から始まる語の手前までを、変換エンジンの文節にする
-                var next = p + 1;
-                var stop = position + reading.Length;
-                for (; next < pieces.Count && !(pieces[next].Word is not null && starts.Contains(stop)); next++) stop += pieces[next].Reading.Length;
-                var span = new List<ConversionClause>();
-                for (int i = 0, offset = 0; i < engine.Count; offset += engine[i].Reading.Length, i++)
-                    if (offset >= position && offset < stop) span.Add(engine[i]);
-                // 変換エンジンの文節が次の語にまたがるときは、変換エンジンの結果を使わない
-                if (string.Concat(span.Select(c => c.Reading)) == kana[position..stop])
-                {
-                    aligned.Add((kana[position..stop], null, span));
-                    position = stop;
-                    p = next - 1;
-                    continue;
-                }
-            }
-            // 使わない語の読みは、前後の変換エンジンに渡す部分とつなげる
-            if (word is null || midStart)
-            {
-                if (aligned.Count > 0 && aligned[^1] is { Word: null, Engine: null } last) aligned[^1] = (last.Reading + reading, null, null);
-                else aligned.Add((reading, null, null));
-            }
-            else aligned.Add((reading, word, null));
-            position += reading.Length;
-        }
-        return aligned;
-
-        // start から始まる変換エンジンの文節の文字が、語で始まるか
-        bool EngineStartsWith(int start, string word)
-        {
-            var text = new StringBuilder();
-            for (int i = 0, offset = 0; i < engine.Count && text.Length < word.Length; offset += engine[i].Reading.Length, i++)
-                if (offset >= start) text.Append(engine[i].Text);
-            return text.ToString().StartsWith(word, StringComparison.Ordinal);
-        }
+        return ConvertWithEngine(input, env, kana, before, zenzai);
     }
 
     /// <summary>
@@ -567,11 +468,10 @@ internal static class CompositionConversion
     ///   1. 文脈の手がかり辞書 (前後に 気温 があれば あつい → 暑い)
     ///   2. ユーザーが前に選び直した変換 (学習)
     ///   3. 変換エンジンの結果 (入力欄のキャレットの前の文字を文脈として渡している)
-    /// engine を渡したときは、変換エンジンに頼まずにその文節を使う (文全体を変換したときの一部: AlignUserWords)。
     /// </summary>
-    private static List<Clause> ConvertWithEngine(CompositionInput input, CompositionEnv env, string kana, string before, bool zenzai, IReadOnlyList<ConversionClause>? engine = null)
+    private static List<Clause> ConvertWithEngine(CompositionInput input, CompositionEnv env, string kana, string before, bool zenzai)
     {
-        var parts = engine ?? Engine(env, kana, before, zenzai) ?? [.. SplitAtMarks(new ConversionClause(kana, kana))];
+        IReadOnlyList<ConversionClause> parts = Engine(env, kana, before, zenzai) ?? [.. SplitAtMarks(new ConversionClause(kana, kana))];
         // 読み全体が補助辞書・絵文字の辞書の語 (かんがえるかお → 🤔) なら、文節に分けずに 1 つの文節にして候補を出す。
         if (parts.Count > 1 && env.Services.Candidates?.Contains(kana) == true)
         {
@@ -588,7 +488,8 @@ internal static class CompositionConversion
             var others = string.Concat(clauses.Where((_, k) => k != i).Select(c => c.Text));
             var surrounding = (env.Context().PrecedingText ?? "") + EnglishInComposition(input, env) + others + (env.Context().FollowingText ?? "");
             var preferred = env.Services.ContextRules?.Choose(clauses[i].Reading, surrounding, clauses[i].Text, text => Standalone(env, text)) ?? env.Learning.LearnedConversion(clauses[i].Reading);
-            // 変換エンジンは、文節が「から」だけだと記号 (～) にしてしまう。記号だけの変換結果は、ひらがなの後ろに回す (ユーザー辞書の語 なかてん → ・ は除く)。
+            // 変換エンジンは、文節が「から」だけだと記号 (～) にしてしまう。記号だけの変換結果は、ひらがなの後ろに回す。
+            // ユーザー辞書・同梱の語句の記号 (なかてん → ・) はそのまま
             preferred ??= IsSymbolOnly(clauses[i].Text) && clauses[i].Reading.All(KanaChars.IsHiragana) &&
                 env.Services.UserDictionary?.Lookup(clauses[i].Reading).Contains(clauses[i].Text) != true ? clauses[i].Reading : null;
             // 英単語に挟まれて助詞だけの文節になると、変換エンジンは漢字にしてしまう (github + に + push → 二)。助詞はかなのまま。
@@ -611,8 +512,8 @@ internal static class CompositionConversion
     /// かなと一緒に打った記号 (読みの 、。？「 など。CompositionText.Symbol と TypedMarks が決めた文字) は、最初の候補でも読みの文字のままにする。
     /// 変換エンジンの答え・Mozc の学習・変換履歴は、記号を別の文字にすることがある
     /// (ライブ変換で 例文？ が 例文? に: issue #519、「今日は が ［今日は に: issue #1669、わたしは、 が 私は・ に)。別の候補は一覧に残す。
-    /// 記号だけを打って変換したとき (、 だけ・( だけ) は、選んで覚えた候補を使う (issue #672)。記号だけかは、文節や
-    /// ユーザー辞書で分けた部分の読みでなく、打ったもの全体で決める (わたしは、 の区切りを変えてできた 、 だけの文節にも、覚えた ・ を出さない)。
+    /// 記号だけを打って変換したとき (、 だけ・( だけ) は、選んで覚えた候補を使う (issue #672)。記号だけかは、文節の読みでなく、
+    /// 打ったもの全体で決める (わたしは、 の区切りを変えてできた 、 だけの文節にも、覚えた ・ を出さない)。
     /// 記号の数が読みと違う答え (から → ～、あんはさうぇい → アン・ハサウェイ) は、どの記号がどれに当たるか分からないので変えない。
     /// 打った記号を文字の種類と数で見分けているのは、変換の結果が区間の種類を持たない文字列だから。区間の種類を持ち回すようになったら (#1735)、区間で決める。
     /// 最初の候補を決める所 (ConvertWithEngine・Reconvert・WholeClause) の最後に呼ぶ。
