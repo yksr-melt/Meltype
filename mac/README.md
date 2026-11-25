@@ -14,7 +14,7 @@
 
 必要なもの:
 
-- Xcode、またはコマンドライン ツール (`xcode-select --install`)
+- Swift 6.1 以降を含む Xcode、またはコマンドライン ツール (`xcode-select --install`)
 - .NET 10 SDK (<https://dotnet.microsoft.com/download>。または `curl -sSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel 10.0`)
 - Mozc の変換ヘルパーとライセンスの 3 ファイル (`native/mozc/bin/mac/`)。以下の手順で用意します
 
@@ -120,4 +120,4 @@ OS の登録 API で登録・有効化した後、`com.apple.HIToolbox` の `App
 ## 版の番号
 
 ビルドの版の番号は、本体のプロジェクトの `Version`、環境変数 `MELTYPE_VERSION`、GitHub Actions ではリリースのタグから決まります。
-ネイティブのビルドとアプリの plist は同じ番号を使い、変換エンジンは版をアプリの plist から読みます。
+ネイティブのビルドとアプリの plist は同じ番号を使い、macOS のアプリ表示は plist、本体の「ばーじょん」の候補は共有 Core の版を使います。リリース前の版合わせは [リリース手順](../docs/dev/RELEASE.md) を参照してください。

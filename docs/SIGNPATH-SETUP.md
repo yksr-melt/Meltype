@@ -1,11 +1,22 @@
 # SignPath のテスト署名の設定
 
-[Code signing policy](CODE-SIGNING.md) に沿って、Windows 版を SignPath でテスト署名するための設定手順です。
+[コード署名の方針](CODE-SIGNING.md) に沿って、Windows 版を SignPath でテスト署名するための設定手順です。
 テスト署名の成果物は GitHub Releases に添付せず、正式版として配布しません。既存の配布経路 (`release.yml` から呼ぶ `windows.yml` の `package`) は変えません。
 
 Organization ID、Project の表示名と slug、既存 Artifact Configuration の slug は別の値です。
 画面で確認した値を使い、表示名 `Meltype` から slug を推測しません。
 実行前に、SignPath で証明書の状態 (テスト証明書が `VALID` か) を確かめてください。
+
+## テスト署名の流れ
+
+```mermaid
+flowchart TD
+    build["秘密なし: ビルド・テスト"] --> artifact["未署名の 3 ファイルを保存"]
+    artifact --> sign["別 runner: main / signpath-test で署名を申請"]
+    sign --> verify{"証明書・署名・内容の検証"}
+    verify -->|成功| output["Actions にテスト成果物とレポート"]
+    verify -->|失敗| report["レポートだけ保存"]
+```
 
 ## 1. SignPath
 
@@ -45,7 +56,7 @@ Deployment branches and tags は **Selected branches and tags → Branch: `main`
 ## 3. 実行して確かめる
 
 1. PR の `signpath-test / build` が成功することを確認します。ここでは通常の Windows ビルド・テストだけを行います。SignPath の秘密は使いません。
-2. レビュー後にこのワークフローを main に取り込みます。新しい `workflow_dispatch` のワークフローはデフォルトブランチに置く必要があります。PR ブランチから署名させるために制限を緩めません。
+2. 署名するコードとワークフローがレビュー済みで、main に取り込まれていることを確認します。署名ジョブは main の手動実行だけで動きます。
 3. Actions → **signpath-test** → Run workflow → Branch: **main** を選びます。
 4. Environment / SignPath で承認待ちがあれば、対象 commit・Artifact Configuration・ポリシー `test-signing` を確認して承認します。
 5. 成功した run から次を取得します。

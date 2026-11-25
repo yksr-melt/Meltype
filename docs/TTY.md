@@ -4,11 +4,11 @@
 
 # Meltype for TTY
 
-端末版 `meltype-tty` のインストール・使い方の説明です。`meltype-tty` は、シェルなどのコマンドを pty の中で起動し、そのコマンドへの入力を Meltype で変換します。IBus・fcitx5 などの IME が動かない、GUI の無い Linux のコンソールで使います。キー操作と、どの環境でも共通の機能は [USAGE.md](USAGE.md) にあります。
+端末版 `meltype-tty` のインストール・使い方の説明です。`meltype-tty` は、シェルなどのコマンドを pty の中で起動し、そのコマンドへの入力を Meltype で変換します。IBus・fcitx5 などの IME が動かない、GUI の無い Linux のコンソールで使います。キー操作と共通の変換機能は [USAGE.md](USAGE.md) にあります。
 
 ## 動く環境
 
-- Linux (x86_64 / ARM64)
+- Linux (x86_64 / ARM64)、glibc 2.34 以降
 - python3 (3.9 以降) と ICU (`libicu`)
 - 日本語を表示できる端末。Linux のコンソール (`/dev/tty1` など) は日本語を表示できないので、fbterm などの中で起動します
 
@@ -17,6 +17,7 @@
 [Releases](https://github.com/yksr-melt/Meltype/releases/latest) から CPU に合う zip (x86_64 は `Meltype-<version>-tty-linux.zip`、ARM64 は `Meltype-<version>-tty-linux-arm64.zip`) をダウンロードして、好きな場所に展開します。apt・dnf のパッケージとは別の配布物です。
 
 ```sh
+mkdir -p ~/.local/share ~/.local/bin
 unzip Meltype-<version>-tty-linux.zip -d ~/.local/share
 ln -s ~/.local/share/Meltype-tty/meltype-tty ~/.local/bin/meltype-tty
 ```
@@ -34,7 +35,9 @@ meltype-tty -- vim     # コマンドを指定して起動
 
 ## 設定
 
-設定画面はありません。設定と学習データは `~/.local/share/Meltype` にあり、設定は Windows 版と同じ `config.json` を直接編集します。先頭に `"$schema"` を書くと、エディターで項目の補完と説明が出ます。IBus・fcitx5 の版と同じ PC で使うと、設定と学習データを共有します。
+設定画面はありません。Mozc と Zenzai は配布フォルダーに同梱され、変換は端末内で行います。Zenzai を使わないときは `config.json` に `"UseZenzai": false` と書きます。
+
+設定と学習データは `~/.local/share/Meltype` にあり、設定は Windows 版と同じ `config.json` を直接編集します。先頭に `"$schema"` を書くと、エディターで項目の補完と説明が出ます。IBus・fcitx5 の版と同じ PC で使うと、設定と学習データを共有します。
 
 ```json
 {
@@ -42,6 +45,19 @@ meltype-tty -- vim     # コマンドを指定して起動
   "Punctuation": "FullWidthCommaPeriod"
 }
 ```
+
+## ソースからビルドする
+
+.NET 10 SDK・clang・zlib の開発用ファイルを用意し、リポジトリのルートから実行します。依存関係の準備は [Linux 版の開発](../linux/README.md#ビルドする) も参照してください。
+
+```bash
+native/mozc/build-mozc-helper.sh
+native/zenzai/build-llama-server.sh
+tui/build.sh
+python3 -m unittest discover -s tui -p 'test_*.py'
+```
+
+`tui/build/Meltype-tty/` に本体とエンジンが揃います。ビルドしたマシンより古い glibc へ配る場合は、[共通ビルドスクリプト](../native/build-core-linux.sh) の `MELTYPE_SYSROOT` の説明を参照してください。
 
 ## アンインストール
 

@@ -1,6 +1,6 @@
 <a name="性能の計測"></a>
-<img src="../../docs/images/headings/performance/title.svg" alt="性能の計測" height="80">
 
+# 性能の計測
 
 Meltype の性能を測る仕組みは 2 つあります。
 
@@ -9,11 +9,9 @@ Meltype の性能を測る仕組みは 2 つあります。
 
 どちらもアプリ本体には組み込みません。ふだんの入力では何も測らず、何もログに残しません。
 
-<br>
-
 <a name="変換エンジンの計測---perf"></a>
-<img src="../../docs/images/headings/performance/01.svg" alt="変換エンジンの計測 (--perf)" height="53"><br>
 
+## 変換エンジンの計測 (--perf)
 
 ```powershell
 $env:MELTYPE_MOZC = "$PWD\native\mozc\bin\meltype_mozc_helper.exe"
@@ -29,8 +27,8 @@ MELTYPE_MOZC=/path/to/meltype_mozc_helper dotnet run -c Release --project src/Me
 必ず `-c Release` で動かしてください (結果の `meta.configuration` に残ります)。
 
 <a name="前と後を比べる"></a>
-<img src="../../docs/images/headings/performance/s01.svg" alt="前と後を比べる" height="40">
 
+### 前と後を比べる
 
 ```powershell
 git worktree add ..\meltype-base main
@@ -52,8 +50,8 @@ dotnet run -c Release --project src/Meltype.Core.Tests -- --perf-compare $env:TE
 - 回数・控えの使い回し率・候補の数・正解率はばらつかないので、変わっていればそれは変更のせいです
 
 <a name="測るもの"></a>
-<img src="../../docs/images/headings/performance/s02.svg" alt="測るもの" height="40">
 
+### 測るもの
 
 1 つの例文を、変換の控えを捨ててから打つ (**cold**) のと、すぐにもう一度打つ (**warm**、控えが残っている) のを交互に繰り返します。最初の 1 周は JIT と変換ヘルパーの起動を済ませるためだけに打ち、数えません。
 時間はミリ秒で、p50 / p95 / p99 は小さい方から 50% / 95% / 99% の位置の値 (nearest-rank 法) です。
@@ -74,24 +72,23 @@ dotnet run -c Release --project src/Meltype.Core.Tests -- --perf-compare $env:TE
 変換の控えの回数とヘルパーとのやり取りの時間は、`MozcConverter.Statistics()` で読みます。控えを引くときに回数を足しているだけなので、ふだんの入力は遅くなりません (アプリはこれを読みません)。
 
 <a name="入力した文字について"></a>
-<img src="../../docs/images/headings/performance/s03.svg" alt="入力した文字について" height="40">
 
+### 入力した文字について
 
 結果の JSON には、例文のファイルにある文と、それを打った結果だけが入ります。
 例文のファイルには、自分が実際に打った文 (メール・チャットなど) を入れないでください。足すときは、作った文か、公開されている文にしてください。
 
 <a name="測らないもの"></a>
-<img src="../../docs/images/headings/performance/s04.svg" alt="測らないもの" height="40">
 
+### 測らないもの
 
 Windows のキーボードフック・TSF・IMK・IBus とのやり取りと、画面に描くまでの時間は含みません (`Meltype.Core` の中だけ)。
-Microsoft IME で変換するときの時間も測りません (Mozc が無いときは判定だけで測ります)。
-
-<br>
+`--perf` は Mozc を使う計測です。Mozc が無いときは判定だけで測るため、漢字変換ありの結果とは比較しません。Zenzai を含む実際の入力は `--repro` で別に確認します ([開発文書](../../docs/dev/DEVELOPMENT.md#maclinux-でのテスト))。
 
 <a name="打鍵の処理の計測-benchmark-compositionpy"></a>
 <a name="composition-performance-check"></a>
-<img src="../../docs/images/headings/performance/02.svg" alt="打鍵の処理の計測 (benchmark-composition.py)" height="53"><br>
+
+## 打鍵の処理の計測 (benchmark-composition.py)
 
 変換エンジンを外して、1 キーごとの処理 (判定・ローマ字・表示の組み立て) だけを NativeAOT で測ります。
 
@@ -115,7 +112,8 @@ baseline も今の `tools/performance/Program.cs` でビルドするので、bas
 - `--jit`: NativeAOT ではなく、Release の JIT のコードで動かします (段階的なコンパイルは切ります)
 
 <a name="測る範囲"></a>
-<img src="../../docs/images/headings/performance/s05.svg" alt="測る範囲" height="40">
+
+### 測る範囲
 
 時間に入るのは、`HandleKey`、結果の JSON への書き出し、Enter での確定です。辞書の読み込み・起動・セッションを作る時間は入りません。
 両方の版とも、空の言語の学習を使います。変換エンジンは、候補を何も返さない偽物です。
@@ -123,7 +121,8 @@ baseline も今の `tools/performance/Program.cs` でビルドするので、bas
 確定した文字列は、どの場面も baseline と同じでなければなりません。
 
 <a name="結果"></a>
-<img src="../../docs/images/headings/performance/s06.svg" alt="結果" height="40">
+
+### 結果
 
 `report.json` には、生の計測値・中央値・倍率・辞書とプログラムのハッシュ・SDK と PC の情報が入ります。
 確定した文字列が baseline と違うと、コマンドは失敗します。時間の倍率では失敗しません (倍率は `report.json` と最後の出力で確かめます)。

@@ -1,7 +1,9 @@
 # Mozc の変換ヘルパー
 
-Meltype は全 OS で、[Mozc](https://github.com/google/mozc)
+Meltype はデスクトップ・TTY で、[Mozc](https://github.com/google/mozc)
 (Google 日本語入力のオープンソース版、BSD-3-Clause) の変換エンジンを使う小さなプログラム `meltype_mozc_helper` を別のプロセスで動かして変換します。
+
+Android では同じプロセス内の Mozc を JNI 経由で使い、ヘルパーと同じ 1 行の要求形式をコールバックで受け渡します ([Android の構成](../../android/README.md#リポジトリ構成))。
 
 | ファイル | 中身 |
 | --- | --- |
@@ -28,7 +30,7 @@ GitHub Actions では `.github/workflows/windows.yml` の `mozc` ジョブが同
 
 Linux・macOS では `native/mozc/build-mozc-helper.sh` でビルドします (macOS は Xcode が要る。`mac.yml` の Mac 版のビルドも同じスクリプト)。GitHub Releases の依存ファイルは Bazel の公式ミラー (`mirror.bazel.build`) を先に試し、なければ元の URL から取得します。取得した内容は、依存関係の定義にあるハッシュで Bazel が検証します。
 
-学習データ (Mozc が覚えた変換) は `%LOCALAPPDATA%\Meltype\mozc\` に保存されます。
+学習データは OS ごとの Meltype データフォルダーの `mozc/` に保存されます。保存先は [共通の使い方](../../docs/USAGE.md#データと学習) を参照してください。
 
 ## Mozc-UT の辞書を使う (任意)
 
