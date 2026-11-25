@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 aster-void
 
+using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text;
@@ -149,7 +150,7 @@ internal static class ImeSession
         // 日本語のままだと閉じたあとの移動のキー (WASD) が変換中の文字になる。チャットを送る・閉じる前の Enter・Esc を区切りにする
         if (game && composing && !IsComposing(state) && e is ImeEvent.KeyPressed { Key.Vk: VirtualKeys.Return or VirtualKeys.Escape }) CompositionController.SetDirect(state.Composition, true);
         TrackLine(state, e, result);
-        var snippetKeys = SnippetKeys(state, env, e, result, settings);
+        var snippetKeys = active ? SnippetKeys(state, env, e, result, settings) : [];
         // キーでアプリの文字が変わったあとの位置は、フロントが次の出来事 (caret) で知らせる
         var japanese = ShowsJapanese(state, before);
         state.ListedPredictions = result.View is { } shown && SessionResult.ListsPredictions(shown) == true;
@@ -161,7 +162,8 @@ internal static class ImeSession
             ImeOpen = !Direct(state),
             LanguageMode = active && japanese ? ImeLanguageMode.Japanese : ImeLanguageMode.Alphanumeric,
             ModeIndicatorMs = active && indicate && result.View is null ? ModeIndicatorMs : 0,
-            Capture = Capture(active, Direct(state), DirectEnglishWord(state), settings, game, ComposingControlKeys(state, env), snippetKeys),
+            Capture = Capture(active, Direct(state), DirectEnglishWord(state), settings, game,
+                active ? CompositionKeys.ComposingControlKeys(state.Composition, settings) : [], snippetKeys),
             Revision = rev,
         }, result);
     }
@@ -212,16 +214,25 @@ internal static class ImeSession
     /// 何も打っていないときにふつうはアプリに通すが、定型文に使うので受け取るキー: キャレットの前が登録した ;名前 で終わっていたら Space・Tab、
     /// 定型文を入れた直後なら Esc。キャレットの前は、この出来事の入力欄に、アプリに通させた文字を足したもの。
     /// </summary>
-    private static List<int> SnippetKeys(ImeSessionState state, ImeEnv env, ImeEvent e, SessionResult result, Settings settings)
+    private static IReadOnlyList<int> SnippetKeys(ImeSessionState state, ImeEnv env, ImeEvent e, SessionResult result, Settings settings)
     {
+        // 定型文を使えないときは、キャレットの前の文字を読んだり打った文字を足したりしない。
         if (IsComposing(state)) return [];
-        var before = Before(state, e.Field);
-        if (e is ImeEvent.KeyPressed { Key: { Ch: > 0 and < 0x10000 } key } && !result.Consumed) before += (char)key.Ch;
-        var keys = new List<int>();
-        if (SnippetUsable(state, env, before, settings) && SnippetTrigger.TypedBefore(settings.SnippetMark, before) is { } typed && env.Environment.Snippets.Get(typed[1..]) is not null)
-            keys.AddRange([VirtualKeys.Space, VirtualKeys.Tab]);
-        if (state.LastSnippet is not null) keys.Add(VirtualKeys.Escape);
-        return keys;
+        var trigger = false;
+        if (SnippetConfigurationUsable(state, env, settings))
+        {
+            var before = Before(state, e.Field);
+            if (e is ImeEvent.KeyPressed { Key: { Ch: > 0 and < 0x10000 } key } && !result.Consumed) before += (char)key.Ch;
+            trigger = before is not null && SnippetTrigger.TypedBefore(settings.SnippetMark, before) is { } typed && env.Environment.Snippets.Get(typed[1..]) is not null;
+        }
+        var undo = state.LastSnippet is not null;
+        return (trigger, undo) switch
+        {
+            (true, true) => [VirtualKeys.Space, VirtualKeys.Tab, VirtualKeys.Escape],
+            (true, false) => [VirtualKeys.Space, VirtualKeys.Tab],
+            (false, true) => [VirtualKeys.Escape],
+            _ => [],
+        };
     }
 
     /// <summary>
@@ -435,7 +446,10 @@ internal static class ImeSession
     }
 
     private static bool SnippetUsable(ImeSessionState state, ImeEnv env, [NotNullWhen(true)] string? before, Settings settings) =>
-        before is not null && CanDeleteSurrounding(state) && settings.SnippetMark is [_] && settings.InputStyle != InputStyle.Kana && env.Environment.Snippets.Count > 0;
+        before is not null && SnippetConfigurationUsable(state, env, settings);
+
+    private static bool SnippetConfigurationUsable(ImeSessionState state, ImeEnv env, Settings settings) =>
+        CanDeleteSurrounding(state) && settings.SnippetMark is [_] && settings.InputStyle != InputStyle.Kana && env.Environment.Snippets.Count > 0;
 
     /// <summary>文字を入力するキーの仮想キーコード。特別な扱いのない文字 (記号など) は 0x07 (本体は文字だけを見る)。</summary>
     private static int VirtualKeyOf(int ch) => ch switch
@@ -522,38 +536,92 @@ internal static class ImeSession
         (key.Shift ? ShortcutModifiers.Shift : 0) | (key.Ctrl ? ShortcutModifiers.Control : 0) |
         (key.Alt ? ShortcutModifiers.Alt : 0) | (key.Command ? ShortcutModifiers.Win : 0);
 
-    private static ImeCapture Capture(bool active, bool direct, bool directEnglishWord, Settings settings, bool game, IEnumerable<int> composingControlKeys,
+    private static ImeCapture Capture(bool active, bool direct, bool directEnglishWord, Settings settings, bool game, IReadOnlyList<int> composingControlKeys,
         IReadOnlyList<int> snippetKeys)
     {
-        if (!active) return new ImeCapture();
-        // 修飾キー単独の割り当ては使えない (設定の読み込みで外す)。左右の Alt の単独押しは AltKeys
-        var keys = settings.EffectiveToggleShortcuts.Where(shortcut => !ToggleShortcut.IsModifier(shortcut.Key))
-            .Select(shortcut => new ImeShortcut(shortcut.Key, (int)shortcut.Modifiers))
-            .Concat(ModeKeys.Select(key => new ImeShortcut(key, 0)))
-            .ToList();
+        if (!active) return InactiveCapture;
         // 英数でもローマ字を見分ける (英語の語を打っている途中は、続きの英字をそのまま通す)
         // ゲームの英数では判定しない: 英字を受け取って送り直すと、移動のキーが一回目に反応しない・離しても押したままになる (#1447)
         var detects = settings.DirectModeAutoDetect && settings.AutoDetection && !game;
-        if (!direct || detects) keys.Add(new ImeShortcut(VirtualKeys.Space, (int)ShortcutModifiers.Shift));
-        if (!direct && settings.SpaceWidth == SpaceWidth.FullWidth) keys.Add(new ImeShortcut(VirtualKeys.Space, 0));
-        keys.AddRange(snippetKeys.Select(key => new ImeShortcut(key, 0)));
+        var shiftSpace = !direct || detects;
+        var space = !direct && settings.SpaceWidth == SpaceWidth.FullWidth;
+        IReadOnlyList<ToggleShortcut> toggles = settings.ToggleShortcuts is { } configured ? configured : DefaultToggleShortcuts;
+        var shortcuts = snippetKeys.Count == 0 && HasDefaultToggleShortcuts(toggles)
+            ? space ? DefaultFullWidthSpaceCaptureKeys : shiftSpace ? DefaultShiftSpaceCaptureKeys : DefaultCaptureKeys
+            : BuildCaptureShortcuts(toggles, shiftSpace, space, snippetKeys);
         return new ImeCapture
         {
             PrintableAscii = !direct || detects,
             PrintableAsciiExcept = direct && directEnglishWord ? EnglishWordCharacters : "",
-            Shortcuts = keys.Distinct().ToList(),
-            CtrlKeysWhileComposing = composingControlKeys.Select(key => new ImeShortcut(key, (int)ShortcutModifiers.Control)).ToList(),
+            Shortcuts = shortcuts,
+            CtrlKeysWhileComposing = CtrlKeysWhileComposing(composingControlKeys),
             KeyReleases = settings.InputStyle == InputStyle.Kana && settings.KanaLayout is KanaLayout.Nicola or KanaLayout.NakayubiNicola or KanaLayout.Tron,
             AltKeys = settings.AltKeysSwitchKeyboard,
         };
     }
 
+    private static bool HasDefaultToggleShortcuts(IReadOnlyList<ToggleShortcut> shortcuts)
+    {
+        if (ReferenceEquals(shortcuts, DefaultToggleShortcuts)) return true;
+        if (shortcuts.Count != DefaultToggleShortcuts.Count) return false;
+        for (var i = 0; i < shortcuts.Count; i++)
+            if (shortcuts[i] != DefaultToggleShortcuts[i]) return false;
+        return true;
+    }
+
+    /// <summary>同じキーの割り当てを 1 つにする (Distinct)。数は少ないので、順に調べて初めて出たものだけを残す。</summary>
+    private static ReadOnlyCollection<ImeShortcut> BuildCaptureShortcuts(IReadOnlyList<ToggleShortcut> toggleShortcuts, bool shiftSpace, bool space, IReadOnlyList<int> snippetKeys)
+    {
+        var shortcuts = new List<ImeShortcut>(toggleShortcuts.Count + ModeCaptureKeys.Length + snippetKeys.Count + 2);
+        // 修飾キー単独は割り当てに使えない。左右 Alt の単独押しは AltKeys で知らせる。
+        foreach (var shortcut in toggleShortcuts)
+            if (!ToggleShortcut.IsModifier(shortcut.Key)) Add(new(shortcut.Key, (int)shortcut.Modifiers));
+        foreach (var key in ModeCaptureKeys) Add(key);
+        if (shiftSpace) Add(ShiftSpaceKey);
+        if (space) Add(SpaceKey);
+        foreach (var key in snippetKeys) Add(new(key, 0));
+        return shortcuts.AsReadOnly();
+
+        void Add(ImeShortcut shortcut)
+        {
+            if (!shortcuts.Contains(shortcut)) shortcuts.Add(shortcut);
+        }
+    }
+
+    private static IReadOnlyList<ImeShortcut> CtrlKeysWhileComposing(IReadOnlyList<int> keys)
+    {
+        if (keys.Count == 0) return [];
+        if (ReferenceEquals(keys, CompositionKeys.StandardControlLetterKeys)) return StandardCtrlKeys;
+        if (ReferenceEquals(keys, CompositionKeys.AtokConvertingControlLetterKeys)) return AtokConvertingCtrlKeys;
+        if (ReferenceEquals(keys, CompositionKeys.MacControlLetterKeys)) return MacCtrlKeys;
+        return CreateCtrlShortcuts(keys);
+    }
+
+    private static ReadOnlyCollection<ImeShortcut> CreateCtrlShortcuts(IReadOnlyList<int> keys)
+    {
+        var shortcuts = new ImeShortcut[keys.Count];
+        for (var i = 0; i < keys.Count; i++) shortcuts[i] = new(keys[i], (int)ShortcutModifiers.Control);
+        return Array.AsReadOnly(shortcuts);
+    }
+
     /// <summary>英語の語の続きとして、英数のままアプリに通す文字。</summary>
     private const string EnglishWordCharacters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@_";
 
-    /// <summary>設定によらず受け取る、モードを切り替えるキー (半角/全角 の 3 つのキーコード・英数・かな・変換・無変換)。</summary>
-    private static readonly int[] ModeKeys =
-        [ToggleShortcut.Hankaku, VirtualKeys.OemAuto, VirtualKeys.OemEnlw, VirtualKeys.OemAttn, VirtualKeys.Kana, VirtualKeys.Convert, VirtualKeys.NonConvert];
+    // ToggleShortcut・ImeShortcut は不変なので、決まったキーの組は 1 つだけ作って使い回す。中身も書き換えず、IReadOnlyList として返す。
+    private static readonly ImeCapture InactiveCapture = new();
+    private static readonly ReadOnlyCollection<ToggleShortcut> DefaultToggleShortcuts = ToggleShortcut.Defaults().AsReadOnly();
+    // 設定によらず受け取る、モードを切り替えるキー (半角/全角の 3 つのキーコード・英数・かな・変換・無変換)。
+    private static readonly ImeShortcut[] ModeCaptureKeys =
+        [new(ToggleShortcut.Hankaku, 0), new(VirtualKeys.OemAuto, 0), new(VirtualKeys.OemEnlw, 0), new(VirtualKeys.OemAttn, 0),
+         new(VirtualKeys.Kana, 0), new(VirtualKeys.Convert, 0), new(VirtualKeys.NonConvert, 0)];
+    private static readonly ImeShortcut ShiftSpaceKey = new(VirtualKeys.Space, (int)ShortcutModifiers.Shift);
+    private static readonly ImeShortcut SpaceKey = new(VirtualKeys.Space, 0);
+    private static readonly IReadOnlyList<ImeShortcut> DefaultCaptureKeys = BuildCaptureShortcuts(DefaultToggleShortcuts, false, false, []);
+    private static readonly IReadOnlyList<ImeShortcut> DefaultShiftSpaceCaptureKeys = Array.AsReadOnly([.. DefaultCaptureKeys, ShiftSpaceKey]);
+    private static readonly IReadOnlyList<ImeShortcut> DefaultFullWidthSpaceCaptureKeys = Array.AsReadOnly([.. DefaultShiftSpaceCaptureKeys, SpaceKey]);
+    private static readonly IReadOnlyList<ImeShortcut> StandardCtrlKeys = CreateCtrlShortcuts(CompositionKeys.StandardControlLetterKeys);
+    private static readonly IReadOnlyList<ImeShortcut> AtokConvertingCtrlKeys = CreateCtrlShortcuts(CompositionKeys.AtokConvertingControlLetterKeys);
+    private static readonly IReadOnlyList<ImeShortcut> MacCtrlKeys = CreateCtrlShortcuts(CompositionKeys.MacControlLetterKeys);
 
     private static SessionResult Pass => new(false, [], null);
 
@@ -681,9 +749,6 @@ internal static class ImeSession
 
     /// <summary>変換して候補を選んでいるか。</summary>
     public static bool IsConverting(ImeSessionState state) => CompositionController.IsConverting(state.Composition);
-
-    /// <summary>入力中に Ctrl と一緒に押すと、変換ボックスで使う英字のキー。</summary>
-    public static IReadOnlyList<int> ComposingControlKeys(ImeSessionState state, ImeEnv env) => CompositionController.ComposingControlKeys(state.Composition, Env(state, env));
 
     /// <summary>
     /// キーを 1 つ処理する。before / after は入力欄のキャレットの前後の文字列 (分かれば。英語とも日本語とも読める語の判定と変換の文脈に使う)。

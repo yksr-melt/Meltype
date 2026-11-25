@@ -155,7 +155,7 @@ internal static class CompositionPresentation
     {
         if (env.Services.Predictor is not { } predictor || !env.Settings.PredictiveCandidates || input.Text.Mode != DisplayMode.Auto) return [];
         var raw = CompositionText.Raw(input.Text);
-        IEnumerable<string> PredictEnglish() => predictor.PredictEnglish(raw).Select(w => CompositionText.AutoCanonical(env, w) ?? w);
+        IEnumerable<string> PredictEnglish() => Predictor.PredictEnglish(raw).Select(w => CompositionText.AutoCanonical(env, w) ?? w);
         if (CompositionText.IsAlphanumeric(input.Text, env))
         {
             // 英単語 1 語の打ちかけ (decis → decisions)
@@ -179,7 +179,7 @@ internal static class CompositionPresentation
                     heads.Length == 0 ? words : words.Where(w => heads.Any(h => w.StartsWith(h, StringComparison.Ordinal)));
                 Add(Connected(predictor.PredictJapanese(reading)), before, reading);
                 // 英字で書く社名・サービス名 (しゃお → Xiaomi)。日本語の予測の後ろに足す
-                if (env.Settings.EnglishNamePredictions) Add(Connected(predictor.PredictEnglishNames(reading)), before, reading);
+                if (env.Settings.EnglishNamePredictions) Add(Connected(Predictor.PredictEnglishNames(reading)), before, reading);
             }
         }
         // 長い英単語は、打ち終わるまでローマ字として見えていることがある (decis → でしs)。英字だけを 4 文字以上打っていれば英単語の続きも出す

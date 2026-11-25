@@ -159,11 +159,15 @@ internal sealed partial class CompositionDetector
         var unknown = new int[length + 1];
         // 入力途中の子音は、入力中も Enter のときと同じ読みで重みを付ける (表示と確定の区切りを揃える)
         var finalPending = _romaji.ConvertLenient(pending.ToLowerInvariant(), final: true);
+        var unreadablePending = finalPending.Any(char.IsAsciiLetter);
+        // 入力の末尾まで届く日本語の候補は、どれも同じ打ちかけを読む (Shift で打った大文字は日本語にしない)
+        var pendingKana = pending.Length > 0 && !unreadablePending && !pending.AsSpan().ContainsAnyInRange('A', 'Z') &&
+            finalPending.All(KanaChars.IsHiraganaOrLongMark) ? finalPending : null;
         for (var p = 0; p < length; p++)
         {
             var c = text[p];
             var unreadable = char.IsAsciiLetterUpper(c) ||
-                (p < unitsEnd ? unitAt[p] is var k and >= 0 && prepared.Unreadable[k + 1] > prepared.Unreadable[k] : finalPending.Any(char.IsAsciiLetter));
+                (p < unitsEnd ? unitAt[p] is var k and >= 0 && prepared.Unreadable[k + 1] > prepared.Unreadable[k] : unreadablePending);
             unknown[p + 1] = unknown[p] + (char.IsAsciiLetter(c) && unreadable ? 1 : 0);
         }
 
@@ -299,7 +303,7 @@ internal sealed partial class CompositionDetector
         for (var p = 0; p < length; p++)
         {
             if (!IsBoundary(p)) continue;
-            var japanese = JapaneseEdges(prepared, units, text, p, unitOf, unitsEnd, pending, kanaInput);
+            var japanese = JapaneseEdges(prepared, units, text, p, unitOf, unitsEnd, pending, pendingKana, kanaInput);
             var english = EnglishEdges(prepared, learning, text, p, unknown, kanaInput, manual, IsBoundary, precedingEnglish == true);
             var unit = p < unitsEnd ? unitAt[p] : -1;
             // 記号・数字・空白・z の記号 (zh = ←) の単位: 言語を切り替えない
@@ -503,7 +507,7 @@ internal sealed partial class CompositionDetector
     /// 日本語の語は単位の途中で終わってもよい (単位の頭をローマ字として読み直す)。大文字を含む単位は日本語にしない (かな入力を除く)。
     /// </summary>
     private List<(LatticeEdge, double)> JapaneseEdges(Prepared prepared, IReadOnlyList<CompositionUnit> units, string text, int start, int[] unitOf, int unitsEnd, string pending,
-        bool kanaInput)
+        string? pendingKana, bool kanaInput)
     {
         var edges = new List<(LatticeEdge, double)>();
         var length = text.Length;
@@ -540,8 +544,14 @@ internal sealed partial class CompositionDetector
         if (start >= unitsEnd)
         {
             // Shift を押して打った子音 (W) は日本語にしない
-            if (text[start..].Any(char.IsAsciiLetterUpper)) return edges;
-            if (_romaji.ConvertLenient(text[start..].ToLowerInvariant(), final: true) is var tail && tail.All(KanaChars.IsHiraganaOrLongMark)) Add(length, tail);
+            if (text.AsSpan(start).ContainsAnyInRange('A', 'Z')) return edges;
+            var tail = pendingKana;
+            if (start > unitsEnd)
+            {
+                var suffix = _romaji.ConvertLenient(text[start..].ToLowerInvariant(), final: true);
+                tail = suffix.All(KanaChars.IsHiraganaOrLongMark) ? suffix : null;
+            }
+            if (tail is not null) Add(length, tail);
             else LetterEdge(start);
             return edges;
         }
@@ -610,16 +620,24 @@ internal sealed partial class CompositionDetector
                     edges.Add((new LatticeEdge(start, length, false, kana, true, true), JapaneseWordCost));
                 return;
             }
-            if (pending.Any(char.IsAsciiLetterUpper)) return;
-            if (_romaji.ConvertLenient(pending.ToLowerInvariant(), final: true) is var tail && tail.All(KanaChars.IsHiraganaOrLongMark)) Add(length, kana + tail);
+            if (pendingKana is { } tail) Add(length, kana + tail);
             else if (IsPendingSuruForm(kana, pending)) edges.Add((new LatticeEdge(start, length, false, kana, true, true), JapaneseWordCost));
         }
     }
 
     /// <summary>kana の後ろに入力途中の子音 (す|r・し|t) を打っている所で、母音を足すと する の活用になるか。</summary>
-    private bool IsPendingSuruForm(string kana, string pending) =>
-        pending.All(char.IsAsciiLetterLower) &&
-        "aiueo".Any(vowel => _romaji.ConvertLenient(pending + vowel, final: true) is var next && CompositionDetector.IsSuruForm(kana + next));
+    private bool IsPendingSuruForm(string kana, string pending)
+    {
+        if (pending.AsSpan().ContainsAnyExceptInRange('a', 'z')) return false;
+        // 活用の頭と一致しない読みは、後ろに母音を足しても する の活用にならない
+        foreach (var form in SuruForms)
+        {
+            var commonLength = Math.Min(kana.Length, form.Length);
+            if (!kana.AsSpan(0, commonLength).SequenceEqual(form.AsSpan(0, commonLength))) continue;
+            return "aiueo".Any(vowel => _romaji.ConvertLenient(pending + vowel, final: true) is var next && IsSuruForm(kana + next));
+        }
+        return false;
+    }
 
     /// <summary>
     /// start から始まる、綴りで決まる候補: 英語 (知っている英単語・知らない英字・短縮形) と、

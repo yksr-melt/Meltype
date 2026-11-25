@@ -3,6 +3,7 @@
 // Copyright (C) 2026 aster-void
 // Copyright (C) 2026 yksr-melt
 
+using System.Collections.ObjectModel;
 using Meltype.Config;
 using Meltype.Detection;
 using Meltype.Input;
@@ -831,21 +832,26 @@ internal static class CompositionKeys
         return ControlKeyBindingParser.Parse(text).TryGetValue(vk, out var key) ? key : null;
     }
 
+    // 打鍵ごとに作り直さないよう、入力処理と同じ割り当てから既定の一覧を先に作る。
+    internal static IReadOnlyList<int> StandardControlLetterKeys { get; } = DefaultControlLetters();
+    internal static IReadOnlyList<int> AtokConvertingControlLetterKeys { get; } = DefaultControlLetters(atokConverting: true);
+    internal static IReadOnlyList<int> MacControlLetterKeys { get; } = DefaultControlLetters(mac: true);
+
+    private static ReadOnlyCollection<int> DefaultControlLetters(bool mac = false, bool atokConverting = false) =>
+        Array.AsReadOnly(Enumerable.Range('A', 26).Where(vk => ControlShortcut(vk) is not null ||
+            mac && MacControlShortcut(vk) is not null || atokConverting && vk is 'K' or 'L').ToArray());
+
     /// <summary>
     /// 入力中に Ctrl と一緒に押すと、変換ボックスで使う英字のキー (設定「Control キーの割り当て」による。HandleKey の Ctrl の処理と同じ順に見る)。
     /// 入力していなければ空。ほかの Ctrl のキーは、確定してアプリへ送る。
     /// </summary>
-    internal static IReadOnlyList<int> ComposingControlKeys(CompositionState state, CompositionEnv env)
+    internal static IReadOnlyList<int> ComposingControlKeys(CompositionState state, Settings settings)
     {
         if (state.Scene is not CompositionScene.WithInput) return [];
-        var keys = new HashSet<int>();
-        if (CompositionLifecycle.IsConverting(state) && env.Settings.ControlKeys == Config.ControlKeyLayout.Atok) keys.UnionWith(['K', 'L']);
-        if (!string.IsNullOrWhiteSpace(env.Settings.ControlKeyBindings)) keys.UnionWith(ControlKeyBindingParser.Parse(env.Settings.ControlKeyBindings).Keys);
-        for (var vk = 'A'; vk <= 'Z'; vk++)
-        {
-            if ((env.Settings.ControlKeys == Config.ControlKeyLayout.Mac ? MacControlShortcut(vk) : null) is not null || ControlShortcut(vk) is not null) keys.Add(vk);
-        }
-        return [.. keys.Order()];
+        var fixedKeys = settings.ControlKeys == Config.ControlKeyLayout.Mac ? MacControlLetterKeys :
+            settings.ControlKeys == Config.ControlKeyLayout.Atok && CompositionLifecycle.IsConverting(state) ? AtokConvertingControlLetterKeys : StandardControlLetterKeys;
+        if (string.IsNullOrWhiteSpace(settings.ControlKeyBindings)) return fixedKeys;
+        return [.. fixedKeys.Union(ControlKeyBindingParser.Parse(settings.ControlKeyBindings).Keys).Order()];
     }
 
     /// <summary>入力中の Ctrl+英字で、ほかのキーと同じ働きをするもの (U ひらがな / I カタカナ / O 半角英数 / P 全角英数 / H BackSpace)。</summary>
