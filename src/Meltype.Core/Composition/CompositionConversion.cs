@@ -256,24 +256,31 @@ internal static class CompositionConversion
     internal static void SplitWholeSentence(CompositionState state)
     {
         if (state.Clauses is not [{ Alternatives: { } alternatives } whole]) return;
-        if (alternatives.TryGetValue(whole.Text, out var clauses))
-        {
-            state.Conversion!.Clauses = clauses;
-        }
-        else if (alternatives.Values.FirstOrDefault(c => c is [var only] && only.Candidates.Contains(whole.Text)) is [var single])
-        {
-            single.Index = single.Candidates.IndexOf(whole.Text);
-            single.Changed = whole.Changed;
-            state.Conversion!.Clauses = [single];
-        }
-        else
+        if (SelectedAlternative(whole) is not { } clauses)
         {
             whole.NotLearned.Add(whole.Text);
             return;
         }
+        if (!alternatives.ContainsKey(whole.Text) && clauses is [var single])
+        {
+            single.Index = single.Candidates.IndexOf(whole.Text);
+            single.Changed = whole.Changed;
+        }
+        state.Conversion!.Clauses = clauses;
         state.SelectedClause = 0;
         state.Conversion!.Edited = true;
     }
+
+    /// <summary>
+    /// 文全体の文節で選んでいる案の文節。文節が 1 つの案の候補を選んでいれば、その文節。どの案にも無い文なら null。
+    /// </summary>
+    private static List<Clause>? SelectedAlternative(Clause whole) =>
+        whole.Alternatives!.TryGetValue(whole.Text, out var clauses) ? clauses
+        : whole.Alternatives.Values.FirstOrDefault(c => c is [var only] && only.Candidates.Contains(whole.Text));
+
+    /// <summary>文節の読み (英語の文節は打った英字)。文全体の文節は、選んでいる案の読み。</summary>
+    internal static string Reading(Clause clause) =>
+        clause.Alternatives is not null && SelectedAlternative(clause) is { } selected ? string.Concat(selected.Select(c => c.Reading)) : clause.Reading;
 
     /// <summary>入力の全体に一致したユーティリティ変換の候補。一致しなければ null。</summary>
     private static UtilityCandidates? Utilities(CompositionState state, CompositionEnv env, IReadOnlyList<CompositionSegment> segments)
@@ -569,7 +576,7 @@ internal static class CompositionConversion
     /// </summary>
     private static List<Clause> ConvertWithEngine(CompositionState state, CompositionEnv env, string kana, string before, bool zenzai, IReadOnlyList<ConversionClause>? engine = null)
     {
-        var parts = engine ?? Engine(env, kana, before, zenzai) ?? [new ConversionClause(kana, kana)];
+        var parts = engine ?? Engine(env, kana, before, zenzai) ?? [.. SplitAtMarks(new ConversionClause(kana, kana))];
         // 読み全体が補助辞書・絵文字の辞書の語 (かんがえるかお → 🤔) なら、文節に分けずに 1 つの文節にして候補を出す。
         if (parts.Count > 1 && env.Services.Candidates?.Contains(kana) == true)
         {
@@ -743,19 +750,18 @@ internal static class CompositionConversion
         var standalone = inContext is null ? Convert(env, reading, before, zenzai) : Standalone(env, reading);
         var katakana = CompositionText.ToKatakana(reading);
         // ユーザー辞書に登録した単語は、文の中での変換結果の次に出す (文節の区切りを変えて読みが一致したときなど)。
-        return DistinctShown(state, env, [inContext, .. env.Services.UserDictionary?.Lookup(reading) ?? [], standalone, .. env.Services.Candidates?.LookupWords(reading) ?? [],
+        return DistinctShown(env, reading, english: false, [inContext, .. env.Services.UserDictionary?.Lookup(reading) ?? [], standalone, .. env.Services.Candidates?.LookupWords(reading) ?? [],
             reading, katakana, CompositionText.ToHalfWidthKatakana(katakana), .. env.Services.Candidates?.LookupDomain(reading) ?? [], .. EmojiBlock(state,env, reading)]);
     }
 
     /// <summary>
-    /// 入力欄に出る文字 (設定の句読点にした文字) が同じ候補は、最初の 1 つだけ残す。「，．」の設定では、変換エンジンが返す 、 と ， が同じ ， になる。
-    /// 変換エンジンの候補が入る所 (この関数を呼ぶ所) だけで重複を消す。区間の種類を出口まで渡せば要らなくなる (#1735)。
+    /// 入力欄に出る文字 (<see cref="CompositionOutput.Render"/>) が同じ候補は、最初の 1 つだけ残す。「，．」の設定では、打った 、 の候補と、変換エンジンが返す ， の候補が同じ ， になる。
+    /// 変換エンジンの候補が入る所 (この関数を呼ぶ所) だけで重複を消す。
     /// </summary>
-    private static List<string> DistinctShown(CompositionState state, CompositionEnv env, IEnumerable<string?> candidates)
+    private static List<string> DistinctShown(CompositionEnv env, string reading, bool english, IEnumerable<string?> candidates)
     {
-        var style = env.Settings.Punctuation;
         var shown = new HashSet<string>(StringComparer.Ordinal);
-        return [.. candidates.OfType<string>().Where(c => c.Length > 0 && shown.Add(CompositionOutput.ToSetting(style, c)))];
+        return [.. candidates.OfType<string>().Where(c => c.Length > 0 && shown.Add(CompositionOutput.Render(env, english ? ComposedText.English(c) : ComposedText.Converted(reading, c))))];
     }
 
     /// <summary>絵文字・顔文字の候補を、最後に並べる順 (逆順: いちばんよく使うものが最後) で。</summary>
@@ -861,7 +867,7 @@ internal static class CompositionConversion
         var anchor = clause.IsEnglish ? clause.Candidates.IndexOf(reading) : Math.Max(DictionaryWordsEnd(state, env, clause, reading), clause.Leading - 1);
         if (anchor < 0) return;
         var current = clause.Text;
-        var merged = DistinctShown(state, env, [.. clause.Candidates.Take(anchor + 1), .. more(reading, env.Deadline).Select(c => NormalizeHalfWidth(c, reading)), .. clause.Candidates.Skip(anchor + 1)]);
+        var merged = DistinctShown(env, clause.Reading, clause.IsEnglish, [.. clause.Candidates.Take(anchor + 1), .. more(reading, env.Deadline).Select(c => NormalizeHalfWidth(c, reading)), .. clause.Candidates.Skip(anchor + 1)]);
         clause.Candidates = merged;
         clause.Index = Math.Max(0, merged.IndexOf(current));
     }
@@ -882,6 +888,8 @@ internal static class CompositionConversion
         var next = state.SelectedClause + 1 < state.Clauses.Count ? state.Clauses[state.SelectedClause + 1] : null;
         // 区切りを動かせないときは、英語の文節を読み直さずにそのままにする
         if (current.IsEnglish && !CanReadAsJapanese(current)) return;
+        // 打った句読点は、いつも句読点だけの文節 (SplitAtMarks) のままにする
+        if (IsMarks(current) || delta > 0 && next is not null && IsMarks(next)) return;
         if (delta > 0 && (next is null || next.IsEnglish && !CanReadAsJapanese(next))) return;
         if (delta < 0 && (current.IsEnglish ? current.Kana! : current.Reading).Length <= 1) return;
 
@@ -890,6 +898,7 @@ internal static class CompositionConversion
             ReadAsJapanese(state, env, state.SelectedClause);
             current = state.Clauses[state.SelectedClause];
         }
+        if (delta < 0 && next is not null && IsMarks(next)) next = null;
         if (next is { IsEnglish: true })
         {
             if (delta < 0) next = null;
@@ -948,6 +957,8 @@ internal static class CompositionConversion
         return true;
     }
 
+    private static bool IsMarks(Clause clause) => !clause.IsEnglish && clause.Reading.All(ComposedText.IsMark);
+
     private static bool CanReadAsJapanese(Clause clause) => clause is { IsEnglish: true, Kana: { } kana } && kana.Any(IsKana);
 
     /// <summary>index の文節を、読みだけで変換し直す。文脈は、変換ボックスの中でその文節より前にある文字まで。</summary>
@@ -966,8 +977,24 @@ internal static class CompositionConversion
     }
 
     /// <summary>変換エンジンで文節に区切って変換する (待つのは env.Deadline まで)。zenzai は Zenzai にも頼むか (<see cref="ConversionRequest.Zenzai"/>)。</summary>
-    private static IReadOnlyList<ConversionClause>? Engine(CompositionEnv env, string kana, string? before, bool zenzai) =>
-        env.Converter.Convert(new ConversionRequest(kana, string.IsNullOrEmpty(before) ? null : before) { Zenzai = zenzai, Deadline = env.Deadline });
+    private static List<ConversionClause>? Engine(CompositionEnv env, string kana, string? before, bool zenzai) =>
+        env.Converter.Convert(new ConversionRequest(kana, string.IsNullOrEmpty(before) ? null : before) { Zenzai = zenzai, Deadline = env.Deadline })?.SelectMany(SplitAtMarks).ToList();
+
+    /// <summary>
+    /// 変換エンジンの文節を、打った句読点 (読みの 、。) だけの文節とほかの文節に分ける。Mozc は自分で分けるので、分けるのは読み全体で 1 つの文節の Zenzai の答えなど。
+    /// 読みと文字の句読点が合わない文節・ユーザー辞書の語 (読みに 、。 を入れて登録した語) は分けない。
+    /// </summary>
+    internal static IEnumerable<ConversionClause> SplitAtMarks(ConversionClause clause)
+    {
+        if (clause.UserWord || !clause.Reading.Any(ComposedText.IsMark)) return [clause];
+        var (readings, texts) = (Runs(clause.Reading), Runs(clause.Text));
+        return readings.Where(Marks).SequenceEqual(texts.Where(Marks)) && readings.Select(Marks).SequenceEqual(texts.Select(Marks))
+            ? readings.Zip(texts, (reading, text) => clause with { Reading = reading, Text = text })
+            : [clause];
+
+        static List<string> Runs(string text) => [.. System.Text.RegularExpressions.Regex.Matches(text, "[、。]+|[^、。]+").Select(m => m.Value)];
+        static bool Marks(string run) => ComposedText.IsMark(run[0]);
+    }
 
     /// <summary>読み全体を変換した文字列。変換できなければかなのまま。</summary>
     private static string Convert(CompositionEnv env, string kana, string? before, bool zenzai) =>

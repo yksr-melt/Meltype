@@ -2,6 +2,7 @@
 // Copyright (C) 2026 aster-void
 // Copyright (C) 2026 yksr-melt
 
+using Meltype.Config;
 using Meltype.Dictionary;
 using Meltype.Learning;
 using Meltype.Libraries.Chars;
@@ -100,9 +101,11 @@ internal static class CompositionPresentation
         }
     }
 
-    /// <summary>文節 clause の候補 candidate の文字。</summary>
+    /// <summary>文節 clause の候補 candidate の文字。文全体の文節の案は、確定と同じく案の文節から作る (<see cref="CompositionConversion.SplitWholeSentence"/>)。</summary>
     internal static ComposedText Candidate(Clause clause, string candidate) =>
-        clause.IsEnglish ? ComposedText.English(candidate) : ComposedText.Converted(clause.Reading, candidate);
+        clause.Alternatives?.TryGetValue(candidate, out var clauses) == true ? Composed(clauses)
+        : clause.IsEnglish ? ComposedText.English(candidate)
+        : ComposedText.Converted(clause.Reading, candidate);
 
     /// <summary>書き間違いの修正の案内 (もしかして)。</summary>
     private static ComposedText? Suggestion(string? suggestion) => suggestion is null ? null : ComposedText.Of(SpanKind.Japanese, suggestion);
@@ -117,8 +120,19 @@ internal static class CompositionPresentation
         return candidates.Count > 1 ? candidates : null;
     }
 
-    /// <summary>変換ボックスに出す、打ったキー (設定が ON のときだけ)。</summary>
-    private static string? TypedKeys(CompositionState state, CompositionEnv env) => env.Settings.ShowTypedKeys && CompositionText.Raw(state.Text) is { Length: > 0 } raw ? raw : null;
+    /// <summary>変換ボックスに出す、打ったもの (設定「打ったキーを表示」)。漢字変換前は、変換中なら文節の読み、変換していなければ確定される形 (<see cref="CurrentComposed"/>) を漢字にせずに出す。</summary>
+    private static string? TypedKeys(CompositionState state, CompositionEnv env)
+    {
+        if (CompositionText.IsEmpty(state.Text)) return null;
+        return env.Settings.TypedKeys switch
+        {
+            TypedKeysStyle.Keys => CompositionText.Raw(state.Text),
+            TypedKeysStyle.Kana when CompositionLifecycle.IsConverting(state) && state.Clauses.Count > 0 => string.Concat(state.Clauses.Select(CompositionConversion.Reading)),
+            TypedKeysStyle.Kana => CompositionText.AsCommitted(state.Text, env, text => CompositionText.Compose(text, env, final: true)).Text,
+            TypedKeysStyle.Off => null,
+            var style => throw new InvalidOperationException($"不明な TypedKeysStyle: {style}"),
+        };
+    }
 
     /// <summary>
     /// 予測変換の候補を、今の打ちかけから作り直す。打った内容が変わったら選んでいた候補は戻す。
@@ -221,7 +235,7 @@ internal static class CompositionPresentation
     /// <summary>文節の文字。</summary>
     internal static ComposedText Composed(IEnumerable<Clause> clauses) => ComposedText.Concat(clauses.Select(c => Candidate(c, c.Text)));
 
-    /// <summary>予測の候補を、前の文節 (見えている文字) とつなげた文字。</summary>
+    /// <summary>予測の候補を、前の文節 (見えている文字) とつなげた文字。どちらも打った句読点は無い (予測はひらがなだけの読みで出し、語句は確定した文字のまま覚えている)。</summary>
     internal static ComposedText PredictionText(Prediction prediction) =>
-        ComposedText.Kana(prediction.Before) + ComposedText.Of(prediction.Text.All(c => c < 0x80) ? SpanKind.English : SpanKind.Japanese, prediction.Text);
+        ComposedText.Of(SpanKind.Japanese, prediction.Before) + ComposedText.Of(prediction.Text.All(c => c < 0x80) ? SpanKind.English : SpanKind.Japanese, prediction.Text);
 }

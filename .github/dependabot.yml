@@ -7,6 +7,11 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      # 版を揃えて上げる。別々の PR だと隣り合う行を変えてコンフリクトする
+      avalonia:
+        patterns:
+          - "Avalonia*"
 
   # GitHub Actions
   - package-ecosystem: "github-actions"
@@ -14,6 +19,10 @@ updates:
     schedule:
       interval: "weekly"
     groups:
-      codeql-action:
+      # マージキューは 1 PR ずつ検査するので、PR の数を減らす
+      actions:
         patterns:
-          - "github/codeql-action/*"
+          - "*"
+        # 署名の job は PR では動かず、マージ後に手動で signpath-test を実行して確かめるので、単独の PR にする
+        exclude-patterns:
+          - "signpath/*"

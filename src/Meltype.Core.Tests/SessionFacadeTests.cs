@@ -723,7 +723,7 @@ internal static class SessionFacadeTests
     [Test]
     public static void Json_HasTypedKeys_WhenSettingIsOn()
     {
-        var session = new TestSession(() => new Settings { ShowTypedKeys = true });
+        var session = new TestSession(() => new Settings { TypedKeys = TypedKeysStyle.Keys });
         var json = Type(session, "kyou")[^1].ToJson();
         Assert.True(json.Contains("\"typedKeys\":\"kyou\""), json);
     }
@@ -837,7 +837,7 @@ internal static class SessionFacadeTests
         session.CodeInput = true;
         session.Toggle("echo ");
         Assert.True(!session.CodeEnglishAt("echo "), "明示的な日本語指定を有効にする");
-        session.Send(Ime.ImeEventType.CaretMoved, caret: new Ime.ImeCaret { Moved = true, PassedKey = 0, FocusEntered = true });
+        session.Send(new Ime.ImeEvent.CaretMoved(new Ime.ImeCaret { Moved = true, PassedKey = 0, FocusEntered = true }));
         Assert.True(session.CodeEnglishAt("echo "), "再有効化で明示的な日本語指定を初期化する");
         Assert.True(!Type(session, "k", "echo ").Single().Consumed, "コードの行に戻る");
     }
