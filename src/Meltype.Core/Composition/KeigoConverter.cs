@@ -267,11 +267,43 @@ internal static class KeigoConverter
         ["くれます"] = "くださいます",
         ["くれた"] = "くださいました",
         ["くれました"] = "くださいました",
+        ["かくにんする"] = "ご確認になります",
+        ["かくにんします"] = "ご確認になります",
+        ["かくにんした"] = "ご確認になりました",
+        ["かくにんしました"] = "ご確認になりました",
+        ["おくる"] = "お送りになります",
+        ["おくります"] = "お送りになります",
+        ["おくった"] = "お送りになりました",
+        ["おくりました"] = "お送りになりました",
+        ["れんらくする"] = "ご連絡になります",
+        ["れんらくします"] = "ご連絡になります",
+        ["れんらくした"] = "ご連絡になりました",
+        ["れんらくしました"] = "ご連絡になりました",
+        ["きく"] = "お聞きになります",
+        ["ききます"] = "お聞きになります",
+        ["きいた"] = "お聞きになりました",
+        ["ききました"] = "お聞きになりました",
     };
 
     // 目上・相手が主語のときの尊敬語語尾 (テキスト末尾)
     private static readonly (string Suffix, string Replacement)[] RespectfulTextSuffixes =
     [
+        ("確認します", "ご確認になります"),
+        ("確認する", "ご確認になります"),
+        ("確認しました", "ご確認になりました"),
+        ("確認した", "ご確認になりました"),
+        ("送ります", "お送りになります"),
+        ("送る", "お送りになります"),
+        ("送りました", "お送りになりました"),
+        ("送った", "お送りになりました"),
+        ("連絡します", "ご連絡になります"),
+        ("連絡する", "ご連絡になります"),
+        ("連絡しました", "ご連絡になりました"),
+        ("連絡した", "ご連絡になりました"),
+        ("聞きます", "お聞きになります"),
+        ("聞く", "お聞きになります"),
+        ("聞きました", "お聞きになりました"),
+        ("聞いた", "お聞きになりました"),
         ("行きます", "いらっしゃいます"),
         ("行く", "いらっしゃいます"),
         ("行きました", "いらっしゃいました"),
@@ -380,12 +412,30 @@ internal static class KeigoConverter
         ["じかんありますか"] = "お時間ございますでしょうか",
         ["あいてる"] = "ご都合よろしいでしょうか",
         ["あいてますか"] = "ご都合よろしいでしょうか",
+        ["かくにんしてほしい"] = "ご確認いただけますでしょうか",
+        ["かくにんしてくれない"] = "ご確認いただけませんでしょうか",
+        ["かくにんしてもらえる"] = "ご確認いただけますでしょうか",
+        ["みてくれない"] = "ご覧いただけませんでしょうか",
+        ["みてもらえる"] = "ご覧いただけますでしょうか",
+        ["おしえてくれない"] = "ご教示いただけませんでしょうか",
+        ["おしえてもらえる"] = "ご教示いただけますでしょうか",
+        ["おくってくれない"] = "お送りいただけませんでしょうか",
+        ["おくってもらえる"] = "お送りいただけますでしょうか",
     };
 
     // 疑問文 (？ / ?) のときの文末変換 (二重敬語を避け、ビジネスで自然な尊敬・丁寧形にする)
     private static readonly (string Suffix, string Replacement)[] QuestionSuffixes =
     [
         ("問題ございません", "問題ございませんでしょうか"),
+        ("確認してほしい", "ご確認いただけますでしょうか"),
+        ("確認してくれない", "ご確認いただけませんでしょうか"),
+        ("確認してもらえる", "ご確認いただけますでしょうか"),
+        ("見てくれない", "ご覧いただけませんでしょうか"),
+        ("見てもらえる", "ご覧いただけますでしょうか"),
+        ("教えてくれない", "ご教示いただけませんでしょうか"),
+        ("教えてもらえる", "ご教示いただけますでしょうか"),
+        ("送ってくれない", "お送りいただけませんでしょうか"),
+        ("送ってもらえる", "お送りいただけますでしょうか"),
         ("確認しました", "ご確認いただけましたでしょうか"),
         ("確認した", "ご確認いただけましたでしょうか"),
         ("見ました", "ご覧になりましたでしょうか"),
@@ -1015,6 +1065,24 @@ internal static class KeigoConverter
         ("てた", "ておりました"),
         ("かもしれない", "かもしれません"),
         ("かも", "かもしれません"),
+        ("していません", "しておりません"),
+        ("していない", "しておりません"),
+        ("してない", "しておりません"),
+        ("っていません", "っておりません"),
+        ("っていない", "っておりません"),
+        ("ってない", "っておりません"),
+        ("んでいません", "んでおりません"),
+        ("んでいない", "んでおりません"),
+        ("んでない", "んでおりません"),
+        ("ていません", "ておりません"),
+        ("ていない", "ておりません"),
+        ("てない", "ておりません"),
+        ("でいません", "でおりません"),
+        ("でいない", "でおりません"),
+        ("でない", "でおりません"),
+        ("無理だ", "いたしかねます"),
+        ("だめだ", "いたしかねます"),
+        ("ダメだ", "いたしかねます"),
         ("ではありません", "ではございません"),
         ("じゃありません", "ではございません"),
         ("ではない", "ではございません"),
@@ -1067,22 +1135,9 @@ internal static class KeigoConverter
     {
         if (clauses.Count == 0) return;
 
-        // 全文節を連結した読みが 1 つの定型句に一致する場合 (ちょっと + まって → 少々お待ちください など)
-        if (clauses.Count > 1)
-        {
-            var fullReading = string.Concat(clauses.Select(c => c.Reading));
-            var (coreFull, trailFull) = SplitTrailingPunctuation(fullReading);
-            if (!IsQuestion(trailFull) && (ReadingWords.TryGetValue(coreFull, out var fullWord) || TailReadingMap.TryGetValue(coreFull, out fullWord)))
-            {
-                var original = string.Concat(clauses.Select(c => c.Text));
-                var keigo = fullWord + trailFull;
-                var merged = new Clause(fullReading, false, keigo == original ? [keigo] : [keigo, original]) { Engine = original };
-                merged.NotLearned.Add(keigo);
-                clauses.Clear();
-                clauses.Add(merged);
-                return;
-            }
-        }
+        // 隣接する 2〜3 文節を連結した読みが定型句に一致する場合、1 文節に統合して変換する
+        // (例: [うちの, 会社] → 弊社、[忙しい, ところ] → お忙しいところ恐れ入りますが、[ちょっと, 待ってて] → 少々お待ちください)
+        MergeMultiClauseIdioms(clauses);
 
         var lastContentIndex = clauses.Count - 1;
         while (lastContentIndex >= 0 && IsPunctuationOnly(clauses[lastContentIndex].Text))
@@ -1127,6 +1182,35 @@ internal static class KeigoConverter
 
             if (HasSentenceBreak(clauseText) || HasSentenceBreak(clauseReading))
                 currentSentence.Clear();
+        }
+    }
+
+    private static void MergeMultiClauseIdioms(List<Clause> clauses)
+    {
+        for (var i = 0; i < clauses.Count - 1; i++)
+        {
+            var maxSpan = Math.Min(3, clauses.Count - i);
+            for (var span = maxSpan; span >= 2; span--)
+            {
+                var reading = string.Concat(clauses.Skip(i).Take(span).Select(c => c.Reading));
+                var (core, trail) = SplitTrailingPunctuation(reading);
+                if (IsQuestion(trail)) continue;
+
+                var isAtEnd = i + span == clauses.Count || IsPunctuationOnly(clauses[i + span].Text) || HasSentenceBreak(trail);
+                string? matched = null;
+                if (ReadingWords.TryGetValue(core, out var w)) matched = w;
+                else if (isAtEnd && TailReadingMap.TryGetValue(core, out var t)) matched = t;
+
+                if (matched is null) continue;
+
+                var original = string.Concat(clauses.Skip(i).Take(span).Select(c => c.Text));
+                var keigo = matched + trail;
+                var merged = new Clause(reading, false, keigo == original ? [keigo] : [keigo, original]) { Engine = original };
+                merged.NotLearned.Add(keigo);
+                clauses.RemoveRange(i, span);
+                clauses.Insert(i, merged);
+                break;
+            }
         }
     }
 
@@ -1197,7 +1281,7 @@ internal static class KeigoConverter
             foreach (var (suffix, replacement) in RespectfulTextSuffixes)
             {
                 if (respText.EndsWith(suffix, StringComparison.Ordinal))
-                    return respText[..^suffix.Length] + replacement + punct;
+                    return AppendWithoutDuplicatePrefix(respText[..^suffix.Length], replacement) + punct;
             }
         }
 
@@ -1264,7 +1348,7 @@ internal static class KeigoConverter
                         if (rewritten.EndsWith(suffix, StringComparison.Ordinal) &&
                             (rewritten.Length > suffix.Length || suffix.Length >= 2))
                         {
-                            rewritten = rewritten[..^suffix.Length] + replacement;
+                            rewritten = AppendWithoutDuplicatePrefix(rewritten[..^suffix.Length], replacement);
                             suffixApplied = true;
                             break;
                         }
@@ -1390,7 +1474,7 @@ internal static class KeigoConverter
             {
                 if (rewritten.EndsWith(suffix, StringComparison.Ordinal))
                 {
-                    rewritten = rewritten[..^suffix.Length] + replacement;
+                    rewritten = AppendWithoutDuplicatePrefix(rewritten[..^suffix.Length], replacement);
                     matched = true;
                     break;
                 }
@@ -1411,6 +1495,20 @@ internal static class KeigoConverter
         }
 
         return rewritten != textCore ? rewritten + punct : null;
+    }
+
+    /// <summary>「ご連絡」の直後に「ご連絡いたします」が重なって「ごご連絡いたします」になる二重接頭辞を防ぐ。</summary>
+    private static string AppendWithoutDuplicatePrefix(string stem, string replacement)
+    {
+        if (stem.Length > 0 && replacement.Length > 0)
+        {
+            if ((stem.EndsWith('ご') && replacement.StartsWith('ご')) ||
+                (stem.EndsWith('お') && replacement.StartsWith('お')))
+            {
+                return stem[..^1] + replacement;
+            }
+        }
+        return stem + replacement;
     }
 
     private static string ApplyInTextReplacements(string text)

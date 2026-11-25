@@ -6814,6 +6814,29 @@ internal static class CompositionTests
         KeigoConverter.Apply(bizIdiom);
         Assert.Equal("お世話になっております", bizIdiom[0].Text, "メール書き出し定型");
 
+        // 複数文節に分かれた定型句マージ・ごご重複防止・否定形・相手主語の確認系
+        var splitIdiom = new List<Clause> { new("うちの", false, ["うちの"]), new("かいしゃの", false, ["会社の"]), new("しりょう", false, ["資料"]) };
+        // 「うちの」「会社」の 2 文節マージ確認
+        var splitCompany = new List<Clause> { new("うちの", false, ["うちの"]), new("かいしゃ", false, ["会社"]), new("から", false, ["から"]) };
+        KeigoConverter.Apply(splitCompany);
+        Assert.Equal("弊社から", string.Concat(splitCompany.Select(c => c.Text)), "文中の複数文節定型句もマージして敬語化");
+
+        var noDupGo = new List<Clause> { new("ごれんらくする", false, ["ご連絡する"]) };
+        KeigoConverter.Apply(noDupGo);
+        Assert.Equal("ご連絡いたします", noDupGo[0].Text, "『ごご連絡いたします』にならない");
+
+        var negTeiru = new List<Clause> { new("かくにんしてない", false, ["確認してない"]) };
+        KeigoConverter.Apply(negTeiru);
+        Assert.Equal("確認しておりません", negTeiru[0].Text, "『〜てない』を『〜ておりません』にする");
+
+        var bossCheck = new List<Clause> { new("ぶちょうが", false, ["部長が"]), new("かくにんする", false, ["確認する"]) };
+        KeigoConverter.Apply(bossCheck);
+        Assert.Equal("部長がご確認になります", string.Concat(bossCheck.Select(c => c.Text)), "目上主語の確認する → ご確認になります");
+
+        var askNegative = new List<Clause> { new("おしえてくれない？", false, ["教えてくれない？"]) };
+        KeigoConverter.Apply(askNegative);
+        Assert.Equal("ご教示いただけませんでしょうか？", askNegative[0].Text, "〜てくれない？ → いただけませんでしょうか？");
+
         // OFF (既定) なら通常のまま
         var off = new Keyboard(live: true);
         off.Type("ryoukai");
