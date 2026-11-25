@@ -256,6 +256,8 @@ std::string Answer(Helper& helper, absl::string_view line) {
 // 学習データはブラウザーのメモリー上の /mozc に置く。
 #include <emscripten/emscripten.h>
 
+#include <filesystem>
+
 namespace {
 Helper* g_helper = nullptr;
 std::string g_answer;
@@ -263,6 +265,8 @@ std::string g_answer;
 
 extern "C" EMSCRIPTEN_KEEPALIVE int meltype_mozc_init() {
   if (g_helper != nullptr) return 1;
+  // 置き場が無いと、Mozc は学習データを開けず、何も覚えない (デスクトップ版は Meltype が作ってから起動する)
+  std::filesystem::create_directories("/mozc");
   mozc::SystemUtil::SetUserProfileDirectory("/mozc");
   auto engine = mozc::EngineFactory::Create();
   if (!engine.ok()) return 0;
