@@ -138,9 +138,10 @@ internal sealed class ConversionHistory
         {
             var loaded = JsonSerializer.Deserialize(content, Config.ConversionJsonContext.Default.Conversions);
             // 覚えない読み・日時や版から作る語 (StaleWords.IsStale) は、以前の版で覚えてしまったものも使わない。
+            // 値・Text が null の読みは捨てる (手で書き換えたファイル・細工したバックアップ。System.Text.Json は辞書の値の null を拒まない)
             if (loaded is not null)
                 foreach (var (reading, entry) in loaded)
-                    if (IsLearnableReading(reading) && !StaleWords.IsStale(reading, entry.Text)) entries[reading] = entry;
+                    if (entry?.Text is not null && IsLearnableReading(reading) && !StaleWords.IsStale(reading, entry.Text)) entries[reading] = entry;
         }, stamp);
         return read ? entries : null;
     }
