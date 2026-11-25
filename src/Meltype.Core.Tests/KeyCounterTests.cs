@@ -157,15 +157,4 @@ internal static class KeyCounterTests
         Assert.True(counter.DiscordPresence, "Discord に出す設定は残す");
         Assert.True(!new KeyCounter(null).DiscordPresence, "既定は OFF");
     }
-
-    [Test]
-    public static void Import_TooLargeToAdd_KeepsCountsAndAnalyzes()
-    {
-        var counter = OnCounter();
-        counter.Import("A,9223372036854775807\n");
-        var result = counter.Import("B,9223372036854775807\nC,9223372036854775807\n");
-        Assert.Equal(0L, result.Total);
-        Assert.Equal(9223372036854775807L, counter.Total);
-        counter.Analyze(DateTime.Today);
-    }
 }

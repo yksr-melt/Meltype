@@ -47,10 +47,11 @@ internal static class SavedDataTests
     [Test]
     public static void ConversionHistory_NullValue_IsDropped()
     {
-        WithFile("{\"きしゃ\":null,\"きょう\":{\"Text\":\"今日\"}}", path =>
+        WithFile("{\"きしゃ\":null,\"かんじ\":{\"Text\":null},\"きょう\":{\"Text\":\"今日\"}}", path =>
         {
             var history = new ConversionHistory(path);
             Assert.True(history.Get("きしゃ") is null, "null の読みは覚えていない");
+            Assert.True(history.Get("かんじ") is null, "Text が null の読みは覚えていない");
             Assert.Equal("今日", history.Get("きょう"), "ほかの読みは読む");
         });
     }
