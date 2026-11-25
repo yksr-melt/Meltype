@@ -137,6 +137,14 @@ public enum ModeIndicatorTiming
     [Description("切り替えたときと入力欄に入ったとき")] OnSwitchAndFocus,
 }
 
+/// <summary>打鍵数を数えるか。Discord に出すのは数えているときだけなので、1 つの選択肢にする。</summary>
+public enum KeyCountMode
+{
+    [Description("数えない")] Off,
+    [Description("数える")] Count,
+    [Description("数えて Discord に表示する")] CountAndDiscord,
+}
+
 /// <summary>確定した文字をアプリに入れる方法。</summary>
 public enum CommitMethod
 {
@@ -606,6 +614,8 @@ public sealed class Settings
         nameof(Enabled), nameof(JapaneseKeyboardOnly), nameof(AllowInjectedInput), nameof(FileLog), nameof(LogTypedText), nameof(AutoUpdate), nameof(UpdatePrerelease), nameof(ShowReleaseNotesAfterUpdate),
         // 入力の方式 (Windows の IME として入力するか) は PC 全体の選び方なので、プロファイルで変えない
         nameof(Mode),
+        // 打鍵数 (keycount.json) は全プロファイルの合計
+        nameof(KeyCount),
     ];
 
     /// <summary>今の設定の値のうち、プロファイルに入れるもの。</summary>
@@ -826,6 +836,11 @@ public sealed class Settings
     [Category("11. アプリ"), DisplayName("独自の種類"), Description("アプリ別設定の「種類」に使える、自分で作る種類です。一般 / コード を元に、自動判定・ライブ変換を変えられます (「全体と同じ」なら上の設定のまま)。")]
     public List<AppKind> AppKinds { get; set; } = [];
 
+    // 打った時刻 (日・時間帯) を残すので、使う人が自分で選ぶまで数えない
+    [Category("1. 全般"), DisplayName("打鍵数"),
+     Description("キーごと・日ごと・時間帯ごとの打鍵数を数えて、この PC の中に保存します (打った文字の並びは保存しません)。Windows 以外では、Meltype で入力しているときの打鍵だけを数えます (Shift などの修飾キーは数えません)。端末版と Android では数えません。パスワード欄では数えませんが、macOS ではアプリによってパスワード欄の打鍵も数えることがあります。「Discord に表示する」を選ぶと、今日と合計の打鍵数・1 分あたりの打鍵数・Meltype を起動してからの時間を、この PC の Discord のアプリに送ります。既定は「数えない」です。")]
+    public KeyCountMode KeyCount { get; set; }
+
     [Category("12. ログ"), DisplayName("ファイルにログを書く"), Description("%LOCALAPPDATA%\\Meltype\\meltype.log にログを書きます (OFF でも、トレイの「ログ / 判定理由」で見られるログは Meltype が動いている間だけメモリに残ります)。/・$・@ で始まる語を検知したときの先頭の記号 1 文字・アプリ名・入力欄の名前が含まれます。確定した文字列などは「ログに入力した文字を残す」が ON のときだけ残ります。")]
     public bool FileLog { get; set; }
 
@@ -948,6 +963,7 @@ public sealed class Settings
         if (!Enum.IsDefined(InputStyle)) InputStyle = InputStyle.Romaji;
         if (!Enum.IsDefined(KanaLayout)) KanaLayout = KanaLayout.Jis;
         if (!Enum.IsDefined(RomajiLayout)) RomajiLayout = RomajiLayout.Qwerty;
+        if (!Enum.IsDefined(KeyCount)) KeyCount = KeyCountMode.Off;
         AppRules ??= [];
         AppKinds ??= [];
         AppRules.RemoveAll(r => r is null || string.IsNullOrWhiteSpace(r.Process));
@@ -1168,7 +1184,17 @@ public sealed class Settings
     /// <summary><see cref="Load"/> と同じだが、読めなければ例外を投げる (既定値に戻さず、.broken も作らない)。</summary>
     internal static Settings LoadOrThrow(string path)
     {
-        if (!File.Exists(path)) return new Settings();
+        var keyCountPath = Path.Combine(Path.GetDirectoryName(path) ?? "", KeyCounter.FileName);
+        if (!File.Exists(path))
+        {
+            var created = new Settings();
+            if (KeyCounter.LegacyMode(keyCountPath) is { } moved)
+            {
+                created.KeyCount = moved;
+                created.SaveMigrated(path);
+            }
+            return created;
+        }
         var json = File.ReadAllText(path);
         if (JsonNode.Parse(json, documentOptions: DocumentOptions) is not JsonObject values) throw new JsonException("config.json の一番上が { } ではありません");
         var version = values[nameof(SettingsVersion)] is JsonValue number && number.TryGetValue<int>(out var v) ? v : 1;
@@ -1203,20 +1229,25 @@ public sealed class Settings
             foreach (var profile in (values[nameof(Profiles)] as JsonArray ?? []).OfType<JsonObject>())
                 if (profile[nameof(SettingsProfile.Values)] is JsonObject profileValues) MigrateToV13(profileValues);
         }
+        // 打鍵数を数えるかは、前の版が keycount.json に書いていた。ここで選んだ値があれば、移さない
+        var legacyKeyCount = values.ContainsKey(nameof(KeyCount)) ? null : KeyCounter.LegacyMode(keyCountPath);
         var settings = values.Deserialize(JsonType) ?? new Settings();
         settings.SettingsVersion = version;
+        if (legacyKeyCount is { } keyCount) settings.KeyCount = keyCount;
         // 動作モードが IME 自動切替 (消した) だった: Meltype IME として読んでいる (InputModeJsonConverter)。保存して名前を書き直す
         var autoSwitch = TopLevelStringIs(json, nameof(Mode), "AutoSwitch");
         var migrated = settings.Migrate();
         // 移行したキーの競合も保存前に除外し、次回起動時の再通知を防ぐ。
         settings.Normalize();
-        if (migrated || autoSwitch)
-        {
-            // 保存できなくても、読み込んだ設定は使う (既定値に戻すと、次の保存でユーザーの設定が消える)。
-            try { settings.Save(path); }
-            catch (Exception ex) when (DataFile.IsFileError(ex)) { Diagnostics.Log.Warn($"移行した config.json を保存できませんでした: {ex.Message}"); }
-        }
+        if (migrated || autoSwitch || legacyKeyCount is not null) settings.SaveMigrated(path);
         return settings;
+    }
+
+    // 保存できなくても、読み込んだ設定は使う (既定値に戻すと、次の保存でユーザーの設定が消える)。
+    private void SaveMigrated(string path)
+    {
+        try { Save(path); }
+        catch (Exception ex) when (DataFile.IsFileError(ex)) { Diagnostics.Log.Warn($"移行した config.json を保存できませんでした: {ex.Message}"); }
     }
 
     /// <summary>config.json の一番上の項目 property が、文字列の value か (プロファイルの中の値は見ない)。</summary>
