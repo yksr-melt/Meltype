@@ -61,8 +61,9 @@ internal static class TypedMarks
         var next = NextChar(state, i);
         if (i > 0 && units[i - 1].Raw is [var previous] && char.IsAsciiDigit(previous))
         {
-            // 数字の後の , は、次も数字なら桁区切り (1,000)、ほかの文字が続くなら読点 (x64、arm64)。まだ何も続いていなければ桁区切りにしておく
-            return units[i].Raw == "," && next is { } after && !char.IsAsciiDigit(after) ? MarkRole.Punctuation : MarkRole.Number;
+            // 数字の後の , は、次も数字なら桁区切り (1,000)、ほかの文字が続くか末尾なら読点 (x64、arm64・100、)。英文の続きの末尾は半角のまま (In 2020,)
+            var number = units[i].Raw == "." || (next is { } after ? char.IsAsciiDigit(after) : env.Context().EndsWithEnglishAndSpace);
+            return number ? MarkRole.Number : MarkRole.Punctuation;
         }
         return units[i].Raw == "." && next is { } c && char.IsAsciiLetterOrDigit(c) && JoinsName(units, i, env) ? MarkRole.Name : MarkRole.Punctuation;
     }

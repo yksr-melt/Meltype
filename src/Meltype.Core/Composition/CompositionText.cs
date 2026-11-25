@@ -336,7 +336,7 @@ internal static partial class CompositionText
         }
     }
 
-    /// <summary>数字だけ (と . , : - /) の入力か。数字は半角のまま、Space で確定して空白を入れる (英語と同じ扱い)。</summary>
+    /// <summary>数字だけ (と . , : - /) の入力か。数字は半角のまま、読点で終わらなければ Space で確定して空白を入れる (英語と同じ扱い)。</summary>
     public static bool IsNumeric(CompositionTextState state) =>
         !state.KanaInput && state.Pending.Length == 0 && state.Units.Count > 0 && state.Units.Any(u => u.Raw.Any(char.IsAsciiDigit)) &&
         state.Units.All(u => u.Raw.All(c => char.IsAsciiDigit(c) || c is '.' or ',' or ':' or '-' or '/'));
@@ -348,7 +348,7 @@ internal static partial class CompositionText
     public static bool IsAlphanumericAt(CompositionTextState state, TextEnv env, bool final) => state.Mode switch
     {
         DisplayMode.HalfWidthAlphanumeric or DisplayMode.FullWidthAlphanumeric => true,
-        DisplayMode.Auto => CompositionText.IsNumeric(state) || CompositionText.Segments(state, env).All(s => s.IsEnglish),
+        DisplayMode.Auto => CompositionText.IsNumeric(state) ? CompositionText.Numeric(state, env).Spans[^1].Kind == SpanKind.English : CompositionText.Segments(state, env).All(s => s.IsEnglish),
         _ => false,
     };
 
