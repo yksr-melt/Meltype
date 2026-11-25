@@ -1181,6 +1181,20 @@ internal static class CompositionTests
             same.Type(keys);
             Assert.True(same.Host.View!.Typed is null, $"{keys}: {same.Host.View.Text} に {same.Host.View.Typed}");
         }
+        // 区切りの別案・打ち間違いの直し・語末の n も、今の変換が使っている読みで出す
+        foreach (var (keys, typed) in new[]
+        {
+            ("bottoshuuseisita  ", null),
+            ("bottoshuuseisita   ", "ぼっとしゅうせいした"),
+            ("onegaisimsu", null),
+            ("onegaisimsu  ", "おねがいします"),
+            ("hon  ", "ほん"),
+        })
+        {
+            var reading = new Keyboard(typedKeys: Meltype.Config.TypedKeysStyle.Kana);
+            reading.Type(keys);
+            Assert.Equal(typed, reading.Host.View!.Typed, $"{keys}: {reading.Host.View.Text}");
+        }
     }
 
     [Test]

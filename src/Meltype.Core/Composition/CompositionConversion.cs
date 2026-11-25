@@ -255,25 +255,32 @@ internal static class CompositionConversion
     /// </summary>
     internal static void SplitWholeSentence(CompositionState state)
     {
-        if (state.Clauses is not [{ Alternatives: { } alternatives } whole]) return;
-        if (alternatives.TryGetValue(whole.Text, out var clauses))
-        {
-            state.Conversion!.Clauses = clauses;
-        }
-        else if (alternatives.Values.FirstOrDefault(c => c is [var only] && only.Candidates.Contains(whole.Text)) is [var single])
-        {
-            single.Index = single.Candidates.IndexOf(whole.Text);
-            single.Changed = whole.Changed;
-            state.Conversion!.Clauses = [single];
-        }
-        else
+        if (state.Clauses is not [{ Alternatives: not null } whole]) return;
+        if (SelectedAlternative(whole) is not { } clauses)
         {
             whole.NotLearned.Add(whole.Text);
             return;
         }
+        if (clauses is [var single] && single.Text != whole.Text)
+        {
+            single.Index = single.Candidates.IndexOf(whole.Text);
+            single.Changed = whole.Changed;
+        }
+        state.Conversion!.Clauses = clauses;
         state.SelectedClause = 0;
         state.Conversion!.Edited = true;
     }
+
+    /// <summary>
+    /// 文全体の文節で選んでいる案の文節。文節が 1 つの案の候補を選んでいれば、その文節。どの案にも無い文なら null。
+    /// </summary>
+    private static List<Clause>? SelectedAlternative(Clause whole) =>
+        whole.Alternatives!.TryGetValue(whole.Text, out var clauses) ? clauses
+        : whole.Alternatives.Values.FirstOrDefault(c => c is [var only] && only.Candidates.Contains(whole.Text));
+
+    /// <summary>文節の読み (英語の文節は打った英字)。文全体の文節は、選んでいる案の読み。</summary>
+    internal static string Reading(Clause clause) =>
+        clause.Alternatives is not null && SelectedAlternative(clause) is { } selected ? string.Concat(selected.Select(c => c.Reading)) : clause.Reading;
 
     /// <summary>入力の全体に一致したユーティリティ変換の候補。一致しなければ null。</summary>
     private static UtilityCandidates? Utilities(CompositionState state, CompositionEnv env, IReadOnlyList<CompositionSegment> segments)
