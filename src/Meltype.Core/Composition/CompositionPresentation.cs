@@ -100,9 +100,11 @@ internal static class CompositionPresentation
         }
     }
 
-    /// <summary>文節 clause の候補 candidate の文字。</summary>
+    /// <summary>文節 clause の候補 candidate の文字。文全体の文節の案は、確定と同じく案の文節から作る (<see cref="CompositionConversion.SplitWholeSentence"/>)。</summary>
     internal static ComposedText Candidate(Clause clause, string candidate) =>
-        clause.IsEnglish ? ComposedText.English(candidate) : ComposedText.Converted(clause.Reading, candidate);
+        clause.Alternatives?.TryGetValue(candidate, out var clauses) == true ? Composed(clauses)
+        : clause.IsEnglish ? ComposedText.English(candidate)
+        : ComposedText.Converted(clause.Reading, candidate);
 
     /// <summary>書き間違いの修正の案内 (もしかして)。</summary>
     private static ComposedText? Suggestion(string? suggestion) => suggestion is null ? null : ComposedText.Of(SpanKind.Japanese, suggestion);
@@ -221,7 +223,7 @@ internal static class CompositionPresentation
     /// <summary>文節の文字。</summary>
     internal static ComposedText Composed(IEnumerable<Clause> clauses) => ComposedText.Concat(clauses.Select(c => Candidate(c, c.Text)));
 
-    /// <summary>予測の候補を、前の文節 (見えている文字) とつなげた文字。</summary>
+    /// <summary>予測の候補を、前の文節 (見えている文字) とつなげた文字。どちらも打った句読点は無い (予測はひらがなだけの読みで出し、語句は確定した文字のまま覚えている)。</summary>
     internal static ComposedText PredictionText(Prediction prediction) =>
-        ComposedText.Kana(prediction.Before) + ComposedText.Of(prediction.Text.All(c => c < 0x80) ? SpanKind.English : SpanKind.Japanese, prediction.Text);
+        ComposedText.Of(SpanKind.Japanese, prediction.Before) + ComposedText.Of(prediction.Text.All(c => c < 0x80) ? SpanKind.English : SpanKind.Japanese, prediction.Text);
 }
