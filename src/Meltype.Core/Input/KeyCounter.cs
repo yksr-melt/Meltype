@@ -5,6 +5,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using Meltype.Config;
 
@@ -12,11 +13,13 @@ namespace Meltype.Input;
 
 /// <summary>
 /// 打鍵数のカウンター (typect / タイプ数カウンターのように、合計・日ごと・キーごとに数える)。
-/// フックのスレッドから Count を呼び、ファイル (keycount.json) には Save でまとめて書く。
-/// 打った文字は残さない (どのキーを何回押したかだけ)。
+/// キーを処理するスレッドから Count を呼び、ファイル (keycount.json) には Save でまとめて書く。
+/// 打った文字は残さない (どのキーを何回押したかだけ)。数えるかどうかは設定 (<see cref="KeyCountMode"/>) で決め、ここでは見ない。
 /// </summary>
 public sealed partial class KeyCounter
 {
+    internal const string FileName = "keycount.json";
+
     public sealed class Data
     {
         public long Total { get; set; }
@@ -26,12 +29,13 @@ public sealed partial class KeyCounter
         public long[] Hours { get; set; } = new long[24];
         /// <summary>キーの名前 (A・Space・Enter など) ごとの打鍵数。</summary>
         public Dictionary<string, long> Keys { get; set; } = [];
-        /// <summary>数えるかどうか。既定は OFF (打った時刻を残すので、使う人が自分で ON にする)。</summary>
-        public bool Enabled { get; set; }
         /// <summary>取り込んだテキストの SHA-256 (取り込んだ順)。同じものを 2 回取り込んで 2 倍にしないため。</summary>
         public List<string> ImportedHashes { get; set; } = [];
-        /// <summary>Discord のステータス (Rich Presence) に打鍵数を出すか。既定は OFF。</summary>
-        public bool DiscordPresence { get; set; }
+        /// <summary>前の版が書いた、数えるかどうか・Discord に出すか。設定に移す (<see cref="LegacyMode"/>) ので、読んでも保存しない。</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public bool? Enabled { get; set; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public bool? DiscordPresence { get; set; }
     }
 
     private readonly string? _path;
@@ -56,42 +60,43 @@ public sealed partial class KeyCounter
             data.Keys ??= [];
             data.ImportedHashes ??= [];
             if (data.Hours is not { Length: 24 }) data.Hours = new long[24];
-            lock (_lock) _data = data;
+            lock (_lock)
+            {
+                // 設定は先に移してある (Settings.LoadOrThrow)
+                _dirty = LegacyMode(data) is not null;
+                (data.Enabled, data.DiscordPresence) = (null, null);
+                _data = data;
+            }
         });
 
     public static string DayKey(DateTime day) => day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
-    /// <summary>数えるかどうか (OFF の間は何も数えない)。</summary>
-    public bool Enabled
+    /// <summary>前の版が keycount.json に書いた設定。無い・読めないなら null (読めないことは、打鍵数を読むときにログに書く)。</summary>
+    internal static KeyCountMode? LegacyMode(string path)
     {
-        get { lock (_lock) return _data.Enabled; }
-        set
+        if (!File.Exists(path)) return null;
+        try
         {
-            lock (_lock)
-            {
-                _data.Enabled = value;
-                _dirty = true;
-            }
+            return JsonSerializer.Deserialize(File.ReadAllText(path), KeyCountJsonContext.Default.Data) is { } data ? LegacyMode(data) : null;
+        }
+        // 利用者が書き換えられる中身なので、型で絞らない (DataFile)。ここで投げると、config.json ごと読めなくなる
+        catch (Exception)
+        {
+            return null;
         }
     }
 
-    /// <summary>Discord のステータス (Rich Presence) に今日と合計の打鍵数を出すか。</summary>
-    public bool DiscordPresence
+    private static KeyCountMode? LegacyMode(Data data) => (data.Enabled, data.DiscordPresence) switch
     {
-        get { lock (_lock) return _data.DiscordPresence; }
-        set
-        {
-            lock (_lock)
-            {
-                _data.DiscordPresence = value;
-                _dirty = true;
-            }
-        }
-    }
+        (null, null) => null,
+        (true, true) => KeyCountMode.CountAndDiscord,
+        (true, _) => KeyCountMode.Count,
+        _ => KeyCountMode.Off,
+    };
 
     /// <summary>
-    /// 1 打鍵を数える。押しっぱなしの繰り返しは数えない (離すまで 1 回)。
-    /// allowed が false (一時停止中・アプリ別に OFF・パスワード欄など) のときは数えないが、離したことは覚えておく。
+    /// フックで見た 1 打鍵を数える。押しっぱなしの繰り返しは数えない (離すまで 1 回)。
+    /// allowed が false (数えない設定・一時停止中・アプリ別に OFF・パスワード欄など) のときは数えないが、離したことは覚えておく。
     /// 押したキーと離したキーは物理キー (PhysicalId) で対にする (押下と解放で仮想キーコードが変わっても、押したままにしない)。
     /// </summary>
     public void Count(KeyEvent e, DateTime now, bool allowed)
@@ -103,17 +108,29 @@ public sealed partial class KeyCounter
                 _held.Remove(e.PhysicalId);
                 return;
             }
-            if (!_held.Add(e.PhysicalId) || !allowed || !_data.Enabled) return;
-            Add(KeyName(e.Vk), DayKey(now), 1);
-            _data.Hours[now.Hour]++;
+            if (!_held.Add(e.PhysicalId) || !allowed) return;
+            Add(KeyName(e.Vk), now);
         }
     }
 
-    private void Add(string? key, string? day, long count)
+    /// <summary>
+    /// フロントが送った 1 打鍵を数える (フックの無い OS)。vk は仮想キーコード、ch は入力される文字で、無ければ 0
+    /// (どちらも無いのは、1 回のキーで文字が複数入るとき。キーごとには数えない)。
+    /// 文字を入力するキーは仮想キーコードが無く、Shift を押して入る記号は Windows と違ってその記号の名前で数える。
+    /// </summary>
+    public void Count(int vk, int ch, DateTime now)
     {
-        _data.Total += count;
-        if (day is not null) _data.Days[day] = _data.Days.GetValueOrDefault(day) + count;
-        if (key is not null) _data.Keys[key] = _data.Keys.GetValueOrDefault(key) + count;
+        var key = vk != 0 ? KeyName(vk) : Rune.TryCreate(ch, out var rune) && ch != 0 ? Rune.ToUpperInvariant(rune).ToString() : null;
+        lock (_lock) Add(key, now);
+    }
+
+    private void Add(string? key, DateTime now)
+    {
+        _data.Total++;
+        var day = DayKey(now);
+        _data.Days[day] = _data.Days.GetValueOrDefault(day) + 1;
+        if (key is not null) _data.Keys[key] = _data.Keys.GetValueOrDefault(key) + 1;
+        _data.Hours[now.Hour]++;
         _dirty = true;
     }
 
@@ -170,12 +187,12 @@ public sealed partial class KeyCounter
         }
     }
 
-    /// <summary>数えた分をすべて 0 に戻す。数えるかどうか・Discord に出すかの設定は残す。</summary>
+    /// <summary>数えた分をすべて 0 に戻す。</summary>
     public void Reset()
     {
         lock (_lock)
         {
-            _data = new Data { Enabled = _data.Enabled, DiscordPresence = _data.DiscordPresence };
+            _data = new Data();
             _dirty = true;
         }
     }
