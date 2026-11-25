@@ -13,7 +13,6 @@ on:
       - 'src/Meltype.Settings/**'
       - 'native/mozc/**'
       - 'native/zenzai/**'
-      - 'tests/test_mac_scripts.lisp'
       - '.github/workflows/mac.yml'
   push:
     branches: [main]
@@ -25,7 +24,6 @@ on:
       - 'dictionaries/**'
       - 'native/mozc/**'
       - 'native/zenzai/**'
-      - 'tests/test_mac_scripts.lisp'
       - '.github/workflows/mac.yml'
   workflow_dispatch:
   workflow_call:
@@ -43,7 +41,7 @@ defaults:
     shell: bash
 
 jobs:
-  # mac/ のスクリプトのテスト。Homebrew の sbcl は版を固定できないので、署名の証明書を読み込む app とは別の job で流す
+  # mac/ のスクリプトのテスト
   scripts:
     runs-on: macos-15
     timeout-minutes: 15
@@ -51,10 +49,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: SBCL
-        run: brew install sbcl
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
       - name: Test
-        run: sbcl --script tests/test_mac_scripts.lisp
+        run: node --test mac/Tests/scripts.test.ts
 
   app:
     runs-on: macos-15
