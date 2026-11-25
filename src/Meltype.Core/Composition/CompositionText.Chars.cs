@@ -22,9 +22,9 @@ internal static partial class CompositionText
     private static char Symbol(CompositionTextState state, char c) => c switch
     {
         '-' => 'ー',
-        // 句読点は、読みでは設定によらず 、。 (設定の句読点は CompositionOutput が当てる)。
-        ',' => '、',
-        '.' => '。',
+        // 読みにするときに TypedMarks が決める。
+        ',' => ',',
+        '.' => '.',
         // 設定の括弧の幅は、句読点と違って CompositionOutput では当てられない。出口には区間の種類が届かず、英語の区間の ( や、半角を選んだ候補の () まで全角になる (#1735)
         // TODO (#2010): 英語の区間かを状態で判別し、記号の表示の幅を読みに焼き込んでいるのがよくない。読みに全角の記号が入るので、Zenzai には半角に直して渡している (ZenzaiConverter.ToHalfWidth)
         '[' => state.SquareBrackets ? '［' : '「',

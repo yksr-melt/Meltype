@@ -276,8 +276,17 @@ internal static class Henkan
 
     private static readonly Lazy<Engine.MozcConverter?> Mozc = new(() =>
         Environment.GetEnvironmentVariable("MELTYPE_MOZC") is { Length: > 0 } helper && File.Exists(helper)
-            ? new Engine.MozcConverter(new Engine.MozcHelperProcess(helper, ProfileDirectory))
+            ? WithBuiltInPhrases(new Engine.MozcConverter(new Engine.MozcHelperProcess(helper, ProfileDirectory)))
             : null);
+
+    /// <summary>アプリ (MeltypeRuntime) と同じく、同梱の語句を Mozc のユーザー辞書に渡す。</summary>
+    private static Engine.MozcConverter WithBuiltInPhrases(Engine.MozcConverter mozc)
+    {
+        if (!mozc.SetUserDictionary([.. new Meltype.Dictionary.UserDictionary(null).EngineWords().Words.Select(w => (w.Reading, w.Word, w.Pos))]))
+            throw new InvalidOperationException("Mozc の変換ヘルパーが同梱の語句を受け取りませんでした");
+        return mozc;
+    }
+
     private static readonly Lazy<Dictionary.TranslationDictionary> Translations = new(Dictionary.TranslationDictionary.Load);
 
     // bot の runner は CPU だけで計算するので、アプリより長く待つ (待ちきれなかった答えを ZenzaiConverter は捨てて、しばらく休む)
