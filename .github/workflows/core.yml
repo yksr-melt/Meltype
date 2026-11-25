@@ -1,6 +1,6 @@
 # 判定・変換のコア (Meltype.Core) と辞書のチェック。Windows 版のビルドとテストは windows.yml。
 #   core         … いつも: Meltype.Core のテストを Linux と Mac で流す (Mac 版・Linux 版の土台)。main の必須チェック
-#   辞書の形式   … dictionaries/ が変わったとき: 読めない行・ひらがなでない読み・重複など
+#   辞書の形式   … dictionaries/ か tools/ が変わったとき: 読めない行・ひらがなでない読み・重複など。tools/ のテストも流す
 #   精度の比較   … 判定・変換の本体か辞書が変わったとき: main と Pull Request で品質テストを比べ、新しく外れた例があれば失敗。main の必須チェック
 #                  あわせて、よく使う語の判定が main から変わった語を一覧にする (参考。失敗にはしない)
 #                  Core・辞書を変えない Pull Request では skipped になり、skipped は必須チェックを満たす (比べずにマージできる)
@@ -70,7 +70,7 @@ jobs:
         run: |
           files="$(git diff --name-only "$BASE...$HEAD")"
           echo "$files"
-          if grep -q '^dictionaries/' <<< "$files"; then echo "dictionaries=true" >> "$GITHUB_OUTPUT"; fi
+          if grep -qE '^(dictionaries|tools)/' <<< "$files"; then echo "dictionaries=true" >> "$GITHUB_OUTPUT"; fi
           # 比べ方 (このワークフローと pr-checks.mjs・それが読む markdown.mjs) を変えたときも流す。流さないと、変えた比べ方を確かめないままマージになる (#1842)
           if grep -qE '^(dictionaries/|src/Meltype\.Core/|src/Meltype\.Core\.Tests/|\.github/workflows/core\.yml$|\.github/bot/(pr-checks|markdown)\.mjs$)' <<< "$files"; then echo "core=true" >> "$GITHUB_OUTPUT"; fi
 
@@ -85,6 +85,7 @@ jobs:
         with:
           persist-credentials: false
       - run: node tools/check-dictionaries.mjs
+      - run: node --test tools/*.test.mjs
 
   quality:
     name: 精度の比較
