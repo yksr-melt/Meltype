@@ -78,6 +78,20 @@ internal static class RuntimeTests
     }
 
     [Test]
+    public static void Issue2014_UnremovableMozcLearningDoesNotPreventStartup()
+    {
+        WithRuntime((runtime, directory) =>
+        {
+            // 学習ファイルの名前にフォルダーがある場合も、消せないユーザーデータとして扱って起動を続ける。
+            // File.Delete は Windows・Linux とも UnauthorizedAccessException を投げる。
+            var blocked = Path.Combine(directory, "mozc", "boundary.db");
+            Directory.CreateDirectory(blocked);
+            runtime.CreateConverter(directory);
+            Assert.True(Directory.Exists(blocked), "消せなくても変換エンジンを作れる");
+        });
+    }
+
+    [Test]
     public static void DirectModeDetection_ReturnsRomajiToJapanese()
     {
         // 英数状態で打ち始めた語がローマ字なら日本語に戻す (設定「英数状態で自動判定」)。Mac・Linux ではまだ判定しない (#1724)

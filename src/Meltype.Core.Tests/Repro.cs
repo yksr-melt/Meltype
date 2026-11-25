@@ -280,7 +280,7 @@ internal static class Henkan
             : null);
     private static readonly Lazy<Dictionary.TranslationDictionary> Translations = new(Dictionary.TranslationDictionary.Load);
 
-    // bot の Windows の runner は CPU だけで計算するので、アプリより長く待つ (待ちきれなかった答えを ZenzaiConverter は捨てて、しばらく休む)
+    // bot の runner は CPU だけで計算するので、アプリより長く待つ (待ちきれなかった答えを ZenzaiConverter は捨てて、しばらく休む)
     private const int ZenzaiTimeoutMs = 30000;
     private static readonly Lazy<Engine.ZenzaiConverter?> Zenzai = new(() =>
         Environment.GetEnvironmentVariable("MELTYPE_ZENZAI_SERVER") is { Length: > 0 } server &&
@@ -369,70 +369,4 @@ internal static class Henkan
             candidates,
         }, Json));
     }
-}
-
-/// <summary>
-/// 英単語の混じった文の変換を 2 通りで比べる (MELTYPE_MOZC に Mozc の変換ヘルパーの場所が要る)。
-///   今の変換: Meltype キーボードで打って Space で変換した結果 (英単語のところで文を切って、日本語の部分を別々に Mozc に渡す)
-///   丸ごと:   英単語を仮の名詞 (えっくす) に置き換えた読みを、文ごと 1 回で Mozc に渡し、エックス を英単語に戻す
-/// 入力ファイルは 1 行に「打ったもの&lt;Tab&gt;期待」。
-/// </summary>
-internal static class MozcCompare
-{
-    private static readonly JsonSerializerOptions Json = new() { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
-    private const string Placeholder = "えっくす";
-    private const string PlaceholderText = "エックス";
-
-    public static void Run(string input, string output)
-    {
-        var helper = Environment.GetEnvironmentVariable("MELTYPE_MOZC");
-        if (helper is null || !File.Exists(helper)) throw new InvalidOperationException("MELTYPE_MOZC に Mozc の変換ヘルパーの場所を入れてください");
-        var profile = Path.Combine(Path.GetTempPath(), $"meltype-mozc-compare-{Environment.ProcessId}");
-        using var mozc = new Engine.MozcConverter(new Engine.MozcHelperProcess(helper, profile));
-        var results = new List<object>();
-        int currentOk = 0, wholeOk = 0;
-        foreach (var line in File.ReadAllLines(input))
-        {
-            var parts = line.Split('\t');
-            if (parts.Length != 2 || parts[0].StartsWith('#')) continue;
-            var (typed, expected) = (parts[0].Trim(), parts[1].Trim());
-
-            // 今の変換
-            var s = Henkan.Keyboard();
-            s.Type(typed + " ");
-            var view = s.Host.View;
-            var current = view is { Converting: true } ? string.Concat(view.Clauses ?? [view.Text]) : s.Host.Document.TrimEnd();
-            Henkan.Reset();
-
-            // 丸ごと: 変換エンジン無しのキーボードで、英語と日本語 (かな) の分かれ方を見る
-            var k = new CompositionTests.Keyboard();
-            k.Type(typed);
-            var shown = k.Showing ?? "";
-            var english = System.Text.RegularExpressions.Regex.Matches(shown, "[A-Za-z0-9][A-Za-z0-9._'+#-]*").Select(m => m.Value).ToList();
-            var reading = System.Text.RegularExpressions.Regex.Replace(shown, "[A-Za-z0-9][A-Za-z0-9._'+#-]*", Placeholder);
-            var clauses = mozc.ConvertClauses(reading, null) ?? [];
-            var text = string.Concat(clauses.Select(c => c.Text));
-            var placeholders = System.Text.RegularExpressions.Regex.Count(text, PlaceholderText);
-            string whole;
-            if (placeholders == english.Count)
-            {
-                var index = 0;
-                whole = System.Text.RegularExpressions.Regex.Replace(text, PlaceholderText, _ => english[index++]);
-            }
-            else whole = $"(仮の名詞が {english.Count} 個 → {placeholders} 個) {text}";
-            mozc.ClearCache();
-
-            var ok1 = Normalize(current) == Normalize(expected);
-            var ok2 = Normalize(whole) == Normalize(expected);
-            if (ok1) currentOk++;
-            if (ok2) wholeOk++;
-            results.Add(new { typed, expected, shown, current, whole, wholeClauses = clauses.Select(c => c.Reading + ":" + c.Text), currentOk = ok1, wholeOk = ok2 });
-        }
-        File.WriteAllText(output, JsonSerializer.Serialize(new { currentOk, wholeOk, total = results.Count, cases = results },
-            Json));
-        Console.WriteLine($"今の変換 {currentOk}/{results.Count}、丸ごと {wholeOk}/{results.Count}");
-    }
-
-    /// <summary>比べるときは空白と、英字の大文字・小文字を無視する (GitHub と github は同じとみなす)。</summary>
-    private static string Normalize(string text) => new(text.Where(c => !char.IsWhiteSpace(c)).Select(char.ToLowerInvariant).ToArray());
 }

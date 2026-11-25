@@ -186,9 +186,9 @@ public sealed class MeltypeRuntime : IDisposable
             if (Directory.Exists(profile))
                 foreach (var name in new[] { "boundary.db", "segment.db" }) File.Delete(Path.Combine(profile, name));
         }
-        catch (IOException ex)
+        catch (Exception ex) when (DataFile.IsFileError(ex))
         {
-            // 強制終了された Meltype の変換ヘルパーがまだファイルを開いている (Windows)。次に起動したときに消す
+            // ほかのプロセスが開いている・権限が無い場合も、入力の起動は続け、次の起動時に消し直す。
             Diagnostics.Log.Warn($"前の版の Mozc の学習データを消せませんでした: {ex.Message}");
         }
         return profile;

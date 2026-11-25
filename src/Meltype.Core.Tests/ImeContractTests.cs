@@ -1317,6 +1317,30 @@ internal static class ImeContractTests
     }
 
     [Test]
+    public static void CodeApps_KeepCommandNamesLowercase()
+    {
+        // 固有名詞の自動の大文字小文字 (mysql → MySQL、jquery → jQuery) は、コードの行や文字列リテラルの中では効かせない
+        foreach (var (app, before, typed) in new[]
+        {
+            ("Code.exe", "import ", "numpy"),
+            ("Code.exe", "db = ", "mysql"),
+            ("WindowsTerminal.exe", "$ ", "mysql"),
+            ("Code.exe", "require('", "jquery"),
+            ("Code.exe", "image = \"", "mysql"),
+        })
+        {
+            var front = new Front { App = app, Document = before };
+            front.Type(typed);
+            if (front.Composition.GetValueOrDefault("t1") is not null) front.Key('\n');
+            Assert.Equal(before + typed, front.Document, $"{app}: {before}{typed}\n" + front.Trace);
+        }
+        // コードのコメントの中は文章なので、通常どおり自動で直す
+        var comment = new Front { App = "Code.exe", Document = "// " };
+        comment.Type("iphone\n");
+        Assert.Equal("// iPhone", comment.Document, comment.Trace);
+    }
+
+    [Test]
     public static void Snippets_ExpandFromTheTextBeforeTheCaret()
     {
         // 何も打っていないときの Space・Tab・Esc は受け取らないキーなので、定型文に使うときだけ capture に入れる (TSF・Meltype キーボードはほかを通す)
@@ -1353,6 +1377,25 @@ internal static class ImeContractTests
         Assert.True(!Consumed(front.Key('a')), front.Trace);
         front.Open = true;
         Assert.True(Consumed(front.Key('k')), front.Trace);
+    }
+
+    [Test]
+    public static void ClosedWhileComposing_CommitsOnce()
+    {
+        // 入力中にアプリが IME を閉じた: TSF の DLL は、開閉だけを先に知らせ (応答の確定は入れない)、入力欄を編集できるようになってから確定を頼む。
+        // 状態だけを受け取る出来事では入力を続け、確定を頼まれたときに 1 回だけ確定する
+        foreach (var notice in new[] { ("StateRequested", ""), ("CaretMoved", ",\"caret\":{}") })
+        {
+            var front = new Front();
+            front.Type("ka");
+            front.Open = false;
+            var noticed = front.Event(notice.Item1, extra: notice.Item2);
+            Assert.True(Commits(noticed).GetArrayLength() == 0 && front.Composition["t1"] == "か" && !Japanese(noticed), front.Trace);
+            front.Event("CommitRequested");
+            Assert.Equal("か", front.Document, front.Trace);
+            front.Event("CommitRequested");
+            Assert.True(!Consumed(front.Key('a')) && front.Document == "かa", "確定した後は英数\n" + front.Trace);
+        }
     }
 
     [Test]

@@ -39,7 +39,7 @@ internal sealed class ProperNouns
                 if (!word.All(char.IsAsciiLetterOrDigit)) continue;
                 var lower = word.ToLowerInvariant();
                 if (accept?.Invoke(lower) == false) continue;
-                _canonical.TryAdd(lower, word);
+                _canonical[lower] = word;
                 _words.Add(lower);
             }
         }
@@ -56,4 +56,30 @@ internal sealed class ProperNouns
 
     /// <summary>正しい大文字小文字の形。固有名詞でなければ null。</summary>
     public string? Canonical(string lower) => _canonical.TryGetValue(lower, out var word) ? word : null;
+
+    /// <summary>
+    /// すべて小文字で打った語を自動で正しい大文字小文字に直す形 (iphone → iPhone、iphone's → iPhone's)。直さないなら null。
+    /// 直すのは、語の途中で Shift を押し直す手間がかかり、文章では小文字で書くことのない語 (iPhone・GitHub・macOS):
+    /// 大文字・小文字が混在し、2 文字目以降に大文字を含む固有名詞。
+    /// 先頭だけ大文字 (Google) や全大文字 (LINE) の語は、小文字で書く人もいるので直さない。
+    /// 自分で大文字を混ぜて打った語 (IPHONE) は、打ったままにする。
+    /// </summary>
+    public string? AutoCanonical(string raw)
+    {
+        if (raw.EndsWith("'s", StringComparison.Ordinal))
+            return AutoCanonical(raw[..^2]) is { } stem ? stem + "'s" : null;
+        return _canonical.TryGetValue(raw, out var word) && IsMixedInternalUpper(word) ? word : null;
+    }
+
+    private static bool IsMixedInternalUpper(string word)
+    {
+        var hasLower = false;
+        var hasInternalUpper = false;
+        for (var i = 0; i < word.Length; i++)
+        {
+            if (char.IsAsciiLetterLower(word[i])) hasLower = true;
+            else if (i > 0 && char.IsAsciiLetterUpper(word[i])) hasInternalUpper = true;
+        }
+        return hasLower && hasInternalUpper;
+    }
 }
