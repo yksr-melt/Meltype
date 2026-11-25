@@ -41,7 +41,7 @@ internal static class Program
                     var env = TestSupport.Env(CompositionTests.Detector);
                     foreach (var c in args.ElementAtOrDefault(1) ?? "") Composition.CompositionText.Append(text, env, c);
                     Console.OutputEncoding = new System.Text.UTF8Encoding(false);
-                    Console.WriteLine("units: " + string.Join(" ", Composition.CompositionText.Units(text).Select(u => $"{u.Raw}={u.Kana}")) + (Composition.CompositionText.Pending(text).Length > 0 ? $" +{Composition.CompositionText.Pending(text)}" : ""));
+                    Console.WriteLine("units: " + string.Join(" ", Composition.TypedMarks.Read(text, env).Select(u => $"{u.Raw}={u.Kana}")) + (Composition.CompositionText.Pending(text).Length > 0 ? $" +{Composition.CompositionText.Pending(text)}" : ""));
                     CompositionTests.Detector.LatticeTrace = Console.WriteLine;
                     var segments = Composition.CompositionText.Segments(text, env);
                     CompositionTests.Detector.LatticeTrace = null;
@@ -60,7 +60,7 @@ internal static class Program
                 Checks.MixedBench(args[1]);
                 return 0;
             case "--perf":
-                // --perf 出力ファイル [例文のファイル] [回数]: 変換エンジンの遅延・段階ごとの時間・候補の数・控えの使い回し・メモリ・正解率 (tools/performance/README.md)
+                // --perf 出力ファイル [例文のファイル] [回数]: 変換エンジンの遅延・段階ごとの時間・候補の数・控えの使い回し・メモリ・正解率 (src/Meltype.Benchmark/README.md)
                 Performance.Measure(args[1], args.ElementAtOrDefault(2), args.Length > 3 ? int.Parse(args[3], CultureInfo.InvariantCulture) : Performance.DefaultSamples);
                 Henkan.Shutdown();
                 return 0;
