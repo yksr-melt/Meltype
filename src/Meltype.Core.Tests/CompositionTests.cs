@@ -6867,6 +6867,19 @@ internal static class CompositionTests
         KeigoConverter.Apply(clientGave);
         Assert.Equal("お客様がお送りくださいました", string.Concat(clientGave.Select(c => c.Text)), "〜てくれた → お送りくださいました");
 
+        // 口語 → ビジネス書き言葉の言い換え (後で → 後ほど 等)
+        var atode = new List<Clause> { new("あとで", false, ["後で"]), new("おくる", false, ["送る"]) };
+        KeigoConverter.Apply(atode);
+        Assert.Equal("後ほどお送りいたします", string.Concat(atode.Select(c => c.Text)), "後で → 後ほど");
+
+        var konaida = new List<Clause> { new("こないだの", false, ["こないだの"]), new("けん", false, ["件"]) };
+        KeigoConverter.Apply(konaida);
+        Assert.Equal("先日の件", string.Concat(konaida.Select(c => c.Text)), "こないだの → 先日の");
+
+        var ikaga = new List<Clause> { new("どうだった？", false, ["どうだった？"]) };
+        KeigoConverter.Apply(ikaga);
+        Assert.Equal("いかがでしたでしょうか？", ikaga[0].Text, "どうだった？ → いかがでしたでしょうか？");
+
         // OFF (既定) なら通常のまま
         var off = new Keyboard(live: true);
         off.Type("ryoukai");
