@@ -123,7 +123,7 @@ internal static class CompositionCommit
             for (var i = 0; i < segments.Count; i++)
             {
                 var segment = segments[i];
-                if (segment.IsEnglish) clauses.Add((segment.Kana, null, segment.Raw));
+                if (segment.IsEnglish) clauses.Add((segment.Kana, null, CompositionText.DisplayEnglishSegment(segments, i, env)));
                 else if (env.Settings.LiveConversion && CompositionConversion.CountsAsLive(segment.Kana))
                     clauses.AddRange(CompositionConversion.LiveClauses(state, env, segment.Kana, i > 0 && segments[i - 1].IsEnglish, CompositionConversion.SegmentBefore(env, string.Concat(clauses.Select(c => c.Text))))
                         .Select(c => (c.Reading, c.Engine, c.Text)));

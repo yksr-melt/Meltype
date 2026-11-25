@@ -227,7 +227,7 @@ internal static partial class CompositionText
         if (state.Mode != DisplayMode.Auto || !CompositionText.EffectiveManual(state, env) || CompositionText.IsNumeric(state)) return null;
         var suggested = env.Detector.Segment(LearningContext(state, env), state.Units, CompositionText.Pending(state), env.Context().PrecedingEnglish, env.Context().FollowingEnglish, false, env.Context().PrecedingEnglishSentence, state.KanaInput);
         if (!suggested.Any(s => s.IsEnglish) || suggested.SequenceEqual(CompositionText.Segments(state, env))) return null;
-        return string.Join(" ", suggested.Where(s => s.IsEnglish).Select(s => s.Raw));
+        return string.Join(" ", suggested.Select((s, i) => (s, i)).Where(x => x.s.IsEnglish).Select(x => DisplayEnglishSegment(suggested, x.i, env)));
     }
 
     /// <summary>変換用の区間分け。末尾の入力途中の子音は確定扱い (n → ん) にして日本語区間の読みに含める。</summary>

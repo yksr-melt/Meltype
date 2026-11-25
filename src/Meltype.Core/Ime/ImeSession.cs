@@ -570,6 +570,7 @@ internal static class ImeSession
     private static CompositionEnv Env(ImeSessionState state, ImeEnv env, Settings settings)
     {
         var lateResults = env.Parts.LateResults();
+        var before = LineBefore(state, state.Field);
         CompositionEnv composition = null!;
         composition = new(env.Parts.Detector, env.Parts.Converter, env.Parts.Services, settings)
         {
@@ -582,8 +583,9 @@ internal static class ImeSession
             OtherTipVersion = () => env.Environment.OtherTipVersion,
             NowPlaying = env.Parts.NowPlaying,
             Corrected = env.Parts.Corrected,
-            Before = LineBefore(state, state.Field),
+            Before = before,
             After = state.Field?.After,
+            CodeString = CodeInput(state) && CodeLineKind(before) == LineKind.String,
             LateResults = lateResults,
             Deadline = lateResults ? 0 : long.MaxValue,
             Context = () => CompositionContext.ContextOf(state.Composition, composition),
