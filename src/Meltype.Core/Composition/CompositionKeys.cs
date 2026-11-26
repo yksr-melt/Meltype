@@ -174,7 +174,7 @@ internal static class CompositionKeys
         // 読みの途中を直している間も、カーソルを動かす・打つ・消す以外のキーは、カーソルを末尾に戻してから処理する
         if (input.Text.Tail.Count > 0 && !(vk is VirtualKeys.Left or VirtualKeys.Right or VirtualKeys.Home or VirtualKeys.End or VirtualKeys.Back or VirtualKeys.Delete ||
                                           CharOf(e) is { } typed && !char.IsControl(typed) && !state.Modifier))
-            CompositionText.MergeTail(input.Text);
+            CompositionText.MergeTail(input.Text, env);
 
         if (scene is CompositionScene.Converting converting && HandleConversionKey(state, converting, env, vk)) return;
 

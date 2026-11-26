@@ -52,13 +52,13 @@ internal static partial class CompositionText
     /// 読みの途中を直していたら、カーソルより後ろを戻す (カーソルを末尾にする)。打ちかけのローマ字は、見えていたとおりカーソルの位置に残す
     /// (Pending は末尾の続きなので、そのままだと戻した読みの後ろに移る)。
     /// </summary>
-    public static void MergeTail(CompositionTextState state)
+    public static void MergeTail(CompositionTextState state, TextEnv env)
     {
         if (state.Tail.Count == 0) return;
         if (state.Pending.Length > 0)
         {
-            var pending = state.Pending.ToString();
-            state.Units.Add(new CompositionUnit(pending, pending));
+            // 末尾で確定するときと同じかなにする (打ちかけの n は ん)
+            state.Units.Add(new CompositionUnit(PendingText(state, env, final: true), state.Pending.ToString()));
             state.Pending.Clear();
         }
         state.Units.AddRange(state.Tail);
@@ -84,7 +84,8 @@ internal static partial class CompositionText
                 state.Units.Clear();
                 return true;
             case VirtualKeys.End:
-                MergeTail(state);
+                state.Units.AddRange(state.Tail);
+                state.Tail.Clear();
                 return true;
         }
         return false;

@@ -2679,6 +2679,16 @@ internal static class CompositionTests
         Assert.Equal("もみじふぁkりにいきます", k.Showing);
         k.Type("\n");
         Assert.Equal("もみじふぁkりにいきます", k.Host.Document);
+        // 打ちかけの n は、末尾で確定するときと同じく ん
+        var n = new Keyboard { EscStepsBack = true };
+        n.Type("momijifariniikimasu");
+        n.Press(VirtualKeys.F7);
+        n.Press(VirtualKeys.Escape);
+        for (var i = 0; i < 6; i++) n.Press(VirtualKeys.Left);
+        n.Type("n");
+        Assert.Equal("もみじふぁんりにいきます", n.Showing);
+        n.Type("\n");
+        Assert.Equal("もみじふぁんりにいきます", n.Host.Document);
         // 途中に入ってから末尾に戻して打っても、同じ読みの続き (確定して新しく始めない)
         var end = new Keyboard { EscStepsBack = true };
         end.Type("kyou");
