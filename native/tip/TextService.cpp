@@ -1154,7 +1154,7 @@ bool TextService::WouldEat(ITfContext* context, UINT vk, LPARAM lParam, wchar_t&
         // Ctrl・Alt・Windows キーとの組み合わせ (Ctrl + S など): Meltype.exe も確定してアプリに渡すだけなので、ここで確定して
         // 受け取らずに通す (受け取ってから送り直すと、送り直しが届かないアプリでキーが消える)。
         // ここで確定できなければ受け取り、キーの処理の中で確定してから送り直す (キーが先に届いて、確定が後になるのを防ぐ)
-        // ただし変換ボックスの中で使う Ctrl+英字 (本体が capture.composing で知らせる) は、確定せずに Meltype.exe に送る
+        // ただし変換中に本体が使う Ctrl+Enter・Ctrl+英字 (capture.ctrlKeysWhileComposing) は Meltype.exe に送る
         const bool used = KeyDown(VK_CONTROL) && !KeyDown(VK_MENU) && !KeyDown(VK_LWIN) && !KeyDown(VK_RWIN) &&
             std::find(state_.composing.begin(), state_.composing.end(), vk) != state_.composing.end();
         if ((KeyDown(VK_CONTROL) || KeyDown(VK_MENU) || KeyDown(VK_LWIN) || KeyDown(VK_RWIN)) && !used && CommitNow()) return false;

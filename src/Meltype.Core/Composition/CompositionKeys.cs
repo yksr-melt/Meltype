@@ -834,13 +834,14 @@ internal static class CompositionKeys
     }
 
     /// <summary>
-    /// 入力中に Ctrl と一緒に押すと、変換ボックスで使う英字のキー (設定「Control キーの割り当て」による。HandleKey の Ctrl の処理と同じ順に見る)。
+    /// 入力中に Ctrl と一緒に押すと、変換ボックスで使うキー (設定「Control キーの割り当て」による。HandleKey の Ctrl の処理と同じ順に見る)。
     /// 入力していなければ空。ほかの Ctrl のキーは、確定してアプリへ送る。
     /// </summary>
     internal static IReadOnlyList<int> ComposingControlKeys(CompositionState state, CompositionEnv env)
     {
         if (state.Scene is not CompositionScene.WithInput) return [];
-        var keys = new HashSet<int>();
+        // Ctrl+Enter は本体で確定し、チャットの送信キーをアプリに渡さない (#1618)。
+        var keys = new HashSet<int> { VirtualKeys.Return };
         if (CompositionLifecycle.IsConverting(state) && env.Settings.ControlKeys == Config.ControlKeyLayout.Atok) keys.UnionWith(['K', 'L']);
         if (!string.IsNullOrWhiteSpace(env.Settings.ControlKeyBindings)) keys.UnionWith(ControlKeyBindingParser.Parse(env.Settings.ControlKeyBindings).Keys);
         for (var vk = 'A'; vk <= 'Z'; vk++)
