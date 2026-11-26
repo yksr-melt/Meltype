@@ -272,7 +272,8 @@ class MeltypeEngine(IBus.Engine):
         return {"vk": vk, "ch": character,
                 "shift": bool(state & IBus.ModifierType.SHIFT_MASK), "ctrl": bool(state & IBus.ModifierType.CONTROL_MASK),
                 "alt": bool(state & IBus.ModifierType.MOD1_MASK),
-                "command": bool(state & (IBus.ModifierType.SUPER_MASK | IBus.ModifierType.MOD4_MASK))}
+                "command": bool(state & (IBus.ModifierType.SUPER_MASK | IBus.ModifierType.MOD4_MASK)),
+                "capsLock": bool(state & IBus.ModifierType.LOCK_MASK)}
 
     def _alt_key(self, vk, keyval, keycode, state, released):
         """左右の Alt。単独押しかは本体が決めるので、押下は本体に知らせてアプリに通し、解放は本体が consumed にしたら止める。"""

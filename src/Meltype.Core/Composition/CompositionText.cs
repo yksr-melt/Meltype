@@ -48,10 +48,19 @@ internal static partial class CompositionText
     public static string Pending(CompositionTextState state) => state.Pending.ToString();
     public static bool IsEmpty(CompositionTextState state) => state.Units.Count == 0 && state.Pending.Length == 0 && state.Tail.Count == 0;
 
-    /// <summary>読みの途中を直していたら、カーソルより後ろを戻す (カーソルを末尾にする)。</summary>
+    /// <summary>
+    /// 読みの途中を直していたら、カーソルより後ろを戻す (カーソルを末尾にする)。打ちかけのローマ字は、見えていたとおりカーソルの位置に残す
+    /// (Pending は末尾の続きなので、そのままだと戻した読みの後ろに移る)。
+    /// </summary>
     public static void MergeTail(CompositionTextState state)
     {
         if (state.Tail.Count == 0) return;
+        if (state.Pending.Length > 0)
+        {
+            var pending = state.Pending.ToString();
+            state.Units.Add(new CompositionUnit(pending, pending));
+            state.Pending.Clear();
+        }
         state.Units.AddRange(state.Tail);
         state.Tail.Clear();
     }

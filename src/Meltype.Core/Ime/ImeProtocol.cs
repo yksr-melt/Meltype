@@ -182,7 +182,7 @@ public sealed record ImeKey
     public bool Alt { get; init; }
     /// <summary>Windows キー・Command・Super。</summary>
     public bool Command { get; init; }
-    /// <summary>CapsLock が ON (送るのは Windows のフロントだけ。ほかの OS は CapsLock を反映した文字をそのまま使う。Ch は CapsLock を反映した文字)。</summary>
+    /// <summary>CapsLock が ON (Windows・macOS・Linux のフロントが送る。Ch は CapsLock を反映した文字)。</summary>
     public bool CapsLock { get; init; }
     /// <summary>押したままの自動の繰り返し (OS が分かるときだけ)。入力モードのキーの繰り返しでは切り替えない。</summary>
     public bool Repeat { get; init; }

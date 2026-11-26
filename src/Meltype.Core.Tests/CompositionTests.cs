@@ -2667,6 +2667,31 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void EscRevertedReading_KeepsPendingRomajiAtTheCaret()
+    {
+        // 打ちかけのローマ字があるまま確定しても、見えていた位置 (カーソル) に残す
+        var k = new Keyboard { EscStepsBack = true };
+        k.Type("momijifariniikimasu");
+        k.Press(VirtualKeys.F7);
+        k.Press(VirtualKeys.Escape);
+        for (var i = 0; i < 6; i++) k.Press(VirtualKeys.Left);
+        k.Type("k");
+        Assert.Equal("もみじふぁkりにいきます", k.Showing);
+        k.Type("\n");
+        Assert.Equal("もみじふぁkりにいきます", k.Host.Document);
+        // 途中に入ってから末尾に戻して打っても、同じ読みの続き (確定して新しく始めない)
+        var end = new Keyboard { EscStepsBack = true };
+        end.Type("kyou");
+        end.Press(VirtualKeys.F7);
+        end.Press(VirtualKeys.Escape);
+        end.Press(VirtualKeys.Left);
+        end.Press(VirtualKeys.End);
+        end.Type("ha");
+        Assert.Equal("", end.Host.Document, "確定しない");
+        Assert.Equal("きょうは", end.Showing);
+    }
+
+    [Test]
     public static void Issue676_EscStepsBackOneLevelAtATime()
     {
         var k = new Keyboard { EscStepsBack = true };

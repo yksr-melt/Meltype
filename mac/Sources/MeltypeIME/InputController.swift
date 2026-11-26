@@ -146,7 +146,7 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         // flagsChanged (CapsLock) の isARepeat・characters は例外になる。characters は KeyMapping.text が読まない
         var key: [String: Any] = ["vk": KeyMapping.virtualKey(for: event),
                                   "shift": flags.contains(.shift), "ctrl": flags.contains(.control),
-                                  "alt": flags.contains(.option), "command": flags.contains(.command), "repeat": event.type == .keyDown && event.isARepeat]
+                                  "alt": flags.contains(.option), "command": flags.contains(.command), "capsLock": flags.contains(.capsLock), "repeat": event.type == .keyDown && event.isARepeat]
         // event.characters は「見た目の 1 文字」で、UTF-16 要素が複数のことがある
         // (補助面の文字・結合文字・ZWJ 絵文字・異体字セレクター)。1 スカラーならそのコードポイント、複数ならそのまま渡す
         let text = KeyMapping.text(for: event)

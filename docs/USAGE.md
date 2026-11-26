@@ -82,7 +82,7 @@ kyouhagoogledekensaku  →  今日はgoogleで検索
 
 設定「入力モード切り替えキー」に <kbd>CapsLock</kbd>・<kbd>英数</kbd>・<kbd>かな</kbd>・<kbd>変換</kbd>・<kbd>無変換</kbd> を登録すると、そのキーだけで日本語入力 ⇔ 英数を切り替えられます。
 
-日本語入力中は、CapsLock を ON にしたままでも日本語に変換します。CapsLock で大文字を打ちたいときは、設定「CapsLock で大文字を入力」を ON にします (Windows)。
+日本語入力中は、CapsLock を ON にしたままでも日本語に変換します。CapsLock で大文字を打ちたいときは、設定「CapsLock で大文字を入力」を ON にします。
 
 アプリごとに、動きを 4 つのモードから選べます。設定の「アプリ別設定」の「種類」で変えられます。
 

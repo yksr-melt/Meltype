@@ -182,7 +182,8 @@ internal static class CompositionKeys
         {
             case VirtualKeys.Left or VirtualKeys.Right or VirtualKeys.Home or VirtualKeys.End when EditsReading(scene):
                 // Esc でひらがなに戻した読みは、カーソルを動かして途中を直せる (打つ・消すのはカーソルの位置。日英の判定はし直さない)
-                CompositionText.MoveCaret(input.Text, vk);
+                // カーソルを動かしたら、末尾に戻しても読みを直している途中 (打っても確定して新しく始めない)
+                if (CompositionText.MoveCaret(input.Text, vk)) input.ModeByKey = false;
                 return;
             case VirtualKeys.Delete when input.Text.Tail.Count > 0:
                 input.Text.Tail.RemoveAt(0);
@@ -444,8 +445,8 @@ internal static class CompositionKeys
     {
         var input = scene.Input;
         if (scene is CompositionScene.Converting converting) return CommitOrKeepConversion(state, converting, env);
-        // F7・Esc などで表示を変えた後に打ったら、確定して新しく打ち始める。読みの途中を直している (カーソルが末尾でない) 間は、カーソルの位置に打つ
-        if (input.ModeByKey && !(EditsReading(scene) && input.Text.Tail.Count > 0))
+        // F7・Esc などで表示を変えた後に打ったら、確定して新しく打ち始める (カーソルを動かしたら ModeByKey を外し、カーソルの位置に打つ)
+        if (input.ModeByKey)
         {
             CompositionCommit.Commit(state, scene, env);
             return CompositionLifecycle.Begin(state, env);

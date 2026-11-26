@@ -515,7 +515,7 @@ internal static class ImeSession
     /// </summary>
     private static (FieldModes? Modes, string? Key) FieldModeOf(ImeEnv env, ImeField? field) =>
         (ForbidsLearning(field) || !env.Settings.ForApp(field?.App).LearningEnabled ? null : env.Parts.Services.FieldModes,
-         FieldModes.KeyOf(field?.App, field?.Element?.ClassName, field?.Element?.Name));
+         FieldModes.KeyOf(field?.App, field?.Element?.ClassName));
 
     /// <summary>入力欄で前に切り替えたモード (日本語なら true)。覚えていない・ゲームなら null。</summary>
     public static bool? LearnedMode(ImeEnv env, ImeField? field) =>

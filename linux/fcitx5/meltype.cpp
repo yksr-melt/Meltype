@@ -481,6 +481,7 @@ public:
         const std::string fields = std::string(",\"key\":{\"vk\":") + std::to_string(vk) + ",\"ch\":" + std::to_string(character) +
             ",\"shift\":" + boolean(shift) + ",\"ctrl\":" + boolean(states.test(fcitx::KeyState::Ctrl)) +
             ",\"alt\":" + boolean(states.test(fcitx::KeyState::Alt)) + ",\"command\":" + boolean(states.test(fcitx::KeyState::Super)) +
+            ",\"capsLock\":" + boolean(event.rawKey().states().test(fcitx::KeyState::CapsLock)) +
             // key() の修飾キーは正規化されている
             ",\"repeat\":" + boolean(event.rawKey().states().test(fcitx::KeyState::Repeat)) + "}";
         Json output;

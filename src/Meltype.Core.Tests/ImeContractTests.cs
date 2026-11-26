@@ -1185,6 +1185,17 @@ internal static class ImeContractTests
     }
 
     [Test]
+    public static void FieldMode_KeepsALimitedNumberOfFields()
+    {
+        // 覚える入力欄の数には上限があり、古いものから忘れる
+        var modes = new Meltype.Learning.FieldModes(null);
+        for (var i = 0; i < 1000; i++) modes.Remember($"app{i}.exe\t", false);
+        Assert.True(modes.Count < 1000, modes.Count.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        Assert.Equal(false, modes.Get("app999.exe\t"), "新しいものは残る");
+        Assert.Equal(null, modes.Get("app0.exe\t"), "古いものは忘れる");
+    }
+
+    [Test]
     public static void CapsLock_TypesCapitalsOnlyWhenTheSettingIsOn()
     {
         // #837: 日本語入力中も CapsLock で大文字にしたい人と、CapsLock を ON のまま日本語にしたい人 (#736) がいる
