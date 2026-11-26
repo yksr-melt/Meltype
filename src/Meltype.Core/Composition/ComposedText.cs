@@ -52,7 +52,7 @@ internal sealed class ComposedText
         var start = 0;
         for (var i = 0; i <= kana.Length; i++)
         {
-            if (i < kana.Length && kana[i] is not ('、' or '。')) continue;
+            if (i < kana.Length && !IsMark(kana[i])) continue;
             if (i > start) spans.Add(new TextSpan(SpanKind.Japanese, kana[start..i]));
             if (i < kana.Length) spans.Add(new TextSpan(SpanKind.Punctuation, kana[i].ToString()));
             start = i + 1;
@@ -60,8 +60,14 @@ internal sealed class ComposedText
         return new(spans);
     }
 
-    /// <summary>読み reading を変換した文字 text。</summary>
-    public static ComposedText Converted(string reading, string text) => Of(SpanKind.Japanese, text);
+    /// <summary>
+    /// 読み reading の文節の文字 text。打った句読点は読みが句読点だけの文節になる (<see cref="CompositionConversion.SplitAtMarks"/>) ので、
+    /// 読みのままの文字なら読みの 、。 を句読点の区間にし、変換した文字の 、。 (モーニング娘。・顔文字) は語の文字のままにする。
+    /// </summary>
+    public static ComposedText Converted(string reading, string text) => text == reading ? Kana(text) : Of(SpanKind.Japanese, text);
+
+    /// <summary>読みの句読点か (読みでは設定によらず 、。)。</summary>
+    public static bool IsMark(char c) => c is '、' or '。';
 
     public static ComposedText operator +(ComposedText left, ComposedText right) => new([.. left.Spans, .. right.Spans]);
 

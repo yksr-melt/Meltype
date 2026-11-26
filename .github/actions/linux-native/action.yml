@@ -1,50 +1,14 @@
 # Linux の変換エンジン (Mozc の変換ヘルパーと Zenzai の llama-server) を、ランナーの CPU 向けにビルドして
-# native/mozc/bin/linux/・native/zenzai/bin/linux-<版>/ に置く。linux.yml (IBus・fcitx5) と tui.yml (端末版) が使う。
-# Mozc のビルドは初回 30〜40 分かかるので、Bazel の結果をキャッシュする (キャッシュはワークフローをまたいで共有される)。
+# native/mozc/bin/linux/・native/zenzai/bin/linux-<版>/ に置き、NativeAOT のリンクに使う sysroot を MELTYPE_SYSROOT に設定する。
+# linux.yml (IBus・fcitx5) と tui.yml (端末版) が使う。
 name: linux-native
-description: Build the Mozc helper and llama-server for Linux
+description: Build the Mozc helper and llama-server for Linux, and prepare the NativeAOT sysroot
 
 runs:
   using: composite
   steps:
-    # x64 と arm64 で、キャッシュの名前・Bazelisk・manylinux のコンテナを選ぶ
-    - name: Select architecture
-      shell: bash
-      run: |
-        case "$RUNNER_ARCH" in
-          X64) echo "NATIVE_ASSET=linux NATIVE_BAZELISK=amd64 NATIVE_MANYLINUX=x86_64 NATIVE_BAZELISK_SHA256=5a408715e932c0250d28bd84555f12edbf70117de42f9181691c736eacc4a992 NATIVE_BAZELISK_ASSET_ID=406879103" ;;
-          ARM64) echo "NATIVE_ASSET=linux-arm64 NATIVE_BAZELISK=arm64 NATIVE_MANYLINUX=aarch64 NATIVE_BAZELISK_SHA256=e20e8b0f4f240091b7a55bf17b9398bd4f40ee70ae0208dff95dd4c445fb4010 NATIVE_BAZELISK_ASSET_ID=406879161" ;;
-          *) echo "対応していない CPU です: $RUNNER_ARCH" >&2; exit 1 ;;
-        esac | tr ' ' '\n' >> "$GITHUB_ENV"
-    - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-      with:
-        path: |
-          ~/bazel-cache
-          ~/mozc/src/third_party_cache
-        key: mozc-manylinux_2_34-${{ env.NATIVE_ASSET }}-${{ hashFiles('native/mozc/MOZC_COMMIT') }}-${{ hashFiles('native/mozc/*.cc', 'native/mozc/BUILD.fragment') }}
-        restore-keys: |
-          mozc-manylinux_2_34-${{ env.NATIVE_ASSET }}-${{ hashFiles('native/mozc/MOZC_COMMIT') }}-
-    # Bazelisk は版を固定し、ダウンロードしたものが公開されているものと同じか (SHA-256) を確かめる。
-    # GitHub の一時的な 504 などでは再試行する。接続と 1 回の取得には上限を設ける。
-    # 通常の URL で取得できないときは、GitHub の Release Asset API から同じファイルを取る。
-    - name: Bazelisk
-      shell: bash
-      run: |
-        mkdir -p "$HOME/tools"
-        if ! curl -fsSL --retry 3 --connect-timeout 15 --max-time 120 -o "$HOME/tools/bazelisk" "https://github.com/bazelbuild/bazelisk/releases/download/v1.29.0/bazelisk-linux-$NATIVE_BAZELISK"; then
-          curl -fsSL --retry 3 --connect-timeout 15 --max-time 120 -H 'Accept: application/octet-stream' -o "$HOME/tools/bazelisk" "https://api.github.com/repos/bazelbuild/bazelisk/releases/assets/$NATIVE_BAZELISK_ASSET_ID"
-        fi
-        echo "$NATIVE_BAZELISK_SHA256  $HOME/tools/bazelisk" | sha256sum -c -
-        chmod +x "$HOME/tools/bazelisk"
-    # Mozc のヘルパーは、サポートする中で一番古い glibc (2.34、RHEL 9 系) の manylinux のコンテナでビルドする (#1484)
-    - name: Build Mozc helper
-      shell: bash
-      run: |
-        mkdir -p "$HOME/mozc" "$HOME/bazel-cache"
-        docker run --rm --user "$(id -u):$(id -g)" -e USER -e HOME=/tmp/home -e BAZEL=/tools/bazelisk \
-          -v "$PWD:/repo" -v "$HOME/mozc:/mozc" -v "$HOME/bazel-cache:/cache" -v "$HOME/tools:/tools:ro" -w /repo \
-          "quay.io/pypa/manylinux_2_34_$NATIVE_MANYLINUX:2026.11.01-2" \
-          native/mozc/build-mozc-helper.sh /mozc /cache
+    # NATIVE_ASSET・NATIVE_MANYLINUX_IMAGE も設定する
+    - uses: ./.github/actions/linux-mozc
     - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       id: llama-cache
       with:
@@ -56,5 +20,17 @@ runs:
       shell: bash
       run: |
         docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp/home -v "$PWD:/repo" -w /repo \
-          "quay.io/pypa/manylinux_2_34_$NATIVE_MANYLINUX:2026.11.01-2" \
+          "$NATIVE_MANYLINUX_IMAGE" \
           native/zenzai/build-llama-server.sh
+    # NativeAOT (本体・設定アプリ) は、同じ manylinux のコンテナの中身を sysroot にしてリンクする (MELTYPE_SYSROOT は src/Directory.Build.props が読む)。
+    # ランナーの glibc (Ubuntu 24.04 は 2.39) に対してリンクすると、RHEL 9 系で動かない (設定アプリが fmod@GLIBC_2.38 を要求した)。
+    # 展開するのは、リンクに要るヘッダー・ライブラリ・gcc-toolset の crt を含むフォルダーだけ (/opt/_internal の Python などは要らない)
+    - name: Sysroot
+      shell: bash
+      run: |
+        sysroot="$RUNNER_TEMP/manylinux-sysroot"
+        mkdir -p "$sysroot"
+        container="$(docker create "$NATIVE_MANYLINUX_IMAGE")"
+        docker export "$container" | tar -x -C "$sysroot" usr/include usr/lib usr/lib64 lib lib64 opt/rh
+        docker rm "$container" > /dev/null
+        echo "MELTYPE_SYSROOT=$sysroot" >> "$GITHUB_ENV"
