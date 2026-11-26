@@ -2824,6 +2824,20 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void UserDictionary_EnglishReadingConvertsToTheRegisteredWord()
+    {
+        // #764: 英字の読み (atm) に英単語 (Atmosphere) を登録したら、その読みだけを打って変換したときに出す
+        var dictionary = new UserDictionary(null);
+        dictionary.Add("atm", "Atmosphere");
+        var k = new Keyboard(userDictionary: dictionary);
+        k.Type("atm \n");
+        Assert.Equal("Atmosphere", k.Host.Document);
+        var sentence = new Keyboard(userDictionary: dictionary);
+        sentence.Type("atmdeharau\n");
+        Assert.True(!sentence.Host.Document.Contains("Atmosphere"), "文の中の atm は登録語にしない: " + sentence.Host.Document);
+    }
+
+    [Test]
     public static void Issue339_JikouOffersSeasonalGreetings()
     {
         var k = new Keyboard(now: () => new DateTime(2026, 10, 9));
