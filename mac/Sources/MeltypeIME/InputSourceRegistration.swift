@@ -35,6 +35,10 @@ enum InputSourceRegistration {
         (source["Input Mode"] as? String) == japaneseIdentifier
     }
 
+    // 重複を消し、足りない項目は書き足さない。設定に日本語モードを書き足すと、TIS からは有効に見えて
+    // インストール時に選ばれるのに、入力メニューとシステム設定には出ず、一度切り替えると戻れなくなる。
+    // 有効にするのは TIS とシステム設定の「+」に任せる。
+    // 日本語モードの無い親の項目は消す。親だけが残っていると、システム設定の「+」で Meltype を追加できない。
     static func normalized(_ sources: [[String: Any]]) -> [[String: Any]] {
         var seen = Set<String>()
         var result: [[String: Any]] = []
@@ -53,10 +57,9 @@ enum InputSourceRegistration {
             }
         }
         if !seen.contains("Input Mode") {
-            result.append(["Bundle ID": identifier, "Input Mode": japaneseIdentifier, "InputSourceKind": "Input Mode"])
-        }
-        if !seen.contains("Keyboard Input Method") {
-            result.append(["Bundle ID": identifier, "InputSourceKind": "Keyboard Input Method"])
+            result.removeAll {
+                ($0["InputSourceKind"] as? String) == "Keyboard Input Method" && ($0["Bundle ID"] as? String) == identifier
+            }
         }
         return result
     }
@@ -167,7 +170,7 @@ enum InputSourceRegistration {
                     wait()
                 } else {
                     FileHandle.standardError.write(Data(
-                        "Input-source registration is pending (enabled selectable Japanese modes: \(count)). Choose Meltype in Keyboard settings or log out and back in.\n".utf8))
+                        "Input-source registration is pending (enabled selectable Japanese modes: \(count)). Allow Meltype if macOS asks. If Meltype is missing from the input menu, add it in Keyboard settings or log out and back in.\n".utf8))
                 }
             }
             return .pending

@@ -7,6 +7,7 @@ using Meltype.Config;
 using Meltype.Detection;
 using Meltype.Input;
 using Meltype.Libraries.Chars;
+using Meltype.Notation;
 
 namespace Meltype.Composition;
 

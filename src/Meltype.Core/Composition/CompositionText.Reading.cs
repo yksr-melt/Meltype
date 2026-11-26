@@ -5,6 +5,7 @@ using System.Text;
 using Meltype.Detection;
 using Meltype.Dictionary;
 using Meltype.Libraries.Chars;
+using Meltype.Notation;
 
 namespace Meltype.Composition;
 
@@ -126,8 +127,14 @@ internal static partial class CompositionText
         DisplayMode.Hiragana => ComposedText.Kana(CompositionText.AllKana(state, env, final)),
         DisplayMode.Katakana => ComposedText.Kana(ToKatakana(CompositionText.AllKana(state, env, final))),
         DisplayMode.HalfWidthKatakana => ComposedText.Kana(ToHalfWidthKatakana(ToKatakana(CompositionText.AllKana(state, env, final)))),
-        _ => CompositionText.IsNumeric(state) || CompositionText.IsHorizontalRule(state) ? ComposedText.English(CompositionText.Raw(state)) : CompositionText.RenderSegments(state, env, final, convert),
+        _ when CompositionText.IsNumeric(state) => CompositionText.Numeric(state, env),
+        _ => CompositionText.IsHorizontalRule(state) ? ComposedText.English(CompositionText.Raw(state)) : CompositionText.RenderSegments(state, env, final, convert),
     };
+
+    /// <summary>数字だけの入力 (<see cref="IsNumeric"/>) の表示。読点のほかは打った半角のまま (10:00、-)。英文の続きと、, から始まる入力 (1 を確定した後の ,000) は、すべて打ったまま。</summary>
+    internal static ComposedText Numeric(CompositionTextState state, TextEnv env) =>
+        env.Context().EndsWithEnglishAndSpace || state.Units[0].Raw == "," ? ComposedText.English(CompositionText.Raw(state))
+        : ComposedText.Concat(TypedMarks.Read(state, env).Select(unit => unit.Kana == "、" ? ComposedText.Kana(unit.Kana) : ComposedText.English(unit.Raw)));
 
     /// <summary>英字の大文字・小文字を変える (ai → AI / Ai)。</summary>
     public static string ApplyCase(string text, LetterCase letterCase) => letterCase switch
@@ -137,26 +144,9 @@ internal static partial class CompositionText
         _ => text,
     };
 
-    /// <summary>
-    /// すべて小文字で打った英単語を、自動で正しい大文字小文字に直した形 (iphone → iPhone、iphone's → iPhone's)。直さないなら null。
-    /// コードの文字列の中 (require('jquery')) や、ユーザーが小文字で確定して覚えた語は直さない。
-    /// </summary>
-    internal static string? AutoCanonical(TextEnv env, string raw)
-    {
-        if (env.CodeString) return null;
-        var stem = raw.EndsWith("'s", StringComparison.Ordinal) ? raw[..^2] : raw;
-        if (env.History?.Get(stem) == stem) return null;
-        return env.Detector.ProperNouns.AutoCanonical(raw);
-    }
-
-    /// <summary>前後の区間と . でつながったドメイン・識別子の一部 (github.com・google.github) か。文末の句点 (github.) や連続する . は含めない。</summary>
-    internal static bool IsDotConnected(IReadOnlyList<CompositionSegment> segments, int index) =>
-        index >= 2 && segments[index - 1].Raw == "." && segments[index - 2].Raw is [.., var prev] && char.IsAsciiLetterOrDigit(prev) ||
-        index + 2 < segments.Count && segments[index + 1].Raw == "." && segments[index + 2].Raw is [var next, ..] && char.IsAsciiLetterOrDigit(next);
-
-    /// <summary>英語の区間の表示テキスト。ドメインの一部 (github.com など) は打ったまま、それ以外は自動で正しい大文字小文字に直す。</summary>
-    internal static string DisplayEnglishSegment(IReadOnlyList<CompositionSegment> segments, int index, TextEnv env) =>
-        IsDotConnected(segments, index) ? segments[index].Raw : AutoCanonical(env, segments[index].Raw) ?? segments[index].Raw;
+    /// <summary>区間ごとの打った文字 (区間と同じ数・順)。英語の区間は見せる表記にしてある。</summary>
+    internal static IReadOnlyList<TextSpan> TypedSpans(IReadOnlyList<CompositionSegment> segments, TextEnv env) =>
+        NotationRules.Typed([.. segments.Select(s => new TextSpan(s.IsProtected ? SpanKind.Protected : s.IsEnglish ? SpanKind.Typed : SpanKind.Japanese, s.Raw))], env.ProperNoun);
 
     /// <summary>英語区間は英字のまま、日本語区間はかな (または漢字)。保護範囲は打った原文のまま。</summary>
     private static ComposedText RenderSegments(CompositionTextState state, TextEnv env, bool final, Func<string, bool, string, ComposedText>? convert)
@@ -165,12 +155,13 @@ internal static partial class CompositionText
         if (CompositionText.VerifyProtectedRaw(state)) return ComposedText.Of(SpanKind.Protected, CompositionText.Raw(state));
         var built = ComposedText.Empty;
         var segments = CompositionText.Segments(state, env);
+        var typed = TypedSpans(segments, env);
         for (var i = 0; i < segments.Count; i++)
         {
             var segment = segments[i];
             if (segment.IsEnglish)
             {
-                built += ComposedText.Of(segment.IsProtected ? SpanKind.Protected : SpanKind.English, DisplayEnglishSegment(segments, i, env));
+                built += ComposedText.Of(typed[i].Kind, typed[i].Text);
                 continue;
             }
             var isLast = i == segments.Count - 1;
@@ -195,7 +186,7 @@ internal static partial class CompositionText
             built += convert is not null && kana.Length > 0 ? convert(kana, i > 0 && segments[i - 1].IsEnglish, built.Text) : ComposedText.Kana(kana);
             built += ComposedText.Kana(pending);
         }
-        return built.MapChars(text => CompositionText.HalfWidthStars(state, text));
+        return NotationRules.Show(built, CompositionText.TypedForNotation(state));
     }
 
     /// <summary>英語判定を無視してすべてかなにしたもの (F6)。</summary>
