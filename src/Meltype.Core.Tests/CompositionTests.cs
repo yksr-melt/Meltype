@@ -7016,6 +7016,10 @@ internal static class CompositionTests
         KeigoConverter.Apply(kamoMid);
         Assert.Equal("遅れるかもしれませんが、伺います", string.Concat(kamoMid.Select(c => c.Text)), "〜かもだけど、 → 〜かもしれませんが、");
 
+        var kamoQuest = new List<Clause> { new("とどくかも？", false, ["届くかも？"]) };
+        KeigoConverter.Apply(kamoQuest);
+        Assert.Equal("届くでしょうか？", kamoQuest[0].Text, "届くかも？ → 届くでしょうか？");
+
         // OFF (既定) なら通常のまま
         var off = new Keyboard(live: true);
         off.Type("ryoukai");

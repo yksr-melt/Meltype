@@ -309,6 +309,9 @@ internal static class KeigoConverter
         ("すぐ", "ただちに", false),
     ];
 
+    private static readonly Dictionary<char, (string ReadingPrefix, string KeigoPrefix, bool AllowsParticle)[]> ReadingPrefixBuckets =
+        ReadingPrefixes.GroupBy(x => x.ReadingPrefix[0]).ToDictionary(g => g.Key, g => g.ToArray());
+
     private static readonly string[] Particles =
         ["には", "では", "にも", "でも", "から", "まで", "より", "は", "が", "を", "に", "で", "と", "も", "の", "へ"];
 
@@ -895,7 +898,8 @@ internal static class KeigoConverter
         ["だろう"] = "でしょうか",
         ["でしょ"] = "でしょうか",
         ["かな"] = "でしょうか",
-        ["かも"] = "かもしれませんでしょうか",
+        ["かも"] = "でしょうか",
+        ["かもしれない"] = "でしょうか",
         ["はず"] = "はずでしょうか",
         ["はずだ"] = "はずでしょうか",
         ["じゃないか"] = "ではないでしょうか",
@@ -1041,6 +1045,8 @@ internal static class KeigoConverter
         ("でしょう", "でしょうか"),
         ("でしょ", "でしょうか"),
         ("かな", "でしょうか"),
+        ("かもしれない", "でしょうか"),
+        ("かも", "でしょうか"),
         ("です", "でしょうか"),
     ];
 
@@ -2497,27 +2503,8 @@ internal static class KeigoConverter
             return tailWord + punct;
 
         // 3. 語頭接頭辞 (+ 助詞) の一致と、残りの部分の再帰変換 (きょうはいく → 本日は + 伺います)
-        foreach (var (readingPrefix, keigoPrefix, allowsParticle) in ReadingPrefixes)
-        {
-            if (!readingCore.StartsWith(readingPrefix, StringComparison.Ordinal)) continue;
-            var afterPrefix = readingCore[readingPrefix.Length..];
-            if (afterPrefix.Length == 0) return keigoPrefix + punct;
-
-            if (allowsParticle)
-            {
-                foreach (var particle in Particles)
-                {
-                    if (!afterPrefix.StartsWith(particle, StringComparison.Ordinal)) continue;
-                    var tailReading = afterPrefix[particle.Length..];
-                    if (tailReading.Length == 0) return keigoPrefix + particle + punct;
-                    if (ConvertReadingRemainder(tailReading, isSentenceEnd) is { } convertedTail)
-                        return keigoPrefix + particle + convertedTail + punct;
-                }
-            }
-
-            if (ConvertReadingRemainder(afterPrefix, isSentenceEnd) is { } convertedRest)
-                return keigoPrefix + convertedRest + punct;
-        }
+        if (TryConvertWithReadingPrefix(readingCore, rest => ConvertReadingRemainder(rest, isSentenceEnd)) is { } prefixed)
+            return prefixed + punct;
 
         // 4. 変換後テキスト内の語彙と文末表現・複文途中節の変換
         var rewritten = ApplyInTextReplacements(textCore);
@@ -2701,23 +2688,8 @@ internal static class KeigoConverter
             return qWord + punct;
 
         // 語頭接頭辞 + 疑問の残り (きょうはいく？ → 本日は行かれますでしょうか？)
-        foreach (var (readingPrefix, keigoPrefix, allowsParticle) in ReadingPrefixes)
-        {
-            if (!readingCore.StartsWith(readingPrefix, StringComparison.Ordinal)) continue;
-            var afterPrefix = readingCore[readingPrefix.Length..];
-            if (allowsParticle)
-            {
-                foreach (var particle in Particles)
-                {
-                    if (!afterPrefix.StartsWith(particle, StringComparison.Ordinal)) continue;
-                    var tail = afterPrefix[particle.Length..];
-                    if (QuestionReadingMap.TryGetValue(tail, out var qTail))
-                        return keigoPrefix + particle + qTail + punct;
-                }
-            }
-            if (QuestionReadingMap.TryGetValue(afterPrefix, out var qRest))
-                return keigoPrefix + qRest + punct;
-        }
+        if (TryConvertWithReadingPrefix(readingCore, tail => QuestionReadingMap.GetValueOrDefault(tail)) is { } prefixedQuestion)
+            return prefixedQuestion + punct;
 
         var rewritten = ApplyInTextReplacements(textCore);
         if (!rewritten.EndsWith("でしょうか", StringComparison.Ordinal) &&
@@ -2860,7 +2832,14 @@ internal static class KeigoConverter
     {
         if (ReadingWords.TryGetValue(reading, out var word)) return word;
         if (isSentenceEnd && TailReadingMap.TryGetValue(reading, out var tail)) return tail;
-        foreach (var (readingPrefix, keigoPrefix, allowsParticle) in ReadingPrefixes)
+        return TryConvertWithReadingPrefix(reading, rest => ConvertReadingRemainder(rest, isSentenceEnd));
+    }
+
+    private static string? TryConvertWithReadingPrefix(string reading, Func<string, string?> convertRest)
+    {
+        if (reading.Length == 0 || !ReadingPrefixBuckets.TryGetValue(reading[0], out var bucket))
+            return null;
+        foreach (var (readingPrefix, keigoPrefix, allowsParticle) in bucket)
         {
             if (!reading.StartsWith(readingPrefix, StringComparison.Ordinal)) continue;
             var rest = reading[readingPrefix.Length..];
@@ -2869,13 +2848,14 @@ internal static class KeigoConverter
             {
                 foreach (var particle in Particles)
                 {
-                    if (rest == particle) return keigoPrefix + particle;
-                    if (rest.StartsWith(particle, StringComparison.Ordinal) &&
-                        ConvertReadingRemainder(rest[particle.Length..], isSentenceEnd) is { } convertedAfterParticle)
-                        return keigoPrefix + particle + convertedAfterParticle;
+                    if (!rest.StartsWith(particle, StringComparison.Ordinal)) continue;
+                    var tail = rest[particle.Length..];
+                    if (tail.Length == 0) return keigoPrefix + particle;
+                    if (convertRest(tail) is { } convertedTail)
+                        return keigoPrefix + particle + convertedTail;
                 }
             }
-            if (ConvertReadingRemainder(rest, isSentenceEnd) is { } convertedRest)
+            if (convertRest(rest) is { } convertedRest)
                 return keigoPrefix + convertedRest;
         }
         return null;
