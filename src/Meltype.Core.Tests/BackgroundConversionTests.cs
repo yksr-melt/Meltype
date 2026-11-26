@@ -100,10 +100,11 @@ internal static class BackgroundConversionTests
             Interlocked.Increment(ref calls);
             if (n == 1) throw new InvalidOperationException("試し");
         });
+        // 壊れたワーカーは何秒待っても終わらないので、時間切れは長くてよい。Windows の CI では、1 件目の処理 (例外をログに書く) に 5 秒以上かかったことがある
         worker.Submit(1);
-        Assert.True(worker.Wait(1, 5000), "例外でも終わる");
+        Assert.True(worker.Wait(1, 30000), "例外でも終わる");
         worker.Submit(2);
-        Assert.True(worker.Wait(2, 5000), "次の要求も処理する");
+        Assert.True(worker.Wait(2, 30000), "次の要求も処理する");
         Assert.Equal(2, Volatile.Read(ref calls));
     }
 
