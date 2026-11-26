@@ -10,8 +10,10 @@ namespace Meltype.Composition.Utility;
 /// HEX・RGB・HSL のカラー表記を相互変換して候補に出す (#3b82f6 ↔ rgb(59, 130, 246) ↔ hsl(217, 91%, 60%))。
 /// 打った表記を先頭に残し、別形式を後ろに並べる。
 /// </summary>
-internal sealed partial class ColorConversion : IUtilityConversion
+public sealed partial class ColorConversion : IUtilityConversion
 {
+    internal ColorConversion() { }
+
     [GeneratedRegex(@"^#(?<hex>[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")]
     private static partial Regex HexPattern();
 
@@ -21,13 +23,39 @@ internal sealed partial class ColorConversion : IUtilityConversion
     [GeneratedRegex(@"^hsla?\(\s*(?<h>-?\d+(?:\.\d+)?)\s*(?:,\s*|\s+)(?<s>\d+(?:\.\d+)?)%\s*(?:,\s*|\s+)(?<l>\d+(?:\.\d+)?)%(?:\s*(?:,|/)\s*(?<a>\d+(?:\.\d+)?%?|\.\d+%?))?\s*\)$", RegexOptions.IgnoreCase)]
     private static partial Regex HslPattern();
 
-    public UtilityCandidates? Convert(UtilityInput input)
+    UtilityCandidates? IUtilityConversion.Convert(UtilityInput input)
     {
         var raw = CompositionText.Raw(input.Text);
         if (input.Text.KanaInput || input.Text.Mode != DisplayMode.Auto) return null;
         var candidates = Candidates(raw);
         return candidates.Count > 0 ? new(candidates, UtilityPlacement.Replace) : null;
     }
+
+    /// <summary>HEX・RGB・HSL のカラーコードなら RGBA (0..255) を返す。色見本の描画用。</summary>
+    public static bool TryParseRgba(string text, out (byte R, byte G, byte B, byte A) rgba)
+    {
+        if (TryParseHex(text, out var hex))
+        {
+            rgba = (hex.R, hex.G, hex.B, ToAlphaByte(hex.Alpha));
+            return true;
+        }
+        if (TryParseRgb(text, out var rgb))
+        {
+            rgba = (rgb.R, rgb.G, rgb.B, ToAlphaByte(rgb.Alpha));
+            return true;
+        }
+        if (TryParseHsl(text, out var hsl))
+        {
+            var (r, g, b) = HslToRgb(hsl.H, hsl.S, hsl.L);
+            rgba = (r, g, b, ToAlphaByte(hsl.Alpha));
+            return true;
+        }
+        rgba = default;
+        return false;
+    }
+
+    private static byte ToAlphaByte(double? alpha) =>
+        alpha is { } a ? (byte)Math.Round(a * 255.0, MidpointRounding.AwayFromZero) : (byte)255;
 
     internal static List<string> Candidates(string raw)
     {

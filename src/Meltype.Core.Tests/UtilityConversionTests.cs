@@ -302,5 +302,11 @@ internal static class UtilityConversionTests
         var space = new Keyboard();
         space.Type("#3b82f6 ");
         Assert.Equal("#3b82f6 ", space.Host.Document);
+
+        // 色見本用の RGBA パース
+        Assert.True(ColorConversion.TryParseRgba("#3b82f6", out var hexRgba) && hexRgba == (59, 130, 246, 255), "HEX を RGBA にパースできる");
+        Assert.True(ColorConversion.TryParseRgba("rgba(255, 0, 0, 0.5)", out var alphaRgba) && alphaRgba == (255, 0, 0, 128), "RGBA をパースできる");
+        Assert.True(ColorConversion.TryParseRgba("hsl(0, 100%, 50%)", out var hslRgba) && hslRgba == (255, 0, 0, 255), "HSL を RGBA にパースできる");
+        Assert.True(!ColorConversion.TryParseRgba("#3b82f6 Issueタイトル", out _), "カラーコード以外の文字が混ざる候補はパースしない");
     }
 }

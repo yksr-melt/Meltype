@@ -311,9 +311,10 @@ internal sealed class CompositionWindow : PopupForm
         {
             for (var i = 0; i < items.Count; i++)
             {
-                // 候補の右に注記を出す分だけ広くする
+                // 候補の右に注記や色見本を出す分だけ広くする
                 var note = view.Notes?[i].ToDisplayText() is { } n ? TextRenderer.MeasureText(g, n, _hintFont).Width + 12 : 0;
-                width = Math.Max(width, TextRenderer.MeasureText(g, $"9  {items[i]}", _candidateFont).Width + 28 + note);
+                var swatch = Utility.ColorConversion.TryParseRgba(items[i], out _) ? SwatchWidth() : 0;
+                width = Math.Max(width, TextRenderer.MeasureText(g, $"9  {items[i]}", _candidateFont).Width + 28 + note + swatch);
             }
             height += Math.Min(items.Count, PageSize) * (_candidateFont.Height + 4) + 6;
             // 2 ページ以上あるときは、下に「3 / 27」を出す分
@@ -403,11 +404,21 @@ internal sealed class CompositionWindow : PopupForm
                 DrawText(g, $"{(numbered ? $"{i - first + 1}" : " ")}  {items[i]}", _candidateFont, new Point(12, y),
                     i == selectedItem ? _palette.Text : _palette.Candidate,
                     i == selectedItem ? Blend(Background, Color.FromArgb(60, Accent)) : Background, TextFormatFlags.NoPrefix);
+                var hasSwatch = Utility.ColorConversion.TryParseRgba(items[i], out var rgba);
+                var rightEdge = Width - 10;
+                if (hasSwatch)
+                {
+                    var swatchSize = SwatchSize(rowHeight);
+                    var swatchX = rightEdge - swatchSize;
+                    var swatchY = y + (_candidateFont.Height - swatchSize) / 2;
+                    DrawColorSwatch(g, swatchX, swatchY, swatchSize, rgba);
+                    rightEdge = swatchX - 8;
+                }
                 if (view.Notes?[i].ToDisplayText() is { } note)
                 {
                     // 候補の注記を右端に小さく出す
                     var noteWidth = TextRenderer.MeasureText(g, note, _hintFont).Width;
-                    TextRenderer.DrawText(g, note, _hintFont, new Point(Width - noteWidth - 10, y + (_candidateFont.Height - _hintFont.Height) / 2), Accent, TextFormatFlags.NoPrefix);
+                    TextRenderer.DrawText(g, note, _hintFont, new Point(rightEdge - noteWidth, y + (_candidateFont.Height - _hintFont.Height) / 2), Accent, TextFormatFlags.NoPrefix);
                 }
                 y += rowHeight;
             }
@@ -423,6 +434,29 @@ internal sealed class CompositionWindow : PopupForm
             y += 6;
         }
         TextRenderer.DrawText(g, view.Hint, _hintFont, new Point(8, y), _palette.Hint, TextFormatFlags.NoPrefix);
+    }
+
+    private int SwatchSize(int rowHeight) =>
+        Math.Max(10, Math.Min(rowHeight - 4, (int)Math.Round(12 * _monitorScale)));
+
+    private int SwatchWidth() => SwatchSize(_candidateFont.Height + 4) + 10;
+
+    private void DrawColorSwatch(Graphics g, int x, int y, int size, (byte R, byte G, byte B, byte A) rgba)
+    {
+        if (rgba.A < 255)
+        {
+            var half = size / 2;
+            using var light = new SolidBrush(Color.White);
+            using var dark = new SolidBrush(Color.LightGray);
+            g.FillRectangle(light, x, y, half, half);
+            g.FillRectangle(dark, x + half, y, size - half, half);
+            g.FillRectangle(dark, x, y + half, half, size - half);
+            g.FillRectangle(light, x + half, y + half, size - half, size - half);
+        }
+        using var fill = new SolidBrush(Color.FromArgb(rgba.A, rgba.R, rgba.G, rgba.B));
+        g.FillRectangle(fill, x, y, size, size);
+        using var border = new Pen(Color.FromArgb(160, _palette.Hint));
+        g.DrawRectangle(border, x, y, size, size);
     }
 
     /// <summary>
