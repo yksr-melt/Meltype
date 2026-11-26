@@ -1111,6 +1111,36 @@ internal static class SessionFacadeTests
     }
 
     [Test]
+    public static void CodeInput_TerminalShellWordsWithCommentMarkersRemainDirect()
+    {
+        // #1665: ターミナルのシェルの -- のオプションと、語の途中の # (引数の数・長さ・前方一致の削除・基数・flake) は、続けて打つ語も英数のまま入れる。
+        foreach (var command in new[]
+        {
+            "bash --kyouha", "git log --oneline", "--kyouha", "ls\t--all",
+            "echo $# ima", "echo ${#name}", "echo ${path#*/} ima", "echo ${path##*/} ima", "echo $((16#ff)) ima", "nix build .#hello",
+            "ls src/*.c ima", "ls /*", "cp /*.txt ima",
+        })
+        {
+            var session = Create();
+            session.CodeInput = true;
+            session.CodeTerminal = true;
+            var field = new Field();
+            Assert.True(Type(session, command, field).All(r => !r.Consumed && r.View is null), command);
+            Assert.Equal(command, field.Text);
+        }
+        // 語の先頭の記号の後に空白を打てば、コメント (シェル・SQL・Lua) を日本語で書ける。
+        foreach (var prefix in new[] { "-- ", "kome -- ", "# ", "ls # ", "## ", "/* ", "int a; /* " })
+        {
+            var session = Create();
+            session.CodeInput = true;
+            session.CodeTerminal = true;
+            var field = new Field();
+            Assert.True(Type(session, prefix, field).All(r => !r.Consumed), prefix);
+            Assert.Equal("きょうは", Type(session, "kyouha", field)[^1].View?.Text, prefix);
+        }
+    }
+
+    [Test]
     public static void CodeInput_TerminalEditorSlashCommentsComposeJapanese()
     {
         // ターミナルの中のエディター (Vim など) の、空白の後の // コメントは日本語で書く。前の行も含む周辺文字列を返すターミナルでも同じ。
@@ -1122,13 +1152,18 @@ internal static class SessionFacadeTests
                 session.CodeTerminal = true;
                 Assert.Equal("こめんと", Type(session, "komento", new Field(before + body))[^1].View?.Text, before + body);
             }
+        // 空白の後の /* で始めたコメントは、次の行も日本語で書く。
+        var block = Create();
+        block.CodeInput = true;
+        block.CodeTerminal = true;
+        Assert.Equal("こめんと", Type(block, "komento", new Field("/* 説明\n   "))[^1].View?.Text);
     }
 
     [Test]
     public static void CodeInput_TerminalSlashArgumentsDoNotOpenBlocks()
     {
-        // 引数の // に続く /* は、次の行まで続くコメントの始まりではない。
-        foreach (var before in new[] { "$ gsutil ls gs://bucket/*\n$ ", "$ curl https://example.com/*\n$ ", "int a; // foo /* bar\n" })
+        // 引数の // に続く /* と、ワイルドカードの /* は、次の行まで続くコメントの始まりではない。
+        foreach (var before in new[] { "$ gsutil ls gs://bucket/*\n$ ", "$ curl https://example.com/*\n$ ", "int a; // foo /* bar\n", "$ ls src/*.c\n$ ", "$ ls /*\n$ " })
         {
             var session = Create();
             session.CodeInput = true;
@@ -1155,7 +1190,8 @@ internal static class SessionFacadeTests
     [Test]
     public static void CodeInput_TerminalWithoutSurroundingTextContinuesLineComments()
     {
-        foreach (var marker in new[] { "#", "// " })
+        // ターミナルのコメントは、記号の後に空白を打った時点で始まる
+        foreach (var marker in new[] { "# ", "// " })
         {
             var session = Create();
             session.CodeInput = true;
