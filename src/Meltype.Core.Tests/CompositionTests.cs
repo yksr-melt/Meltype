@@ -2803,6 +2803,27 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void AtokConversionKeys_ArrowsResizeAndDownCommitsUpToTheSelectedClause()
+    {
+        // #2128: ATOK と同じく、Shift + ← で文節を移り、↓ で選んだ文節までを確定する。← は区切りを変える
+        var k = new Keyboard();
+        k.Settings.AtokConversionKeys = true;
+        k.Type("tanniwotoru ");
+        var before = string.Join("|", k.Host.View!.Clauses!);
+        k.Press(VirtualKeys.Left);
+        Assert.True(string.Join("|", k.Host.View!.Clauses!) != before, "← で区切りが変わる: " + before);
+        var clauses = k.Host.View!.Clauses!;
+        k.Host.PhysicalShift = true;
+        k.Key(VirtualKeys.LShift);
+        k.Press(VirtualKeys.Left);
+        k.Key(VirtualKeys.LShift, up: true);
+        k.Host.PhysicalShift = false;
+        k.Press(VirtualKeys.Down);
+        Assert.Equal(clauses[0], k.Host.Document, "選んでいる文節までを確定");
+        Assert.True(k.Showing is { Length: > 0 }, "残りは未確定のまま");
+    }
+
+    [Test]
     public static void Issue339_JikouOffersSeasonalGreetings()
     {
         var k = new Keyboard(now: () => new DateTime(2026, 10, 9));

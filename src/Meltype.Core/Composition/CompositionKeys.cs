@@ -536,6 +536,17 @@ internal static class CompositionKeys
     {
         var (input, conversion) = (scene.Input, scene.Conversion);
         var shift = state.Shift;
+        if (env.Settings.AtokConversionKeys)
+        {
+            // ATOK と同じ: ← → で文節の区切りを変え、Shift + ← → で文節を移る。↓ で選んだ文節までを確定する
+            if (vk is VirtualKeys.Left or VirtualKeys.Right) shift = !shift;
+            if (vk == VirtualKeys.Down)
+            {
+                if (conversion.Selected < conversion.Clauses.Count - 1) CommitUpToSelectedClause(state, scene, env);
+                else CompositionCommit.Commit(state, scene, env);
+                return true;
+            }
+        }
         switch (vk)
         {
             case VirtualKeys.Space when shift:

@@ -338,6 +338,10 @@ public sealed class Settings
      Description("文節に分けて変換しているとき、F6〜F10 (ひらがな・カタカナ・半角カタカナ・全角英数・半角英数) を全体ではなく、選んでいる文節だけに効かせます (今日は|Google の「今日は」だけをカタカナにするなど)。打った英字が分からない文節 (かな入力など) では何もしません。")]
     public bool FunctionKeysAffectSelectedClause { get; set; }
 
+    [Category("8. キー操作"), DisplayName("変換中の矢印キーを ATOK と同じにする"),
+     Description("変換中の ← → で文節の区切りを変え、Shift + ← → で文節を移ります。↓ で選んでいる文節までを確定し、残りは続けて変換できます。")]
+    public bool AtokConversionKeys { get; set; }
+
     [Category("8. キー操作"), DisplayName("Shift + Enter で選んだ文節までを確定"),
      Description("文節に分けて変換しているとき、Shift + Enter で、選んでいる文節までを確定し、残りの文節は未確定のまま (ひらがなに戻して) 続けて編集できるようにします。")]
     public bool PartialCommit { get; set; }

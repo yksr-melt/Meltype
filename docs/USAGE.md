@@ -26,6 +26,8 @@ kyouhagoogledekensaku  →  今日はgoogleで検索
 | 全角英字 / 半角英字 | <kbd>F9</kbd> / <kbd>F10</kbd> |
 | 取り消す | <kbd>Esc</kbd> |
 
+設定「変換中の矢印キーを ATOK と同じにする」を ON にすると、<kbd>←</kbd> <kbd>→</kbd> で区切りを変え、<kbd>Shift</kbd> + <kbd>←</kbd> <kbd>→</kbd> で文節を選び、<kbd>↓</kbd> で選んだ文節までを確定します。
+
 ローマ字の綴りは Microsoft IME と同じです。
 
 <a name="設定の開き方"></a>
