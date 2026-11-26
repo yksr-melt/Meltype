@@ -11,7 +11,7 @@ $originalTemp = $env:TEMP
 $powershell = Join-Path ([Environment]::GetFolderPath('Windows')) 'System32\WindowsPowerShell\v1.0\powershell.exe'
 New-Item -ItemType Directory -Path $fixture -Force | Out-Null
 try {
-    Copy-Item -LiteralPath (Join-Path $PSScriptRoot '..\packaging\setup-ime.ps1') -Destination $fixture
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'setup-ime.ps1') -Destination $fixture
     $env:TEMP = $testRoot
     $helper = Join-Path $fixture 'meltype-ime.ps1'
     $log = Join-Path $testRoot 'Meltype-setup-ime.log'

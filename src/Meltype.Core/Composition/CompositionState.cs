@@ -6,6 +6,7 @@ using Meltype.Diagnostics;
 using Meltype.Engine;
 using Meltype.Input;
 using Meltype.Learning;
+using Meltype.Notation;
 
 namespace Meltype.Composition;
 
@@ -20,6 +21,18 @@ internal record TextEnv(CompositionDetector Detector, Config.Settings Settings, 
 
     /// <summary>入力欄の文脈。使うたびに、そのときの入力欄の文字と自分の確定の記録から決める (<see cref="CompositionContext.ContextOf"/>)。</summary>
     public required Func<TextContext> Context { get; init; }
+
+    /// <summary>
+    /// すべて小文字で打った英単語を、自動で正しい大文字小文字に直した形 (iphone → iPhone、iphone's → iPhone's)。直さないなら null。
+    /// コードの文字列の中 (require('jquery')) や、ユーザーが小文字で確定して覚えた語は直さない。
+    /// </summary>
+    internal string? ProperNoun(string raw)
+    {
+        if (CodeString) return null;
+        var stem = raw.EndsWith("'s", StringComparison.Ordinal) ? raw[..^2] : raw;
+        if (History?.Get(stem) == stem) return null;
+        return Detector.ProperNouns.AutoCanonical(raw);
+    }
 }
 
 /// <summary>
@@ -31,6 +44,9 @@ internal record TextEnv(CompositionDetector Detector, Config.Settings Settings, 
 internal sealed record TextContext(string? PrecedingText, bool? PrecedingEnglish, bool PrecedingEnglishSentence, bool PrecedingEnglishName, string? FollowingText, bool? FollowingEnglish)
 {
     public static readonly TextContext None = new(null, null, false, false, null, null);
+
+    /// <summary>キャレットの前が空白で終わる英語 ("Hello "・"GitHub ") か。英単語を確定したすぐ後 ("GitHub") は含まない。</summary>
+    public bool EndsWithEnglishAndSpace => PrecedingEnglish == true && PrecedingText is [.., ' '];
 }
 
 /// <summary>打った英字を読み直す断片が、読み直す元の入力から引き継ぐもの。LearningContext は元の入力の学習の文脈。</summary>
@@ -42,7 +58,7 @@ internal sealed record FragmentOrigin(bool? LearningContext);
 internal sealed record CompositionEnv(CompositionDetector Detector, IKanjiConverter Converter, CompositionServices Services, Config.Settings Settings)
     : TextEnv(Detector, Settings, Services.RomajiTypos, Services.History)
 {
-    public CompositionLearning Learning { get; } = new(Services, Converter, Detector.ProperNouns);
+    public CompositionLearning Learning { get; } = new(Services, Detector.ProperNouns);
 
     /// <summary>
     /// 変換エンジンの答えを後から受け取れるフロント (<see cref="IKanjiConverter.ResultReady"/> を受けて <see cref="CompositionController.RefreshConversion"/> を呼ぶ) か。
@@ -121,7 +137,8 @@ internal sealed record CompositionEnv(CompositionDetector Detector, IKanjiConver
 
 internal enum ConversionTrigger { Other, Space, Tab }
 
-internal sealed record LastCommit(string Text, bool English);
+/// <summary>自分の確定の記録。Shown は確定したときにフロントが渡したキャレットの前の文字 (読めなければ null)、Text は確定した後のキャレットの前の文字 (末尾の 20 文字まで)。</summary>
+internal sealed record OwnCommit(string? Shown, string Text);
 
 /// <summary>1 回の変換 (Space などで始めてから、確定するか取り消すまで) の状態。</summary>
 internal sealed class Conversion(List<Clause> clauses, ConversionTrigger startedBy, bool preferJapanese)
@@ -184,14 +201,8 @@ internal sealed class CompositionState
     // 押したキー (離したことを受け取るまで。親指シフトの親指キーを、文字に使わずに離したかを見る)
     public readonly HashSet<int> Pressed = [];
 
-    /// <summary>自分が最後に確定した文字 (末尾の 20 文字まで) と、それが英語だったか。キャレットの前が読めないときの文脈に使う。分からなければ null。</summary>
-    public LastCommit? Last;
-
-    /// <summary>
-    /// 自分が最後に確定した時刻。この直後はアプリの文字がまだ更新されていないかもしれないので、アプリの文字より <see cref="Last"/> を信じる。
-    /// フォーカスが移って <see cref="Last"/> を消した直後も、アプリの文字は信じない (文脈が分からないものとして扱う)。
-    /// </summary>
-    public long LastCommitTime = long.MinValue / 2;
+    /// <summary>最後の確定の記録。キャレットの前が読めないときと、確定がまだ入っていないときの文脈に使う (<see cref="CompositionContext.ContextOf"/>)。キャレットが動いたら忘れる。</summary>
+    public OwnCommit? Own;
 
     /// <summary>入力を覚えないように求める入力欄か。</summary>
     public bool PrivateField;

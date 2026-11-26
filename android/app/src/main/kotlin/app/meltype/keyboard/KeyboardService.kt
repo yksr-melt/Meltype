@@ -17,6 +17,7 @@ import android.os.SystemClock
 import android.util.Log
 import android.view.KeyEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.ViewTreeObserver
 import android.view.WindowInsets
 import android.view.WindowInsetsController
@@ -291,10 +292,10 @@ class KeyboardService : InputMethodService(), KeyListener {
     /** 配列の切り替えと、絵文字の画面の開け閉め。どの順で確定して何を出すかは [ScreenCoordinator] が決める。 */
     private val screens = ScreenCoordinator(nav, object : ScreenCoordinator.Screen {
         override fun showKeyboard() = showLayout()
-        override fun releaseShift() = setShift(ShiftState.OFF)
+        override fun releaseShift() = setShift(ShiftState.Off)
         override fun showEmojiPanel(pressedAtMs: Long) = openEmojiPanel(pressedAtMs)
     })
-    private var shift = ShiftState.OFF
+    private var shift: ShiftState = ShiftState.Off
 
     private var selStart = 0
     private var selEnd = 0
@@ -635,7 +636,7 @@ class KeyboardService : InputMethodService(), KeyListener {
                 if (nav.current == LayoutId.QWERTY) setShift(shift.onCharTyped())
             }
             is KeyAction.Romaji -> {
-                val shifted = shift != ShiftState.OFF
+                val shifted = shift != ShiftState.Off
                 typeCharacter((if (shifted) action.char.uppercaseChar() else action.char).code, shift = shifted)
                 setShift(shift.onCharTyped())
             }
@@ -650,7 +651,8 @@ class KeyboardService : InputMethodService(), KeyListener {
                 if (editorAction != null) currentInputConnection?.performEditorAction(editorAction)
                 else sendDownUpKeyEvents(KeyEvent.KEYCODE_ENTER)
             }
-            KeyAction.Shift -> setShift(shift.onShiftPressed())
+            // 連打の間隔は Android の既定のダブルタップの間隔 (ふつう 300ms) に合わせる。
+            KeyAction.Shift -> setShift(shift.onShiftPressed(timeMs, ViewConfiguration.getDoubleTapTimeout()))
             KeyAction.Language -> coreMode(ImeJson::modeToggleRequested)
             is KeyAction.Switch -> screens.switchTo(action.to)
             KeyAction.Emoji -> if (Settings(this).emojiEnabled) screens.openEmoji(timeMs)

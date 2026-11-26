@@ -108,7 +108,7 @@ stub が impl をロードし、Meltype の更新後は、アプリを再起動�
 ### キーの流れ
 
 1. `OnTestKeyDown`: 変換中ならキーを使う。変換していないときは、最後の応答の `state.capture` が受け取ると言ったキーだけを使う
-   (`keys` の入力モードのキー・切り替えキー、`word` の英字・数字・@・_、`symbol` の記号、`space`・`shiftSpace`)。Ctrl・Alt・Windows キー付き・ほかのソフトが送り込んだ文字 (VK_PACKET) は使わない
+   (`printableAscii` の文字から `printableAsciiExcept` を除いたもの、`shortcuts` の入力モードのキー・切り替えキー・Space・Shift+Space)。Ctrl・Alt・Windows キー付き・ほかのソフトが送り込んだ文字 (VK_PACKET) は使わない
    (変換中なら、その場で確定してからアプリに通す。その場で確定できないアプリでは受け取り、2. で確定してから送り直す)。
    まだ応答が無い・つながらないときは、日本語入力として文字と入力モードのキーを使う。
    パスワード欄か (入力欄の種類 InputScope) も、ここでキーごとに読み直す (読んだ結果は、続く同じキー・同じ入力欄の `OnKeyDown` で 1 回だけ使う)。
