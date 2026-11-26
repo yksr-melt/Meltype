@@ -13,9 +13,9 @@ describe("使い方ガイド", () => {
     assert.equal(rewriteUrl("MACOS.md#ユーザー辞書"), "/guide/macos/#ユーザー辞書");
   });
 
-  it("見出しの画像はガイドに写した場所を使う", () => {
-    assert.equal(rewriteUrl("images/headings/usage/01.svg"), "/guide/images/headings/usage/01.svg");
-    assert.match(render('<img src="images/headings/usage/01.svg" alt="キー操作">'), /src="\/guide\/images\/headings\/usage\/01\.svg"/);
+  it("文書の画像はガイドに写した場所を使う", () => {
+    assert.equal(rewriteUrl("images/cards/os-linux.svg"), "/guide/images/cards/os-linux.svg");
+    assert.match(render('<img src="images/cards/os-linux.svg" alt="Linux">'), /src="\/guide\/images\/cards\/os-linux\.svg"/);
   });
 
   it("ガイドに無い文書・ソースは GitHub で開く", () => {

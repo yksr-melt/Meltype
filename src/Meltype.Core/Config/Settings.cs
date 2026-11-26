@@ -837,7 +837,7 @@ public sealed class Settings
      Description("キーごと・日ごと・時間帯ごとの打鍵数を数えて、この PC の中に保存します (打った文字の並びは保存しません)。Windows 以外では、Meltype で入力しているときの打鍵だけを数えます (Shift などの修飾キーは数えません)。端末版と Android では数えません。パスワード欄では数えませんが、macOS ではアプリによってパスワード欄の打鍵も数えることがあります。「Discord に表示する」を選ぶと、今日と合計の打鍵数・1 分あたりの打鍵数・Meltype を起動してからの時間を、この PC の Discord のアプリに送ります。既定は「数えない」です。")]
     public KeyCountMode KeyCount { get; set; }
 
-    [Category("12. ログ"), DisplayName("ファイルにログを書く"), Description("%LOCALAPPDATA%\\Meltype\\meltype.log にログを書きます (OFF でも、トレイの「ログ / 判定理由」で見られるログは Meltype が動いている間だけメモリに残ります)。/・$・@ で始まる語を検知したときの先頭の記号 1 文字・アプリ名・入力欄の名前が含まれます。確定した文字列などは「ログに入力した文字を残す」が ON のときだけ残ります。")]
+    [Category("12. ログ"), DisplayName("ファイルにログを書く"), Description("%LOCALAPPDATA%\\Meltype\\meltype.log にログを書きます (OFF でも、トレイの「ログ / 判定理由」で見られるログは Meltype が動いている間だけメモリに残ります)。アプリ名・入力欄の名前が含まれます。確定した文字列などは「ログに入力した文字を残す」が ON のときだけ残ります。")]
     public bool FileLog { get; set; }
 
     [Category("12. ログ"), DisplayName("ログに入力した文字を残す"), Description("確定した文字列・打った英字・読み・直した語をログに残します (不具合を調べるとき用)。OFF なら文字数だけを残します。パスワード欄では入力を扱わないので残りません。")]
