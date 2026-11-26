@@ -131,7 +131,7 @@ internal sealed partial class CompositionDetector
     /// </summary>
     /// <param name="reasons">渡したら、選んだ道と、言語の割り当てが違う一番軽い道 (次点) を書く関数を足す (確定のログ用。issue #1644)。
     /// キーを打つたびに呼ばれるので、次点を探して文字列にするのは、ログに書くときだけにする。</param>
-    private List<List<CompositionSegment>> FindSpanAlternatives(Prepared prepared, bool? learning, IReadOnlyList<CompositionUnit> units, string pending, bool? precedingEnglish, bool? followingEnglish,
+    private List<List<CompositionSegment>> FindSpanAlternatives(Prepared prepared, LanguageLearning learning, IReadOnlyList<CompositionUnit> units, string pending, bool? precedingEnglish, bool? followingEnglish,
         bool manual, bool englishSentence, bool kanaInput, bool punctuateAfterEnglish, double englishBias, int count, List<Func<string>>? reasons = null)
     {
         var text = prepared.Raw + pending;
@@ -635,7 +635,7 @@ internal sealed partial class CompositionDetector
     /// start から始まる、綴りで決まる候補: 英語 (知っている英単語・知らない英字・短縮形) と、
     /// ユーザーがかなに直して覚えた語 (日本語の語として重み 1)。
     /// </summary>
-    private List<(LatticeEdge, double)> EnglishEdges(Prepared prepared, bool? learning, string text, int start, int[] unknown, bool kanaInput, bool manual, Func<int, bool> isBoundary, bool afterEnglish)
+    private List<(LatticeEdge, double)> EnglishEdges(Prepared prepared, LanguageLearning learning, string text, int start, int[] unknown, bool kanaInput, bool manual, Func<int, bool> isBoundary, bool afterEnglish)
     {
         var edges = new List<(LatticeEdge, double)>();
         if (!char.IsAsciiLetter(text[start])) return edges;
@@ -657,7 +657,7 @@ internal sealed partial class CompositionDetector
             else if (IsWordCasing(span) && IsLatticeEnglishWord(learning, span.ToLowerInvariant()) && (span.Length > 1 || Standalone(text, start, end, afterEnglish)) &&
                      !IsLowercaseJapaneseProperNoun(learning, span))
             {
-                cost = Memory?.Get(span.ToLowerInvariant(), learning) == true ? LearnedEnglishCost
+                cost = learning.Get(span.ToLowerInvariant()) == true ? LearnedEnglishCost
                     : (ReadableEnglish.Value.ContainsWord(span.ToLowerInvariant()) ? ReadableEnglishCost : KnownEnglishCost) + (span.Length <= 2 && span.All(char.IsAsciiLetterLower) ? ShortEnglishCost : 0);
                 if (kanaInput && span.Length >= 4) cost += KanaInputEnglishBias;
                 // 日本語由来の語 (suzuki・sushi) は、ローマ字で読んだかなも日本語の語として並べる
@@ -665,7 +665,7 @@ internal sealed partial class CompositionDetector
                     _romaji.ConvertLenient(span, final: true) is var reading && reading.All(KanaChars.IsHiraganaOrLongMark))
                     edges.Add((new LatticeEdge(start, end, false, reading, true, false), JapaneseWordCost));
             }
-            else if (Memory?.Get(span.ToLowerInvariant(), learning) == false)
+            else if (learning.Get(span.ToLowerInvariant()) == false)
             {
                 // かなに直して覚えた語 (google を ごおgぇ に) は、日本語の語として読む
                 edges.Add((new LatticeEdge(start, end, false, _romaji.ConvertLenient(span.ToLowerInvariant(), final: true), true, false), JapaneseWordCost));
@@ -704,8 +704,8 @@ internal sealed partial class CompositionDetector
     /// 小文字で打った、japanese.txt の語と同じ綴りの固有名詞か (wakatte は わかって、Wakatte.TV は固有名詞)。
     /// 英単語の辞書には固有名詞の小文字も入っているので、固有名詞で見分ける。
     /// </summary>
-    private bool IsLowercaseJapaneseProperNoun(bool? learning, string span) =>
-        span.All(char.IsAsciiLetterLower) && Memory?.Get(span, learning) is null && _proper.Contains(span) &&
+    private bool IsLowercaseJapaneseProperNoun(LanguageLearning learning, string span) =>
+        span.All(char.IsAsciiLetterLower) && learning.Get(span) is null && _proper.Contains(span) &&
         _kana?.IsJapaneseWord(_romaji.ConvertLenient(span, final: true)) == true;
 
     /// <summary>
@@ -722,9 +722,9 @@ internal sealed partial class CompositionDetector
     /// <remarks>
     /// english.txt の語の -s の形 (deploys) も語にする。english-words.txt は deploy を持たず ploys を持つので、deploys を de|ploys に割ってしまう。
     /// </remarks>
-    private bool IsLatticeEnglishWord(bool? learning, string lower)
+    private bool IsLatticeEnglishWord(LanguageLearning learning, string lower)
     {
-        if (Memory?.Get(lower, learning) is { } learned) return learned;
+        if (learning.Get(lower) is { } learned) return learned;
         if (lower.Length == 1) return lower is "a" or "i" or "u" or "r";
         return _english.Words.ContainsWord(lower) || _proper.Contains(lower) || IsCommonEnglishWord(lower) || ReadableEnglish.Value.ContainsWord(lower) ||
             lower.Length >= 4 && lower[^1] == 's' && _english.Words.ContainsWord(lower[..^1]) ||
