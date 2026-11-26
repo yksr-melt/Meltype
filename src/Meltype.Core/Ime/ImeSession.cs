@@ -571,7 +571,7 @@ internal static class ImeSession
         var lateResults = env.Parts.LateResults();
         var before = LineBefore(state, state.Field);
         CompositionEnv composition = null!;
-        composition = new(env.Parts.Detector, env.Parts.Converter, env.Parts.Services, settings)
+        composition = new(env.Parts.Detector, env.Parts.Converter, settings.LearningEnabled ? env.Parts.Services : env.Parts.Services.WithoutLearning(), settings)
         {
             ReadingOf = env.Parts.ReadingOf,
             ClassifyDirect = env.Parts.ClassifyDirect is { } classify ? (letters, final) => classify(letters, final, settings) : null,

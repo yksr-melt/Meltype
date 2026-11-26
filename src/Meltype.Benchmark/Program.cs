@@ -12,7 +12,7 @@ using Meltype.Engine;
 using Meltype.Ime;
 using Meltype.Learning;
 CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
-var detector = CompositionDetector.CreateDefault(); var languages = new LanguageMemory(null); detector.Memory = languages;
+var detector = CompositionDetector.CreateDefault(); var languages = new LanguageMemory(null);
 var services = new CompositionServices { Languages = languages, Candidates = CandidateDictionary.Load(null), ContextRules = ContextRules.Load(null), History = new ConversionHistory(null), Misspellings = MisspellingDictionary.Load(null), RomajiTypos = RomajiTypoCorrector.Load(detector.Romaji) };
 MeltypeRuntime.Connect(detector, services);
 var samples = args.Length > 0 ? int.Parse(args[0], CultureInfo.InvariantCulture) : 15; var lengths = args.Length > 1 ? args[1].Split(',').Select(n => int.Parse(n, CultureInfo.InvariantCulture)).ToArray() : new[] { 256 };
