@@ -19,7 +19,7 @@ internal static class BackupTests
             System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo("th-TH");
             Directory.CreateDirectory(root);
             var (content, _) = Backup.Create(root, "test");
-            var (created, _, _) = Backup.Inspect(content);
+            var created = Backup.Read(content).Created;
             var date = DateTime.ParseExact(created, "yyyy-MM-ddTHH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
             Assert.Equal(DateTime.Now.Year, date.Year, "仏暦ではなく西暦で保存する");
         }
@@ -46,19 +46,19 @@ internal static class BackupTests
 
             var (content, files) = Backup.Create(source, "0.2.0");
             Assert.Equal(3, files, "ログは入れない");
-            var (_, app, names) = Backup.Inspect(content);
-            Assert.Equal("0.2.0", app);
-            Assert.True(names.Contains("dictionaries/candidates.txt"), "ユーザーの辞書も入る");
+            var backup = Backup.Read(content);
+            Assert.Equal("0.2.0", backup.App);
+            Assert.True(backup.Files.Any(file => file.Name == "dictionaries/candidates.txt"), "ユーザーの辞書も入る");
 
             Directory.CreateDirectory(target);
             File.WriteAllText(Path.Combine(target, "userdict.txt"), "まえ\t前\n");
-            Assert.Equal(3, Backup.Restore(content, target));
+            Assert.Equal(3, backup.Restore(target));
             Assert.Equal("ゆきしろ\t雪代\n", File.ReadAllText(Path.Combine(target, "userdict.txt")));
             Assert.True(File.Exists(Path.Combine(target, "userdict.txt.before-restore")), "今までのファイルを残す");
 
             // データフォルダーの外を指す名前は書かない
             var evil = Encoding.UTF8.GetBytes("{\"format\":\"meltype-backup\",\"version\":1,\"app\":\"x\",\"created\":\"x\",\"files\":{\"../evil.txt\":\"AA==\",\"sub/x.txt\":\"AA==\"}}");
-            Assert.Equal(0, Backup.Restore(evil, target), "../ や知らないフォルダーは無視");
+            Assert.Equal(0, Backup.Read(evil).Restore(target), "../ や知らないフォルダーは無視");
             Assert.True(!File.Exists(Path.Combine(root, "evil.txt")), "データフォルダーの外に書かない");
 
             // 決まった名前 (バックアップに入れるもの) 以外は戻さない
@@ -68,7 +68,7 @@ internal static class BackupTests
             }
             Assert.True(Backup.IsRestorableName("config.json") && Backup.IsRestorableName("dictionaries/candidates.txt"), "バックアップに入れるものは戻す");
 
-            Assert.True(Throws(() => Backup.Inspect(Encoding.UTF8.GetBytes("{\"a\":1}"))), "Meltype のバックアップでないファイルは読まない");
+            Assert.True(IsBroken(Encoding.UTF8.GetBytes("{\"a\":1}")), "Meltype のバックアップでないファイルは読まない");
         }
         finally
         {
@@ -92,7 +92,7 @@ internal static class BackupTests
             Assert.True(Backup.IsRestorableName("phrases.txt"), "phrases.txt は戻す");
 
             Directory.CreateDirectory(target);
-            Assert.Equal(1, Backup.Restore(content, target));
+            Assert.Equal(1, Backup.Read(content).Restore(target));
             Assert.Equal("ゆきしろ\t雪代\t1\t0\n", File.ReadAllText(Path.Combine(target, "phrases.txt")));
         }
         finally
@@ -102,30 +102,37 @@ internal static class BackupTests
     }
 
     [Test]
-    public static void Backup_BrokenFile_RestoresNothing()
+    public static void Read_BrokenBackup_IsInvalidData()
     {
-        var target = Path.Combine(Path.GetTempPath(), "meltype-backup-test-" + Guid.NewGuid().ToString("N"));
-        try
+        // 1 つ目のファイルは読める。壊れたファイルが 1 つでもあれば、読めるファイルも戻さない
+        const string Good = "\"config.json\":\"AA==\"";
+        foreach (var json in new[]
         {
-            Directory.CreateDirectory(target);
-            File.WriteAllText(Path.Combine(target, "config.json"), "まえ");
-            // 1 つ目は読めるが 2 つ目が base64 でない・文字列でない
-            foreach (var broken in new[] { "\"!!\"", "1" })
-            {
-                var content = Encoding.UTF8.GetBytes("{\"format\":\"meltype-backup\",\"version\":1,\"app\":\"x\",\"created\":\"x\",\"files\":{\"config.json\":\"" + Convert.ToBase64String(Encoding.UTF8.GetBytes("あと")) + "\",\"userdict.txt\":" + broken + "}}");
-                Assert.True(Throws(() => Backup.Restore(content, target)), "読めないファイルがあれば戻さない");
-                Assert.Equal("まえ", File.ReadAllText(Path.Combine(target, "config.json")), "途中まで戻さない");
-                Assert.True(!File.Exists(Path.Combine(target, "config.json.before-restore")), "今のファイルも触らない");
-            }
-        }
-        finally
+            "", "[]", "{\"format\":1}", "{\"format\":\"\\ud800\"}",
+            Json(files: "[]"), Json(files: "1"), Json(app: "1"), Json(app: "\"\\ud800\""), Json(created: "\"\\ud800\""),
+            Json(files: "{" + Good + ",\"\\ud800\":\"\"}"),
+            Json(files: "{" + Good + ",\"userdict.txt\":1}"),
+            Json(files: "{" + Good + ",\"userdict.txt\":null}"),
+            Json(files: "{" + Good + ",\"userdict.txt\":\"!!\"}"),
+            Json(files: "{" + Good + ",\"userdict.txt\":\"\\ud800\"}"),
+            "{\"format\":\"meltype-backup\",\"app\":\"x\",\"created\":\"x\"}",
+        })
         {
-            try { Directory.Delete(target, recursive: true); } catch { }
+            Assert.True(IsBroken(Encoding.UTF8.GetBytes(json)), json);
         }
+
+        // base64 の 1 バイトが UTF-8 でない値に化けている
+        var corrupted = Encoding.UTF8.GetBytes(Json(files: "{" + Good + "}"));
+        corrupted[corrupted.AsSpan().IndexOf("AA=="u8)] = 0xFF;
+        Assert.True(IsBroken(corrupted), "0xFF");
+
+        static string Json(string app = "\"x\"", string created = "\"x\"", string files = "{}") =>
+            "{\"format\":\"meltype-backup\",\"version\":1,\"app\":" + app + ",\"created\":" + created + ",\"files\":" + files + "}";
     }
 
-    private static bool Throws(Action action)
+    // 設定画面 (BackupPage) が捕まえる、壊れたバックアップの例外か
+    private static bool IsBroken(byte[] content)
     {
-        try { action(); return false; } catch { return true; }
+        try { Backup.Read(content); return false; } catch (InvalidDataException) { return true; }
     }
 }

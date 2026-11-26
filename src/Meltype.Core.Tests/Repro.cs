@@ -339,22 +339,12 @@ internal static class Henkan
     {
         // アプリと同じく Mozc と Zenzai を合わせた変換エンジンを使う。答えが届くまで待つ (LateResults にしない)
         var converter = Mozc.Value is { } engine ? new Engine.HybridConverter(engine, zenzai ? () => Zenzai.Value : null) : null;
-        return new(live: true, history: history, converter: converter is null ? null : new WithoutEngineLearning(converter),
+        return new(live: true, history: history, converter: converter is null ? null : converter,
             moreCandidates: converter is null ? null : reading => converter.Candidates(reading, long.MaxValue),
             userDictionary: new Meltype.Dictionary.UserDictionary(null), languages: languages, translations: Translations.Value)
         { Learning = false };
     }
 
-    /// <summary>
-    /// 変換エンジン (Mozc) には、--learn の手順でも覚えさせない。変換エンジンへの学習は確定した後に裏のスレッドで行われ、
-    /// 終わったことを知る方法が無いので、次を打つ前に覚え終わっている保証が無い (Meltype の学習は確定と同時に終わる)。
-    /// </summary>
-    private sealed class WithoutEngineLearning(Engine.IKanjiConverter inner) : Engine.IKanjiConverter
-    {
-        public IReadOnlyList<Engine.ConversionClause>? Convert(Engine.ConversionRequest request) => inner.Convert(request);
-
-        public event Action? ResultReady { add => inner.ResultReady += value; remove => inner.ResultReady -= value; }
-    }
 
     public static void Run(string keys)
     {
