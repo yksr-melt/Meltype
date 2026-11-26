@@ -21,7 +21,7 @@
 
 変換エンジンは Core が別プロセスで動かす。Mozc は `meltype_mozc_helper`、Zenzai は llama.cpp の `llama-server`。Android だけは Mozc をアプリのプロセスで動かし、`meltype_mozc_helper` と同じ 1 行の要求を JNI のコールバック (`core/CoreMozcCallbacks.kt`) で答える。ブラウザーも Mozc を同じページで (WebAssembly にして) 動かし、同じ 1 行の要求を JS の関数で答える。
 
-`src/Meltype.Core` の namespace は `Ime` → `Composition` (と `Composition.Utility`) → `Detection`・`Learning`・`Engine`・`Dictionary` → `Libraries.Chars`・`Libraries.Lexicon` の向きにだけ参照する。`Detection`・`Learning`・`Engine`・`Dictionary` どうしと、`Libraries` の中どうしは参照しない。どこからでも使えるのは `Config`・`Input`・`Diagnostics`。
+`src/Meltype.Core` の namespace は `Ime` → `Composition` (と `Composition.Utility`) → `Detection`・`Learning`・`Engine`・`Dictionary`・`Notation` → `Libraries.Chars`・`Libraries.Lexicon` の向きにだけ参照する。`Detection`・`Learning`・`Engine`・`Dictionary`・`Notation` どうしと、`Libraries` の中どうしは参照しない。どこからでも使えるのは `Config`・`Input`・`Diagnostics`。
 
 `CompositionController` は出来事の入口だけを受け持ち、キー・変換・確定・表示を別の class に分ける。
 
@@ -56,6 +56,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 あなたの名前
 ```
+
+### 語彙
+
+- 状態マシン
+- 代数的データ型
+- 疎結合
+- 純粋関数
 
 ### コメント
 
@@ -107,7 +114,7 @@ dotnet run --project src/Meltype.Windows.Tests -- --explain konnichiwa hello
 node tools/check-dictionaries.mjs
 ```
 
-`--repro`・`--perf` などで漢字変換するには、環境変数 `MELTYPE_MOZC` に Mozc 変換ヘルパーのパスを指定する（未指定だと判定のみで、かなのまま確定する。`--expect` は未指定だとエラーになる）。ヘルパーは最新のリリースの zip から取る（Linux は `Meltype-<版>-linux.zip` 内 `Meltype-linux/mozc/meltype_mozc_helper`、Mac は `Meltype-<版>-mac.zip` 内 `Meltype-mac/Meltype.app/Contents/Resources/mozc/meltype_mozc_helper`、Windows は `Meltype-<版>-windows-portable.zip` 内 `meltype_mozc_helper.exe`）。`native/mozc/build-mozc-helper.sh` で手元ビルドするのは、ヘルパーのソースや `MOZC_COMMIT` を変えたときだけ（初回 30〜40 分かかる）。`--repro` は、`MELTYPE_ZENZAI_SERVER` (llama-server) と `MELTYPE_ZENZAI_MODEL` (zenz の .gguf) もあれば、Zenzai も使って打った結果を `zenzai` に出す (Windows のリリースの zip の `zenzai\` にある)。
+`--repro`・`--perf` などで漢字変換するには、環境変数 `MELTYPE_MOZC` に Mozc 変換ヘルパーのパスを指定する（未指定だと判定のみで、かなのまま確定する。`--expect` は未指定だとエラーになる）。ヘルパーは最新のリリースの zip から取る（Linux は `Meltype-<版>-linux.zip` 内 `Meltype-linux/mozc/meltype_mozc_helper`、Mac は `Meltype-<版>-mac.zip` 内 `Meltype-mac/Meltype.app/Contents/Resources/mozc/meltype_mozc_helper`、Windows は `Meltype-<版>-windows-portable.zip` 内 `meltype_mozc_helper.exe`）。1.7.1 以前のヘルパーは同梱の語句を受け取れず、`--repro`・`--expect` がエラーになるので、次のリリースまでは main の `linux`・`mac` のワークフローの Artifacts の zip から取る。`native/mozc/build-mozc-helper.sh` で手元ビルドするのは、ヘルパーのソースや `MOZC_COMMIT` を変えたときだけ（初回 30〜40 分かかる）。`--repro` は、`MELTYPE_ZENZAI_SERVER` (llama-server) と `MELTYPE_ZENZAI_MODEL` (zenz の .gguf) もあれば、Zenzai も使って打った結果を `zenzai` に出す (Windows のリリースの zip の `zenzai\` にある)。
 
 その他のフラグ（`--perf`・`--judge-corpus`・`--henkan` など）は `src/Meltype.Core.Tests/Program.cs` のコメントを見てください。
 

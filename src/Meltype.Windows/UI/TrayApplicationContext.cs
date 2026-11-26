@@ -564,7 +564,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             _keyCountForm.Activate();
             return;
         }
-        _keyCountForm = new KeyCountForm(_engine.KeyCounter);
+        _keyCountForm = new KeyCountForm(_engine);
         _keyCountForm.Show();
     }
 

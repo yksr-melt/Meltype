@@ -42,7 +42,7 @@ internal sealed class MozcConverter : IKanjiConverter, IDisposable
     private long _helperCalls;
     private long _helperTicks;
 
-    // 終了した。終了のあとで裏の処理 (覚えさせる・WarmUp) が動いても、ヘルパーを起動し直さない
+    // 終了した。終了のあとで裏の処理 (変換・WarmUp) が動いても、ヘルパーを起動し直さない
     private volatile bool _disposed;
 
     /// <param name="helper">変換ヘルパー。この MozcConverter が Dispose する。</param>
@@ -111,29 +111,6 @@ internal sealed class MozcConverter : IKanjiConverter, IDisposable
         if (segments is null) return [];
         // 1 文節ならその候補。複数の文節に分かれたなら、最初の候補をつなげたものだけ。
         return segments.Count == 1 ? segments[0].Candidates : [string.Concat(segments.Select(s => (s.Candidates.Count > 0 ? s.Candidates[0] : null) ?? s.Reading))];
-    }
-
-    // 学習データを保存する間隔 (覚えさせた回数)。Meltype を終了するときにも保存する。
-    private const int SaveEvery = 5;
-    private int _learnedSinceSave;
-
-    /// <summary>確定した文節を Mozc に覚えさせる (Mozc の候補に無い文字列の文節があれば覚えない)。</summary>
-    public void Learn(string? before, IReadOnlyList<ConversionClause> clauses)
-    {
-        if (clauses.Count == 0 || !IsAvailable) return;
-        var records = string.Join(RecordSeparator, clauses.Select(c => Clean(c.Reading).Replace(UnitSeparator, ' ') + UnitSeparator + Clean(c.Text).Replace(UnitSeparator, ' ')));
-        lock (_gate)
-        {
-            if (_disposed) return;
-            // 覚えさせると候補の順番が変わるので、候補の控えを捨てる。
-            ClearCache();
-            var result = Send($"L\t{Clean(EngineContext.Sentence(before) ?? "")}\t{records}");
-            if (result == "OK" && ++_learnedSinceSave >= SaveEvery)
-            {
-                _learnedSinceSave = 0;
-                Send("S");
-            }
-        }
     }
 
     /// <summary>
@@ -276,7 +253,7 @@ internal sealed class MozcConverter : IKanjiConverter, IDisposable
         lock (_gate)
         {
             if (_disposed) return null;
-            // ライブ変換は 1 キーごとに同じ読みを何度も変換し直すので、同じ頼み方の結果は使い回す (覚えさせたら捨てる)。
+            // ライブ変換は 1 キーごとに同じ読みを何度も変換し直すので、同じ頼み方の結果は使い回す。
             var key = context + "\t" + reading;
             lock (_resultsGate)
             {
@@ -369,7 +346,7 @@ internal sealed class MozcConverter : IKanjiConverter, IDisposable
 
 /// <summary>
 /// MozcConverter の計測値 (起動してからの合計)。Requests / CacheHits は変換、CandidateRequests / CandidateCacheHits は候補の一覧、
-/// HelperCalls / HelperTime は変換ヘルパーとのやり取り (学習・保存も含む)、HelperWorkingSet は変換ヘルパーの使っているメモリ (起動していなければ 0)。
+/// HelperCalls / HelperTime は変換ヘルパーとのやり取り (変換・逆変換)、HelperWorkingSet は変換ヘルパーの使っているメモリ (起動していなければ 0)。
 /// </summary>
 internal readonly record struct MozcStatistics(long Requests, long CacheHits, long CandidateRequests, long CandidateCacheHits,
     long HelperCalls, TimeSpan HelperTime, long HelperWorkingSet);
