@@ -33,10 +33,17 @@ final class InputSourceRegistrationTests: XCTestCase {
         }
     }
 
-    // 書き足した項目は入力メニューに出ないまま選ばれてしまうので、片方だけでも足さない。
+    // 書き足した日本語モードは入力メニューに出ないまま選ばれてしまうので、足りない項目は足さない。
     func testDoesNotAppendMissingRecord() {
         XCTAssertTrue(NSArray(array: InputSourceRegistration.normalized([mode, google, mode])).isEqual(to: [mode, google]))
-        XCTAssertTrue(NSArray(array: InputSourceRegistration.normalized([parent, google, parent])).isEqual(to: [parent, google]))
+    }
+
+    // 親だけが残っていると、システム設定の「+」で Meltype を追加できない。
+    func testRemovesParentWithoutJapaneseMode() {
+        XCTAssertTrue(NSArray(array: InputSourceRegistration.normalized([parent, google, parent])).isEqual(to: [google]))
+        let result = InputSourceRegistration.repaired(legacy: [abc, parent], thirdParty: [parent])
+        XCTAssertTrue(NSArray(array: result.legacy).isEqual(to: [abc]))
+        XCTAssertEqual(result.thirdParty?.count, 0)
     }
 
     func testPreservesUnrecognizedMeltypeModesAndSimilarIdentifiers() {

@@ -35,9 +35,10 @@ enum InputSourceRegistration {
         (source["Input Mode"] as? String) == japaneseIdentifier
     }
 
-    // 重複を消すだけで、足りない項目は書き足さない。設定に日本語モードを書き足すと、TIS からは有効に見えて
+    // 重複を消し、足りない項目は書き足さない。設定に日本語モードを書き足すと、TIS からは有効に見えて
     // インストール時に選ばれるのに、入力メニューとシステム設定には出ず、一度切り替えると戻れなくなる。
     // 有効にするのは TIS とシステム設定の「+」に任せる。
+    // 日本語モードの無い親の項目は消す。親だけが残っていると、システム設定の「+」で Meltype を追加できない。
     static func normalized(_ sources: [[String: Any]]) -> [[String: Any]] {
         var seen = Set<String>()
         var result: [[String: Any]] = []
@@ -53,6 +54,11 @@ enum InputSourceRegistration {
                 if seen.insert("Keyboard Input Method").inserted { result.append(source) }
             } else {
                 result.append(source)
+            }
+        }
+        if !seen.contains("Input Mode") {
+            result.removeAll {
+                ($0["InputSourceKind"] as? String) == "Keyboard Input Method" && ($0["Bundle ID"] as? String) == identifier
             }
         }
         return result
