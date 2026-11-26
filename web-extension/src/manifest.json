@@ -1,0 +1,78 @@
+{
+  "manifest_version": 3,
+  "name": "Meltype",
+  "short_name": "Meltype",
+  "version": "0.1.0",
+  "description": "どのサイトの入力欄でも、ローマ字のまま打つと日本語と英語を分けて変換します。すべてブラウザーの中で動き、打った文字はどこにも送りません。",
+  "homepage_url": "https://github.com/yksr-melt/Meltype",
+  "author": "Yukishiro",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "action": {
+    "default_title": "Meltype",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js",
+    "scripts": [
+      "background.js"
+    ]
+  },
+  "commands": {
+    "toggle-meltype": {
+      "suggested_key": {
+        "default": "Alt+Shift+M"
+      },
+      "description": "Meltype を一時的にオン・オフする"
+    }
+  },
+  "permissions": [
+    "storage",
+    "activeTab"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "storage.js",
+        "content.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "engine/*",
+        "engine/_framework/*",
+        "engine/mozc/*",
+        "frame.html",
+        "frame.js",
+        "storage.js"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "web-extension@meltype.moe",
+      "strict_min_version": "128.0"
+    }
+  }
+}

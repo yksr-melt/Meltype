@@ -1,0 +1,34 @@
+{
+  "name": "meltype-web-engine",
+  "version": "0.1.0",
+  "description": "Meltype をウェブページの入力欄で使う。ローマ字のまま打つと、日本語と英語を分けて変換する。すべてブラウザーの中で動く",
+  "license": "GPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yksr-melt/Meltype.git",
+    "directory": "web-engine"
+  },
+  "type": "module",
+  "main": "./index.mjs",
+  "module": "./index.mjs",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.mjs"
+    },
+    "./meltype.js": "./meltype.js",
+    "./meltype.css": "./meltype.css"
+  },
+  "files": [
+    "index.mjs",
+    "index.d.ts",
+    "meltype.js",
+    "meltype.css",
+    "_framework/",
+    "mozc/",
+    "LICENSE",
+    "THIRD-PARTY-NOTICES.md"
+  ],
+  "keywords": ["ime", "japanese", "romaji", "mozc", "webassembly"]
+}
