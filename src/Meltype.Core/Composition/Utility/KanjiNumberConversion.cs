@@ -7,7 +7,7 @@ using System.Text;
 namespace Meltype.Composition.Utility;
 
 /// <summary>
-/// 数字だけの入力に、漢数字 (二〇二六・二千二十六・弐千弐拾六) を出す (issue #344)。
+/// 数字だけの入力に、漢数字 (二〇二六・二千二十六・弐千弐拾六) と括弧で囲んだ数字 ((1)・（1）) を出す (issue #344)。
 /// Mozc も同じ候補を出すが、Mac の azooKey は打った数字を漢数字にしないので、どの OS でも出るようにここで出す。
 /// 選んだ漢数字は学習する (1 → 一 を選んだら次も 一: issue #672)。
 /// </summary>
@@ -31,13 +31,15 @@ internal sealed class KanjiNumberConversion : IUtilityConversion
         if (half.Length is 0 or > 16 || !half.All(char.IsAsciiDigit)) return [];
         var result = new List<string> { string.Concat(half.Select(c => Digits[c - '0'])) };
         // 先頭が 0 の数字 (001) は位取りしない
-        if (half.Length > 1 && half[0] == '0') return result;
         var value = ulong.Parse(half, CultureInfo.InvariantCulture);
-        if (value > 0)
+        if (value > 0 && !(half.Length > 1 && half[0] == '0'))
         {
             result.Add(ToKanji(value, Digits, SmallUnits, omitOne: true));
             result.Add(ToKanji(value, FormalDigits, FormalSmallUnits, omitOne: false));
         }
+        // 箇条書きの番号 ((1)・（1）)。打った数字はそのまま囲む
+        result.Add($"({text})");
+        result.Add($"（{text}）");
         return result.Distinct().ToList();
     }
 

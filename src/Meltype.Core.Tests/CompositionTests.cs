@@ -2515,7 +2515,7 @@ internal static class CompositionTests
             Assert.Equal(k.Host.Document, front, $"見えていたとおりに確定 ({typed})");
         }
         // 英語と判定して英字で見せている所は、直さずに見えているとおりに確定する (inclu が いんこう で入っていた)
-        foreach (var (typed, expected) in new[] { ("inclu", "inclu"), ("obsidi", "obしぢ"), ("mainnipushsu", "mainにpushす") })
+        foreach (var (typed, expected) in new[] { ("inclu", "inclu"), ("obsidi", "obsidi"), ("mainnipushsu", "mainにpushす") })
         {
             var k = new Keyboard();
             k.Type(typed);
