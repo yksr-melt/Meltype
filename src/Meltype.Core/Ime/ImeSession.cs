@@ -271,7 +271,7 @@ internal static class ImeSession
                     caret is { FocusLeft: false, FocusEntered: false, Ctrl: false, PassedKey: > 0, PassedChar: >= '!' and <= '~' and var passedChar } &&
                     EnglishWordCharacters.Contains((char)passedChar) &&
                     (inputMethod == InputMode.Keyboard || e.Field is { Composing: false, Selection: null or "", Before: [.., var last] } && last == passedChar))
-                    CompositionController.AbandonDirectHold(state.Composition);
+                    CompositionController.KeepEnglishWord(state.Composition);
                 else
                     ForgetDirectInput(state);
             }
