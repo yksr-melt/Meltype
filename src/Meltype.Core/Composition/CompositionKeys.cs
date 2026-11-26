@@ -21,7 +21,7 @@ internal static class CompositionKeys
         (state.Shift, state.Control, state.Modifier) = (key.Shift, key.Control, key.Modifier);
         if (!CompositionLifecycle.IsComposing(state) && !state.KanaLayout.ThumbHeld && (key.Modifier || !StartsComposition(state, env, key))) return false;
         state.Pressed.Add(key.Vk);
-        HandleKey(state, env, new KeyEvent(key.Vk, key.Ch ?? 0, false, false, false, key.TimeMs));
+        HandleKey(state, env, new KeyEvent(key.Vk, key.Ch ?? 0, false, false, false, key.TimeMs), key.Position);
         return true;
     }
 
@@ -33,7 +33,7 @@ internal static class CompositionKeys
         if (key.Vk is VirtualKeys.Convert or VirtualKeys.NonConvert && !direct && CompositionLifecycle.KanaInput(env) &&
             env.Settings.KanaLayout is KanaLayout.Nicola or KanaLayout.NakayubiNicola or KanaLayout.Tron) return true;
         // かな入力: かなのキーならすべて入力を始める (StartWith)
-        if (CompositionLifecycle.KanaInput(env) && !direct && Detection.KanaDetector.IsKanaKey(key.Vk)) return true;
+        if (CompositionLifecycle.KanaInput(env) && !direct && Detection.KanaDetector.IsKanaKey(key.Position)) return true;
         // 日本語入力の Shift+Space・設定「スペースの幅」が全角の Space は、全角スペースにする (StartWith)
         if (key.Vk == VirtualKeys.Space) return key.Shift || !direct && env.Settings.SpaceWidth == Config.SpaceWidth.FullWidth;
         if (key.Ch is not { } c) return false;
@@ -42,21 +42,22 @@ internal static class CompositionKeys
         return StartsWithSymbol(c);
     }
 
-    internal static void HandleRelease(CompositionState state, CompositionEnv env, int vk)
+    internal static void HandleRelease(CompositionState state, CompositionEnv env, int vk, int position)
     {
         var pressed = state.Pressed.Remove(vk);
         if (!CompositionLifecycle.IsComposing(state) && !state.KanaLayout.ThumbHeld) return;
-        var kanaUp = state.KanaLayout.Up(vk);
+        var kanaUp = state.KanaLayout.Up(position);
         // 中指NICOLA: シフトのキーを押したまま先に離した文字キーを、シフト面で打ち直す
         if (kanaUp.Stroke.Handled && state.Scene is CompositionScene.WithInput) ApplyKanaStroke(state, env, kanaUp.Stroke);
         // 親指シフト: 文字に使わずに離した親指キーは、もとの働き (変換・無変換) をする
         if (kanaUp.ThumbTap && pressed)
         {
-            HandleKey(state, env with { BypassKanaLayout = true }, new KeyEvent(vk, 0, false, false, false, 0));
+            HandleKey(state, env with { BypassKanaLayout = true }, new KeyEvent(vk, 0, false, false, false, 0), position);
         }
     }
 
-    private static void HandleKey(CompositionState state, CompositionEnv env, KeyEvent e)
+    /// <param name="position">押したキーの位置 (<see cref="KeyPress.Position"/>)。かな配列・SKY 配列だけが使う。</param>
+    private static void HandleKey(CompositionState state, CompositionEnv env, KeyEvent e, int position)
     {
         var vk = e.Vk;
         if (state.Scene is CompositionScene.Judging judging)
@@ -155,14 +156,14 @@ internal static class CompositionKeys
             PassKey(state);
             return;
         }
-        if (!env.BypassKanaLayout && HandleKanaLayout(state, env, e)) return;
+        if (!env.BypassKanaLayout && HandleKanaLayout(state, env, e, position)) return;
 
-        if (state.Scene is CompositionScene.WithInput scene) HandleInputKey(state, scene, env, e, vk);
-        else StartWith(state, env, e);
+        if (state.Scene is CompositionScene.WithInput scene) HandleInputKey(state, scene, env, e, vk, position);
+        else StartWith(state, env, e, position);
     }
 
     /// <summary>変換ボックスに入力があるときのキー。vk は、Ctrl のショートカットを読み替えたキー。</summary>
-    private static void HandleInputKey(CompositionState state, CompositionScene.WithInput scene, CompositionEnv env, KeyEvent e, int vk)
+    private static void HandleInputKey(CompositionState state, CompositionScene.WithInput scene, CompositionEnv env, KeyEvent e, int vk, int position)
     {
         var input = scene.Input;
         if (input.Reconversion is not null && vk == VirtualKeys.Escape)
@@ -323,7 +324,7 @@ internal static class CompositionKeys
             return;
         }
 
-        if (input.Text.KanaInput && KanaOf(state, e) is { } key)
+        if (input.Text.KanaInput && KanaOf(state, e, position) is { } key)
         {
             CompositionText.AppendKana(CommitBeforeTyping(state, scene, env).Text, key.Raw, key.Kana);
             return;
@@ -351,7 +352,7 @@ internal static class CompositionKeys
     internal static bool StartsWithSymbol(char c) => c is >= '!' and <= '~' && !char.IsAsciiLetter(c);
 
     /// <summary>変換ボックスが空のときの最初の打鍵。英字・句読点なら入力を始め、それ以外はそのまま通す。</summary>
-    private static void StartWith(CompositionState state, CompositionEnv env, KeyEvent e)
+    private static void StartWith(CompositionState state, CompositionEnv env, KeyEvent e, int position)
     {
         var direct = CompositionLifecycle.IsDirect(state);
         if (e.Vk == VirtualKeys.Convert)
@@ -388,7 +389,7 @@ internal static class CompositionKeys
             return;
         }
         // かな入力: かなのキーならすべて入力を始める (英数状態でなければ)。
-        if (CompositionLifecycle.KanaInput(env) && !direct && KanaOf(state, e) is { } key)
+        if (CompositionLifecycle.KanaInput(env) && !direct && KanaOf(state, e, position) is { } key)
         {
             CompositionText.AppendKana(CompositionLifecycle.Begin(state, env).Text, key.Raw, key.Kana);
             return;
@@ -464,13 +465,13 @@ internal static class CompositionKeys
     /// JIS かな以外のかな配列 (月・花・NICOLA・中指NICOLA・TRON) と SKY 配列の打鍵 (issue #1415)。配列のキーとして扱ったら true。
     /// 打ったキーの英字は英単語の判定に使わない (刻印と違う配列なので)。かなをそのまま原文にする。
     /// </summary>
-    private static bool HandleKanaLayout(CompositionState state, CompositionEnv env, KeyEvent e)
+    private static bool HandleKanaLayout(CompositionState state, CompositionEnv env, KeyEvent e, int position)
     {
         var direct = CompositionLifecycle.IsDirect(state);
         if (!CompositionLifecycle.KanaInput(env) && !direct && env.Settings.RomajiLayout == RomajiLayout.Sky)
         {
             // SKY 配列: キーをローマ字の綴りにして足す。英語の判定はしない (ひらがなで見せる)
-            if (state.Shift || SkyLayout.Romaji(e.Vk) is not { } romaji) return false;
+            if (state.Shift || SkyLayout.Romaji(position) is not { } romaji) return false;
             var input = state.Scene is CompositionScene.WithInput scene ? CommitBeforeTyping(state, scene, env) : CompositionLifecycle.Begin(state, env);
             if (input.Text.Mode == DisplayMode.Auto) input.Text.Mode = DisplayMode.Hiragana;
             foreach (var c in romaji) CompositionText.Append(input.Text, env, c);
@@ -488,13 +489,13 @@ internal static class CompositionKeys
             return true;
         }
         var shift = state.Shift;
-        var stroke = state.KanaLayout.Down(e.Vk, shift, e.TimeMs);
+        var stroke = state.KanaLayout.Down(position, shift, e.TimeMs);
         if (!stroke.Handled)
         {
             // 配列のキー以外 (BackSpace・Enter・Esc・Space など): 打ちかけの前置シフトを忘れる
             state.KanaLayout.Reset();
             // 配列の表で空いているかなのキー (月配列の 1 や ]) は何も入れない (JIS かなの文字を入れない)
-            return !shift && Detection.KanaDetector.IsKanaKey(e.Vk);
+            return !shift && Detection.KanaDetector.IsKanaKey(position);
         }
         ApplyKanaStroke(state, env, stroke);
         return true;
@@ -511,14 +512,14 @@ internal static class CompositionKeys
     }
 
     /// <summary>かな入力で、その打鍵が入力するかなと、そのキーの英字 (英語として見せるとき用)。かなのキーでなければ null。</summary>
-    private static (char Raw, char Kana)? KanaOf(CompositionState state, KeyEvent e)
+    private static (char Raw, char Kana)? KanaOf(CompositionState state, KeyEvent e, int position)
     {
         var shift = state.Shift;
-        if (Detection.KanaDetector.KanaForKey(e.Vk, shift) is not { } kana) return null;
+        if (Detection.KanaDetector.KanaForKey(position, shift) is not { } kana) return null;
         var raw = CharOf(e) ?? kana;
         // Shift で打った小書き文字 (っ = Shift+Z、ぃ = Shift+E) は、大文字で打った英語 (Z・E) ではない
         // (きのうはたのしかった が たのしかZq になっていた)。
-        if (shift && kana != Detection.KanaDetector.KanaForKey(e.Vk, false)) raw = char.ToLowerInvariant(raw);
+        if (shift && kana != Detection.KanaDetector.KanaForKey(position, false)) raw = char.ToLowerInvariant(raw);
         return (raw, kana);
     }
 

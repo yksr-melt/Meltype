@@ -86,7 +86,7 @@ internal static class CommittedClausesTests
     private static long _now = 1000;
 
     private static void Press(CompositionState state, CompositionEnv env, int vk, char? ch = null) =>
-        CompositionController.Press(state, env, new KeyPress(vk, ch, false, false, false, false, _now += 100));
+        CompositionController.Press(state, env, new KeyPress(vk, vk, ch, false, false, false, false, _now += 100));
 
     private static CompositionScene.WithInput Scene(CompositionState state) => (CompositionScene.WithInput)state.Scene;
 

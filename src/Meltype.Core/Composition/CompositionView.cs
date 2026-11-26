@@ -43,8 +43,11 @@ public sealed record CompositionView(
     // 変換中の文字の中のカーソルを、末尾から何文字 (UTF-16) 前に置くか (読みの途中を直している間だけ 1 以上)
     int CaretBack = 0);
 
-/// <summary>キーを 1 つ押した。Ch は入力する文字 (キーボード配列は OS 側で解決済み。文字を生まないキーなら null)。</summary>
-internal readonly record struct KeyPress(int Vk, char? Ch, bool Shift, bool Control, bool Alt, bool Command, long TimeMs)
+/// <summary>
+/// キーを 1 つ押した。Ch は入力する文字 (キーボード配列は OS 側で解決済み。文字を生まないキーなら null)。
+/// Position は押した物理キーの位置で、日本語 106/109 キーボードでその位置にあるキーの仮想キーコード。かな配列・SKY 配列は Position で、ほかは Vk・Ch で決める。
+/// </summary>
+internal readonly record struct KeyPress(int Vk, int Position, char? Ch, bool Shift, bool Control, bool Alt, bool Command, long TimeMs)
 {
     public bool Modifier => Control || Alt || Command;
 }
