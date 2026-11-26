@@ -127,7 +127,8 @@ internal sealed class RomajiTypoCorrector
                 if (word[^1] != 'る') break;
                 // て・た 形 (と て の縮まった ちゃ・ちゃった の ちゃっ) も 1 語にする: 語幹が 1 文字 (み・き) だと 1 文字の語の重みになり、
                 // み|て が英単語 mite に、き|ちゃ が kit + や に負ける
-                foreach (var ending in (string[])["", "て", "た", "ちゃ", "ちゃっ"]) forms.Add(stem + ending);
+                // 命令形 (みろ・たべろ) も、ろ が 1 文字の語にならないよう 1 語にする (みろ が英単語 miro に負ける)
+                foreach (var ending in (string[])["", "て", "た", "ちゃ", "ちゃっ", "ろ"]) forms.Add(stem + ending);
                 break;
             case "i":
                 if (word[^1] != 'い') break;
@@ -152,7 +153,14 @@ internal sealed class RomajiTypoCorrector
                     "v5b" or "v5m" or "v5n" => "ん",
                     _ => null,
                 };
-                if (onbin is not null) forms.Add(stem + onbin);
+                if (onbin is not null)
+                {
+                    forms.Add(stem + onbin);
+                    // 音便の て・た 形 (まって・よんで) も 1 語にする: まっ|て に分けると、英単語 (matte) 1 語と同じ重みにしかならない
+                    var voiced = kind is "v5g" or "v5b" or "v5m" or "v5n";
+                    forms.Add(stem + onbin + (voiced ? "で" : "て"));
+                    forms.Add(stem + onbin + (voiced ? "だ" : "た"));
+                }
                 // ござる・いらっしゃる・なさる は ます の前が い (ございます)
                 if (kind == "v5aru") forms.Add(stem + "い");
                 break;
