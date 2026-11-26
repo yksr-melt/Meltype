@@ -8,7 +8,6 @@ mozc_cc_binary(
         ":segments",
         "//base:init_mozc",
         "//base:system_util",
-        "//base:util",
         "//composer",
         "//config:config_handler",
         "//dictionary:dictionary_interface",

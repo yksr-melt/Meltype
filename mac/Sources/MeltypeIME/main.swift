@@ -122,7 +122,7 @@ func runChecks(inputPath: String?) -> Int32 {
     }
     for (input, expected) in [("kyouhagoogledekensaku \n", "今日はgoogleで検索"),
                                ("I want to go to the park\n", "I want to go to the park"),
-                               ("google github hello\n", "google github hello"),
+                               ("google github hello\n", "google GitHub hello"),
                                ("seeyouagain\n", "seeyouagain")] {
         let document = Document()
         _ = type(input, into: document)
@@ -235,6 +235,7 @@ guard let bundleIdentifier = Bundle.main.bundleIdentifier,
 }
 NSRegisterServicesProvider(ModeServices.shared, ModeServices.portName)
 NativeCore.shared.startBackgroundConversion()
+NativeCore.shared.startKeyCount()
 // 終了するときに llama-server を止める (ログアウトなどの終了と、SIGTERM。強制終了で残ったものは、次に起動したときに止める)
 NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: nil) { _ in
     NativeCore.shared.shutdown()

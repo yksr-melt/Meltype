@@ -11,8 +11,8 @@ using Meltype.Config;
 namespace Meltype.Input;
 
 /// <summary>
-/// Discord のステータス (Rich Presence) に打鍵数と起動からの経過時間を出す (打鍵数の「Discord に表示する」。既定は OFF)。
-/// Discord のローカル IPC (Windows は名前付きパイプ discord-ipc-N、macOS・Linux は Unix ソケット) で送り、外のサーバーは使わない。
+/// Discord のステータス (Rich Presence) に打鍵数と起動からの経過時間を出す (設定「打鍵数」の「数えて Discord に表示する」。既定は OFF)。
+/// Discord のローカル IPC (discord-ipc-N。Windows は名前付きパイプ、macOS・Linux は Unix ソケット) で送り、外のサーバーは使わない。
 /// 送るのは今日と合計の打鍵数・直近の 1 分あたりの打鍵数・Meltype の起動時刻だけ (打った文字・変換候補・入力先のアプリ名は送らない)。
 /// 入力とは別のスレッドで UpdateInterval ごとに送り、Discord が起動していない・切れたときは次の回につなぎ直す (入力には影響しない)。
 /// </summary>
@@ -23,6 +23,8 @@ public sealed class DiscordPresence : IDisposable
 
     public static readonly TimeSpan UpdateInterval = TimeSpan.FromSeconds(20);
     private static readonly TimeSpan IoTimeout = TimeSpan.FromSeconds(5);
+    // 終わるときは、Discord が応答しなくても入力メソッドの終了を遅らせない
+    private static readonly TimeSpan ExitTimeout = TimeSpan.FromSeconds(1);
 
     /// <summary>出す打鍵数。</summary>
     public readonly record struct Stats(long Today, long Total);
@@ -67,7 +69,7 @@ public sealed class DiscordPresence : IDisposable
             try { await Task.Delay(UpdateInterval, _stop.Token); }
             catch (OperationCanceledException) { break; }
         }
-        await ClearAsync();
+        using (var exit = new CancellationTokenSource(ExitTimeout)) await ClearAsync(exit.Token);
         Disconnect();
     }
 
@@ -77,7 +79,7 @@ public sealed class DiscordPresence : IDisposable
         if (!_enabled())
         {
             // OFF にしたら表示を消して切る
-            await ClearAsync();
+            await ClearAsync(token);
             Disconnect();
             _last = null;
             return;
@@ -103,19 +105,19 @@ public sealed class DiscordPresence : IDisposable
             or UnauthorizedAccessException or System.Text.Json.JsonException;
 
     /// <summary>OFF にした・終わるときに、出していた表示を消す (失敗してもかまわない)。</summary>
-    private async Task ClearAsync()
+    private async Task ClearAsync(CancellationToken token)
     {
         if (_stream is null || _sent is null) return;
-        try { await SendAsync(1, SetActivityJson(null), CancellationToken.None); }
+        try { await SendAsync(1, SetActivityJson(null), token); }
         catch (Exception ex) when (IsConnectionFailure(ex)) { }
         _sent = null;
     }
 
     private async Task ConnectAsync(CancellationToken token)
     {
-        for (var i = 0; i < 10; i++)
+        foreach (var name in PipeNames())
         {
-            var stream = await OpenAsync(i, token);
+            var stream = await OpenAsync(name, token);
             if (stream is null) continue;
             _stream = stream;
             try
@@ -133,53 +135,35 @@ public sealed class DiscordPresence : IDisposable
         throw new IOException("Discord が起動していません。");
     }
 
-    private static async Task<Stream?> OpenAsync(int index, CancellationToken token)
+    private static readonly string[] RuntimeVariables = ["XDG_RUNTIME_DIR", "TMPDIR", "TMP", "TEMP"];
+
+    /// <summary>Discord が待つパイプの名前。macOS・Linux では、Discord と同じく最初に設定されている環境変数のフォルダーにあるソケット (Flatpak・Snap 版も)。</summary>
+    private static IEnumerable<string> PipeNames()
     {
-        var name = $"discord-ipc-{index}";
-        if (OperatingSystem.IsWindows())
-        {
-            var pipe = new NamedPipeClientStream(".", name, PipeDirection.InOut, PipeOptions.Asynchronous);
-            try
-            {
-                await pipe.ConnectAsync(200, token);
-                return pipe;
-            }
-            catch (Exception ex) when (ex is TimeoutException or IOException)
-            {
-                await pipe.DisposeAsync();
-                return null;
-            }
-        }
-        foreach (var dir in SocketDirectories())
-        {
-            var path = Path.Combine(dir, name);
-            if (!File.Exists(path)) continue;
-            var socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
-            try
-            {
-                await socket.ConnectAsync(new UnixDomainSocketEndPoint(path), token);
-                return new NetworkStream(socket, ownsSocket: true);
-            }
-            catch (SocketException)
-            {
-                socket.Dispose();
-            }
-        }
-        return null;
+        var names = Enumerable.Range(0, 10).Select(i => $"discord-ipc-{i}");
+        if (OperatingSystem.IsWindows()) return names;
+        var root = RuntimeVariables.Select(Environment.GetEnvironmentVariable).FirstOrDefault(dir => !string.IsNullOrEmpty(dir)) ?? "/tmp";
+        string[] directories = [root, Path.Combine(root, "app", "com.discordapp.Discord"), Path.Combine(root, "snap.discord")];
+        // NamedPipeClientStream は、絶対パスの名前をその場所の Unix ソケットとして開く。無いソケットは時間切れまで待つので、あるものだけ試す
+        return directories.SelectMany(directory => names.Select(name => Path.Combine(directory, name))).Where(File.Exists);
     }
 
-    /// <summary>macOS・Linux で Discord がソケットを置くところ (Flatpak・Snap 版も)。</summary>
-    private static IEnumerable<string> SocketDirectories()
+    private static async Task<Stream?> OpenAsync(string name, CancellationToken token)
     {
-        foreach (var variable in new[] { "XDG_RUNTIME_DIR", "TMPDIR", "TMP", "TEMP" })
+        // パイプの名前と /tmp はユーザー間で共有で、ほかのユーザーが先に同じ名前のパイプ・ソケットを作って待てる。
+        // CurrentUserOnly は、つないだ相手のユーザーが自分でなければ、何も送る前に UnauthorizedAccessException にする
+        var pipe = new NamedPipeClientStream(".", name, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+        try
         {
-            var dir = Environment.GetEnvironmentVariable(variable);
-            if (string.IsNullOrEmpty(dir)) continue;
-            yield return dir;
-            yield return Path.Combine(dir, "app", "com.discordapp.Discord");
-            yield return Path.Combine(dir, "snap.discord");
+            await pipe.ConnectAsync(200, token);
+            return pipe;
         }
-        yield return "/tmp";
+        // ほかのユーザーが使っている番号なら、自分の Discord は次以降の番号で待っている
+        catch (Exception ex) when (ex is TimeoutException or IOException or UnauthorizedAccessException or SocketException)
+        {
+            await pipe.DisposeAsync();
+            return null;
+        }
     }
 
     /// <summary>1 通送って、返事を 1 通読む (読まずにおくと Discord 側が詰まる)。</summary>
@@ -299,7 +283,7 @@ public sealed class DiscordPresence : IDisposable
     {
         if (_stop.IsCancellationRequested) return;
         _stop.Cancel();
-        try { _loop.Wait(IoTimeout * 2); }
+        try { _loop.Wait(ExitTimeout * 2); }
         catch (AggregateException) { }
         _stop.Dispose();
     }

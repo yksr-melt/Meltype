@@ -21,7 +21,7 @@ def main():
     parser.add_argument('library', type=Path)
     args = parser.parse_args()
     library = args.library.resolve(strict=True)
-    repo = Path(__file__).resolve().parent.parent
+    repo = Path(__file__).resolve().parents[2]
     sources = repo / 'mac/Sources/MeltypeIME'
     with tempfile.TemporaryDirectory(prefix='meltype-events-') as temporary:
         root = Path(temporary)
@@ -42,14 +42,14 @@ def main():
             'ImportDialogPresentation.swift', 'CompositionPanel.swift',
         ]
         subprocess.run(['xcrun', 'swiftc', '-swift-version', '5',
-                        str(repo / 'tools/test-mac-events.swift'),
+                        str(repo / 'mac/Tests/test-mac-events.swift'),
                         *[str(sources / name) for name in filenames],
                         '-framework', 'InputMethodKit', '-framework', 'Carbon', '-o', str(executable)], check=True)
         data = root / 'data'
         data.mkdir()
         (data / 'config.json').write_text(json.dumps({
             'SpaceAroundEnglish': True, 'LiveConversion': False, 'SigilWordsDirect': False,
-            'ShowTypedKeys': True, 'PredictiveCandidates': True,
+            'TypedKeys': 'Keys', 'PredictiveCandidates': True,
         }))
         # 「こう」で予測候補が開き、「こうほ」まで打つと閉じるようにする。
         # ページ送りの検証用に、Mozc に頼らず 3 ページ分の候補を用意する。

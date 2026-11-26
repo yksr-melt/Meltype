@@ -10,14 +10,14 @@ import app.meltype.keyboard.view.keyIcon
 import kotlin.test.*
 
 class KeyIconTest {
-    private fun icon(action: KeyAction, shift: ShiftState = ShiftState.OFF, enter: EnterKind = EnterKind.NEWLINE) = keyIcon(action, shift, enter)
+    private fun icon(action: KeyAction, shift: ShiftState = ShiftState.Off, enter: EnterKind = EnterKind.NEWLINE) = keyIcon(action, shift, enter)
     @Test fun enterIconDependsOnEditorAction() {
         assertEquals(listOf(KeyIcon.ENTER,KeyIcon.SEARCH,KeyIcon.SEND,KeyIcon.ARROW,KeyIcon.ARROW,KeyIcon.CHECK,KeyIcon.ARROW),
             EnterKind.entries.map { icon(KeyAction.Enter, enter = it) })
     }
     @Test fun shiftIconDependsOnState() {
         assertEquals(listOf(KeyIcon.SHIFT,KeyIcon.SHIFT_ONCE,KeyIcon.SHIFT_LOCKED),
-            ShiftState.entries.map { icon(KeyAction.Shift, shift = it) })
+            listOf(ShiftState.Off, ShiftState.Once(0), ShiftState.Locked).map { icon(KeyAction.Shift, shift = it) })
     }
     @Test fun keyIconMatchesPresenceOfAVisibleLabel() {
         assertEquals(KeyIcon.DELETE, icon(KeyAction.Delete))

@@ -2,6 +2,8 @@
 // Copyright (C) 2026 Yukishiro
 // Copyright (C) 2026 yksr-melt
 
+using Meltype.Notation;
+
 namespace Meltype.Composition;
 
 /// <summary>
@@ -54,7 +56,7 @@ internal static class CompositionController
 
     private static SessionResult Result(CompositionState state, CompositionEnv env, bool consumed) => CompositionOutput.Result(state.Out, env, consumed && !state.Out.PassedCurrent, env.Settings);
 
-    /// <summary>出来事を処理した後。表示を作り直し、入力が終わったら再変換の状態と押したキーを忘れる。</summary>
+    /// <summary>出来事を処理した後。表示を作り直し、入力が終わったら押したキーを忘れる。</summary>
     private static void Settle(CompositionState state, CompositionEnv env)
     {
         CompositionPresentation.UpdateView(state, env);
@@ -71,8 +73,6 @@ internal static class CompositionController
         return CompositionRefresh.Refresh(state, env) ? Result(state, env, consumed: true) : null;
     }
 
-    internal static void AbandonDirectHold(CompositionState state) => CompositionLifecycle.ClearHeld(state);
-
     /// <summary>変換中の文節の候補を番号で選ぶ (Mac の候補ウィンドウをクリックしたときなど)。</summary>
     public static SessionResult SelectCandidate(CompositionState state, CompositionEnv env, int index)
     {
@@ -83,16 +83,8 @@ internal static class CompositionController
 
     private static void SelectCandidateAt(CompositionState state, CompositionEnv env, int index)
     {
-        // 入力中に出した候補 (設定「入力中も変換候補をいくつか表示」) をクリックしたら、変換を始めてからその候補を選ぶ
-        // 入力中の候補は読み全体の候補なので、変換を始めて文節に分かれると一覧が変わり、番号が別の語を指す。
-        // 見えていた一覧のまま、読み全体 1 つの文節にして、クリックした語を選ぶ
-        if (!CompositionLifecycle.IsConverting(state) && CompositionPresentation.TypingCandidates(state, env) is { } typing)
-        {
-            if (index < 0 || index >= typing.Count) return;
-            state.Conversion = new Conversion([new Clause(CompositionText.AllKana(state.Text, env, final: false), false, typing) { Raw = CompositionText.Raw(state.Text), Expanded = true }], ConversionTrigger.Other, preferJapanese: false);
-        }
-        if (!CompositionLifecycle.IsConverting(state) || state.Clauses.Count == 0) return;
-        var clause = state.Clauses[state.SelectedClause];
+        if (state.Scene is not CompositionScene.Converting converting) return;
+        var clause = converting.Conversion.SelectedClause;
         if (index < 0 || index >= clause.Candidates.Count) return;
         clause.Index = index;
         clause.Changed = true;
@@ -103,10 +95,9 @@ internal static class CompositionController
     public static SessionResult CommitPredictionAt(CompositionState state, CompositionEnv env, int index)
     {
         CompositionOutput.Begin(state.Out);
-        var predictions = CompositionPresentation.CurrentPredictions(state, env);
-        if (!CompositionLifecycle.IsConverting(state) && index >= 0 && index < predictions.Count)
+        if (state.Scene is CompositionScene.Typing { Input: var input } && CompositionPresentation.CurrentPredictions(input, env) is var predictions && index >= 0 && index < predictions.Count)
         {
-            CompositionCommit.CommitPrediction(state, env, predictions[index]);
+            CompositionCommit.CommitPrediction(state, input, env, predictions[index]);
             CompositionPresentation.UpdateView(state, env);
         }
         return Result(state, env, consumed: true);
@@ -126,15 +117,14 @@ internal static class CompositionController
     private static void CommitAll(CompositionState state, CompositionEnv env, bool preserveLatinRaw, bool preserveText)
     {
         env = env.WaitingForInput();
-        if (state.HeldLetters.Length > 0) CompositionDirectInput.ReleaseHeldAsEnglish(state, env);
+        if (state.Scene is CompositionScene.Judging) CompositionDirectInput.ReleaseAsEnglish(state);
         // e + 結合アクセントを「え + アクセント」にしない。明示した表示モード・候補・かな入力は尊重する。
         // ASCII 英字だけの原文に Latin アクセントが続く場合に限り、変換や学習を経由せず確定する。
-        if (preserveLatinRaw && !CompositionLifecycle.IsConverting(state) && state.Reconversion is null && !state.Text.KanaInput &&
-            state.Text.Mode is DisplayMode.Auto or DisplayMode.HalfWidthAlphanumeric &&
-            !CompositionText.IsEmpty(state.Text) && CompositionText.Raw(state.Text).All(char.IsAsciiLetter))
+        if (preserveLatinRaw && state.Scene is CompositionScene.Typing { Input: { Reconversion: null, Text: { KanaInput: false, Mode: DisplayMode.Auto or DisplayMode.HalfWidthAlphanumeric } text } } &&
+            CompositionText.Raw(text).All(char.IsAsciiLetter))
         {
             state.Correctable.Clear();
-            CompositionCommit.CommitText(state, env, ComposedText.English(CompositionText.Raw(state.Text)), english: true, preserveText: true, rule: "英字にアクセント記号が続くので打ったまま");
+            CompositionCommit.CommitText(state, env, ComposedText.English(CompositionText.Raw(text)), english: true, preserveText: true, rule: "英字にアクセント記号が続くので打ったまま");
         }
         else CompositionCommit.CommitIfAny(state, env, preserveText);
         CompositionPresentation.UpdateView(state, env);
@@ -148,15 +138,21 @@ internal static class CompositionController
 
     internal static bool IsConverting(CompositionState state) => CompositionLifecycle.IsConverting(state);
 
+    internal static bool IsDirect(CompositionState state) => CompositionLifecycle.IsDirect(state);
+
     internal static void SetDirect(CompositionState state, bool direct) => CompositionLifecycle.SetDirect(state, direct);
+
+    internal static bool InEnglishWord(CompositionState state) => CompositionLifecycle.InEnglishWord(state);
+
+    internal static void LeaveEnglishWord(CompositionState state) => CompositionLifecycle.LeaveEnglishWord(state);
+
+    internal static void ForgetDirectInput(CompositionState state) => CompositionLifecycle.ForgetDirectInput(state);
 
     internal static void ForgetLastCommit(CompositionState state) => CompositionLifecycle.ForgetLastCommit(state);
 
     internal static void ResetContext(CompositionState state) => CompositionLifecycle.ResetContext(state);
 
-    internal static void CancelPending(CompositionState state, CompositionEnv env) => CompositionLifecycle.CancelPending(state, env);
+    internal static void CancelPending(CompositionState state) => CompositionLifecycle.CancelPending(state);
 
     internal static IReadOnlyList<int> ComposingControlKeys(CompositionState state, CompositionEnv env) => CompositionKeys.ComposingControlKeys(state, env);
-
-    internal static void MarkSlashAtStart(CompositionState state) => CompositionConversion.MarkSlashAtStart(state);
 }
