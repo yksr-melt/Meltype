@@ -96,7 +96,7 @@ stub が impl をロードし、Meltype の更新後は、アプリを再起動�
 | ITfTextInputProcessorEx | IME として起動・終了 |
 | ITfKeyEventSink | キーを受け取り、サーバーに渡して「使ったか」を返す |
 | ITfThreadMgrEventSink / ITfTextEditSink | フォーカスが変わった・キャレットが変換中の文字の外に出た → 確定する。変換していないときにキャレットが動いた・文字が変わった → `CaretMoved` ですぐ伝える (コードの行か・前の語を確定し直すかは本体がキャレットの前の文字で決め、タスクバーの「あ / A」も応答で合わせる) |
-| ITfCompositionSink | アプリの側が変換中の文字を確定したとき (打っている途中で、キャレットがその後ろのままなら、次のキーで変換中に戻して続ける。空のノートに最初の文字を入れたときに、アプリが入力欄を作り直して確定することがあるため) |
+| ITfCompositionSink | アプリの側が変換中の文字を確定したとき (打っている途中で、キャレットの直前がその文字のままなら、次のキーで変換中に戻して続ける。空のノートに最初の文字を入れたときに、アプリが入力欄を作り直して確定することがあるため) |
 | ITfDisplayAttributeProvider | 下線の種類 (打っている途中は点線、変換した文節は細線、選んでいる文節は太線) |
 | ITfCompartmentEventSink | 日本語 ⇔ 英数 (IME の ON/OFF)。半角/全角 と、タスクバーの「あ / A」のボタン (ITfLangBarItemButton) で切り替える |
 | ITfCandidateListUIElement | 候補の一覧を UI Element として `ITfUIElementMgr` に知らせる (`CandidateWindow.cpp`)。アプリが自分で描くと答えたら (`BeginUIElement` の show が FALSE) 窓は出さない |

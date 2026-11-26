@@ -291,7 +291,6 @@ STDMETHODIMP TextService::ActivateEx(ITfThreadMgr* threadMgr, TfClientId clientI
     ownEdit_ = false;
     ForgetSecretField();
     markerSeen_ = false;
-    resumeRange_.Reset();
     resumeContext_.Reset();
     resumeText_.clear();
     lastConverting_ = false;
@@ -397,8 +396,8 @@ STDMETHODIMP TextService::Deactivate() {
     }
     // ここから後 (アプリが変換中の文字を確定した通知・あとから動く非同期の編集セッション) は、Meltype.exe につなぎ直さない
     deactivated_ = true;
-    resumeRange_.Reset();
     resumeContext_.Reset();
+    resumeText_.clear();
     ForgetSecretField();
     // 手放した変換中の文字は、終われるならここで終える (下線を残さない)。終えられなかったものは、手放したときに頼んだ
     // 非同期の編集セッションに任せて、ここでは持たない (入力欄を持ち続けて、この IME が解放されなくなるのを防ぐ)
@@ -796,7 +795,6 @@ bool TextService::Send(const char* type, const std::string& field, const std::st
     // Password を送ると Core は未確定入力を捨てる。応答を待つ前に変換を切り離し、
     // 遅れて動く旧欄の確定が空の応答で表示済みの文字を消したり、旧欄の属性を送り直したりしないようにする。
     if (field == kPasswordField) {
-        resumeRange_.Reset();
         resumeContext_.Reset();
         resumeText_.clear();
         if (composition_ != nullptr) EndCompositionAsync();
@@ -1909,8 +1907,7 @@ STDMETHODIMP TextService::OnCompositionTerminated(TfEditCookie ec, ITfCompositio
     }
     // 打っている途中 (変換していない) なら、Meltype.exe の側はまだ確定しない。空のノートに最初の文字を入れたときなどに、
     // アプリが入力欄を作り直して確定してしまうことがある (そのまま確定すると、ka が「kあ」になる)。
-    // キャレットがその文字の後ろのままなら、次のキーで変換中に戻して続ける (ResumeOrCommit)
-    resumeRange_.Reset();
+    // キャレットの直前がその文字のままなら、次のキーで変換中に戻して続ける (ResumeOrCommit)
     resumeContext_.Reset();
     resumeText_.clear();
     const bool canReadField = !disabled_ && !deactivated_ && compositionContext_ != nullptr;
@@ -1928,7 +1925,6 @@ STDMETHODIMP TextService::OnCompositionTerminated(TfEditCookie ec, ITfCompositio
                 // 応答がなければ Core が同じ未確定入力を持つと分からないので、再開しない。
                 JsonValue reply;
                 if (field.empty() || (Send("StateRequested", field, "", reply, 100, true) && !reply[L"result"][L"view"].IsNull())) {
-                    resumeRange_ = range;
                     resumeContext_ = compositionContext_;
                     resumeText_.assign(buffer, length);
                 }
@@ -1948,18 +1944,16 @@ STDMETHODIMP TextService::OnCompositionTerminated(TfEditCookie ec, ITfCompositio
     staleVk_ = 0;
     lastConverting_ = false;
     TipLog(L"アプリが変換中の文字を確定しました");
-    if (resumeRange_) return S_OK;
+    if (resumeContext_) return S_OK;
     // 入力欄の文字は、アプリが書き換えたかもしれない: 前に確定した語を、次のキーで確定し直さない (関係ない文字を消さないように)
     CommittedOutside(field);
     return S_OK;
 }
 
 void TextService::ResumeOrCommit(ITfContext* context) {
-    if (!resumeRange_) return;
-    Microsoft::WRL::ComPtr<ITfRange> range = resumeRange_;
+    if (!resumeContext_) return;
     Microsoft::WRL::ComPtr<ITfContext> resumeContext = resumeContext_;
     std::wstring text = resumeText_;
-    resumeRange_.Reset();
     resumeContext_.Reset();
     resumeText_.clear();
     bool resumed = false;
@@ -1970,18 +1964,21 @@ void TextService::ResumeOrCommit(ITfContext* context) {
             if (scope == FieldScope::Private || scope == FieldScope::Password) field = FieldJson(ec, context, scope);
             else if (scope == FieldScope::Unreadable) field = kPrivateField;
             if (scope == FieldScope::Password || scope == FieldScope::Unreadable || ContextDisabled(context)) return S_OK;
-            // 文字がアプリに確定されたときのままで、キャレットがその後ろにある (選んでいない) ときだけ
-            wchar_t buffer[65];
-            ULONG length = 0;
-            if (FAILED(range->GetText(ec, 0, buffer, 64, &length)) || text.compare(0, std::wstring::npos, buffer, length) != 0) return S_OK;
+            // キャレットが選んでおらず、その直前がアプリに確定されたときの文字のままのときだけ戻す。
+            // 範囲は確定されたときのものを持たず、今のキャレットから作り直す: Web 版 ChatGPT で貼り付けた URL のリンクの後ろでは、
+            // ページが最初の文字を確定して要素を作り直すので、確定されたときの範囲はその文字を指さなくなる (#2199)
             TF_SELECTION selection = {};
             ULONG fetched = 0;
             if (FAILED(context->GetSelection(ec, TF_DEFAULT_SELECTION, 1, &selection, &fetched)) || fetched == 0) return S_OK;
-            LONG start = 1, end = 1;
-            selection.range->CompareStart(ec, range.Get(), TF_ANCHOR_END, &start);
-            selection.range->CompareEnd(ec, range.Get(), TF_ANCHOR_END, &end);
-            selection.range->Release();
-            if (start != 0 || end != 0) return S_OK;
+            Microsoft::WRL::ComPtr<ITfRange> range;
+            range.Attach(selection.range);
+            BOOL empty = FALSE;
+            if (FAILED(range->IsEmpty(ec, &empty)) || !empty) return S_OK;
+            LONG moved = 0;
+            if (FAILED(range->ShiftStart(ec, -static_cast<LONG>(text.size()), &moved, nullptr)) || moved != -static_cast<LONG>(text.size())) return S_OK;
+            wchar_t buffer[65];
+            ULONG length = 0;
+            if (FAILED(range->GetText(ec, 0, buffer, 64, &length)) || text.compare(0, std::wstring::npos, buffer, length) != 0) return S_OK;
             ITfContextComposition* contextComposition = nullptr;
             if (FAILED(context->QueryInterface(IID_ITfContextComposition, reinterpret_cast<void**>(&contextComposition)))) return S_OK;
             if (context == editSinkContext_) ownEdit_ = true;

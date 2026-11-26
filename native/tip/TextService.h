@@ -229,7 +229,7 @@ private:
         UINT vk = 0;
         ULONGLONG time = 0;
     };
-    Microsoft::WRL::ComPtr<ITfRange> resumeRange_;  // アプリが確定した打ちかけの文字 (次のキーで変換中に戻す)
+    // アプリが確定した打ちかけの文字がある入力欄とその文字 (次のキーで、キャレットの直前にあれば変換中に戻す)
     Microsoft::WRL::ComPtr<ITfContext> resumeContext_;
     std::wstring resumeText_;
     bool lastConverting_ = false;  // 最後に置いた変換中の文字が、変換した状態か (打っている途中なら false)
