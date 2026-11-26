@@ -645,7 +645,7 @@ internal sealed partial class CompositionDetector
                 cost = KnownEnglishCost;
             }
             else if (IsWordCasing(span) && IsLatticeEnglishWord(learning, span.ToLowerInvariant()) && (span.Length > 1 || Standalone(text, start, end, afterEnglish)) &&
-                     !IsLowercaseJapaneseProperNoun(learning, span))
+                     !IsLowercaseJapaneseProperNoun(learning, span) && !IsUnfinishedRomajiBeforeKana(learning, text, end, span))
             {
                 cost = Memory?.Get(span.ToLowerInvariant(), learning) == true ? LearnedEnglishCost
                     : (ReadableEnglish.Value.ContainsWord(span.ToLowerInvariant()) ? ReadableEnglishCost : KnownEnglishCost) + (span.Length <= 2 && span.All(char.IsAsciiLetterLower) ? ShortEnglishCost : 0);
@@ -681,6 +681,19 @@ internal sealed partial class CompositionDetector
         return edges;
     }
 
+    /// <summary>
+    /// ローマ字 1 音と打ちかけの子音からなる語は、入力の終わりか助詞の前で英語とみなす。
+    /// 子音が重なるときは「っ」にする (shit|tori ではなく shittori)。複数の音になる語 (dies など) は今までどおり英語の候補にする。
+    /// </summary>
+    private bool IsUnfinishedRomajiBeforeKana(bool? learning, string text, int end, string word)
+    {
+        if (end == text.Length || !char.IsAsciiLetterLower(text[end]) || !word.All(char.IsAsciiLetterLower) ||
+            !ReadableEnglish.Value.ContainsWord(word) || Memory?.Get(word, learning) == true ||
+            _romaji.AnalyzeFragment(word) is not { IsValid: true, Partial.Length: 1 } reading ||
+            reading.Partial == "n" || reading.Tokens.Count != 1) return false;
+        return text[end] == word[^1] || DictionaryDetector.StartsWithParticle(text[end..]) is null;
+    }
+
     /// <summary>大文字 1 文字の後ろが小文字だけで、ローマ字で読むと日本人の姓・名の読み (dictionaries/names.txt) になるか (Takahashi・Sato)。</summary>
     private bool IsJapaneseName(string span) =>
         span.Skip(1).All(char.IsAsciiLetterLower) && _romaji.ConvertLenient(span.ToLowerInvariant(), final: true) is var reading &&
@@ -710,7 +723,7 @@ internal sealed partial class CompositionDetector
     /// 1 文字は a・i と、チャットの略し方の u (you)・r (are) だけ。
     /// </summary>
     /// <remarks>
-    /// english.txt の語の -s の形 (deploys) も語にする。english-words.txt は deploy を持たず ploys を持つので、deploys を de|ploys に割ってしまう。
+    /// english.txt にある語は、末尾に s を付けた形も 1 語にする (deploys を de|ploys に分けない)。
     /// </remarks>
     private bool IsLatticeEnglishWord(bool? learning, string lower)
     {

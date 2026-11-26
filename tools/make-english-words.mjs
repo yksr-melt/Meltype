@@ -34,23 +34,30 @@ function wordsAt(size) {
 const common = new Set([10, 20, 35].flatMap(wordsAt));
 // 先頭を 1 文字取った低頻度語があると、かな入力で元の英単語を分けてしまう (function → は + unction)。
 const commonTails = new Set([...common].map(word => word.slice(1)));
+// 予測変換もこの一覧を引く。SCOWL の差別語と、そこにない既知の差別語は追加しない。
+const offensive = new Set([
+  ...[1, 2].flatMap(level => readWords(path.join(dir, '..', 'misc', `offensive.${level}`))),
+  'wetback', 'wetbacks',
+]);
 const words = new Set(common);
 for (const word of [40, 50].flatMap(wordsAt)) {
   // 頻度の低い語が日本語の読みや打ちかけと重なると、入力の途中を英字に分けてしまう (anode → あので)。
-  if (kana.test(word) || commonTails.has(word)) continue;
+  if (offensive.has(word) || kana.test(word) || commonTails.has(word)) continue;
   // 短い語は余計な子音を 1 文字打ったローマ字とも重なる (shims → し + ms)。
   if (word.length <= 5 && [...word].some((letter, i) => !'aiueo'.includes(letter) && kana.test(word.slice(0, i) + word.slice(i + 1)))) continue;
   words.add(word);
 }
 for (const level of [1, 3]) {
-  for (const word of readWords(path.join(dir, '..', 'misc', `profane.${level}`))) words.add(word);
+  for (const word of readWords(path.join(dir, '..', 'misc', `profane.${level}`))) {
+    if (!offensive.has(word)) words.add(word);
+  }
 }
 
 
 const out = [
   '# Meltype よく使う英単語',
   '# SCOWL (Spell Checker Oriented Word Lists) の english-words・american-words (10, 20, 35, 40, 50) と misc/profane.{1,3} から tools/make-english-words.mjs で作成。',
-  '# 大きさ 40・50 はローマ字の読みや打ちかけと重なる語を除く。',
+  '# 追加語から差別語を除く。大きさ 40・50 はローマ字の読みや打ちかけと重なる語も除く。',
   '# Copyright 2000-2018 by Kevin Atkinson',
   '#   Permission to use, copy, modify, distribute and sell these word lists, the associated scripts, the output created from the scripts,',
   '#   and its documentation for any purpose is hereby granted without fee, provided that the above copyright notice appears in all copies and',

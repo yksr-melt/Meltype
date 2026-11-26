@@ -179,16 +179,10 @@ internal static partial class CompositionText
             var afterRomaji = s > 0 && segments[s - 1] is { IsEnglish: false } before && before.Raw.Any(char.IsAsciiLetter);
             if (segment.IsEnglish && segment.Raw.Any(char.IsAsciiLetter) && !afterRomaji)
             {
-                // 語末が打ちかけの子音と同じ短い英単語は、助詞以外のかなが続くときにローマ字の打ち間違いにもなる (shit|measu → してます)。
-                var possibleTypo = !segment.IsProtected && segment.Raw.Length is >= 3 and <= 4 &&
-                    segment.Raw.All(char.IsAsciiLetterLower) && CompositionDetector.IsCommonEnglishWord(segment.Raw) &&
-                    env.Detector.Romaji.AnalyzeFragment(segment.Raw).Partial is { Length: > 0 } partial && partial != "n" &&
-                    s + 1 < segments.Count && segments[s + 1] is { IsEnglish: false } next &&
-                    DictionaryDetector.StartsWithParticle(next.Raw) is null;
                 for (var i = 0; i < segment.Raw.Length; i++)
                 {
-                    mask.Add(!possibleTypo);
-                    firm.Add(!possibleTypo);
+                    mask.Add(true);
+                    firm.Add(true);
                 }
                 continue;
             }

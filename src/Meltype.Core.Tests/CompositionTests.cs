@@ -5594,6 +5594,33 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void EnglishWordsBeforeKana_AreNotCorrectedAsTypos()
+    {
+        AssertCommitted(
+            ("napshita", "napした"), ("capsuru", "capする"), ("hugshita", "hugした"),
+            ("idolmade", "idolまで"), ("raidmade", "raidまで"), ("maidkudasai", "maidください"),
+            ("dieddesu", "diedです"), ("diessuru", "diesする"), ("diestai", "diesたい"));
+    }
+
+    [Test]
+    public static void EnglishWordEndingInPendingConsonant_KeepsJapaneseSokuon()
+    {
+        AssertCommitted(
+            ("shittori", "しっとり"), ("shittorishita", "しっとりした"),
+            ("shittosuru", "しっとする"), ("shittoga", "しっとが"),
+            ("shitto", "しっと"), ("shittai", "しったい"),
+            ("shitty", "shitty"), ("shitting", "shitting"));
+    }
+
+    [Test]
+    public static void EnglishPredictions_ExcludeOffensiveDictionaryAdditions()
+    {
+        Assert.True(!Predictor.PredictEnglish("nigg").Contains("niggers"), "nigg");
+        Assert.True(!Predictor.PredictEnglish("wetb").Any(word => word.StartsWith("wetback", StringComparison.Ordinal)), "wetb");
+        Assert.True(Predictor.PredictEnglish("decis").Contains("decision"), "decis");
+    }
+
+    [Test]
     public static void ToolNames_AppearInKanaConversionCandidates()
     {
         foreach (var (typed, name) in new[]

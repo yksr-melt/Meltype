@@ -121,6 +121,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 全 OS で英単語かどうかを判定するために使う辞書です。
 [SCOWL](http://wordlist.aspell.net/) (Spell Checker Oriented Word Lists、2020.12.07) の `final/english-words` と `final/american-words` (大きさ 10・20・35・40・50)、`misc/profane.1`、`misc/profane.3` から、小文字の英字だけで 2 文字以上の語を取り出します。
 大きさ 40・50 からは、ローマ字での入力と重なる語と、よく使う英単語の先頭 1 文字を取った綴りを除きます。
+予測変換にも使うため、追加語からは SCOWL の `misc/offensive.1`・`misc/offensive.2` にある差別語と、同一覧にない差別語を除きます。
 `tools/make-english-words.mjs` で一覧にしました。
 
 以下に SCOWL の Copyright ファイルの全文を掲載します。
