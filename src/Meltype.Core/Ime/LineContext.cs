@@ -98,7 +98,7 @@ internal static class LineContext
             }
             // 1 行のコメント: 行の終わりまで飛ばす。
             // ターミナルの引数の // (//src/work/* など) も飛ばす。後ろの /* を、次の行まで続くコメントの始まりにしない
-            if (StartsWith(text, i, "//") || IsHashComment(text, i) || IsDashComment(text, i, atStart) ||
+            if (StartsWith(text, i, "//") || IsHashComment(text, i) || IsDashComment(text, i, atStart, terminal: false) ||
                 (atStart && StartsWithIgnoreCase(text, i, "rem ")))
             {
                 while (i + 1 < text.Length && text[i + 1] is not ('\r' or '\n')) i++;
@@ -163,7 +163,7 @@ internal static class LineContext
                 continue;
             }
             if (IsHashComment(line, i)) return LineKind.Comment;
-            if (IsDashComment(line, i, atStart)) return LineKind.Comment;
+            if (IsDashComment(line, i, atStart, terminal)) return LineKind.Comment;
             // 複数行コメントの途中の行 ( * …)
             if (atStart && c == '*' && (i + 1 == line.Length || line[i + 1] == ' ')) return LineKind.Comment;
             // REM コメント (バッチファイル)
@@ -185,9 +185,10 @@ internal static class LineContext
 
     // #1623: -- コメント (SQL・Lua・Haskell) は、直後に日本語・全角の本文を確定してもコメントのままにする。
     // 直前の境界は x-- の減算、直後の ASCII は --count のようなオプションと区別するために残す。
-    private static bool IsDashComment(string text, int index, bool atStart) =>
+    // ターミナルでは // と同じく、打ったばかりの -- もコードとする。bash --kyouha のようなオプションの名前を、続けて直接入力するため (#1665)。
+    private static bool IsDashComment(string text, int index, bool atStart, bool terminal) =>
         StartsWith(text, index, "--") && (atStart || index > 0 && char.IsWhiteSpace(text[index - 1])) &&
-        (index + 2 == text.Length || text[index + 2] is > '~' || char.IsWhiteSpace(text[index + 2]));
+        (index + 2 == text.Length ? !terminal : text[index + 2] is > '~' || char.IsWhiteSpace(text[index + 2]));
 
     /// <summary>
     /// 行コメントの // にすぐ続けて打った記号 c か (C# の ///、Rust の //!、区切りの //---- //==== //****)。

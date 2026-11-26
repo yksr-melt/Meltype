@@ -1111,6 +1111,31 @@ internal static class SessionFacadeTests
     }
 
     [Test]
+    public static void CodeInput_TerminalShellOptionsAfterDoubleDashRemainDirect()
+    {
+        // #1665: ターミナルのシェルの -- のオプションは、続けて打つ名前も英数のまま入れる。
+        foreach (var command in new[] { "bash --kyouha", "git log --oneline", "--kyouha", "ls\t--all" })
+        {
+            var session = Create();
+            session.CodeInput = true;
+            session.CodeTerminal = true;
+            var field = new Field();
+            Assert.True(Type(session, command, field).All(r => !r.Consumed && r.View is null), command);
+            Assert.Equal(command, field.Text);
+        }
+        // -- コメント (SQL・Lua) は、-- の後に空白を打てば日本語で書ける。
+        foreach (var prefix in new[] { "-- ", "kome -- " })
+        {
+            var session = Create();
+            session.CodeInput = true;
+            session.CodeTerminal = true;
+            var field = new Field();
+            Assert.True(Type(session, prefix, field).All(r => !r.Consumed), prefix);
+            Assert.Equal("きょうは", Type(session, "kyouha", field)[^1].View?.Text, prefix);
+        }
+    }
+
+    [Test]
     public static void CodeInput_TerminalEditorSlashCommentsComposeJapanese()
     {
         // ターミナルの中のエディター (Vim など) の、空白の後の // コメントは日本語で書く。前の行も含む周辺文字列を返すターミナルでも同じ。
