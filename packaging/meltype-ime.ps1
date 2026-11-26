@@ -89,17 +89,21 @@ function Invoke-Elevated([string]$Source, [string]$Mode) {
     return 'failed'
 }
 
+# 一覧に Meltype だけを足す・外す (input.dll の InstallLayoutOrTip)。
+# Get-WinUserLanguageList → Set-WinUserLanguageList で一覧ごと書き戻すと、Get-WinUserLanguageList が読めなかった
+# ほかの IME (Google 日本語入力など) が一覧から消える (#470)
+function Invoke-InstallLayoutOrTip([switch]$Uninstall) {
+    if (-not ('Meltype.InputDll' -as [type])) {
+        Add-Type -Namespace Meltype -Name InputDll -MemberDefinition '[DllImport("input.dll", CharSet = CharSet.Unicode)] public static extern bool InstallLayoutOrTip(string psz, uint dwFlags);'
+    }
+    # ILOT_UNINSTALL = 1
+    $flags = 0
+    if ($Uninstall) { $flags = 1 }
+    if (-not [Meltype.InputDll]::InstallLayoutOrTip($MeltypeImeTip, $flags)) { throw 'InstallLayoutOrTip が失敗しました。' }
+}
+
 function Add-MeltypeImeToLanguageList {
-    $list = Get-WinUserLanguageList
-    $japanese = $list | Where-Object { $_.LanguageTag -like 'ja*' } | Select-Object -First 1
-    if (-not $japanese) {
-        $list.Add('ja-JP')
-        $japanese = $list | Where-Object { $_.LanguageTag -like 'ja*' } | Select-Object -First 1
-    }
-    if ($japanese.InputMethodTips -notcontains $MeltypeImeTip) {
-        $japanese.InputMethodTips.Add($MeltypeImeTip)
-        Set-WinUserLanguageList $list -Force
-    }
+    Invoke-InstallLayoutOrTip
     # 既定の入力方式を自分で決めていなければ、Meltype にする (サインインし直したときも Meltype から始まるように)。
     # 自分で決めているときは変えない
     $override = Get-WinDefaultInputMethodOverride -ErrorAction SilentlyContinue
@@ -110,15 +114,7 @@ function Remove-MeltypeImeFromLanguageList {
     # 既定の入力方式が Meltype のままなら、決めていない状態に戻す
     $override = Get-WinDefaultInputMethodOverride -ErrorAction SilentlyContinue
     if ("$($override | Out-String)" -match '417D801B-A9BD-4C26-BD16-356A825A6998') { Set-WinDefaultInputMethodOverride }
-    $list = Get-WinUserLanguageList
-    $changed = $false
-    foreach ($language in $list) {
-        if ($language.InputMethodTips -contains $MeltypeImeTip) {
-            $language.InputMethodTips.Remove($MeltypeImeTip) | Out-Null
-            $changed = $true
-        }
-    }
-    if ($changed) { Set-WinUserLanguageList $list -Force }
+    Invoke-InstallLayoutOrTip -Uninstall
 }
 
 # ファイルの SHA-256 (Get-FileHash は、ほかのシェルから起動した PowerShell では読み込めないことがあるので .NET で計算する)
