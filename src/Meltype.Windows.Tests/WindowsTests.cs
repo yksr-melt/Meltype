@@ -236,6 +236,21 @@ internal static class WindowsTests
     }
 
     [Test]
+    public static void SettingsChange_ReportsTsfUnavailableOnlyWhenChosen()
+    {
+        // 設定アプリで動作モードを Meltype IME にしても、使えなければ Running は Meltype キーボードになる。
+        // Running で比べていたので、登録を聞けなかった
+        using var engine = new MeltypeEngine(TestRuntime.Create());
+        var reported = 0;
+        engine.TsfUnavailable += () => reported++;
+        engine.EditSettings(settings => settings.Mode = InputMode.Tsf);
+        var expected = Tip.TipServer.IsUsable ? 0 : 1;
+        Assert.Equal(expected, reported, "Meltype IME を選んだ");
+        engine.EditSettings(settings => settings.AutoDetection = !settings.AutoDetection);
+        Assert.Equal(expected, reported, "ほかの設定を変えただけでは知らせ直さない");
+    }
+
+    [Test]
     public static void AltTap_ReleaseIsSentAfterMaskKey()
     {
         // 右 Alt (拡張キー) の単独押しの解放: 0xE8 の押下・解放のあとに、解放をそのまま送り直す (先に解放が届くとメニューバーに移る)
