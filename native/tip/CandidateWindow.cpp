@@ -35,6 +35,8 @@ constexpr float kRowHeight = 32;     // 候補の 1 行
 constexpr float kNumberWidth = 26;   // 番号の列
 constexpr float kTextInset = 10;     // 行の左端から番号まで
 constexpr float kNoteGap = 16;       // 候補と注釈の間
+constexpr float kSwatchSize = 14;    // 色見本の大きさ
+constexpr float kSwatchGap = 8;      // 候補と色見本の間
 constexpr float kFooterHeight = 24;  // 「3 / 27」の行
 constexpr float kTypedHeight = 22;   // 打ったキーの行
 constexpr float kCandidateFontSize = 15;
@@ -170,6 +172,206 @@ void FillRounded(ID2D1RenderTarget* target, const D2D1_RECT_F& rect, float radiu
     brush->Release();
 }
 
+void DrawColorSwatch(ID2D1RenderTarget* target, const D2D1_RECT_F& rect, unsigned char r, unsigned char g, unsigned char b, unsigned char a,
+                     const D2D1_COLOR_F& borderColor) {
+    if (a < 255) {
+        float midX = (rect.left + rect.right) * 0.5f;
+        float midY = (rect.top + rect.bottom) * 0.5f;
+        ID2D1SolidColorBrush* light = nullptr;
+        ID2D1SolidColorBrush* dark = nullptr;
+        target->CreateSolidColorBrush(Rgba(255, 255, 255), &light);
+        target->CreateSolidColorBrush(Rgba(204, 204, 204), &dark);
+        if (light && dark) {
+            target->FillRectangle(D2D1::RectF(rect.left, rect.top, midX, midY), light);
+            target->FillRectangle(D2D1::RectF(midX, rect.top, rect.right, midY), dark);
+            target->FillRectangle(D2D1::RectF(rect.left, midY, midX, rect.bottom), dark);
+            target->FillRectangle(D2D1::RectF(midX, midY, rect.right, rect.bottom), light);
+        }
+        if (light) light->Release();
+        if (dark) dark->Release();
+    }
+    ID2D1SolidColorBrush* fill = nullptr;
+    target->CreateSolidColorBrush(Rgba(r, g, b, a / 255.0f), &fill);
+    if (fill) {
+        target->FillRectangle(rect, fill);
+        fill->Release();
+    }
+    ID2D1SolidColorBrush* border = nullptr;
+    target->CreateSolidColorBrush(borderColor, &border);
+    if (border) {
+        target->DrawRectangle(rect, border, 1.0f);
+        border->Release();
+    }
+}
+
+int HexDigit(wchar_t c) {
+    if (c >= L'0' && c <= L'9') return c - L'0';
+    if (c >= L'a' && c <= L'f') return c - L'a' + 10;
+    if (c >= L'A' && c <= L'F') return c - L'A' + 10;
+    return -1;
+}
+
+void SkipSpaces(const std::wstring& s, size_t& i) {
+    while (i < s.size() && (s[i] == L' ' || s[i] == L'\t')) i++;
+}
+
+bool MatchWordInsensitive(const std::wstring& s, size_t& i, const wchar_t* word) {
+    size_t j = i;
+    for (const wchar_t* p = word; *p != 0; p++, j++) {
+        if (j >= s.size()) return false;
+        wchar_t c = s[j];
+        if (c >= L'A' && c <= L'Z') c = static_cast<wchar_t>(c - L'A' + L'a');
+        if (c != *p) return false;
+    }
+    i = j;
+    return true;
+}
+
+bool ParseDoubleToken(const std::wstring& s, size_t& i, bool allowNeg, double& out) {
+    size_t start = i;
+    if (allowNeg && i < s.size() && s[i] == L'-') i++;
+    bool hasDigit = false;
+    while (i < s.size() && s[i] >= L'0' && s[i] <= L'9') {
+        hasDigit = true;
+        i++;
+    }
+    if (i < s.size() && s[i] == L'.') {
+        i++;
+        while (i < s.size() && s[i] >= L'0' && s[i] <= L'9') {
+            hasDigit = true;
+            i++;
+        }
+    }
+    if (!hasDigit) {
+        i = start;
+        return false;
+    }
+    try {
+        out = std::stod(s.substr(start, i - start));
+        return true;
+    } catch (...) {
+        i = start;
+        return false;
+    }
+}
+
+bool ParseSeparator(const std::wstring& s, size_t& i, wchar_t alt = L',') {
+    size_t before = i;
+    SkipSpaces(s, i);
+    if (i < s.size() && s[i] == alt) {
+        i++;
+        SkipSpaces(s, i);
+        return true;
+    }
+    return i > before;
+}
+
+bool ParseAlphaSuffix(const std::wstring& s, size_t& i, unsigned char& outA) {
+    SkipSpaces(s, i);
+    if (i < s.size() && s[i] == L')') {
+        i++;
+        outA = 255;
+        return i == s.size();
+    }
+    if (i >= s.size() || (s[i] != L',' && s[i] != L'/')) return false;
+    i++;
+    SkipSpaces(s, i);
+    double val = 0;
+    if (!ParseDoubleToken(s, i, false, val)) return false;
+    if (i < s.size() && s[i] == L'%') {
+        i++;
+        if (val < 0 || val > 100) return false;
+        val /= 100.0;
+    } else if (val < 0 || val > 1) {
+        return false;
+    }
+    SkipSpaces(s, i);
+    if (i >= s.size() || s[i] != L')') return false;
+    i++;
+    if (i != s.size()) return false;
+    outA = static_cast<unsigned char>(std::lround(val * 255.0));
+    return true;
+}
+
+double HueToRgb(double p, double q, double t) {
+    if (t < 0) t += 1.0;
+    if (t > 1) t -= 1.0;
+    if (t < 1.0 / 6.0) return p + (q - p) * 6.0 * t;
+    if (t < 0.5) return q;
+    if (t < 2.0 / 3.0) return p + (q - p) * (2.0 / 3.0 - t) * 6.0;
+    return p;
+}
+
+bool TryParseColorRgba(const std::wstring& text, unsigned char& outR, unsigned char& outG, unsigned char& outB, unsigned char& outA) {
+    if (text.empty()) return false;
+    if (text[0] == L'#') {
+        size_t len = text.size() - 1;
+        if (len != 3 && len != 4 && len != 6 && len != 8) return false;
+        int d[8] = {};
+        for (size_t i = 0; i < len; i++) {
+            d[i] = HexDigit(text[1 + i]);
+            if (d[i] < 0) return false;
+        }
+        if (len == 3 || len == 4) {
+            outR = static_cast<unsigned char>((d[0] << 4) | d[0]);
+            outG = static_cast<unsigned char>((d[1] << 4) | d[1]);
+            outB = static_cast<unsigned char>((d[2] << 4) | d[2]);
+            outA = len == 4 ? static_cast<unsigned char>((d[3] << 4) | d[3]) : 255;
+        } else {
+            outR = static_cast<unsigned char>((d[0] << 4) | d[1]);
+            outG = static_cast<unsigned char>((d[2] << 4) | d[3]);
+            outB = static_cast<unsigned char>((d[4] << 4) | d[5]);
+            outA = len == 8 ? static_cast<unsigned char>((d[6] << 4) | d[7]) : 255;
+        }
+        return true;
+    }
+
+    size_t i = 0;
+    if (MatchWordInsensitive(text, i, L"rgba(") || MatchWordInsensitive(text, i, L"rgb(")) {
+        SkipSpaces(text, i);
+        double r = 0, g = 0, b = 0;
+        if (!ParseDoubleToken(text, i, false, r) || r > 255 || std::floor(r) != r) return false;
+        if (!ParseSeparator(text, i)) return false;
+        if (!ParseDoubleToken(text, i, false, g) || g > 255 || std::floor(g) != g) return false;
+        if (!ParseSeparator(text, i)) return false;
+        if (!ParseDoubleToken(text, i, false, b) || b > 255 || std::floor(b) != b) return false;
+        if (!ParseAlphaSuffix(text, i, outA)) return false;
+        outR = static_cast<unsigned char>(r);
+        outG = static_cast<unsigned char>(g);
+        outB = static_cast<unsigned char>(b);
+        return true;
+    }
+
+    i = 0;
+    if (MatchWordInsensitive(text, i, L"hsla(") || MatchWordInsensitive(text, i, L"hsl(")) {
+        SkipSpaces(text, i);
+        double hDeg = 0, sPct = 0, lPct = 0;
+        if (!ParseDoubleToken(text, i, true, hDeg)) return false;
+        if (!ParseSeparator(text, i)) return false;
+        if (!ParseDoubleToken(text, i, false, sPct) || i >= text.size() || text[i] != L'%' || sPct > 100) return false;
+        i++;
+        if (!ParseSeparator(text, i)) return false;
+        if (!ParseDoubleToken(text, i, false, lPct) || i >= text.size() || text[i] != L'%' || lPct > 100) return false;
+        i++;
+        if (!ParseAlphaSuffix(text, i, outA)) return false;
+        double h = std::fmod(std::fmod(hDeg, 360.0) + 360.0, 360.0) / 360.0;
+        double s = sPct / 100.0;
+        double l = lPct / 100.0;
+        if (s == 0) {
+            outR = outG = outB = static_cast<unsigned char>(std::lround(l * 255.0));
+        } else {
+            double q = l < 0.5 ? l * (1.0 + s) : l + s - l * s;
+            double p = 2.0 * l - q;
+            outR = static_cast<unsigned char>(std::lround(HueToRgb(p, q, h + 1.0 / 3.0) * 255.0));
+            outG = static_cast<unsigned char>(std::lround(HueToRgb(p, q, h) * 255.0));
+            outB = static_cast<unsigned char>(std::lround(HueToRgb(p, q, h - 1.0 / 3.0) * 255.0));
+        }
+        return true;
+    }
+
+    return false;
+}
+
 void PrepareWindow(HWND hwnd, COLORREF border) {
     // Windows 11: 角丸と縁の色 (Windows 10 では何もしない)
     DWORD corner = 2;  // DWMWCP_ROUND
@@ -236,6 +438,8 @@ struct CandidateWindow::Impl {
         float widest = 0;
         for (size_t i = 0; i < view.candidates.size(); i++) {
             float w = TextWidth(candidate, view.candidates[i]);
+            unsigned char cr = 0, cg = 0, cb = 0, ca = 0;
+            if (TryParseColorRgba(view.candidates[i], cr, cg, cb, ca)) w += kSwatchGap + kSwatchSize;
             if (i < view.notes.size() && !view.notes[i].empty()) w += kNoteGap + TextWidth(note, view.notes[i]);
             widest = std::max(widest, w);
         }
@@ -319,8 +523,17 @@ struct CandidateWindow::Impl {
                 DrawText(target, note, view.notes[index], D2D1::RectF(row.right - 10 - noteWidth, row.top, row.right - 6, row.bottom), p.secondary);
                 noteWidth += kNoteGap;
             }
-            DrawText(target, candidate, view.candidates[index],
-                     D2D1::RectF(row.left + kTextInset + kNumberWidth, row.top, row.right - 8 - noteWidth, row.bottom), p.text);
+            float textLeft = row.left + kTextInset + kNumberWidth;
+            float maxRight = row.right - 8 - noteWidth;
+            unsigned char cr = 0, cg = 0, cb = 0, ca = 0;
+            if (TryParseColorRgba(view.candidates[index], cr, cg, cb, ca)) {
+                float candWidth = TextWidth(candidate, view.candidates[index]);
+                float swatchX = std::min(textLeft + candWidth + kSwatchGap, maxRight - kSwatchSize);
+                float swatchY = row.top + (kRowHeight - kSwatchSize) * 0.5f;
+                DrawColorSwatch(target, D2D1::RectF(swatchX, swatchY, swatchX + kSwatchSize, swatchY + kSwatchSize), cr, cg, cb, ca, p.secondary);
+                maxRight = swatchX - kSwatchGap;
+            }
+            DrawText(target, candidate, view.candidates[index], D2D1::RectF(textLeft, row.top, maxRight, row.bottom), p.text);
             y += kRowHeight;
         }
 
