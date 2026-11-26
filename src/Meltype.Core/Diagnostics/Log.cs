@@ -33,7 +33,7 @@ public static class Log
 
     /// <summary>
     /// 入力した文字 (確定した文字列・打った英字・読み・直した語) をログに残すか (設定「ログに入力した文字を残す」、既定は残さない)。
-    /// 残さないときは文字数だけを残す。/・$・@ で始まる語を検知したときの、先頭の記号 1 文字はこれに関係なく残る。
+    /// 残さないときは文字数だけを残す。
     /// </summary>
     public static bool RecordText { get; set; }
 
@@ -98,9 +98,9 @@ public static class Log
             if (File.Exists(path) && new FileInfo(path).Length > 5 * 1024 * 1024) File.Move(path, path + ".old", overwrite: true);
             File.AppendAllText(path, builder.ToString());
         }
-        catch
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // ログの失敗で入力処理を止めない。
+            // ログを書けない (ディスクがいっぱい・権限が無い) ときも、入力処理を止めない。
         }
     }
 }

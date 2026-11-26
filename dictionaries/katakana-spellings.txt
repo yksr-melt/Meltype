@@ -1,0 +1,6833 @@
+# Meltype 英単語のカタカナ表記 (英単語 カタカナ カタカナ …)。export → エクスポート
+# JMdict (Electronic Dictionary Research and Development Group) のカタカナ語の英訳から tools/make-katakana-spellings.mjs で作成。
+# JMdict は Creative Commons Attribution-ShareAlike 4.0 (CC BY-SA 4.0) で公開されている: https://www.edrdg.org/edrdg/licence.html
+# CMUdict (Carnegie Mellon University、BSD-2-Clause) の発音で子音の並びを照合。出典・ライセンス: THIRD-PARTY-NOTICES.md
+aardvark アードバーク
+abacus アバカス
+ability アビリティー
+abnormal アブノーマル
+abort アボート
+abortion アボーション
+absolute アブソリュート アブソルート
+abstract アブストラクト
+abstraction アブストラクション
+abuse アビューズ アビュース
+abyss アビス
+academic アカデミック
+academy アカデミー
+acceleration アクセラレーション
+accelerator アクセラレータ アクセラレーター
+accent アクセント
+accept アクセプト
+acceptance アクセプタンス
+access アクセス
+accessibility アクセシビリティ アクセシビリティー
+accessible アクセシブル
+accessing アクセシング
+accessory アクセサリー アクセサリ
+accident アクシデント
+accidental アクシデンタル
+acclaim アクレイム
+accommodation アコモデーション
+accompaniment アカンパニメント
+accomplice アコンプリス
+accord アコード
+accordion アコーディオン アコーデオン アコーディアン
+account アカウント
+accountability アカウンタビリティ アカウンタビリティー
+accounting アカウンティング
+accredit アクレディット
+accumulate アキュミュレイト アキュムレイト アクムレイト
+accuracy アキュラシー
+accurate アキュレイト アキュレット
+accusation アキュゼイション
+ace エース
+achievement アチーブメント
+acid アシッド
+acknowledge アクノリッジ
+acne アクネ
+acoustic アコースティック
+acquaint アクウェイント アクエイント
+acquaintance アクウェインタンス アクエインタンス
+acquiesce アクイエス アクウィエス
+acquire アクワイア アクワイヤ
+acquisition アクイジション アクウィジション
+acquit アクイット アクウィット
+acre エーカー エイカー
+acrid アクリッド
+acrobat アクロバット
+acrobatic アクロバティック アクロバチック
+acronym アクロニム
+across アクロス
+act アクト
+acting アクティング
+action アクション
+active アクティブ
+activist アクティビスト
+activity アクティビティ
+actor アクター アクタ
+actress アクトレス
+actual アクチュアル アクチャル
+actuality アクチュアリティー
+actually アクチュアリ アクチャリ
+actuary アクチュアリー
+ad アド
+adaptation アダプテーション
+adapter アダプター アダプタ
+adaptive アダプティブ アダプティヴ
+addict アディクト
+addiction アディクション
+additional アディショナル
+address アドレス
+addressing アドレッシング
+adept アデプト
+adjacent アジェイサント アジェイスント
+adjective アジェクティブ アジェクテブ
+adjustment アジャストメント
+administration アドミニストレーション
+administrator アドミニストレータ アドミニストレーター
+admiral アドミラル
+admission アドミッション
+admittance アドミタンス アドミッタンス
+adobe アドベ アドービ
+adolescence アドレセンス
+adoption アダプション
+adult アダルト
+advance アドバンス
+advanced アドバンスト
+advantage アドバンテージ アドヴァンテージ アドバンテッジ
+adventure アドベンチャー
+adventurous アドベンチャラス
+advertisement アドバタイズメント
+advertising アドバタイジング
+advice アドバイス
+adviser アドバイザー
+advisor アドバイザー
+advisory アドバイザリー アドバイザリ
+aerial エアリアル
+aerodynamics エアロダイナミクス エアロダイナミックス
+affair アフェア アフェアー
+affection アフェクション
+affiliate アフィリエイト
+affinity アフィニティ
+affirmation アファメーション
+affirmative アファーマティブ
+after アフター
+afternoon アフタヌーン
+afterwards アーフタワーズ
+again アゲーン アゲイン アゲン
+age エイジ エージ
+agency エージェンシー エイジェンシー
+agenda アジェンダ
+agent エージェント エージント
+aggravate アグラベイト アグリベイト
+aggression アグレション アグレッション アグレッシン
+aggressive アグレッシブ アグレッシヴ アグレシブ アグレシヴ
+agility アジリティ アジリティー
+aging エージング エイジング
+agitate アジテイト アジテート
+agitation アジテーション
+agitator アジテーター
+agonize アガナイズ
+agreeable アグレアブル
+agreement アグリーメント アグリメント
+agriculture アグリカルチャー アグリカルチャ
+ahead アヘッド
+aid エイド エード
+aim エイム
+air エア エアー
+airborne エアボーン
+aircraft エアクラフト
+airfield エアフィールド
+airline エアライン
+airmail エアメール エアーメール
+airport エアポート
+aisle アイル
+alarm アラーム
+albino アルビノ アルビーノ
+album アルバム
+alcoholic アルコホリック
+alcove アルコーブ
+ale エール
+alert アラート
+algorithm アルゴリズム
+alias エイリアス
+alibi アリバイ
+alien エイリアン
+alignment アラインメント
+alive アライブ
+all オール
+allegory アレゴリー
+alley アレー アレイ
+alliance アライアンス
+alligator アリゲーター
+allocate アロケート
+allocation アロケーション
+allowance アローワンス アローアンス アラウアンス アロウアンス
+alloy アロイ
+almanac アルマナック
+almighty オールマイティ オールマイティー
+almond アーモンド
+alphabet アルファベット
+alphanumeric アルファニューメリック
+alternate オルタネイト オルタネート
+alternative オルタナティブ オルタナティヴ
+alternator オルタネーター オルタネータ
+altruism オルトルイズム
+aluminum アルミニウム アルミニューム
+amateur アマチュア
+amazing アメージング アメイジング
+ambassador アンバサダー
+amber アンバー
+ambiance アンビアンス
+ambient アンビエント
+ambiguity アンビギュイティ
+ambition アンビション
+ambitious アンビシャス
+ambivalence アンビバレンス アンビヴァレンス
+ambivalent アンビバレント
+ambulance アンビュランス
+ambush アンブッシュ
+amen アーメン エイメン
+amendment アメンドメント
+amenity アメニティ アメニティー
+amethyst アメシスト
+amnesty アムネスティ
+amoeba アメーバ アミーバ
+amount アマウント
+amp アンプ
+ampere アンプ アンペア
+ampersand アンパサンド アンパーサンド
+amplifier アンプリファイアー アンプリファイア アンプリファイヤー アンプリファイヤ
+amulet アミュレット
+amusement アミューズメント
+anachronism アナクロニズム
+anagram アナグラム
+anal アナル
+analog アナログ
+analogue アナログ
+analogy アナロジー
+analysis アナリシス
+analyst アナリスト
+analyzer アナライザ アナライザー
+anarchist アナーキスト アナキスト
+anarchy アナーキー
+anatomy アナトミー
+anchor アンカー
+anchoring アンカリング
+anchovy アンチョビー アンチョビ
+ancient エンシェント
+android アンドロイド
+anecdote アネクドート
+anesthetic アネスセチック アネスセティック
+angel エンジェル エンゼル
+angle アングル
+angler アングラー
+angry アングリー
+angular アンギュラー
+animal アニマル
+animation アニメーション
+ankle アンクル
+annex アネックス
+anniversary アニバーサリー
+annotation アノテーション
+announcement アナウンスメント
+announcer アナウンサー
+annual アニュアル
+anomaly アノマリー
+anonymous アノニマス
+anorak アノラック
+another アナザー
+answer アンサー
+antagonism アンタゴニズム
+antagonist アンタゴニスト
+antelope アンテロープ
+antenna アンテナ
+anthem アンセム
+anthology アンソロジー
+anticipation アンティシペーション
+antidote アンチドート アンチドーテ
+antifreeze アンチフリーズ
+anvil アンビル アンヴィル
+apartment アパートメント
+apathy アパシー
+aperture アパーチャ アパーチュア アパーチャー
+aphorism アフォリズム アフォルズム
+apostrophe アポストロフィ アポストロフィー
+apparel アパレル
+appeal アピール アッピール
+appearance アピアランス
+append アペンド
+appendix アペンディックス アペンディクス
+appetite アペタイト
+appetizer アペタイザー
+applause アプローズ
+apple アップル
+appliance アプライアンス
+applicant アプリカント
+application アプリケーション
+applicator アプリケーター アプリケータ
+apply アプライ
+appointment アポイントメント
+approach アプローチ
+appropriation アプロプリエーション
+approval アプルーバル
+apricot アプリコット
+apron エプロン
+aquamarine アクアマリン アクアマリーン
+aquarium アクアリウム
+aquatic アクアティック
+aqueduct アキダクト アクウダクト アクウィダクト
+arbiter アービタ アビタ
+arbitrary アービトラリ アービトレリ
+arbitration アービトレーション
+arc アーク
+arcade アーケード アーケイド
+arch アーチ
+archaeology アーキオロジー アーケオロジー
+archaic アーケイック
+archbishop アーチビショップ
+archer アーチャー アーチャ
+archery アーチェリー アーチェリ
+archipelago アーキペラゴ
+architect アーキテクト
+architectural アーキテクチュラル アーキテクチャル
+architecture アーキテクチャ アーキテクチャー
+archive アーカイブ
+archives アーカイブズ
+ardent アーデント アーダント
+ardor アーダー
+arduous アージュアス
+area エリア
+arena アリーナ
+argue アーギュー
+argument アーギュメント
+aristocracy アリストクラシー
+aristocrat アリストクラット
+aristocratic アリストクラティック
+arithmetic アリスマティック
+arm アーム
+armament アーマメント
+armchair アームチェア アームチェアー
+arming アーミング
+armistice アーミスティス
+armor アーマー
+armory アーマリー
+army アーミー
+aroma アロマ
+aromatic アロマティック アロマチック
+around アラウンド
+arrangement アレンジメント
+array アレイ アレー
+arrival アライバル
+arrow アロー
+arsenic アーセニック
+art アート
+artery アーテリー
+artichoke アーティチョーク アーティーチョーク
+article アーティクル アーテクル
+articulate アーティキュレート アーティキュレイト
+articulation アーティキュレーション
+artifact アーティファクト アーチファクト
+artifice アーティフィス アーテフィス
+artificial アーティフィシャル アーテフィシャル
+artist アーティスト アーチスト
+artistic アーティスティック
+artists アーティスツ
+artwork アートワーク
+ascension アセンション
+asexual アセクシャル アセクシュアル
+ash アッシュ
+ashamed アシェイムド
+aside アサイド
+asparagus アスパラガス
+aspect アスペクト
+aspen アスペン
+asphalt アスファルト
+aspiration アスピレーション
+assassin アサシン
+assassinate アサシネイト
+assassination アサシネイション アサシネーション
+assault アサルト
+assemble アセンブル
+assembler アセンブラ アセンブラー
+assembly アセンブリ アセンブリー アッセンブリー
+assert アサート
+assertion アサーション
+assessment アセスメント
+asset アセット
+assignment アサインメント
+assimilate アシミレイト
+assimilation アシミレイション
+assist アシスト
+assistance アシスタンス
+assistant アシスタント
+associate アソシエイト アソシエート
+associates アソシエーツ
+association アソシエーション
+assortment アソートメント
+assumption アサンプション
+assurance アシュアランス
+assure アシュア
+asterisk アスタリスク
+asteroid アステロイド
+astonish アストニッシュ
+astonishment アストニッシメント アストニッシュメント
+astringent アストリンゼント
+astrology アストロロジー
+astronaut アストロノート アストロノウト
+astronomy アストロノミー
+asylum アサイラム
+asymmetry アシメトリー
+athlete アスリート
+athletics アスレチックス アスレティックス
+atlas アトラス
+atmosphere アトモスフィア アトモスフェア
+atom アトム
+atomic アトミック
+attach アタッチ
+attachment アタッチメント
+attack アタック
+attacker アタッカー
+attendance アテンダンス
+attendant アテンダント
+attention アテンション
+attic アティック
+attitude アティテュード アティチュード アチチュード
+attraction アトラクション
+attractive アトラクティブ
+attribute アトリビュート
+attribution アトリビューション
+auction オークション
+auctioneer オークショニア
+audience オーディエンス
+audio オーディオ
+audition オーディション
+auditorium オーディトリアム
+aunt アーント
+aura オーラ アウラ
+authentic オーセンティック
+authenticity オーセンティシティ
+author オーサー
+authority オーソリティー オーソリティ
+authorization オーソリゼーション オーソライゼーション
+auto オート
+autobiography オートバイオグラフィー
+autocracy オートクラシー
+automatic オートマチック オートマティック
+automation オートメーション
+automobile オートモビル オートモービル
+automotive オートモーチブ
+autonomy オートノミー
+autumn オータム
+availability アベイラビリティ アベイラビリティー
+available アベイラブル
+avalanche アバランチ アヴァランチ
+avenue アベニュー アヴェニュー アヴェニュ
+average アベレージ
+aviation アヴィエーション アビエーション
+avocado アボカド
+await アウェイト
+awake アウェイク
+awaken アウェイクン
+award アワード アウォード
+aware アウェア
+away アウェイ アウェー
+awning オーニング
+axis アクシス
+axle アクスル
+azalea アザレア
+baby ベビー ベイビー
+bachelor バチェラー
+back バック
+backbone バックボーン
+backer バック バッカー
+backfire バックファイア
+backgammon バックギャモン
+background バックグラウンド バックグランド
+backhand バックハンド
+backing バッキング
+backlash バックラッシュ
+backlog バックログ
+backpack バックパック
+backpacking バックパッキング
+backslash バックスラッシュ
+backstage バックステージ
+backtrack バックトラック
+bacon ベーコン
+bacteria バクテリア バクテリヤ
+bad バッド
+badge バッジ
+badminton バドミントン
+baffle バッフル
+bag バッグ
+bagel ベーグル
+baggage バゲージ バゲッジ バッゲージ
+bakery ベーカリー
+baking ベーキング ベイキング
+balance バランス
+balancing バランシング
+balcony バルコニー
+balk ボーク
+ball ボール
+ballad バラード バラッド
+ballast バラスト
+balloon バルーン
+ballot バロット
+ballroom ボールルーム
+balm バーム バルム
+bamboo バンブー
+banana バナナ
+band バンド
+bandage バンデージ
+banding バンディング
+bandit バンディット バンデット
+bandwagon バンドワゴン
+bang バング
+banjo バンジョー
+bank バンク
+banker バンカー
+banking バンキング
+banner バナー
+banquet バンケット
+baptism バプティズム
+bar バー
+barbarian バーバリアン
+barber バーバー
+bard バード
+bare ベア
+bargain バーゲン
+barge バージ
+baritone バリトン
+bark バーク
+barn バーン
+barometer バロメーター バロメータ
+baron バロン
+barrel バレル バーレル
+barricade バリケード
+barrier バリア バリアー バリヤ バリヤー
+barrister バリスター
+bartender バーテンダー
+barter バーター
+base ベース ベイス
+baseball ベースボール
+baseline ベースライン
+basement ベースメント
+bashing バッシング
+basic ベーシック
+basil バジル
+basin ベイスン
+basis ベース ベイス
+basket バスケット
+basketball バスケットボール
+bass ベース バス
+bassoon バスーン
+bat バット
+batch バッチ
+bath バス
+bathroom バスルーム
+bathtub バスタブ
+baton バトン
+batter バッター
+battery バッテリー バッテリ バタリー
+batting バッティング
+battle バトル
+bay ベイ
+bayonet バヨネット ベイオネット
+bazaar バザー
+beach ビーチ
+beacon ビーコン
+beads ビーズ
+beagle ビーグル
+beaker ビーカ ビーカー
+beam ビーム
+bean ビーン
+beans ビーンズ
+bear ベア ベアー
+bearer ベアラ
+bearing ベアリング
+beast ビースト
+beat ビート
+beater ビーター
+beats ビーツ
+beautiful ビューティフル
+beauty ビューティー ビューティ
+beaver ビーバー
+bed ベッド
+bedroom ベッドルーム
+bedside ベッドサイド
+bee ビー
+beef ビーフ
+beer ビア ビヤ ビアー ビヤー ビーア
+beet ビート
+beetle ビートル
+beets ビーツ
+before ビフォー ビフォア ビフォアー
+beginner ビギナー
+beginning ビギニング
+behavior ビヘイビア
+believer ビリーバー
+bell ベル
+bellboy ベルボーイ
+bellows ベローズ
+belly ベリー
+belt ベルト
+bench ベンチ
+bend ベンド
+bending ベンディング
+benefit ベネフィット
+bent ベント
+berry ベリー
+berserk バーサーク
+berth バース
+best ベスト
+bet ベット
+better ベター
+beverage ビバレッジ ベバレッジ ベバリッジ ビバリッジ
+bias バイアス バイヤス
+bib ビブ
+bible バイブル
+bibliography ビブリオグラフィー
+bicycle バイシクル
+big ビッグ
+bikini ビキニ
+bilateral バイラテラル
+bilingual バイリンガル
+bill ビル
+billboard ビルボード
+billion ビリオン
+binary バイナリ バイナリー
+binder バインダー
+binding バインディング
+bingo ビンゴ
+biography バイオグラフィー
+biological バイオロジカル
+biology バイオロジー
+bird バード
+birthday バースデー バースディ バースデイ
+biscuit ビスケット
+bisexual バイセクシャル バイセクシュアル
+bishop ビショップ
+bison バイソン
+bit ビット バイト
+bitter ビター
+bittersweet ビタースイート
+black ブラック
+blackberry ブラックベリー
+blackbird ブラックバード
+blackboard ブラックボード
+blackjack ブラックジャック
+blacklist ブラックリスト
+blackout ブラックアウト
+blacksmith ブラックスミス
+blade ブレード ブレイド
+blank ブランク
+blanket ブランケット
+blanking ブランキング
+blast ブラスト
+blazer ブレザー
+bleach ブリーチ
+bleaching ブリーチング
+bleeding ブリーディング
+blend ブレンド
+blind ブラインド
+blink ブリンク
+blinking ブリンキング
+blister ブリスター
+blitz ブリッツ
+blizzard ブリザード
+blob ブロッブ
+bloc ブロック
+block ブロック
+blockbuster ブロックバスター
+blocking ブロッキング
+blog ブログ
+blogger ブロガー
+blonde ブロンド
+blood ブラッド
+bloodhound ブラッドハウンド
+bloom ブルーム
+blooming ブルーミング
+blossom ブロッサム
+blotter ブロッター
+blouse ブラウス
+blow ブロー
+blue ブルー
+bluebell ブルーベル
+blueberry ブルーベリー
+bluebird ブルーバード
+bluegrass ブルーグラス
+blueprint ブループリント
+blues ブルーズ
+bluff ブラフ
+blushing ブラッシング
+boa ボア
+board ボード
+boarder ボーダー
+boarding ボーディング
+boardwalk ボードウォーク
+boat ボート
+bob ボブ ボッブ
+bobbin ボビン
+bobcat ボブキャット
+bodice ボディス
+body ボディー ボディ ボデー
+bodyguard ボディーガード ボディガード
+boiled ボイルド
+boiler ボイラー ボイラ
+boiling ボイリング
+bold ボールド
+bolt ボルト
+bomb ボム
+bomber ボマー
+bond ボンド
+bondage ボンデージ
+bonding ボンディング
+bone ボーン
+bonnet ボンネット
+bonus ボーナス ボナス
+booing ブーイング
+book ブック
+bookcase ブックケース
+bookend ブックエンド
+booking ブッキング
+bookkeeping ブックキーピング
+booklet ブックレット
+bookmark ブックマーク ブックマーカー
+bookshelf ブックシェルフ
+bookstore ブックストア
+boom ブーム
+boost ブースト
+booster ブースター ブースタ
+boot ブート
+booth ブース
+bootleg ブートレグ ブートレッグ
+boots ブーツ
+bootstrap ブートストラップ
+booty ブーティ ブーティー
+bop バップ
+border ボーダー
+bore ボア
+boring ボーリング
+boss ボス
+botanical ボタニカル
+bottle ボトル
+bottleneck ボトルネック
+bottom ボトム
+bottomless ボトムレス
+boulder ボルダー ボールダー
+bounce バウンス
+bound バウンド
+boundary バウンダリー バウンダリ
+bounty バウンティ バウンティー
+bourbon バーボン
+bout バウト
+boutique ブティック
+bow ボー ボウ バウ
+bowing ボーイング ボウイング
+bowl ボウル ボール
+bowler ボウラー
+bowling ボウリング ボーリング
+box ボックス
+boxer ボクサー
+boxing ボクシング
+boy ボーイ
+boycott ボイコット
+boyfriend ボーイフレンド
+boyish ボーイッシュ
+brace ブレース
+bracelet ブレスレット
+bracket ブラケット
+braid ブレード ブレイド
+braids ブレイズ
+brain ブレーン ブレイン
+brainstorm ブレインストーム ブレーンストーム
+brainstorming ブレインストーミング ブレーンストーミング
+brainwashing ブレインウォッシング
+brake ブレーキ
+braking ブレーキング
+branch ブランチ
+brand ブランド
+branding ブランディング
+brandy ブランデー ブランディ ブランディー ブランデ
+brass ブラス
+brave ブレイブ ブレイヴ ブレーブ ブレーヴ
+breach ブリーチ
+breaching ブリーチング
+bread ブレッド
+break ブレイク ブレーク
+breakdown ブレイクダウン ブレークダウン
+breakfast ブレックファースト ブレックファスト ブレークファスト
+breakthrough ブレークスルー ブレイクスルー
+breast ブレスト
+breath ブレス
+breathing ブリージング
+breeder ブリーダー
+breeze ブリーズ
+brewery ブルワリー ブリュワリー
+bridal ブライダル
+bride ブライド
+bridesmaid ブライズメイド
+bridge ブリッジ
+bridging ブリッジング
+briefcase ブリーフケース
+briefing ブリーフィング
+brightness ブライトネス
+brilliant ブリリアント
+brim ブリム
+brine ブライン
+broach ブローチ
+broadcast ブロードキャスト
+broadcasting ブロードキャスティング
+brocade ブロケード
+broccoli ブロコリ ブロッコリー ブロッコリ
+brochure ブローシャ
+broiler ブロイラー
+broken ブロークン
+broker ブローカー ブローカ
+bronze ブロンズ
+brooch ブローチ
+brook ブルック
+broom ブルーム
+broth ブロス
+brother ブラザー
+brothers ブラザーズ
+brown ブラウン
+brownie ブラウニー
+browse ブラウズ
+browsing ブラウジング
+brunch ブランチ
+brunette ブルネット ブルーネット
+brush ブラシ ブラッシュ
+brushing ブラッシング
+bubble バブル
+bubbly バブリー
+bucket バケット
+buckle バックル
+buddy バディ バディー
+budget バジェット
+buff バフ
+buffalo バッファロー
+buffer バッファ バッファー
+buffered バッファード
+buffering バッファリング
+buffet バフェ
+bug バグ
+bugging バッギング
+buggy バギー
+bugle ビューグル
+build ビルド
+builder ビルダ ビルダー
+bulb バルブ
+bulge バルジ
+bulk バルク
+bulky バルキー
+bull ブル
+bulldog ブルドッグ
+bulldozer ブルドーザー
+bump バンプ
+bumper バンパー
+bun バン
+bunch バンチ
+bundle バンドル
+bundling バンドリング
+bungalow バンガロー
+bunker バンカー
+bunny バニー
+buns バンズ
+buoy ブイ
+bureau ビューロー
+bureaucracy ビューロクラシー
+bureaucrat ビューロクラット
+burner バーナー
+burning バーニング
+burst バースト
+bus バス
+bush ブッシュ
+bushel ブッシェル
+business ビジネス
+businessman ビジネスマン
+businesswoman ビジネスウーマン
+busing バッシング
+bust バスト
+busy ビジー
+butcher ブッチャー
+butler バトラー
+butter バター
+butterfly バタフライ
+buttermilk バターミルク
+butterscotch バタースコッチ バタースカッチ
+butting バッティング
+buttonhole ボタンホール
+buttress バットレス
+buyer バイヤー
+buzz バズ
+buzzer ブザー
+bye バイ
+bypass バイパス
+byte バイト
+cab キャブ
+cabin キャビン ケビン
+cabinet キャビネット
+cable ケーブル
+cache キャッシュ
+caching キャッシング
+cactus カクタス
+caddie キャディー キャディ
+cadence ケイデンス
+cafeteria カフェテリア
+cage ケージ
+cake ケーキ
+calcium カルシウム
+calculation カルキュレーション
+calculator カリキュレータ カリキュレーター
+calendar カレンダー カレンダ
+calf カーフ
+calibration キャリブレーション
+calico キャラコ キャリコ
+call コール
+calligraphy カリグラフィー
+callus カルス
+calorie カロリー
+cam カム
+camel キャメル
+cameo カメオ
+camera カメラ
+camp キャンプ
+campaign キャンペーン
+camper キャンパー
+camping キャンピング
+campus キャンパス
+canal カナル キャナル
+cancer キャンサー
+candidate キャンディデート
+candle キャンドル
+candlestick キャンドルスティック
+candy キャンディ キャンディー
+cane ケーン
+canister キャニスター
+cannibal カニバル
+cannibalism カニバリズム
+cannon キャノン
+canoe カヌー
+canoeing カヌーイング
+canon カノン キャノン
+canopy キャノピー
+cant カント
+cantaloupe キャンタロープ カンタループ カンタロープ
+canter キャンター カンター
+canvas キャンバス カンバス キャンヴァス
+canyon キャニオン
+cap キャップ
+capability ケイパビリティ ケーパビリティ
+capacitance キャパシタンス
+capacitor キャパシタ キャパシター
+capacity キャパシティ キャパシティー
+cape ケープ
+caper ケッパー ケイパー ケーパー
+capillary キャピラリー キャピラリ
+capital キャピタル キャピトル カピタル
+capitalism キャピタリズム
+capitalist キャピタリスト
+capping キャッピング
+captain キャプテン
+caption キャプション
+captive キャプティブ
+capture キャプチャー キャプチャ
+car カー
+caramel キャラメル
+carat カラット
+caravan キャラバン
+carbon カーボン
+carburetor キャブレター
+carcass カーカス
+card カード
+cardigan カーディガン カーデガン
+cardinal カーディナル
+care ケア
+career キャリア
+cargo カーゴ
+caribou カリブー
+caricature カリカチュア
+carnation カーネーション
+carnival カーニバル
+carol キャロル カロル
+carp カープ
+carpenter カーペンター
+carpet カーペット
+carriage キャリッジ
+carrier キャリア キャリアー キャリヤ キャリヤー
+carrot キャロット
+carry キャリー
+cart カート
+carton カートン
+cartoon カートゥーン
+cartridge カートリッジ
+carving カービング
+cascade カスケード キャスケード
+case ケース
+cash キャッシュ
+cashew カシュー
+cashier キャッシャー
+cashing キャッシング
+casing ケーシング
+cask キャスク カスク
+casket カスケット キャスケット
+casserole カセロール
+cassette カセット
+cast キャスト
+caster キャスター キャスタ カスター
+casting キャスティング
+castle キャッスル
+casual カジュアル
+cat キャット カト
+catapult カタパルト カタプルト
+catastrophe カタストロフィー カタストロフィ カタストロフ キャタストロフィ
+catch キャッチ
+catching キャッチング
+catchy キャッチー
+catechism カテキズム
+catering ケータリング
+catfish キャットフィッシュ
+catnip キャットニップ
+cats キャッツ
+catwalk キャットウォーク キャットウオーク
+cauliflower カリフラワー
+caulking コーキング
+caution コーション
+cave ケーブ ケイブ
+cavern カバーン
+caviar キャビア カビア
+caving ケービング
+cavity キャビティー キャビティ
+ceiling シーリング
+celebration セレブレーション
+celebrity セレブリティー セレブリティ
+celery セロリ セルリー
+cell セル
+cellar セラー
+cellist チェリスト
+cello チェロ
+cellular セルラー
+cellulose セルロース
+cement セメント
+census センサス
+cent セント
+center センター センタ
+centering センタリング
+centerpiece センターピース
+central セントラル
+century センチュリー
+ceramic セラミック
+cereal シリアル セリアル
+ceremony セレモニー
+certificate サーティフィケート サティフィケート
+chaff チャフ
+chain チェーン チェイン
+chainsaw チェーンソー チェンソー
+chair チェア チェアー
+chairman チェアマン
+chairperson チェアパーソン チェアパースン
+chalk チョーク
+chalking チョーキング
+challenger チャレンジャー
+challenging チャレンジング
+chamber チャンバー チェンバー
+chameleon カメレオン
+champion チャンピオン チャンピョン チャンピォン チャンピヨン
+championship チャンピオンシップ
+chance チャンス
+chandelier シャンデリア
+change チェンジ
+changeover チェンジオーバー
+channel チャネル チャンネル
+channeling チャネリング
+chant チャント
+chaos ケイオス ケーオス
+chaotic カオティック
+chapel チャペル
+chaplain チャプレン
+chapter チャプター チャプタ
+character キャラクター
+charcoal チャコール
+charge チャージ
+charger チャージャー チャージャ
+charging チャージング
+chariot チャリオット
+charity チャリティー チャリティ
+charm チャーム
+charming チャーミング
+chart チャート
+charter チャーター
+chase チェイス
+chasing チェーシング
+chat チャット
+chatter チャター
+chattering チャタリング
+chauvinist ショービニスト
+cheap チープ
+cheating チーティング
+check チェッカー チェック チッキ
+checker チェッカー
+checkpoint チェックポイント
+cheek チーク
+cheer チア チアー
+cheese チーズ
+cheetah チーター チータ
+chemical ケミカル
+chemist ケミスト
+chemistry ケミストリー
+cherry チェリー
+cherub チェラブ
+chess チェス
+chest チェスト
+chicken チキン
+chief チーフ
+child チャイルド
+children チルドレン
+chilled チルド
+chime チャイム
+chimney チムニー
+chimpanzee チンパンジー
+chin チン
+china チャイナ
+chip チップ
+chiropractor カイロプラクター
+chlorophyll クロロフィル
+chocolate チョコレート
+choice チョイス
+choir クワイア クワイヤ
+choke チョーク
+cholesterol コレステロール
+chop チョップ チャップ
+chopper チョッパー
+choral コーラル
+chord コード
+choreographer コレオグラファー コリオグラファー
+choreography コレオグラフィー コリオグラフィー コレオグラフィ コリオグラフィ
+chorus コーラス
+chowder チャウダー
+chromium クロミウム
+chronicle クロニクル
+chronology クロノロジー
+chuck チャック
+chunk チャンク
+church チャーチ
+chute シュート
+cigar シガー
+cigarette シガレット
+cinder シンダー
+cinnamon シナモン
+circle サークル
+circuit サーキット
+circular サーキュラー
+circulation サーキュレーション
+circus サーカス
+citation サイテーション
+citizen シチズン
+citizenship シティズンシップ シチズンシップ
+citrus シトラス
+city シティ シティー
+civic シビック
+civil シビル
+civilian シビリアン
+civilization シビライゼーション シビリゼーション
+clad クラッド
+claim クレーム
+clairvoyance クレアボヤンス クレヤボヤンス
+clam クラム
+clamp クランプ
+clan クラン
+clarinet クラリネット
+clarity クラリティー クラリティ
+clasp クラスプ
+class クラス
+classic クラシック
+classical クラシカル
+classification クラシフィケーション
+classmate クラスメイト クラスメート
+classroom クラスルーム
+clause クローズ
+clay クレー クレイ
+clean クリーン
+cleaner クリーナー
+cleaning クリーニング
+cleanliness クリンリネス
+cleanse クレンズ
+cleanser クレンザー
+cleansing クレンジング
+clear クリア クリアー
+clearance クリアランス
+clearing クリアリング
+cleat クリート
+cleavage クリーベッジ
+cleaver クリーヴァ
+clef クレフ
+cleric クレリック
+clerk クラーク
+clever クレバー
+click クリック
+client クライアント
+cliff クリフ
+climax クライマックス
+climb クライム
+climber クライマー
+climbing クライミング
+clinch クリンチ
+clinic クリニック
+clinical クリニカル
+clip クリップ
+clipboard クリップボード
+clipping クリッピング
+clique クリーク
+clitoris クリトリス
+clock クロック
+clocking クロッキング
+cloister クロイスター
+clone クローン クロン
+close クローズ
+closed クローズド
+closer クローザー
+closet クローゼット クロゼット
+closing クロージング
+closure クロージャ
+cloth クロス クロース
+clothes クローズ
+clothing クロージング
+cloud クラウド
+clove クローブ
+clover クローバー クロバー クローバ
+clown クラウン
+club クラブ
+clubhouse クラブハウス
+cluster クラスター クラスタ
+clustering クラスタリング
+clutch クラッチ
+coach コーチ コーチャー
+coaching コーチング
+coal コール
+coast コースト
+coaster コースター
+coat コート
+coating コーティング
+coax コアックス
+cobalt コバルト
+cobbler コブラー
+cobra コブラ
+cock コック
+cockpit コックピット コクピット
+cockroach コックローチ
+cocktail カクテル
+cocoa ココア
+cocoon コクーン
+code コード
+coding コーディング
+coffin コフィン
+coherence コヒーレンス コヒーレンシ コヒーレンシー
+coherent コヒーレント
+coil コイル
+coin コイン
+coke コーク
+colander コランダー
+cold コールド
+collaboration コラボレーション
+collaborative コラボレイティブ
+collaborator コラボレーター
+collar カラー
+collect コレクト
+collection コレクション
+collector コレクター コレクタ
+collectors コレクターズ
+college カレッジ
+collie コリー
+collision コリジョン
+colloquial コロキュアル
+collusion コリュージョン
+colon コロン
+colonial コロニアル
+colony コロニー
+color カラー
+colored カラード
+colorful カラフル
+coloring カラーリング カラリング
+colorless カラーレス
+column コラム カラム
+coma コマ コーマ
+comb コーム
+combat コンバット
+combination コンビネーション
+comeback カムバック
+comedian コメディアン
+comedy コメディ コメディー
+comet コメット
+comic コミック
+comical コミカル
+comics コミックス
+command コマンド
+commander コマンダー
+commando コマンド
+comment コメント
+commentary コメンタリー
+commentator コメンテーター
+commerce コマース
+commercial コマーシャル
+commercialism コマーシャリズム
+commission コミッション
+commissioner コミッショナー
+commit コミット
+commitment コミットメント
+committee コミッティー コミッティ
+commodity コモディティ コモディティー
+common コモン
+commons コモンズ
+communicate コミュニケート
+communication コミュニケーション
+communicative コミュニカティブ
+communicator コミュニケーター コミュニケータ
+communism コミュニズム
+communist コミュニスト
+community コミュニティ コミュニティー
+commuter コミューター
+compact コンパクト
+companion コンパニオン
+company カンパニー コンパニー
+compartment コンパートメント
+compass コンパス
+compatibility コンパチビリティ コンパチビリティー
+compatible コンパチブル
+competence コンピテンス コンピタンス
+competition コンペティション
+competitive コンペティティブ
+competitor コンペティター コンペチター
+compilation コンピレーション
+compiler コンパイラ コンパイラー
+complete コンプリート
+completion コンプリーション コンプリション
+complex コンプレックス
+compliance コンプライアンス
+complication コンプリケーション
+compliment コンプリメント
+component コンポーネント
+composer コンポーザー
+composite コンポジット
+composition コンポジション
+compost コンポスト
+compound コンパウンド
+compress コンプレス
+compression コンプレッション
+compulsory コンパルソリー
+computation コンピュテーション
+computer コンピュータ コンピューター
+computing コンピューティング
+concentration コンセントレーション
+concentric コンセントリック
+concept コンセプト
+conception コンセプション
+conceptual コンセプチュアル
+concert コンサート
+concession コンセッション
+concise コンサイス
+concourse コンコース
+concurrent コンカレント
+condense コンデンス
+condition コンディション
+conditioning コンディショニング
+condom コンドーム
+condominium コンドミニアム
+conduct コンダクト
+conductor コンダクター
+cone コーン
+cones コーンズ
+confection コンフェクション
+confederation コンフェデレーション
+conference コンファレンス カンファレンス
+confession コンフェッション
+confetti コンフェティ コンフェッティ
+confidence コンフィデンス
+confidential コンフィデンシャル
+configuration コンフィギュレーション コンフィグレーション
+conflict コンフリクト
+conform コンフォーム
+confusion コンフュージョン
+conglomerate コングロマリット
+congratulations コングラチュレーションズ
+congress コングレス
+conifer コニファー
+connect コネクト
+connection コネクション
+connectivity コネクティビティ コネクティビティー
+connector コネクター コネクタ
+connotation コノテーション
+conscious コンシャス
+consciousness コンシャスネス
+consensus コンセンサス
+conservation コンサベーション
+conservative コンサバティブ コンサーバティブ
+conservatory コンサバトリー
+consideration コンシダレーション
+consistency コンシステンシ
+console コンソール
+consolidation コンソリデーション
+consonant コンソナント
+consort コンソート
+consortium コンソーシアム
+constant コンスタント
+constellation コンステレーション
+constitution コンスティチューション
+constraint コンストレイント
+construct コンストラクト
+construction コンストラクション
+consul コンサル コンスル
+consultant コンサルタント
+consultants コンサルタンツ
+consultation コンサルテーション
+consulting コンサルティング
+consumer コンシューマー コンシューマ
+consumption コンサンプション
+contact コンタクト
+container コンテナ コンテナー
+contamination コンタミネーション
+contemporary コンテンポラリー
+content コンテント
+contention コンテンション
+contents コンテンツ
+contest コンテスト
+contestant コンテスタント
+context コンテキスト コンテクスト
+continental コンチネンタル
+contingency コンティンジェンシー
+continuation コンティニュエーション
+continue コンティニュー
+continuity コンティニュイティ コンティニュイティー
+contortion コントーション
+contour コンター コントゥア コントゥアー カントゥア カントゥアー
+contract コントラクト
+contraction コントラクション
+contractor コントラクター
+contrast コントラスト
+contribution コントリビューション
+control コントロール
+controller コントローラー コントローラ
+convection コンベクション
+convenience コンビニエンス
+convention コンベンション
+conventional コンベンショナル
+convergence コンバージェンス
+conversation カンバセーション
+converse コンバース
+conversion コンバージョン
+converter コンバーター コンバータ
+convertible コンバーチブル コンバーティブル
+convex コンベックス
+convoy コンボイ
+cooker クッカー
+cookie クーキー クッキー
+cooking クッキング
+cool クール
+cooler クーラー
+cooling クーリング
+cooperative コーポラティブ
+coordinate コーディネート コーディネイト
+coordination コーディネーション
+coordinator コーディネーター コーディネータ
+coping コーピング
+copper カッパー コッパー カパー
+copy コピー
+copyright コピーライト
+coral コーラル
+cord コード
+cordless コードレス
+corduroy コーデュロイ
+core コア
+cork コーク
+corkscrew コークスクリュー
+corn コーン
+corner コーナー コーナ
+cornering コーナリング コーナーリング
+cornmeal コーンミール
+corns コーンズ
+cornstarch コーンスターチ
+coronation コロネーション
+corporate コーポレート
+corporation コーポレーション
+corpse コープス
+corpus コーパス
+correspondence コレスポンデンス
+correspondent コレスポンデント
+cosmic コズミック
+cost コスト
+costume コスチューム
+cottage コテージ コッテージ
+cotton コットン
+couch カウチ
+couching コーチング
+cougar クーガー
+council カウンシル
+counseling カウンセリング
+counselor カウンセラー
+count カウント カウントアウト
+countdown カウントダウン
+counter カウンター カウンタ
+counterpart カウンターパート
+counting カウンティング
+country カントリー
+county カウンティ
+couple カップル
+coupling カップリング
+courage カレッジ
+courier クーリエ
+course コース
+court コート
+courtesy カーテシ
+courthouse コートハウス
+courtyard コートヤード
+cousin カズン
+cover カバー カヴァー
+coverage カバレッジ カバレージ
+covering カバーリング
+covert カバート
+cow カウ
+cowboy カウボーイ カーボーイ
+cox コックス
+coyote コヨーテ
+cozy コージー
+crab クラブ
+crack クラック
+cracker クラッカー
+cracking クラッキング
+cradle クレードル クレイドル
+craft クラフト
+cranberry クランベリー
+crane クレーン
+crank クランク
+crash クラッシュ
+crater クレーター クレータ
+crawl クロール
+crazy クレイジー クレージー
+cream クリーム
+creamy クリーミー
+create クリエート クリエイト
+creation クリエイション クリエーション
+creative クリエイティブ
+creativity クリエイティビティ クリエイティビティー クリエーティビティ クリエーティビティー
+creator クリエイター クリエーター
+creature クリーチャー
+credibility クレディビリティー クレディビリティ
+creek クリーク
+creep クリープ
+crescent クレセント クレッセント
+crest クレスト
+crew クルー
+cricket クリケット
+crime クライム
+crimson クリムゾン
+crisis クライシス
+crispy クリスピー
+criteria クライテリア
+critic クリティック
+critical クリティカル
+criticism クリティシズム
+critique クリティーク
+crocodile クロコダイル
+crocus クロッカス
+crony クローニー
+crop クロップ
+cross クロス
+crossbow クロスボウ クロスボー
+crossword クロスワード
+crouch クラウチ
+crow クロウ
+crowd クラウド
+crown クラウン
+cruise クルーズ
+cruiser クルーザー
+cruising クルージング
+crumb クラム
+crumble クランブル
+crunch クランチ
+crunchy クランチー
+crusader クルセイダー
+crust クラスト
+cry クライ
+crypt クリプト
+crystal クリスタル
+cub カブ
+cube キューブ
+cubic キュービック
+cubicle キュービクル
+cuckoo クックー
+cue キュー
+cuffs カフス
+cult カルト
+culture カルチャー
+cup カップ
+curator キュレーター
+curd カード
+cure キュア
+curiosity キュリオシティー
+curl カール
+curling カーリング
+curly カーリー
+currency カレンシー
+current カレント
+curriculum カリキュラム
+curse カース
+curtain カーテン
+curtsy カーテシー
+curve カーブ
+cushion クッション
+custard カスタード
+custom カスタム
+customer カスタマー
+customs カスタムズ
+cut カット
+cutback カットバック
+cute キュート
+cuticle キューティクル
+cutlery カトラリー
+cutter カッター
+cutting カッティング
+cycle サイクル
+cyclic サイクリック
+cycling サイクリング
+cyclist サイクリスト
+cyclone サイクロン
+cylinder シリンダー シリンダ
+cymbal シンバル
+cynic シニック
+cynical シニカル
+cynicism シニシズム
+cypress サイプレス
+dab ダブ
+daddy ダディー ダディ
+daemon デーモン デモン
+dagger ダガー
+daily デイリー デーリー
+daisy デイジー デージー
+dam ダム
+damage ダメージ
+damper ダンパ ダンパー
+dance ダンス
+dancer ダンサー ダンサ
+dancing ダンシング
+dandelion ダンデライオン ダンディライオン
+dandy ダンディ ダンディー
+dangerous デンジャラス
+dark ダーク
+darts ダーツ
+dash ダッシュ ダーシ
+dashboard ダッシュボード
+data データ データー
+database データベース
+date デート
+daughter ドーター
+day デー デイ
+daylight デイライト デーライト
+daytime デイタイム データイム
+dead デッド
+deadline デッドライン
+deadlock デッドロック
+deal ディール
+dealer ディーラー
+dealing ディーリング
+dean ディーン
+dear ディア
+death デス
+debate ディベート
+debugging デバッギング
+decade ディケード
+decay ディケイ
+decency ディセンシー
+decentralization ディセントラリゼーション
+decibel デシベル
+decimal デシマル
+decision デシジョン
+deck デッキ
+decoder デコーダ デコーダー ディコーダー
+decoding デコーディング
+decoration デコレーション
+decorative デコラティブ
+decorator デコレーター デコレータ
+decoy デコイ
+dedication デディケーション
+deduction ディダクション デダクション
+deep ディープ
+deer ディア
+default デフォルト
+defender ディフェンダー
+defending ディフェンディング
+defense ディフェンス
+defensive ディフェンシブ
+definition デフィニション ディフィニション
+deflation デフレーション デフレション
+defrost デフロスト
+degree デグリー ディグリー
+delay ディレイ ディレー
+delegate デリゲート
+delegation デレゲーション デリゲーション
+delete デリート
+delicacy デリカシー
+delicate デリケート デリケイト
+delicious デリシャス
+delivery デリバリー
+deluxe デラックス
+demand デマンド ディマンド
+demerit デメリット
+democracy デモクラシー
+democrat デモクラット
+democratic デモクラティック デモクラチック
+demon デーモン デモン
+demonstration デモンストレーション
+demonstrator デモンストレーター
+den デン
+denim デニム
+denomination デノミネーション
+dent デント
+dental デンタル
+deodorant デオドラント
+department デパートメント
+departure デパーチャー
+deposit デポジット
+depression デプレッション ディプレッション
+derivative デリバティブ
+derrick デリック
+describe ディスクライブ
+description ディスクリプション
+descriptor ディスクリプタ ディスクリプター
+design デザイン
+designer デザイナー
+desire デザイア デザイアー ディザイア ディザイアー
+desk デスク
+desktop デスクトップ
+desperate デスパレート デスペレート
+despot デスポット
+dessert デザート
+destination デスティネーション ディスティネーション
+destiny デスティニー ディスティニー
+destroyer デストロイヤー
+detach デタッチ
+detail ディテール ディティール
+detailing ディーテイリング
+detection ディテクション
+detective ディテクティブ ディティクティブ デテクティブ
+detector ディテクター ディテクタ
+detonation デトネーション
+developer デベロッパー ディベロッパー デベロッパ
+development ディベロップメント デベロップメント
+device デバイス ディバイス
+devil デビル
+diagonal ダイアゴナル
+diagram ダイアグラム ダイヤグラム
+dial ダイヤル ダイアル
+dialect ダイアレクト ダイヤレクト
+dialog ダイアログ ダイアローグ
+dialogue ダイアログ ダイアローグ
+diameter ダイアミター ダイアメーター
+diamond ダイヤモンド ダイアモンド
+diaphragm ダイヤフラム ダイアフラム
+diary ダイアリー
+dice ダイス
+dicing ダイシング
+dictation ディクテーション
+dictionary ディクショナリ ディクショナリー
+diesel ディーゼル ジーゼル
+diet ダイエット
+dietary ダイエタリー
+differential ディファレンシャル ディファレンシアル
+differentiation ディファレンシエーション
+difficult ディフィカルト
+digest ダイジェスト
+digit ディジット デジット
+digital デジタル ディジタル
+dignity ディグニティ ディグニティー
+diligence ディリジェンス
+dill ディル
+dime ダイム
+dimension ディメンション
+dimensional ディメンショナル
+dimple ディンプル
+diner ダイナー
+dinghy ディンギー
+dining ダイニング
+dinner ディナー
+dinosaur ダイノソー ダイノソア
+dip ディップ
+diploma ディプロマ
+diplomacy ディプロマシー
+diplomat ディプロマット
+dips ディップス
+direct ダイレクト
+direction ディレクション ダイレクション
+directive ディレクティブ
+director ディレクター ディレクタ
+directory ディレクトリ ディレクトリー
+dirt ダート
+dirty ダーティー ダーティ
+disable ディスエーブル
+disadvantage ディスアドバンテージ
+disc ディスク
+discharge ディスチャージ
+discipline ディシプリン
+disclosure ディスクロージャー
+disconnect ディスコネクト
+discord ディスコード
+discount ディスカウント
+discourse ディスコース
+discover ディスカバー
+discovery ディスカバリー
+discrepancy ディスクレパンシー
+discrete ディスクリート
+discretion ディスクレション
+discus ディスカス
+discussion ディスカッション
+disease ディジーズ
+dish ディッシュ
+dishwasher ディッシュウォッシャー
+disillusion ディスイリュージョン
+disk ディスク
+dislike ディスライク
+disorder ディスオーダー ディソーダー
+dispatch ディスパッチ
+dispel ディスペル デスペル
+dispenser ディスペンサー ディスペンサ
+displacement ディスプレースメント
+display ディスプレイ ディスプレー
+disposable ディスポーザブル
+disrupt ディスラプト
+dissolve ディゾルブ
+distance ディスタンス
+distortion ディストーション
+distribution ディストリビューション
+distributor ディストリビューター
+disturb ディスターブ
+dither ディザ ディザー
+dithering ディザリング
+dive ダイブ
+diver ダイバー
+diversity ダイバーシティ ダイバーシティー
+diving ダイビング
+division ディビジョン
+divorce ディボース
+dock ドック
+docking ドッキング
+doctrine ドクトリン
+document ドキュメント
+documentary ドキュメンタリー ドキュメンタリ ドキュメンタル
+documentation ドキュメンテーション
+dodging ドッジング
+dodo ドードー ドド
+dog ドッグ
+dogma ドグマ
+dogmatic ドグマティック ドグマチック
+doily ドイリー
+doll ドール
+dollar ダラー
+dolly ドリー ドーリー
+dolphin ドルフィン
+domain ドメイン
+dome ドーム
+domestic ドメスティック
+dominant ドミナント
+dominion ドミニオン
+domino ドミノ
+donation ドネーション
+donkey ドンキー
+donor ドナー
+doom ドゥーム
+door ドア
+doorman ドアマン
+doors ドアーズ
+dormitory ドーミトリー ドミトリー
+dot ドット
+double ダブル
+doubling ダブリング
+dough ドウ
+dove ダブ
+down ダウン
+downgrade ダウングレード
+downhill ダウンヒル
+downstream ダウンストリーム
+downtown ダウンタウン
+draft ドラフト
+drag ドラッグ ドラァグ
+dragging ドラッギング
+dragon ドラゴン
+drain ドレン ドレイン ドレーン
+drainage ドレナージュ ドレナージ
+drama ドラマ
+dramatic ドラマチック ドラマティック
+dramatist ドラマチスト
+drape ドレープ
+draping ドレーピング
+drastic ドラスチック ドラスティック
+draw ドロー
+drawer ドロワー ドロア ドロワ ドロアー ドローワー
+drawers ドロワーズ
+drawing ドローイング
+dream ドリーム
+dreamer ドリーマー
+dreaming ドリーミング
+dreamy ドリーミー
+dress ドレス
+dresser ドレッサー
+dressing ドレッシング
+dressmaker ドレスメーカー
+dressy ドレッシー
+dribble ドリブル
+drier ドライヤー
+drift ドリフト
+drill ドリル
+drink ドリンク
+drinker ドリンカー
+drip ドリップ
+drive ドライブ
+driver ドライバー
+driveway ドライブウェイ ドライブウエイ ドライブウェー ドライブウエー
+driving ドライビング
+drone ドローン
+drop ドロップ ドリップ
+dropout ドロップアウト
+drug ドラッグ
+drugstore ドラッグストア
+drum ドラム
+drummer ドラマー
+drumming ドラミング
+dry ドライ
+dryer ドライヤー
+dual デュアル
+dualism デュアリズム
+dub ダブ
+dubbing ダビング
+duck ダック
+ducking ダッキング
+duct ダクト
+duel デュエル
+duet デュエット
+duff ダフ
+dugout ダグアウト ダッグアウト
+duke デューク
+dull ダル
+dumbbell ダンベル
+dummy ダミー
+dump ダンプ
+dumping ダンピング
+dumpling ダンプリング
+dune デューン
+dungeon ダンジョン
+dunk ダンク
+duplex デュプレックス デュープレックス
+duplicate デュプリケート
+duration デュレイション
+dust ダスト
+duty デューティ
+dwarf ドワーフ
+dwell ドエル
+dwelling ドエリング ドゥエリング
+dynamic ダイナミック
+dynamics ダイナミクス ダイナミックス
+dynamite ダイナマイト
+dynamo ダイナモ
+dyslexia ディスレクシア ディスレキシア
+eagle イーグル
+ear イア
+early アーリー
+earring イアリング
+earth アース
+earthly アースリ
+earthworm アースワーム
+earthy アーシー
+easel イーゼル
+east イースト
+eastern イースタン
+easy イージー
+ebony エボニー
+eccentric エキセントリック エクセントリック
+echo エコー
+eclipse エクリプス
+ecological エコロジカル
+ecologist エコロジスト
+ecology エコロジー
+economic エコノミック
+economical エコノミカル
+economics エコノミクス エコノミックス
+economist エコノミスト
+economy エコノミー エコノミ
+ecosystem エコシステム
+ecstasy エクスタシー
+edge エッジ
+edging エッジング
+edgy エッジー
+edit エディット
+editing エディティング
+edition エディション
+editor エディター エディタ
+editorial エディトリアル
+effect エフェクト イフェクト
+effective エフェクティブ
+effects エフェクツ
+efficiency エフィシェンシー
+egg エッグ
+eggplant エッグプラント
+egoism エゴイズム
+egotism エゴティズム
+egotist エゴティスト エゴチスト
+eight エイト
+eighteen エイティーン
+eject イジェクト
+elastic エラスティック エラスチック
+elasticity イラステシティ
+elbow エルボー エルボ
+elder エルダー
+election エレクション
+electric エレクトリック
+electrical エレクトリカル
+electron エレクトロン
+electronic エレクトロニック
+electronics エレクトロニクス
+elegance エレガンス
+elegant エレガント
+elegy エレジー
+element エレメント
+elementary エレメンタリー
+elephant エレファント
+elevation エレベーション
+elevator エレベーター エレベータ
+eleven イレブン
+eleventh イレブンス
+elf エルフ
+eligibility エリジビリティー
+elimination エリミネーション イリミネーション
+elk エルク
+elm エルム
+elude エルード
+emancipation エマンシペーション
+embalming エンバーミング
+embargo エンバーゴ エンバーゴー
+embassy エンバシー
+emblem エンブレム
+embroidery エンブロイダリー
+embryo エンブリオ
+emerald エメラルド
+emergency エマージェンシー
+emerging エマージング
+emigration エミグレーション
+eminent エミネント
+emission エミッション
+emotion エモーション
+emotional エモーショナル
+empathy エンパシー
+emperor エンペラー
+empire エンパイア エンパイヤ
+employer エンプロイヤー エンプロイア エンプロイヤ エンプロイアー
+empress エンプレス
+empty エンプティー
+emulation エミュレーション
+emulator エミュレータ エミュレーター
+emulsion エマルション
+enable エネーブル
+enamel エナメル
+enclosure エンクロージャー エンクロージャ
+encoding エンコーディング
+encounter エンカウンター
+encyclopedia エンサイクロペディア
+end エンド
+ending エンディング
+endive エンダイブ
+endless エンドレス
+endorsement エンドースメント
+enema エネマ
+enemy エネミー
+energy エナジー エナージー
+enforcement エンフォースメント
+engage エンゲージ エンゲイジ
+engagement エンゲージメント
+engine エンジン
+engineer エンジニア
+engineering エンジニアリング
+engraver エングレーバー
+engraving エングレービング エングレーヴィング
+enhanced エンハンスト
+enhancement エンハンスメント
+enhancing エンハンシング
+enigma エニグマ
+enlargement エンラージメント
+ensemble アンサンブル
+enter エンター
+enterprise エンタープライズ
+entertainer エンターテイナー エンターティナー
+entertainment エンターテインメント エンタテインメント
+enthusiast エンスージアスト
+entity エンティティ エンティティー
+entrance エントランス
+entrant エントラント
+entropy エントロピー エントロピ
+entry エントリー エントリ
+envelope エンベロープ
+environment エンバイロンメント
+envy エンヴィー エンヴィ
+enzyme エンザイム
+eon イーオン
+ephemeral エフェメラル
+epic エピック
+epidemic エピデミック
+epilogue エピローグ
+episode エピソード
+epitaph エピタフ
+epoch エポック
+equal イコール
+equipment イクイップメント エクイップメント
+equitable エクイタブル
+equity エクイティ エクイティー
+erection エレクション
+erotic エロチック エロティック
+error エラー
+eruption イラプション
+escalation エスカレーション
+escalator エスカレーター エスカレータ
+escape エスケープ
+escort エスコート
+essay エッセイ エッセー
+essence エッセンス
+essential エッセンシャル
+establishment エスタブリッシュメント
+estate エステート
+etching エッチング
+eternal エターナル
+eternity エタニティ エタニティー
+ether イーサ
+ethical エシカル
+ethics エシックス
+ethnic エスニック
+euthanasia ユーサネイジア
+evacuation エバキュエーション
+evaluation エバリュエーション
+evangelist エバンジェリスト エヴァンジェリスト
+eve イブ イヴ
+even イーブン
+evening イブニング イヴニング
+event イベント
+ever エバー エバ
+evergreen エバーグリーン エヴァーグリーン
+everybody エブリバディ
+evidence エビデンス
+evil イービル イビル イーブル エビル
+evolution エボリューション
+examination エグザミネーション
+example エグザンプル
+excellence エクセレンス
+excellent エクセレント
+exception エクセプション
+exchange エクスチェンジ
+excitement エキサイトメント
+exciting エキサイティング エクサイティング
+exclusive エクスクルーシブ
+excursion エクスカージョン
+excuse エクスキューズ
+executioner エクスキューショナー
+executive エグゼクティブ
+exempt エグゼンプト
+exemption エグゼンプション
+exercise エキササイズ エクササイズ
+exhaust エグゾースト
+exhibition エキシビション
+exile エグザイル
+existence エグジスタンス
+exit エグジット
+exodus エクソダス
+expansion エキスパンション エクスパンション
+expedition エクスペディション
+expense エクスペンス
+expensive エクスペンシブ
+experience エクスペリエンス
+experiment エクスペリメント
+expert エキスパート エクスパート
+expire エクスパイア
+exploitation エクスプロイテーション
+explorer エクスプローラ エクスプローラー
+explosion エクスプロージョン
+export エクスポート
+exposure エクスポージャー
+express エクスプレス エキスプレス
+expression エクスプレッション
+extension エクステンション
+extent エクステント
+exterior エクステリア
+external エクスターナル
+extra エクストラ エキストラ
+extreme エクストリーム
+eye アイ
+eyebrow アイブロウ アイブロー
+eyelash アイラッシュ
+eyes アイズ
+eyesight アイサイト
+fable フェーブル
+fabric ファブリック
+fabrication ファブリケーション
+face フェイス フェース
+facet ファセット
+facial フェイシャル フェーシャル
+facility ファシリティ ファシリティー
+facsimile ファクシミリ
+fact ファクト
+faction ファクション
+factor ファクター
+factoring ファクタリング
+factory ファクトリー ファクトリ
+faculty ファカルティ
+fad ファッド ファド
+fade フェード
+fading フェーディング
+failure フェイリュア フェイル フェール
+fair フェア フェアー
+fairy フェアリー
+faith フェース フェイス
+fake フェイク フェーク
+falcon ファルコン
+fall フォール
+fallout フォールアウト
+false フォルス フォールス
+familiar ファミリア ファミリアー
+family ファミリー ファミリ
+fan ファン
+fanatic ファナティック
+fancy ファンシー
+fantastic ファンタスティック
+farm ファーム
+farmer ファーマー
+fascism ファシズム
+fascist ファシスト ファシスタ
+fashion ファッション
+fashionable ファッショナブル
+fast ファースト ファスト
+fat ファット
+fatal フェータル
+father ファーザー ファザー
+fathom ファゾム
+fault フォールト フォルト
+fauna ファウナ
+favorite フェイバリット フェバリット フェーバリット
+fear フィア フィアー
+feasibility フィージビリティ フィージビリティー フィジビリティ フィジビリティー
+feather フェザー
+feature フィーチャー フィーチャ フィーチュア
+featuring フィーチャリング
+federal フェデラル
+federalism フェデラリズム
+federalist フェデラリスト
+federation フェデレーション
+fee フィー
+feed フィード
+feedback フィードバック
+feeder フィーダ フィーダー
+feeding フィーディング
+feeling フィーリング
+feint フェイント
+fellow フェロー
+fellowship フェローシップ
+felt フェルト
+female フィメール フィーメール フィーメイル フィーメル フィメイル
+feminine フェミニン
+femininity フェミニニティ フェミニニティー フェミニティ フェミニティー
+feminism フェミニズム
+feminist フェミニスト
+fence フェンス
+fencing フェンシング
+fender フェンダー
+ferret フェレット
+ferry フェリー
+festival フェスティバル フェスティヴァル
+fetch フェッチ
+fetish フェティッシュ
+feudalism フューダリズム
+fever フィーバー
+fez フェズ
+fiber ファイバー ファイバ
+fiberglass ファイバーグラス
+fiction フィクション
+fictional フィクショナル
+fiddle フィドル
+fiddler フィドラー
+fidelity フィデリティー
+field フィールド
+fielding フィールディング
+fiesta フィエスタ
+fifteen フィフティーン
+fifties フィフティーズ
+fifty フィフティー フィフティ
+fight ファイト
+fighter ファイター
+fighting ファイティング
+figure フィギュア
+figurehead フィギュアヘッド
+filament フィラメント
+file ファイル
+filing ファイリング
+fill フィル
+filler フィラー
+filling フィリング
+film フィルム フイルム
+filter フィルター フィルタ
+filtering フィルタリング
+fin フィン
+final ファイナル
+finance ファイナンス フィナンス
+financial フィナンシャル ファイナンシャル
+financier フィナンシア
+finch フィンチ
+finding ファインディング
+fine ファイン
+finesse フィネス
+finger フィンガー
+fingering フィンガリング
+fingerprint フィンガープリント
+finish フィニッシュ
+fire ファイア ファイアー ファイヤー
+fireman ファイアマン ファイアーマン ファイヤーマン
+fireplace ファイアプレース
+fireproof ファイアプルーフ
+firing ファイアリング ファイヤリング
+firm ファーム
+firmware ファームウェア ファームウエア
+first ファースト
+fiscal フィスカル
+fish フィッシュ
+fisher フィッシャー
+fisherman フィッシャーマン
+fishing フィッシング
+fist フィスト
+fit フィット
+fitness フィットネス
+fitting フィッティング
+five ファイブ
+fixed フィクスト
+fixture フィクスチャー フィクスチャ
+fizz フィズ
+flag フラグ フラッグ
+flagship フラッグシップ
+flake フレーク
+flame フレーム
+flaming フレーミング
+flamingo フラミンゴ
+flannel フランネル
+flap フラップ
+flare フレア フレアー
+flaring フレアリング
+flash フラッシュ
+flashback フラッシュバック
+flasher フラッシャー
+flashing フラッシング
+flashlight フラッシュライト
+flat フラット
+flavor フレーバー
+fleece フリース
+flex フレックス
+flexibility フレキシビリティ フレキシビリティー フレクシビリティ フレクシビリティー
+flexible フレキシブル
+flick フリック
+flicker フリッカー フリッカ
+flier フライヤー
+flies フライズ
+flight フライト
+flint フリント
+flip フリップ
+flipper フリッパー
+flipping フリッピング
+float フロート
+floating フローティング
+flood フラッド
+flooding フラッディング
+floodlight フラッドライト
+floor フロア フロアー
+flop フロップ
+flora フローラ フロラ
+floral フローラル
+florist フローリスト フロリスト
+floss フロス
+flounce フラウンス
+flourish フラリッシュ
+flow フロー
+flower フラワー
+fluctuation フラクチュエーション
+fluid フルード
+fluke フロック
+flush フラッシュ
+flute フルート フリュート
+flutist フルーティスト
+flutter フラッター
+flux フラックス
+fly フライ
+flying フライング
+foam フォーム
+focus フォーカス
+fog フォグ
+foil フォイル
+folder フォルダ フォルダー
+folding フォールディング
+folk フォーク
+folklore フォークロア
+follies フォーリーズ
+follow フォロー
+follower フォロワー
+folly フォリー
+font フォント
+food フード
+foods フーズ
+fool フール
+foolish フーリッシュ
+foot フート フット
+football フットボール
+footing フーチング
+footnote フットノート
+footprint フットプリント
+footwork フットワーク
+force フォース
+ford フォード
+fore フォア ファー
+forecast フォーキャスト
+forefront フロンティア
+foreground フォアグラウンド フォアグランド
+foreign フォーリン
+foreigner フォリナー フォーリナー
+foreman フォアマン
+forest フォレスト フォーレスト
+forge フォージ
+fork フォーク
+form フォーム
+formal フォーマル
+format フォーマット
+formation フォーメーション
+formatting フォーマッティング フォーマティング
+formula フォーミュラ
+fortress フォートレス
+fortune フォーチュン
+forty フォーティー フォーティ
+forum フォーラム
+forward フォワード
+forwarder フォワーダー
+forwarding フォワーディング
+foul ファウル ファール
+foundation ファンデーション ファウンデーション
+foundry ファウンドリ ファウンドリー
+fountain ファウンテン
+four フォア フォー
+fourteen フォーティーン
+fox フォックス
+fractal フラクタル
+fraction フラクション
+fractional フラクショナル
+fragile フラジャイル
+fragment フラグメント
+fragmentation フラグメンテーション
+fragrance フレグランス
+frail フレイル フレール
+frame フレーム
+framework フレームワーク
+framing フレーミング
+franchise フランチャイズ
+frank フランク
+fraternity フラタニティ フラタニティー
+freak フリーク
+free フリー
+freedom フリーダム
+freelance フリーランス
+freeway フリーウェイ フリーウェー フリーウエー
+freezer フリーザー
+freezing フリージング
+freight フレート フレイト
+frequency フリークエンシー
+fresh フレッシュ
+fresher フレッシャー
+freshman フレッシュマン
+fret フレット
+friction フリクション
+fried フライド
+friend フレンド
+friendly フレンドリー
+friends フレンズ
+friendship フレンドシップ
+frieze フリーズ
+frigate フリゲート
+frill フリル
+fringe フリンジ
+fritter フリッター
+frog フロッグ
+front フロント
+frontier フロンティア
+frost フロスト
+frosting フロスティング
+frozen フローズン
+fruity フルーティー フルーティ
+frustration フラストレーション
+fudge ファッジ
+fuel フューエル フュエル
+fulfillment フルフィルメント
+full フル
+fumble ファンブル
+fun ファン
+function ファンクション
+functional ファンクショナル
+fund ファンド
+fundamental ファンダメンタル
+fundamentalism ファンダメンタリズム
+fundamentalist ファンダメンタリスト
+fundamentals ファンダメンタルズ
+funeral フューネラル
+funny ファニー
+fur ファー
+furlong ファーロング
+furnace ファーネス
+furniture ファニチャー ファニチャ ファーニチャー ファニチュア
+fuse フューズ
+fusion フュージョン
+future フューチャー
+fuzz ファズ
+fuzzy ファジー ファジィ
+gadget ガジェット ガゼット
+gag ギャグ
+gain ゲイン
+gal ガル
+galaxy ギャラクシー
+gale ゲイル
+gallery ギャラリー ガレリー
+galley ガレー ガリー ゲラ ギャレー
+gallon ガロン
+gallop ギャロップ
+gambler ギャンブラー
+game ゲーム
+gamer ゲーマー
+gaming ゲーミング
+gang ギャング
+gangster ギャングスター
+gap ギャップ
+garage ガレージ
+garbage ガベージ ガーベージ
+garden ガーデン
+gardener ガーデナー ガードナー
+gardening ガーデニング
+gargoyle ガーゴイル
+garish ガーリッシュ
+garlic ガーリック
+garment ガーメント
+garnet ガーネット
+garnish ガーニッシュ
+garter ガーター
+gasket ガスケット ギャスケット
+gasoline ガソリン
+gate ゲート
+gateway ゲートウェイ ゲートウエイ ゲートウエー
+gather ギャザー ギャーザー
+gathering ギャザリング
+gauge ゲージ
+gauntlet ガントレット ゴーントレット
+gauze ゴーズ
+gazelle ガゼル
+gazette ガゼット
+gear ギア ギヤ
+gel ゼリー ジェリー ジェル
+gelatin ゼラチン
+gem ジェム
+gender ジェンダー
+gene ジーン
+general ゼネラル ジェネラル
+generate ジェネレート
+generation ジェネレーション ゼネレーション
+generator ジェネレータ ジェネレーター
+generic ジェネリック
+generics ジェネリクス ジェネリックス
+genetic ジェネティック
+genie ジーニー
+genius ジーニアス
+genocide ジェノサイド
+gentle ジェントル
+gentleman ジェントルマン
+gentry ジェントリー ジェントリ
+geography ジオグラフィー
+geology ジオロジー
+geometric ジオメトリック
+geometry ジオメトリー ジオメトリ
+geranium ゼラニウム
+gesture ジェスチャー ジェスチャ ゼスチャー ゼスチュア
+ghost ゴースト
+giant ジャイアント
+gift ギフト
+gifted ギフテッド
+gig ギグ
+gilt ギルト
+gimmick ギミック
+gin ジン
+ginger ジンジャー
+gingerbread ジンジャーブレッド
+gingham ギンガム
+giraffe ジラフ
+girder ガーダー ガーダ
+girdle ガードル
+girl ガール
+girlfriend ガールフレンド
+girlish ガーリッシュ
+girls ガールズ
+give ギブ
+glacier グレーシャー
+gladiator グラディエーター
+glamorous グラマラス
+glare グレア
+glass グラス
+glaze グレーズ
+glee グリー
+glider グライダー
+gliding グライディング
+glimpse グリンプス
+glitter グリッター
+global グローバル
+globe グローブ
+gloomy グルーミー
+glory グローリー
+gloss グロス
+glossary グロッサリー グロサリー
+glossy グロッシー
+glove グローブ グラブ
+glucose グルコース
+glue グルー
+gluttony グラトニー
+gnome ノーム
+gnu ヌー
+go ゴー
+goal ゴール
+goalie ゴーリー
+goalkeeper ゴールキーパー
+goat ゴート
+goblet ゴブレット
+goblin ゴブリン
+god ゴッド
+godfather ゴッドファーザー
+godmother ゴッドマザー
+gold ゴールド
+golden ゴールデン
+golf ゴルフ
+golfer ゴルファー
+gondola ゴンドラ
+gong ゴング
+good グッド
+goodbye グッドバイ
+goods グッズ
+goose グース
+gore ゴア
+gorgeous ゴージャス
+gorilla ゴリラ
+gospel ゴスペル
+gossip ゴシップ
+gouge ゴージ
+goulash グーラッシュ
+government ガバメント
+governor ガバナー
+gown ガウン
+grace グレイス
+gradation グラデーション
+grade グレード グレイド
+grader グレーダー グレーダ
+gradient グラディエント
+grading グレーディング
+graffiti グラフィティー グラフィティ
+grain グレーン ゲレイン ゲレーン グレイン
+grammar グラマー
+grand グランド
+grandstand グランドスタンド
+granite グラニット
+granola グラノーラ
+grant グラント
+granule グラニュール
+grape グレープ
+graph グラフ
+graphic グラフィック
+graphical グラフィカル
+graphics グラフィックス グラフィクス
+graphite グラファイト
+grappling グラップリング
+grass グラス
+grasshopper グラスホッパー
+grate グレート グレイト
+grater グレーター グレイター
+grave グレイブ グラーヴェ グラーベ
+gravel グラベル
+graver グレーバー
+gravity グラビティ グラビティー
+gravy グレービー グレイビー
+gray グレー グレイ
+graying グレーイング
+grease グリース グリス
+great グレート グレイト
+greater グレーター
+green グリーン
+greenback グリーンバック
+greenhouse グリーンハウス
+gremlin グレムリン
+grenade グレネード
+greyhound グレーハウンド グレイハウンド
+grid グリッド
+grief グリーフ
+grill グリル
+grille グリル
+grime グライム
+grind グラインド
+grinder グラインダー グラインダ
+grip グリップ
+grit グリット
+grizzly グリズリー
+grocery グローサリー グロサリー
+groggy グロッギー
+grooming グルーミング
+groove グルーヴ グルーブ
+groovy グルーヴィー グルービー グルーヴィ
+grotesque グロテスク
+ground グラウンド グランド
+grounding グラウンディング
+groundwork グラウンドワーク
+group グループ
+grouping グルーピング
+growth グロース
+guarantee ギャランティー ギャランティ
+guard ガード
+guardian ガーディアン
+guest ゲスト
+guidance ガイダンス
+guide ガイド
+guidebook ガイドブック
+guideline ガイドライン
+guild ギルド
+guilt ギルト
+guilty ギルティ ギルティー
+guinea ギニー
+guitar ギター
+guitarist ギタリスト
+gully ガリー ガリ
+gum ガム
+gun ガン
+gunman ガンマン
+gunner ガンナー
+guppy グッピー
+gust ガスト
+gut ガット
+guts ガッツ
+gutter ガター ガーター
+guy ガイ
+gym ジム
+gymnastics ジムナスティックス
+gyroscope ジャイロスコープ
+habit ハビット
+habitat ハビタット
+hack ハック
+hacker ハッカー
+hacking ハッキング
+hackney ハクニー
+hacksaw ハクソー ハックソー
+haddock ハドック
+hair ヘア ヘアー ヘヤ ヘヤー
+haircut ヘアカット
+half ハーフ
+halfway ハーフウェイ ハーフウェー ハーフウエイ ハーフウエー
+halibut ハリバット
+hall ホール
+hallelujah ハレルヤ
+hallucination ハルシネーション ハルシネイション
+halo ハロー ハロ
+halon ハロン
+halter ホールター
+ham ハム
+hamburger ハンバーガー
+hamlet ハムレット
+hamster ハムスター
+hamstring ハムストリング
+hand ハンド
+handbag ハンドバッグ
+handbook ハンドブック
+handicap ハンディキャップ ハンデキャップ
+handicraft ハンディクラフト
+handkerchief ハンカチーフ
+handle ハンドル
+handlebar ハンドルバー
+handler ハンドラー ハンドラ
+handling ハンドリング
+handmade ハンドメイド ハンドメード
+handout ハンドアウト
+handshake ハンドシェーク ハンドシェイク
+handsome ハンサム
+handy ハンディー ハンディ
+hang ハング
+hangar ハンガー
+hanger ハンガー
+happening ハプニング ハペニング
+happiness ハピネス ハッピネス
+happy ハッピー
+harassment ハラスメント
+harbor ハーバー
+harboring ハーバリング
+hard ハード
+hardware ハードウェア ハードウエア
+hardwood ハードウッド
+harmonic ハーモニック
+harmonica ハーモニカ ハモニカ
+harmonize ハーモナイズ
+harmony ハーモニー
+harness ハーネス
+harp ハープ
+harpist ハーピスト
+harpsichord ハープシコード
+harrow ハロー
+harvest ハーベスト ハーヴェスト
+harvester ハーベスター
+hash ハッシュ ハヤシ
+haste ヘイスト
+hat ハット
+hatch ハッチ
+hatchet ハチェット
+hatching ハッチング
+hate ヘイト ヘート
+haunt ハウント
+hawk ホーク
+hazard ハザード
+head ヘッド
+header ヘッダー ヘッダ ヘッド
+heading ヘディング ヘッディング
+headlight ヘッドライト
+headline ヘッドライン
+headphone ヘッドフォン
+headrest ヘッドレスト
+healer ヒーラー
+healing ヒーリング
+health ヘルス
+healthy ヘルシー
+heap ヒープ
+hear ヒア
+hearing ヒアリング ヒヤリング
+heart ハート
+heartbeat ハートビート
+heartbreak ハートブレイク
+heat ヒート
+heater ヒーター ヒータ
+heath ヒース
+heather ヘザー
+heaven ヘブン ヘヴン
+heavy ヘビー ヘヴィ
+hedge ヘッジ
+hedgehog ヘッジホッグ
+hedging ヘッジング
+heel ヒール
+height ハイト
+heights ハイツ
+helicopter ヘリコプター
+helium ヘリウム
+hell ヘル
+hello ハロー
+helm ヘルム
+helmet ヘルメット
+help ヘルプ
+helper ヘルパー
+hem ヘム
+hemlock ヘムロック
+hemoglobin ヘモグロビン
+hemp ヘンプ
+herald ヘラルド
+herb ハーブ
+here ヒア
+hero ヒーロー
+heroic ヒロイック
+heroin ヘロイン
+heroine ヒロイン
+heroism ヒロイズム
+heterogeneous ヘテロジーニアス ヘテロジニアス
+heterosexual ヘテロセクシュアル ヘテロセクシャル
+heterosexuality ヘテロセクシュアリティ
+heuristic ヒューリスティック ヒューリスティク
+hexagon ヘキサゴン
+hey ヘイ
+hibernation ハイバネーション
+hickory ヒッコリー
+hiding ハイディング
+hierarchy ハイアラーキー ハイアラーキ
+high ハイ
+highbrow ハイブラウ ハイブロー
+highland ハイランド
+highlight ハイライト
+highway ハイウェイ ハイウェー
+hijack ハイジャック
+hike ハイク
+hiker ハイカー
+hiking ハイキング
+hill ヒル
+hillbilly ヒルビリー
+hinge ヒンジ ヒンヂ
+hint ヒント
+hip ヒップ
+hippie ヒッピー
+hippopotamus ヒポポタマス
+hissing ヒッシング
+histogram ヒストグラム
+historic ヒストリック
+history ヒストリー ヒストリ
+hit ヒット
+hitchhiker ヒッチハイカー
+hitting ヒッティング
+hobby ホビー
+hobo ホーボー
+hock ホック
+hockey ホッケー
+hog ホッグ
+hoist ホイスト
+hold ホールド
+holder ホルダー
+holding ホールディング
+holdup ホールドアップ
+hole ホール
+holiday ホリデー ホリデイ
+holiness ホーリネス
+hollow ホロー
+holster ホルスター
+holy ホーリー ホリー
+home ホーム
+homeless ホームレス
+homemade ホームメード ホームメイド
+homes ホームズ
+homespun ホームスパン
+homework ホームワーク
+homing ホーミング
+homogeneous ホモジニアス ホモジーニアス
+homosexual ホモセクシャル ホモセクシュアル
+homosexuality ホモセクシュアリティ ホモセクシュアリティー
+hone ホーン
+honey ハニー
+honeycomb ハニカム
+honeymoon ハネムーン
+honing ホーニング
+honor オナー
+hook ホック
+hop ホップ
+hope ホープ
+hopper ホッパー
+hopscotch ホップスコッチ
+horizontal ホリゾンタル
+horn ホーン
+hornet ホーネット
+horoscope ホロスコープ
+horror ホラー
+horse ホース
+horsepower ホースパワー
+horseradish ホースラディッシュ
+hose ホーズ
+hospital ホスピタル
+hospitality ホスピタリティー ホスピタリティ
+host ホスト
+hostel ホステル
+hostess ホステス
+hosting ホスティング
+hosts ホスツ
+hot ホット
+hotel ホテル
+hound ハウンド
+house ハウス
+household ハウスホールド
+housekeeper ハウスキーパー
+housewife ハウスワイフ
+housing ハウジング
+hover ホバー
+hovering ホバリング
+how ハウ
+hub ハブ
+huddle ハドル
+hug ハグ
+hum ハム
+human ヒューマン
+humanism ヒューマニズム
+humanist ヒューマニスト
+humanity ヒューマニティー ヒューマニティ
+humble ハンブル
+humming ハミング
+hummingbird ハミングバード
+hump ハンプ
+hundred ハンドレッド
+hunger ハンガー
+hungry ハングリー
+hunt ハント
+hunter ハンター
+hunting ハンティング ハンチング
+hurdle ハードル
+hurdling ハードリング
+hurling ハーリング
+hurricane ハリケーン ハリケイン
+husband ハズバンド
+husky ハスキー
+hustle ハッスル
+hustler ハスラー
+hut ハット
+hybrid ハイブリッド
+hyena ハイエナ
+hymn ヒム
+hyphen ハイフン
+hyphenation ハイフネーション
+hypnosis ヒプノシス
+hypocrite ヒポクリット
+hysteric ヒステリック
+iceberg アイスバーグ
+icebreaker アイスブレーカー アイスブレイカー アイスブレイク アイスブレーク
+icicle アイシクル
+icing アイシング
+icon アイコン
+icy アイシー
+id イド
+idea アイデア アイディア
+ideal アイデアル アイディアル イデアル
+idealist イデアリスト アイディアリスト アイデアリスト
+identical アイデンティカル
+identification アイデンティフィケーション アイデンテフィケイション アイデンティフケイション
+identify アイデンティファイ アイデンテファイ
+identity アイデンティティ アイデンティティー
+idiom イディオム
+idle アイドル
+idler アイドラ アイドラー
+idling アイドリング
+idly アイドゥリ アイドリ
+idol アイドル
+if イフ
+igloo イグルー
+ignition イグニッション イグニション
+iguana イグアナ
+illegal イリーガル
+illumination イルミネーション
+illusion イリュージョン
+illustration イラストレーション
+illustrator イラストレーター イラストレータ
+image イメージ
+imaginary イマジナリー イマジナリ
+imagination イマジネーション
+imagine イマジン
+imaging イメージング
+imbalance アンバランス インバランス
+imitation イミテーション
+immediate イミディエイト
+immigration イミグレーション
+immortal イモータル
+impact インパクト
+impedance インピーダンス
+imperial インペリアル
+imperialism インペリアリズム
+implant インプラント
+implement インプリメント
+implementation インプリメンテーション
+implication インプリケーション
+import インポート
+important インポータント
+impossible インポシブル インポッシブル
+impostor インポスター
+impression インプレッション
+impressive インプレッシブ
+imprinting インプリンティング
+improvisation インプロビゼーション インプロヴィゼーション
+impulse インパルス
+inbreeding インブリーディング
+incense インセンス
+incentive インセンティブ インセンティヴ
+incest インセスト
+incidence インシデンス
+incident インシデント
+incinerator インシネレタ インシネレター
+incline インクライン
+include インクルード
+inclusion インクルージョン
+inclusive インクルーシブ
+incoherent インコヒーレント
+income インカム
+incomplete インコンプリート
+inconsistency インコンシステンシー
+incredible インクレディブル
+increment インクリメント
+incremental インクリメンタル
+incubate インキュベート
+incubation インキュベーション
+incubator インキュベータ インキュベーター
+indent インデント
+indentation インデンテーション
+independence インデペンデンス インディペンデンス
+independent インディペンデント
+index インデックス
+indexing インデクシング インデキシング
+indigo インディゴ
+indirect インダイレクト
+individual インディビジュアル
+indoctrination インドクトリネーション
+indolent インドレント
+indoor インドア
+induction インダクション
+industrial インダストリアル
+industry インダストリー インダストリ
+infant インファント
+infield インフィールド
+infinite インフィニット
+infinity インフィニティ インフィニティー
+inflatable インフレータブル
+inflation インフレーション
+influence インフルエンス
+influenza インフルエンザ
+informal インフォーマル
+informant インフォーマント
+information インフォメーション インフォーメーション
+informer インフォーマー
+infrastructure インフラストラクチャー インフラストラクチャ
+infusion インフュージョン
+ingenious インジニアス インジーニャス
+ingest インジェスト
+inheritance インヘリタンス
+initial イニシャル イニシアル
+initialize イニシャライズ イニシアライズ
+initiation イニシエーション
+initiative イニシアティブ イニシアチブ
+initiator イニシエータ イニシエーター
+injection インジェクション
+injunction インジャンクション
+ink インク
+inlay インレー
+inlet インレット
+inn イン
+inner インナー
+inning イニング インニング
+innkeeper インキーパー
+innocence イノセンス
+innocent イノセント
+innovation イノベーション
+input インプット
+insect インセクト
+insert インサート
+insertion インサーション
+inside インサイド
+insider インサイダー
+insight インサイト
+insomnia インソムニア
+inspection インスペクション
+inspector インスペクター
+inspiration インスピレーション
+installation インストレーション インスタレーション
+installment インストールメント
+instance インスタンス
+instant インスタント
+instinct インスティンクト
+institute インスティチュート
+institution インスティテューション インスティチューション
+instruction インストラクション
+instructor インストラクター
+instrument インストルメント インストゥルメント
+instrumental インストゥルメンタル インストルメンタル
+insulation インシュレーション
+insulator インシュレーター インシュレータ
+insulin インスリン インシュリン
+insurance インシュランス インシュアランス
+intake インテーク
+integer インテジャー
+integral インテグラル
+integrate インテグレート
+integrated インテグレーテッド
+integration インテグレーション
+integrity インテグリティ
+intellect インテレクト
+intellectual インテレクチュアル
+intelligence インテリジェンス
+intelligent インテリジェント
+intensity インテンシティ インテンシティー
+intensive インテンシブ
+intentional インテンショナル
+interaction インタラクション
+interactive インタラクティブ
+interception インターセプション
+interchange インターチェンジ
+intercom インターコム インターカム
+intercontinental インターコンチネンタル
+intercourse インターコース
+interest インタレスト
+interesting インタレスティング
+interface インタフェース インターフェース インターフェイス
+interference インターフェアレンス インターフェアランス
+interior インテリア
+interlock インターロック
+interlude インタールード
+intermission インターミッション
+intern インターン
+internal インターナル
+international インターナショナル インタナショナル
+interplay インタープレー
+interpret インタプリト
+interpretation インタープリテーション
+interpreter インタープリター インタプリタ インタープリタ
+interrogation インタロゲーション
+interrupt インタラプト インターラプト
+interval インターバル
+interview インタビュー
+interviewer インタビュアー インタヴュアー インタビューアー
+intimacy インティマシー
+intimate インティメイト インティメート
+intolerance イントレランス
+intonation イントネーション
+introduction イントロダクション
+invader インベーダー
+invalid インバリッド
+invariant インバリアント
+invention インヴェンション インベンション
+inventory インベントリー インベントリ
+inverse インバース インヴァース
+investment インベストメント
+investor インベスター
+invisible インビジブル
+invitation インビテーション
+invoice インボイス
+involve インボルブ
+iodine アイオダイン
+iris アイリス
+iron アイアン
+ironic アイロニック
+ironing アイアニング
+irony アイロニー
+irrational イラショナル
+irregular イレギュラー
+island アイランド
+isle アイル
+isolate アイソレート
+isolation アイソレーション
+issue イシュー
+item アイテム
+iteration イテレーション
+ivory アイボリー アイヴォリー アイボリ
+ivy アイビー アイビ
+jab ジャブ
+jack ジャッキ ジャック
+jackal ジャッカル
+jackass ジャッカス
+jacket ジャケット
+jackpot ジャックポット
+jade ジェイド ジェード
+jaguar ジャガー
+jail ジェイル
+jam ジャム
+jamming ジャミング
+jar ジャー
+jargon ジャーゴン
+javelin ジャベリン
+jaw ジョー
+jawboning ジョーボニング
+jazz ジャズ
+jealousy ジェラシー
+jeans ジーンズ
+jelly ゼリー ジェリー
+jerky ジャーキー
+jersey ジャージー ジャージ
+jet ジェット
+jewel ジュエル
+jewelry ジュエリー
+jig ジグ
+jigsaw ジグソー
+jingle ジングル
+jinx ジンクス
+job ジョブ
+jockey ジョッキー
+jog ジョグ
+jogger ジョガー
+jogging ジョギング
+join ジョイン
+joint ジョイント
+joke ジョーク
+joker ジョーカー
+journal ジャーナル
+journalism ジャーナリズム
+journalist ジャーナリスト
+journey ジャーニー
+joy ジョイ
+joyful ジョイフル
+jubilee ジュビリー
+judge ジャッジ
+judgment ジャッジメント
+jug ジャグ
+juggle ジャッグル ジャグル
+juggler ジャグラー
+juggling ジャグリング
+juice ジュース
+juicy ジューシー
+jumbo ジャンボ
+jump ジャンプ
+jumper ジャンパー ジャンパ
+jumping ジャンピング
+junction ジャンクション
+jungle ジャングル
+junior ジュニア
+junk ジャンク
+junket ジャンケット
+junkie ジャンキー
+jury ジュリー
+just ジャスト
+justice ジャスティス
+justification ジャスティフィケーション
+justify ジャスティファイ
+jute ジュート ジュト
+juvenile ジュブナイル ジュヴナイル ジュベナイル
+kaleidoscope カレイドスコープ カレードスコープ
+kangaroo カンガルー
+karat カラット
+kayak カヤック
+keel キール
+keg ケグ
+kelp ケルプ
+kennel ケンネル
+kerchief カーチフ
+kernel カーネル
+kerosene ケロシン
+ketchup ケチャップ
+kettle ケトル
+key キー
+keyboard キーボード
+keyhole キーホール
+keying キーイング
+keynote キーノート
+keystone キーストーン
+keyword キーワード
+khaki カーキ カーキー
+kick キック
+kickback キックバック
+kickoff キックオフ
+kid キッド
+kidnap キッドナップ
+kidney キドニー
+kids キッズ
+kill キル
+killer キラー
+killing キリング
+kilobyte キロバイト
+kilowatt キロワット
+kilt キルト
+kind カインド
+king キング
+kingdom キングダム
+kiosk キオスク キヨスク
+kipper キッパー
+kiss キス キッス
+kit キット
+kitchen キッチン
+kite カイト
+kiwi キウイ キウィ キーウィ キーウィー
+knee ニー
+knickers ニッカーズ
+knife ナイフ
+knight ナイト
+knit ニット
+knitting ニッティング
+knob ノブ ノッブ
+knock ノック
+knocking ノッキング
+knockout ノックアウト
+knot ノット
+know ノウ
+knowledge ナレッジ
+knuckle ナックル
+koala コアラ
+label ラベル レーベル
+labeling ラベリング
+labor レイバー
+laboratories ラボラトリーズ
+laboratory ラボラトリー ラボラトリ
+labyrinth ラビリンス
+lace レース
+lacquer ラッカー
+lacrosse ラクロス
+lacy レーシー
+ladder ラダー
+ladle レードル
+lady レディー レディ
+lag ラグ
+lager ラガー
+laggard ラガード
+lagoon ラグーン
+lake レーク レイク レーキ
+lamb ラム
+lampoon ランプーン
+lance ランス
+land ランド
+landing ランディング
+landmark ランドマーク
+landscape ランドスケープ
+lane レーン
+language ランゲージ
+lantern ランタン
+lap ラップ
+lapel ラペル
+lapping ラッピング
+lapse ラプス
+lard ラード
+large ラージ
+lark ラーク
+laser レーザー レーザ
+last ラスト
+latch ラッチ
+late レイト
+lateral ラテラル
+latex ラテックス
+lath ラス
+latitude ラチチュード ラティチュード
+lattice ラティス ラチス
+launch ローンチ ラウンチ ロンチ ランチ
+launcher ランチャー ランチャ
+laundering ロンダリング ローンダリング
+laundry ランドリー
+laurel ローレル
+lava ラーバ
+lavatory ラバトリー
+lavender ラベンダー
+law ロー
+lawful ローフル
+lawn ローン
+layer レイヤー レイヤ
+layered レイヤード
+layman レイマン
+layout レイアウト
+lead リード
+leader リーダー リーダ
+leadership リーダーシップ
+leading リーディング レディング
+leaf リーフ
+leaflet リーフレット
+league リーグ
+leak リーク
+leakage リーケージ
+leaky リーキー
+learning ラーニング
+lease リース
+leash リーシュ
+leather レザー
+leave リーブ
+leaving リービング
+lecture レクチャー
+lecturer レクチャラー
+leech リーチ
+leek リーキ リーク
+left レフト
+leg レグ レッグ
+legacy レガシー レガシ
+legal リーガル
+legend レジェンド
+legitimacy レジティマシー
+leisure レジャー
+lemonade レモネード
+length レングス
+lentil レンチル
+leopard レオパード
+leotard レオタード
+lesbian レズビアン
+lesson レッスン
+let レット
+letter レター
+letterhead レターヘッド
+lettering レタリング
+lettuce レタス
+level レベル
+leveling レベリング
+lever レバー
+leverage レバレッジ
+lexical レキシカル
+lexicon レキシコン
+liability ライアビリティー
+liaison リエゾン
+liar ライアー
+liberal リベラル
+liberalism リベラリズム
+libertarian リバタリアン リバータリアン
+liberty リバティ リバティー
+librarian ライブラリアン
+library ライブラリー ライブラリ
+libretto リブレット
+license ライセンス
+licensing ライセンシング
+lick リック
+licorice リコリス
+lie ライ
+life ライフ
+lifeboat ライフボート
+lifeline ライフライン
+lifestyle ライフスタイル
+lifetime ライフタイム
+lift リフト
+lifting リフティング
+light ライト
+lighter ライター ライタ
+lighthouse ライトハウス
+lighting ライティング
+lightning ライトニング
+lightweight ライトウェイト ライトウエイト
+like ライク
+lilac ライラック
+lily リリー
+limbo リンボー
+lime ライム
+limelight ライムライト
+limerick リメリック
+limit リミット
+limitation リミテーション
+limited リミテッド
+limousine リムジン リムジーン
+line ライン
+lineage リネージ
+linear リニア
+linen リネン
+liner ライナー
+lining ライニング
+link リンク
+linkage リンケージ
+linked リンクト
+linker リンカー リンカ
+links リンクス
+linoleum リノリウム
+lint リント
+lion ライオン
+lip リップ
+lipstick リップスティック
+liquid リキッド
+liquor リカー
+list リスト
+listen リッスン
+listener リスナー
+listening リスニング
+listing リスティング
+literacy リテラシー リテラシ
+literal リテラル
+literature リテラチャー リテラチュア
+little リトル
+live ライブ ライヴ
+liver リバー
+living リビング
+lizard リザード
+load ロード
+loader ローダー ローダ
+loading ローディング
+loafers ローファーズ
+loam ローム
+loan ローン
+lob ロブ
+lobbing ロビング
+lobby ロビー
+lobbying ロビイング ロビーイング
+lobbyist ロビイスト
+lobotomy ロボトミー
+lobster ロブスター ロブスタ
+local ローカル
+locale ロカール ロケール
+locate ロケート
+location ロケーション
+lock ロック
+locker ロッカー
+locket ロケット
+locking ロッキング
+locomotion ロコモーション
+locomotive ロコモーティブ ロコモティブ
+lodge ロッジ
+lodging ロッジング
+loft ロフト
+log ログ
+logarithm ロガリズム
+logger ロガー
+logic ロジック
+logical ロジカル
+logo ロゴ
+lollipop ロリポップ
+loneliness ロンリネス
+lonely ロンリー
+long ロング
+look ルック
+looks ルックス
+loop ループ
+loot ルート
+lore ロアー
+loser ルーザー
+loss ロス
+lost ロスト
+lot ロット
+lotion ローション
+lottery ロッタリー ロッテリー
+lotus ロータス
+loud ラウド
+loudspeaker ラウドスピーカー
+lounge ラウンジ
+love ラブ ラヴ
+lovely ラブリー
+lover ラバー ラヴァー
+low ロー
+loyalty ロイヤリティ ロイヤルティ ロイヤリティー ロイヤルティー
+lubrication ルブリケーション
+luck ラック
+lucky ラッキー
+luggage ラゲッジ ラゲージ
+lullaby ララバイ
+luminous ルミナス
+lunatic ルナティック
+lunch ランチ
+luncheon ランチョン
+lunchtime ランチタイム
+lung ラング
+lunge ランジ
+lupine ルーピン
+lure ルアー
+luster ラスター
+lute リュート
+luxury ラグジュアリー
+lyre ライアー ライア
+lyric リリック
+lyrical リリカル
+macaroni マカロニ
+mace メース
+machete マチェット マシェット マチェーテ マチェテ マシェティ
+machine マシン マシーン
+machinery マシーナリー マシーナリ
+macho マッチョ
+mad マッド
+madness マッドネス
+magazine マガジン
+magenta マゼンタ マジェンタ
+magic マジック
+magical マジカル
+magician マジシャン
+magnet マグネット
+magnetic マグネチック マグネティック
+magnitude マグニチュード
+magnolia マグノリア
+magnum マグナム
+mahogany マホガニー
+maid メイド メード
+mail メール
+mailbox メールボックス
+mailing メーリング
+main メイン メーン
+mainframe メインフレーム
+mainstream メインストリーム
+maintenance メンテナンス メインテナンス
+maize メイズ
+majestic マジェスティック
+majesty マジェスティー マジェスティ
+major メジャー メージャー メイジャー
+majority マジョリティー
+maker メーカー
+makeup メイクアップ メークアップ メーキャップ メイキャップ
+making メイキング メーキング
+malaria マラリア
+male メール
+mall モール
+mallet マレット
+malt モルト
+man マン メン
+manage マネージ
+management マネジメント マネージメント
+manager マネージャー マネジャー マネージャ
+mandate マンデート
+mandolin マンドリン
+maneuver マニューバー マニューバ マヌーバー マヌーバ
+mangrove マングローブ
+manhole マンホール
+mania マニア マニヤ
+maniac マニアック
+manicure マニキュア マニュキュア マニュキア
+manifesto マニフェスト
+manipulate マニピュレイト
+manipulation マニピュレーション
+mannequin マネキン
+mannerism マンネリズム
+manpower マンパワー
+mantle マントル
+manual マニュアル
+manufacture マニュファクチュア マニュファクチャー
+manufacturer マニュファクチャラー マニファクチャラー
+manufacturing マニュファクチャリング マニュファクチュアリング
+manuscript マニュスクリプト
+map マップ
+maple メープル メイプル
+mapping マッピング
+marathon マラソン
+marble マーブル
+march マーチ
+marching マーチング
+margin マージン
+marginal マージナル
+marigold マリーゴールド
+marina マリーナ
+marine マリン マリーン
+mark マーク
+marker マーカー
+market マーケット
+marketing マーケティング
+marketplace マーケットプレイス
+marking マーキング
+marmalade マーマレード ママレード
+maroon マルーン
+marriage マリアージュ マリッジ
+marshal マーシャル
+marshmallow マシュマロ
+mart マート
+marvel マーベル
+marvelous マーベラス
+mascara マスカラ
+mascot マスコット
+masculine マスキュリン
+mash マッシュ
+mask マスク
+masking マスキング
+masquerade マスカレード
+mass マス マッス
+massage マッサージ マサージュ
+massive マッシブ
+mast マスト
+master マスター マスタ
+mastering マスタリング
+masterpiece マスターピース
+masturbation マスターベーション
+mat マット
+match マッチ
+matching マッチング
+matchmaker マッチメーカー
+mate メート メイト マテ
+material マテリアル マティリアル
+materialism マテリアリズム
+materialist マテリアリスト
+maternity マタニティ マタニティー
+matrix マトリックス マトリクス
+matte マット
+matter マター
+mattress マットレス
+mature マチュア
+maul モール
+mauve モーブ
+maxim マキシム マクシム
+maximum マキシマム マクシマム
+mayor メイヤー
+me ミー
+meal ミール
+meander メアンダー
+meaning ミーニング
+measure メジャー
+measuring メジャリング
+meat ミート
+mechanic メカニック
+mechanical メカニカル
+mechanics メカニクス メカニックス
+mechanism メカニズム
+medal メダル
+medallion メダリオン
+media メディア
+median メディアン
+mediator メディエイタ
+medical メディカル
+medicine メディスン メディシン
+meditation メディテーション
+medium ミディアム メディウム ミーディアム メディアム
+medley メドレー
+meeting ミーティング
+megabyte メガバイト
+megaphone メガフォン
+megaton メガトン
+melancholy メランコリー
+mellow メロウ メロー
+melodic メロディック
+melodious メロディアス
+melodrama メロドラマ
+melody メロディー メロディ
+melon メロン
+melt メルト
+melting メルティング
+member メンバー メンバ
+members メンバーズ
+membership メンバーシップ メンバシップ
+membrane メンブレン メンブレイン メンブレーン
+memo メモ
+memorable メモラブル
+memorandum メモランダム
+memorial メモリアル
+memory メモリー メモリ
+men メン
+menagerie メナジェリー
+menopause メノポーズ
+mental メンタル
+mentality メンタリティ メンタリティー
+menthol メンソール
+mention メンション
+mentor メンター
+mentoring メンタリング
+menu メニュー
+merchandising マーチャンダイジング
+merchant マーチャント
+mercury マーキュリー
+merely ミアリー ミアリ
+merge マージ
+meridian メリディアン
+merit メリット
+mermaid マーメイド
+merry メリー
+mesh メッシュ メシュ
+message メッセージ メセージ
+messenger メッセンジャー
+metabolic メタボリック
+metabolism メタボリズム
+metal メタル
+metallic メタリック
+metaphor メタファー メタファ
+metaphorical メタフォリカル
+metaphysical メタフィジカル
+metaphysics メタフィジックス
+meteor メテオ ミーティア
+meteorite メテオライト
+meter メーター メータ
+method メソッド
+metropolis メトロポリス
+metropolitan メトロポリタン
+microcode マイクロコード
+microcomputer マイクロコンピューター マイクロコンピュータ
+microfilm マイクロフィルム
+micrometer マイクロメーター マイクロメータ ミクロメーター ミクロメータ
+microphone マイクロフォン
+microprocessor マイクロプロセッサー マイクロプロセッサ
+microscope マイクロスコープ
+microscopic マイクロスコピック ミクロスコピック
+microwave マイクロウェーブ マイクロウエーブ
+middle ミドル
+midget ミゼット
+midnight ミッドナイト
+midsummer ミッドサマー
+migrate マイグレート
+migration マイグレーション
+mild マイルド
+mileage マイレージ
+milestone マイルストーン
+military ミリタリー
+milk ミルク
+mill ミル
+milling ミーリング
+million ミリオン
+millionaire ミリオネア
+millisecond ミリセカンド ミリセコンド
+mime マイム
+mimic ミミック
+mimicry ミミクリー ミミクリ
+mincemeat ミンスミート
+mind マインド
+mine マイン
+miner マイナー
+mineral ミネラル
+miniature ミニチュア
+minibus ミニバス
+minimal ミニマル
+minimalism ミニマリズム
+minimalist ミニマリスト
+minimum ミニマム
+mining マイニング
+minion ミニオン
+minister ミニスター
+mink ミンク
+minor マイナー
+minority マイノリティー マイノリティ
+minstrel ミンストレル
+minus マイナス
+minutes ミニッツ
+miracle ミラクル
+mirage ミラージュ
+mirror ミラー
+mirroring ミラーリング
+misfortune ミスフォーチュン
+misleading ミスリーディング
+misprint ミスプリント
+missile ミサイル
+mission ミッション
+misspelling ミススペリング
+mist ミスト
+mistake ミステイク ミステーク
+mistress ミストレス
+misty ミスティー
+misunderstanding ミスアンダスタンディング
+mitt ミット
+mitten ミトン
+mix ミックス
+mixed ミクスト ミックスト
+mixer ミキサー
+mixing ミキシング
+mixture ミクスチャー ミクスチュア
+mnemonic ニーモニック
+mob モブ モッブ
+mobile モバイル モービル モビール モビル
+mobility モビリティー モビリティ
+moccasin モカシン
+modal モーダル
+mode モード
+model モデル
+modeling モデリング
+moderate モデレート
+moderation モデレーション
+moderator モデレーター モデレータ
+modern モダン モダーン
+modernity モダニティー
+modernize モダナイズ
+modification モディフィケーション
+modify モディファイ
+modular モジュラー モジュラ
+modulation モジュレーション
+module モジュール
+mohair モヘア モヘヤ
+moist モイスト
+moisture モイスチャー
+mold モールド
+molding モールディング
+mole モーレ モール
+molecular モレキュラー
+moment モーメント モメント
+momentum モーメンタム モメンタム モウメンタム
+monarch モナーク
+monarchy モナーキー
+monetarism マネタリズム
+monetary マネタリー
+money マネー
+mongoose マングース
+monitor モニター モニタ
+monitoring モニタリング
+monk モンク
+monkey モンキー
+monochrome モノクローム
+monogamy モノガミー
+monogram モノグラム
+monolithic モノリシック
+monologue モノローグ
+monopolize モノポライズ
+monopoly モノポリー
+monorail モノレール
+monotonous モノトナス
+monsoon モンスーン
+monster モンスター
+month マンス
+monthly マンスリー
+monument モニュメント
+monumental モニュメンタル
+mood ムード
+moon ムーン
+moonlight ムーンライト
+moor ムーア ムア
+moose ムース
+mop モップ
+moped モペット モペッド
+morale モラール
+moralist モラリスト
+morality モラリティー
+moratorium モラトリアム
+morning モーニング
+mortal モータル
+mortgage モーゲージ モーゲッジ モアゲージ
+mosaic モザイク
+mosque モスク
+mosquito モスキート
+moss モス
+motel モーテル モテル
+mother マザー
+mothering マザリング マザーリング
+motion モーション
+motivate モチベート
+motivation モチベーション モティベーション
+motor モーター モータ
+motorbike モーターバイク
+motorcycle モーターサイクル
+motorist モータリスト
+motto モットー
+mound マウンド
+mount マウント
+mountain マウンテン
+mounting マウンティング
+mouse マウス
+mouth マウス
+mouthpiece マウスピース
+move ムーブ
+movement ムーブメント ムーヴメント
+mover ムーバー
+movie ムービー
+moving ムービング
+mower モーア
+mud マッド
+muff マフ
+muffin マッフィン マフィン
+muffler マフラー
+mug マグ
+mulch マルチ
+mulching マルチング
+mule ミュール
+multinational マルチナショナル
+multiple マルチプル マルティプル
+multitasking マルチタスキング
+murder マーダー
+muscle マッスル
+museum ミュージアム
+music ミュージック
+musical ミュージカル
+musician ミュージシャン
+musk ムスク
+musket マスケット
+must マスト
+mustang ムスタング マスタング
+mustard マスタード
+mutant ミュータント
+mute ミュート
+mutton マトン
+muzzle マズル
+my マイ
+mysterious ミステリアス
+mystery ミステリー ミステリ
+mystic ミスティック
+mysticism ミスティシズム
+myth ミス
+mythology ミソロジー
+nail ネイル ネール
+naked ネイキッド
+name ネーム
+naming ネーミング
+napalm ナパーム
+napkin ナプキン
+narration ナレーション
+narrative ナラティブ ナラティヴ
+narrator ナレーター
+narrow ナロー
+nation ネーション ネイション
+national ナショナル
+nationalism ナショナリズム
+nationalist ナショナルスト ナショナリスト
+nationalistic ナショナリスティック
+nationality ナショナリティー
+native ネイティブ ネイティヴ ネーティブ
+natural ナチュラル
+naturalist ナチュラリスト
+naturalization ナチュラリゼーション
+naturalize ナチュラライズ
+nature ネイチャー ネーチャー
+nautical ノーティカル
+navel ネーブル
+navigation ナビゲーション
+navigator ナビゲーター ナビゲータ
+navy ネイビー ネービー
+nay ナーイ
+neat ニート
+nebula ネビュラ
+neck ネック
+necklace ネックレス
+necktie ネクタイ
+nectar ネクター
+need ニード
+needle ニードル
+needs ニーズ
+negate ネゲート
+negative ネガティブ
+neglect ネグレクト
+negotiation ネゴシエーション
+negotiator ネゴシエーター ネゴシエイター ネゴシエータ
+neon ネオン
+nepotism ネポティズム
+nervous ナーバス
+nest ネスト
+nesting ネスティング
+net ネット
+netting ネッティング
+network ネットワーク
+networking ネットワーキング
+neural ニューラル
+neuron ニューロン
+neutral ニュートラル
+neutrality ニュートラリティー
+neutron ニュートロン
+never ネバー
+new ニュー
+newbie ニュービー
+newcomer ニューカマー
+newsletter ニューズレター
+newton ニュートン
+next ネクスト
+nibble ニブル
+nice ナイス
+niche ニッチ
+nick ニック
+nickel ニッケル
+nickname ニックネーム
+nicotine ニコチン
+night ナイト
+nightclub ナイトクラブ
+nightingale ナイチンゲール ナイティンゲール ナイチンゲイル ナイティンゲイル
+nightmare ナイトメア
+nine ナイン
+ninth ナインス
+nipple ニップル
+nit ニト
+no ノー
+noble ノーブル
+nobleman ノーブルマン
+node ノード
+noise ノイズ
+noisy ノイジー
+nomad ノマド ノーマッド ノマッド
+nominal ノミナル
+nomination ノミネーション
+nonfiction ノンフィクション
+nonsense ナンセンス
+nonstop ノンストップ
+noodle ヌードル
+nook ヌック ヌーク
+noon ヌーン
+norm ノーム
+normal ノーマル
+north ノース
+northwestern ノースウェスタン
+nose ノーズ
+nostalgia ノスタルジア
+nostalgic ノスタルジック
+not ノット
+notation ノーテーション
+notch ノッチ
+note ノート
+notebook ノートブック
+nothing ナッシング
+notorious ノートリアス
+nourish ナリッシュ
+nourishment ナリッシュメント
+nova ノバ ノヴァ
+novel ノベル
+novelist ノベリスト
+novelty ノベルティ ノベルティー
+nozzle ノズル
+nuclear ニュークリア ニュークレア ヌークリア ヌークレア
+nucleus ニュクリアス
+nude ヌード
+nugget ナゲット
+nuisance ニューサンス
+null ヌル ナル
+number ナンバー
+numbering ナンバリング ナンバーリング
+nurse ナース
+nursery ナーサリー
+nut ナット
+nutcracker ナットクラッカー
+nuts ナッツ
+nylon ナイロン
+oak オーク
+oaks オークス
+oasis オアシス
+oatmeal オートミール
+object オブジェクト
+objection オブジェクション
+obligation オブリゲーション
+observable オブザーバブル
+observer オブザーバー オブザーバ
+obsession オブセッション
+obstruction オブストラクション
+occupation オキュペーション オキュペイション
+occupied オキュパイド
+occupy アキュパイ
+ocean オーシャン
+octopus アクトパス オクトパス
+odds オッズ
+ode オード
+odometer オドメーター
+of オブ
+offense オフェンス
+offensive オフェンシブ
+offer オファー
+office オフィス
+officer オフィサー
+official オフィシャル
+offset オフセット
+offshore オフショア
+ogre オーガ オーガー
+ohm オーム
+oil オイル
+oily オイリー
+okra オクラ
+old オールド
+omelet オムレット
+omen オーメン
+omnibus オムニバス
+onion オニオン
+only オンリー
+onward オンワード
+opal オパール
+opaque オペーク
+open オープン
+opener オープナー
+opening オープニング
+operating オペレーティング
+operation オペレーション
+operational オペレーショナル
+operations オペレーションズ
+operator オペレーター オペレータ
+opinion オピニオン
+opium オピウム
+opossum オポッサム
+opportunist オポチュニスト
+opportunity オポチュニティー オポチュニティ
+opposition オポジション
+optic オプティック
+optical オプティカル オプチカル
+optician オプティシャン
+optimism オプティミズム オプチミズム
+optimist オプチミスト オプティミスト
+optimistic オプティミスティック オプチミスティック
+optimize オプティマイズ
+option オプション
+optional オプショナル
+opus オーパス
+oracle オラクル
+oral オーラル
+orange オレンジ
+orchard オーチャード
+orchestra オーケストラ
+orchestration オーケストレーション
+orchid オーキッド
+order オーダー
+ordinary オーディナリー
+organic オーガニック
+organism オーガニズム
+organization オーガニゼーション オーガナイゼーション
+organize オーガナイズ
+organizer オーガナイザー
+orgasm オーガズム
+orgy オージー
+orientation オリエンテーション
+oriented オリエンテッド
+orifice オリフィス
+origin オリジン
+original オリジナル
+originality オリジナリティー オリジナリティ
+originator オリジネーター オリジネイター
+ornament オーナメント
+orphan オーファン
+orthodox オーソドックス
+orthography オーソグラフィー
+oscilloscope オシロスコープ
+ostrich オストリッチ オーストリッチ
+otherwise アザワイズ
+ouch アウチ イタタ イタッ イテッ
+ounce オンス
+ours アウアズ
+ourselves アウアセルブズ
+oust アウスト
+outbound アウトバウンド
+outbreak アウトブレイク アウトブレーク
+outburst アウトバスト
+outcome アウトカム
+outdoors アウトドアズ
+outer アウター アウタ
+outfield アウトフィールド
+outfit アウトフィット
+outing アウティング
+outlaw アウトロー
+outlet アウトレット
+outline アウトライン
+outlook アウトルック
+output アウトプット
+outrage アウトレイジ
+outside アウトサイド
+outsider アウトサイダー
+outstanding アウトスタンディング
+outward アウトワード
+oval オーバル
+ovation オベーション
+oven オーブン
+over オーバー
+overall オーバーオール
+overcharge オーバーチャージ
+overcoat オーバーコート
+overdraft オーバードラフト
+overflow オーバーフロー
+overhang オーバーハング
+overhaul オーバーホール
+overhead オーバーヘッド オーバヘッド
+overkill オーバーキル
+overlap オーバーラップ
+overlay オーバーレイ オーバレイ
+overload オーバーロード
+overloading オーバーローディング
+overnight オーバーナイト
+overpass オーバーパス
+override オーバーライド
+overrun オーバーラン
+overshoot オーバーシュート
+overtime オーバータイム
+overture オーバーチュア
+overweight オーバーウェイト オーバーウエイト オーバーウエート オーバーウェート
+overwork オーバーワーク
+owl アウル
+owner オーナー オーナ
+ownership オーナーシップ
+oxide オキシド オキサイド
+oxygen オキシジェン
+oyster オイスター
+ozone オゾン
+pace ペース
+pacemaker ペースメーカー ペースメーカ
+pack パック
+package パッケージ
+packaging パッケージング
+packer パッカー
+packet パケット
+packing パッキング
+pad パッド
+padding パディング パッディング
+paddle パドル
+paddling パドリング
+paddock パドック
+pageant ページェント
+pager ページャー ページャ
+pagination ページネーション
+paging ページング
+pagoda パゴダ
+paid ペイド
+pail ペール
+pain ペイン
+paint ペイント
+painter ペインター
+painting ペインティング
+pair ペア ペアー
+pairing ペアリング
+palace パレス パラス
+pale ペール
+palette パレット
+palm パーム
+pan パン
+pancake パンケーキ
+panda パンダ
+pane ペイン ペーン
+panel パネル
+panic パニック
+panning パンニング
+panorama パノラマ
+pansy パンジー
+panther パンサー
+pantomime パントマイム
+pantry パントリー
+pants パンツ
+papaya パパイヤ パパイア
+paper ペーパー
+paperback ペーパーバック
+paperweight ペーパーウェイト ペーパーウエイト
+paperwork ペーパーワーク
+paprika パプリカ
+par パー
+parachute パラシュート
+parade パレード
+paradigm パラダイム
+paradise パラダイス
+paradox パラドックス パラドクス
+paradoxical パラドキシカル パラドクシカル
+paraffin パラフィン
+paragraph パラグラフ
+parallel パラレル
+parameter パラメータ パラメーター
+paramount パラマウント
+paranoia パラノイア
+paraphrase パラフレーズ
+parasite パラサイト
+parchment パーチメント
+parent ペアレント
+parents ペアレンツ
+parish パリッシュ パリシ
+parity パリティ パリティー
+park パーク
+parka パーカー パーカ パッカー
+parking パーキング
+parkway パークウェイ
+parliament パーラメント
+parlor パーラー
+parody パロディー パロディ
+parsec パーセク
+parser パーサー パーサ
+parsley パセリ
+part パート
+partial パーシャル
+participation パーティシペーション
+particle パーティクル
+parting パーティング
+partition パーティション パーテーション
+partitioning パーティショニング
+partner パートナー
+partnership パートナーシップ
+party パーティー パーティ
+pass パス
+passage パサージュ パッサージュ パッセージ
+passenger パッセンジャー
+passing パッシング
+passion パッション
+passionate パッショネート
+passive パッシブ
+passport パスポート
+password パスワード
+paste ペースト
+pastel パステル
+pastoral パストラル
+pastry ペストリー ペイストリー ペーストリー
+pat パット
+patch パッチ
+patchwork パッチワーク
+patent パテント
+paternalism パターナリズム
+paternity パタニティ パタニティー
+path パス
+pathetic パセティック
+pathos ペーソス
+patience ペイシェンス ペーシェンス
+patient ペイシェント ペーシェント
+patio パティオ
+patriarch パトリアルク
+patriot パトリオット
+patriotism パトリオティズム
+patrol パトロール
+patron パトロン
+pattern パターン パタン
+patting パッティング
+patty パティ
+pause ポーズ
+pavement ペーブメント
+pavilion パビリオン
+pawn ポーン
+pay ペイ
+payload ペイロード
+payment ペイメント
+payoff ペイオフ
+payroll ペイロール
+peace ピース
+peaceful ピースフル
+peach ピーチ
+peacock ピーコック
+peak ピーク
+pearl パール
+pearling パーリング
+peasant ペザント
+peat ピート
+pecan ピーカン ペカン
+peck ペック
+pedal ペダル
+pedant ペダント
+pedantic ペダンティック ペダンチック
+pedantry ペダントリー
+pedestal ペデスタル
+pedestrian ペデストリアン
+peek ピーク
+peel ピール
+peeling ピーリング
+peer ピア
+peering ピアリング
+peg ペグ ペッグ
+pegging ペギング
+pelican ペリカン
+pellet ペレット ペリット
+pen ペン
+penalty ペナルティー ペナルティ
+pencil ペンシル
+pendant ペンダント
+pending ペンディング
+pendulum ペンジュラム
+penguin ペンギン
+penicillin ペニシリン
+pennant ペナント
+pension ペンション
+penthouse ペントハウス
+people ピープル
+pepper ペッパー ペパー
+peppermint ペパーミント ペパミント
+percent パーセント
+percentage パーセンテージ
+perception パーセプション
+perch パーチ
+percolator パーコレーター パーコレータ
+percussion パーカッション
+perfect パーフェクト
+perforation パーフォレーション
+performance パフォーマンス
+performer パフォーマー
+perfume パフューム
+period ピリオド
+periodic ピリオディック
+peripheral ペリフェラル
+periscope ペリスコープ
+perk パーク
+permanent パーマネント
+permission パーミッション
+peroxide ペルオキシド
+persistence パーシステンス
+person パーソン
+personal パーソナル
+personality パーソナリティー パーソナリティ
+perspective パースペクティブ
+pessimism ペシミズム
+pessimist ペシミスト
+pessimistic ペシミスティック ペシミスチック
+pet ペット
+petroleum ペトロリアム
+petticoat ペチコート ペティコート
+pewter ピューター
+phantom ファントム
+pharmacy ファーマシー
+phase フェーズ フェイズ
+phasing フェイジング
+phenomena フェノミナ フェノメナ
+phenomenon フェノメノン
+philanthropy フィランソロピー フィランスロピー
+philosopher フィロソファー
+philosophy フィロソフィー
+phoenix フェニックス
+phone フォーン フォン
+phonetics フォネティックス
+phonics フォニックス
+phonograph フォノグラフ
+phony フォニー
+phosphorus フォスフォラス
+photo フォト
+photogenic フォトジェニック
+photograph フォトグラフ
+photographer フォトグラファー
+photography フォトグラフィー フォトグラフィ
+photon フォトン
+photosynthesis フォトシンセシス
+phrase フレーズ
+phrasing フレイジング フレージング
+physical フィジカル
+physics フィジックス
+physiology フィジオロジー
+physique フィジーク
+pianist ピアニスト
+piano ピアノ
+pick ピック
+picket ピケット
+picketing ピケッティング
+picking ピッキング
+pickup ピックアップ
+picnic ピクニック
+picture ピクチャー ピクチャ
+picturesque ピクチャレスク
+pie パイ
+piece ピース
+piecework ピースワーク
+pier ピアー
+piercing ピアッシング ピアシング
+pig ピッグ
+pigeon ピジョン
+piggyback ピギーバック
+pigment ピグメント
+pike パイク
+pile パイル
+pill ピル
+pilling ピリング
+pillow ピロー
+pilot パイロット
+pin ピン
+pinch ピンチ
+pine パイン
+pineapple パイナップル パインアップル
+pinion ピニオン
+pink ピンク
+pinnacle ピナクル
+pinpoint ピンポイント
+pint パイント
+pioneer パイオニア
+pipe パイプ
+pipeline パイプライン
+piping パイピング
+pirate パイレート
+pirates パイレーツ
+pistol ピストル
+piston ピストン
+pit ピット
+pitch ピッチ
+pitcher ピッチャー
+pitchfork ピッチフォーク
+pitching ピッチング
+pivot ピボット ピヴォット
+pixie ピクシー
+placard プラカード
+place プレース プレイス
+placement プレースメント プレイスメント
+placenta プラセンタ
+plain プレーン プレイン
+plan プラン
+plane プレーン プレイン
+planet プラネット
+planetarium プラネタリウム
+plankton プランクトン
+planner プランナー
+planning プランニング
+plant プラント
+plantain プランテーン プランテイン プランテン
+plantation プランテーション
+planter プランター
+plaque プラーク
+plasma プラズマ
+plaster プラスター プラスタ
+plastic プラスチック プラスティック
+plate プレート
+plateau プラトー
+platform プラットフォーム
+platter プラター プラッター プラタ プラッタ
+play プレイ プレー
+playback プレイバック プレーバック
+player プレイヤー プレーヤー
+playful プレイフル
+playground プレイグラウンド プレーグラウンド
+plaza プラザ プラーザ
+plea アピール アッピール
+please プリーズ
+pleasure プレジャー プレジャ
+pleats プリーツ
+pledge プレッジ
+plot プロット
+plotter プロッタ プロッター
+plow プラウ
+plug プラグ
+plum プラム
+plume プルーム プリューム
+plunger プランジャー プランジャ
+plus プラス
+plush プラッシュ
+plutonium プルトニウム
+plywood プライウッド
+pneumatic ニューマチック ニューマティック
+pocket ポケット
+pocketbook ポケットブック
+pod ポッド
+podium ポディウム
+poem ポエム
+poet ポエット ポエト
+poetic ポエティック
+poetical ポエティカル
+poetry ポエトリー
+point ピント ポイント
+pointer ポインタ ポインター
+pointing ポインティング
+poise ポアズ ポイズ
+poison ポイズン
+poker ポーカー
+polar ポーラー ポーラ
+pole ポール
+polemic ポレミック
+police ポリス
+policeman ポリスマン
+policing ポリシング
+policy ポリシー ポリシ
+polio ポリオ
+polish ポリッシュ
+polishing ポリッシング
+politeness ポライトネス
+political ポリティカル
+politician ポリティシャン
+politics ポリティクス ポリティックス
+polka ポルカ
+poll ポール
+polling ポーリング
+pollution ポリューション
+polo ポロ
+polygon ポリゴン
+polyp ポリープ ポリプ
+polytechnic ポリテクニック
+pond ポンド
+pony ポニー
+poodle プードル
+pool プール
+poor プア プアー プーア
+pop ポップ
+popcorn ポップコーン
+poplar ポプラ
+poppy ポピー ポッピー
+popular ポピュラー
+popularity ポピュラリティー ポピュラリティ
+population ポピュレーション
+porcelain ポーセリン ポーセレン ポースレン
+porch ポーチ
+pork ポーク
+porridge ポリッジ
+port ポート
+portability ポータビリティ ポータビリティー
+portable ポータブル
+portal ポータル
+porter ポーター
+portfolio ポートフォリオ
+porting ポーティング
+portion ポーション
+portrait ポートレート ポートレイト
+pose ポーズ
+posing ポージング
+position ポジション
+positioning ポジショニング
+positive ポジティブ ポジティヴ
+positivism ポジティビズム
+possession ポゼッション
+possibility ポシビリティ ポッシビリティ
+possible ポシブル ポッシブル
+possum ポッサム
+post ポスト
+postcard ポストカード
+poster ポスター ポスタ
+posting ポスティング
+postman ポストマン
+postmaster ポストマスタ ポストマスター
+postscript ポストスクリプト
+pot ポット
+potato ポテト
+potential ポテンシャル
+pothole ポットホール
+potion ポーション
+pouch ポーチ パウチ
+pound パウンド
+powder パウダー
+powdery パウダリー
+power パワー
+powerful パワフル
+powerhouse パワーハウス
+practical プラクティカル
+practice プラクティス
+pragmatic プラグマティック プラグマチック
+pragmatism プラグマティズム プラグマチズム
+prairie プレーリー
+prawn プローン プラウン
+prayer プレー プレイ
+preamble プリアンブル
+precious プレシャス
+precision プレシジョン プリシジョン
+preference プレファレンス プリファレンス
+prefix プレフィックス プレフィクス プリフィックス
+prelude プレリュード
+premise プレミス
+premium プレミアム
+prepaid プリペイド プリペード
+presence プレゼンス
+present プレゼント
+presentation プレゼンテーション
+presenter プレゼンター
+presents プレゼンツ
+preserve プリザーブ プレザーブ
+preserved プリザーブド
+president プレジデント
+press プレス
+pressing プレッシング
+pressure プレッシャー
+prestige プレスティージ プレステージ
+pretty プリティ プリティー
+preview プレビュー
+price プライス
+priceless プライスレス
+pricing プライシング
+pride プライド
+priest プリースト
+priestess プリーステス プリエステス
+primal プライマル
+primary プライマリ プライマリー
+primer プライマー
+priming プライミング
+primitive プリミティブ プリミチブ プリミティヴ
+primrose プリムローズ
+prince プリンス
+princess プリンセス
+principal プリンシパル
+principle プリンシプル
+print プリント
+printer プリンタ プリンター
+printing プリンティング
+printout プリントアウト
+priority プライオリティ プライオリティー
+prism プリズム
+prison プリズン
+privacy プライバシー
+private プライベート
+prize プライズ
+probability プロバビリティー プロバビリティ
+probable プロバブル
+probe プローブ
+problem プロブレム
+procedure プロシージャ
+proceeds プロシーズ
+process プロセス
+processing プロセッシング プロセシング
+processor プロセッサー プロセッサ
+prodigy プロディジー
+producer プロデューサー プロデューサ
+product プロダクト
+production プロダクション
+productive プロダクティブ プロダクティヴ
+productivity プロダクティビティ プロダクティビティー
+products プロダクツ
+profession プロフェッション
+professional プロフェッショナル
+professor プロフェッサー
+profile プロファイル
+profiling プロファイリング
+profit プロフィット
+program プログラム
+programmable プログラマブル
+programmer プログラマー プログラマ
+programming プログラミング
+progress プログレス
+progressive プレグレッシブ プログレッシブ プログレッシヴ
+project プロジェクト
+projection プロジェクション
+projector プロジェクター プロジェクタ
+prologue プロローグ
+prom プロム
+prominence プロミネンス
+prominent プロミネント
+promise プロミス
+promising プロミッシング
+promotion プロモーション
+prompt プロンプト
+proof プルーフ
+prop プロップ
+propaganda プロパガンダ
+propagation プロパゲーション
+propeller プロペラ
+proper プロパー プロパ
+property プロパティ プロパティー
+proportional プロポーショナル
+proposal プロポーザル
+proprietary プロプライエタリ
+prospect プロスペクト
+prospective プロスペクティブ
+prostitute プロスティテュート プロスティチュート
+protected プロテクテッド
+protection プロテクション
+protector プロテクター
+protein プロテイン
+protest プロテスト
+protocol プロトコル プロトコール
+proton プロトン
+prototype プロトタイプ
+proud プラウド
+providence プロヴィデンス プロビデンス
+province プロビンス
+provisioning プロビジョニング
+proxy プロキシ プロクシ
+prune プルーン
+psychedelic サイケデリック
+psychic サイキック
+psychics サイキックス
+psychological サイコロジカル
+psychologist サイコロジスト
+psychology サイコロジー
+psychopath サイコパス
+psychotherapy サイコセラピー
+pub パブ
+public パブリック
+publicity パブリシティー パブリシティ
+publisher パブリッシャー パブリッシャ
+publishing パブリッシング
+puck パック
+pudding プディング
+puff パフ
+pull プル
+pulley プーリー プーリ
+pulp パルプ
+pulse パルス
+puma プーマ ピューマ
+pumice パミス パマス
+pumping パンピング ポンピング
+pumpkin パンプキン
+pumps パンプス
+punch パンチ ポンチ
+punching パンチング
+punctual パンクチュアル
+punctuation パンクチュエーション
+punishment パニッシュメント
+punk パンク
+punt パント
+puppet パペット
+puppy パピー
+pure ピュア ピュアー
+purge パージ
+purple パープル
+purpose パーパス
+purse パース
+pursuit パシュート
+push プッシュ
+pusher プッシャー
+pushing プッシング
+pussy プッシー
+putt パット
+putter パター
+putting パッティング
+putty パテ
+puzzle パズル
+pyramid ピラミッド
+python パイソン
+quadrant クワドラント
+quake クェイク
+qualifier クオリファイア クオリファイアー
+quality クオリティ クオリティー クォリティ クォリティー
+quantity クオンティティ クオンティティー
+quantum クァンタム クアンタム クォンタム クオンタム
+quark クォーク クオーク
+quart クオート クォート
+quarter クォーター クォータ クオーター クオータ
+quarterback クォーターバック クオーターバック
+quarterly クォータリー クオータリー
+quartz クォーツ クオーツ
+queen クイーン クィーン
+queer クィア クイア
+query クエリ クエリー
+quest クエスト
+question クエスチョン クエッション
+queue キュー
+queuing キューイング
+quick クイック
+quicksand クイックサンド
+quilt キルト
+quilting キルティング
+quinine キニン
+quiz クイズ
+quota クオータ クォータ
+quotation クォーテーション クオーテーション
+quote クォート クオート
+rabbit ラビット
+raccoon ラクーン
+race レース
+racer レーサー
+racial レイシャル
+racing レーシング
+racism レイシズム レーシズム
+racist レイシスト
+rack ラック
+racket ラケット
+racking ラッキング
+radar レーダー レーダ
+radiance ラディアンス
+radiation ラディエーション
+radical ラディカル
+radish ラディッシュ
+raft ラフト
+rafting ラフティング
+rag ラグ
+ragged ラギッド
+ragtime ラグタイム
+raid レイド
+rail レール
+railroad レールロード
+railway レールウェイ レールウエイ レールウェー レールウエー
+rain レーン レイン
+rainbow レインボー
+raincoat レインコート
+rainy レイニー
+raisin レーズン
+rake レーキ
+rally ラリー
+ram ラム
+ramp ランプ
+ranch ランチ
+random ランダム
+range レンジ レインジ
+ranger レンジャー レインジャー レーンジャー
+rank ランク
+ranking ランキング
+rap ラップ
+rape レイプ
+rapist レイピスト
+rare レア レアー
+rarity レアリティ レアリティー
+raspberry ラズベリー
+raster ラスター ラスタ
+rat ラット
+rate レート レイト
+rating レーティング レイティング
+ratio レシオ
+rational ラショナル
+rationalization ラショナリゼーション
+rave レイブ
+razor レザー レーザー
+reach リーチ
+reaction リアクション
+reactor リアクター
+readability リードビリティー リーダビリティ リーダビリティー
+readable リーダブル
+reader リーダー リーダ
+readiness レディネス
+reading リーディング
+ready レディ レディー
+real リアル
+realism リアリズム
+realist リアリスト
+realistic リアリスティック
+reality リアリティ リアリティー
+realty リアルティ リアルティー
+ream リーム
+reaper リーパー
+rear リア リヤ
+reason リーズン
+reasonable リーズナブル
+rebate リベート
+rebel レベル
+rebellion レベリオン レベリヨン
+rebirth リバース
+reborn リボーン
+rebound リバウンド
+rebuild リビルド
+rebuilt リビルト
+recall リコール
+receipt レシート
+receiver レシーバー レシーバ
+reception レセプション リセプション
+recession リセッション
+recharge リチャージ
+recipe レシピ
+recipient レシピエント
+recital リサイタル
+recitation レシテーション
+reclining リクライニング
+recognition レコグニション
+recoil リコイル
+recommendation リコメンデーション レコメンデーション
+reconstruction リコンストラクション
+record レコード
+recorder レコーダー レコーダ リコーダー リコーダ
+recording レコーディング
+recover リカバー
+recovery リカバリー リカバリ
+recreation レクリエーション レクレーション レクリェーション リクリエーション
+recruit リクルート
+recruiting リクルーティング
+recurrent リカレント
+recursive リカーシブ
+recycling リサイクリング
+red レッド
+redirect リダイレクト
+redirection リダイレクション
+redo リドゥ リドゥー
+redress リドレス
+reduction リダクション
+redundancy リダンダンシー
+reed リード
+reef リーフ
+reel リール
+referee レフェリー レフリー
+reference レファレンス リファレンス
+referendum レファレンダム
+refill リフィル レフィル
+reflect リフレクト
+reflection リフレクション
+reflective リフレクティブ
+reflector リフレクター レフレクター リフレクタ レフレクタ
+reflex レフレックス リフレックス
+reformer リフォーマー
+refrain リフレーン リフレイン
+refresh リフレッシュ
+refreshment リフレッシュメント
+refugee レフュジー
+refund リファンド
+regalia レガリア
+regatta レガッタ
+regime レジーム
+regimental レジメンタル
+region リージョン
+regional リージョナル
+register レジスター レジスタ
+registrar レジストラ
+registration レジストレーション
+registry レジストリ レジストリー
+regression リグレッション レグレッション
+regret リグレット
+regular レギュラー
+regulation レギュレーション レギュラシオン
+rehabilitation リハビリテーション
+rehearsal リハーサル
+reimbursement リインバースメント
+reinforcement リインフォースメント
+relation リレーション
+relational リレーショナル
+relationship リレーションシップ
+relaxation リラクセーション
+relay リレー
+release リリース
+reliability リライアビリティー
+relic レリック
+relief リリーフ レリーフ
+relocate リロケート
+relocation リロケーション
+reluctance リラクタンス
+remake リメイク リメーク
+remark リマーク
+remedial リメディアル
+reminder リマインダー リマインド
+reminiscence レミニセンス
+remote リモート
+removable リムーバブル
+rename リネーム
+rendering レンダリング
+rendezvous ランデブー ランデヴー
+renewable リニューアブル
+renewal リニューアル
+renovation リノベーション
+rental レンタル
+repair リペア
+repeat リピート
+replay リプレイ リプレー
+replica レプリカ
+replicate リプリケート
+replication リプリケーション レプリケーション
+reply リプライ
+report レポート リポート
+reporter リポーター レポーター
+repository リポジトリ レポジトリ リポジトリー レポジトリー
+representation リプレゼンテーション
+representative レプレゼンタティブ リプレゼンタティブ
+repression リプレッション
+reprint リプリント
+reproduction リプロダクション
+reproductive リプロダクティブ
+republic リパブリック
+republican リパブリカン
+reputation レピュテーション
+request リクエスト
+resale リセール
+rescheduling リスケジューリング
+rescue レスキュー
+research リサーチ
+researcher リサーチャー
+reservation リザベーション
+reserve リザーブ レザーブ
+reset リセット
+residence レジデンス
+resident レジデント
+residential レジデンシャル
+resilience レジリエンス
+resin レジン
+resolution レゾリューション
+resonance レゾナンス
+resort リゾート
+resource リソース
+respect リスペクト
+respirator レスピレーター
+response レスポンス リスポンス
+responsibility レスポンシビリティ
+responsive レスポンシブ リスポンシブ
+rest レスト
+restart リスタート
+restoration レストレーション
+restore レストア リストア
+restructuring リストラクチャリング リストラクチュアリング
+result リザルト
+resume レジューム
+resurrection リザレクション
+retail リテール
+retailer リテーラー
+retainer リテーナー リテナー
+retention リテンション
+retract リトラクト
+retreat リトリート
+retriever レトリバー レトリーバー
+retrospective レトロスペクティブ
+retry リトライ
+return リターン
+returnable リターナブル
+returns リターンズ
+reuse リユース
+revelation レベレーション
+revenge リベンジ
+revenue レベニュー
+reversal リバーサル
+reverse リバース
+reversible リバーシブル
+review レビュー レヴュー
+reviewer レビュアー レビューアー
+revised リバイズド
+revision リビジョン
+revival リバイバル
+revoke リボーク
+revolt リボルト レボルト
+revolution レボリューション
+revolver リボルバー
+revolving リボルビング
+reward リワード リウォード
+rewind リワインド
+rewrite リライト
+rhapsody ラプソディ ラプソディー
+rhetoric レトリック
+rhododendron ロードデンドロン
+rhubarb ルバーブ
+rhyme ライム
+rhythm リズム
+rhythmic リズミック
+rib リブ
+ribbon リボン
+rice ライス
+rich リッチ
+ride ライド
+rider ライダー
+ridge リッジ
+ridicule リディキュール
+riding ライディング
+rifle ライフル
+rifling ライフリング
+rig リグ
+rigging リギング
+right ライト
+rights ライツ
+rim リム
+ring リング
+ringing リンギング
+rink リンク
+rinse リンス
+riot ライオット
+ripping リッピング
+ripple リップル リプル
+rising ライジング
+risk リスク
+risky リスキー
+rival ライバル
+river リバー
+rivet リベット
+road ロード
+roadside ロードサイド
+roaming ローミング
+roast ロースト
+robber ロバー
+robin ロビン
+robot ロボット
+robustness ロバストネス
+rock ロック
+rocker ロッカー
+rocket ロケット
+rocking ロッキング
+rod ロッド
+rodeo ロデオ
+rogue ローグ
+role ロール
+roll ロール
+roller ローラー ローラ ロール
+rolling ローリング
+romance ロマンス ローマンス
+romantic ロマンチック ロマンティック
+roof ルーフ
+roofing ルーフィング
+rook ルーク
+rookie ルーキー
+room ルーム
+roommate ルームメイト ルームメート
+root ルート
+roots ルーツ
+rope ロープ ロップ
+rose ローズ
+rosemary ローズマリー
+roster ロースター ロスター
+rotary ロータリー
+rotation ローテーション
+rotisserie ロティサリー
+rotor ローター
+rotunda ロタンダ ロータンダ ロウタンダ ロトンダ
+rough ラフ
+round ラウンド
+roundabout ラウンドアバウト ラウンダバウト
+route ルート
+router ルーター ルータ
+routine ルーチン ルーティン ルーティーン
+routing ルーティング
+row ロー
+rowing ローイング
+royal ロイヤル ローヤル ロワイヤル ロワイアル
+royalty ロイヤリティ ロイヤルティ ロイヤリティー ロイヤルティー
+rubber ラバー
+ruby ルビー ルビ
+rudder ラダー
+rude ルード
+ruff ラフ
+ruffle ラッフル
+rug ラグ ラッグ
+rugby ラグビー
+rugged ラギッド
+rule ルール
+ruler ルーラー ルーラ
+rum ラム
+rummy ラミー
+rump ランプ
+run ラン
+runaway ランナウェイ ランナウエイ ランナウェー
+runner ランナー
+running ランニング
+runway ランウェイ ランウエイ ランウェー ランウエー
+rural ルーラル
+rush ラッシュ
+rust ラスト
+rustic ラスティック ラスチック
+rye ライ
+sacrament サクラメント
+sacrifice サクリファイス
+saddle サドル
+sadism サディズム
+sadist サディスト
+sadistic サディスティック
+safari サファリ
+safe セーフ
+safeguard セーフガード
+safety セーフティー セーフティ
+saga サガ サーガ
+sage セージ セイジ
+sailing セイリング セーリング
+sailor セーラー
+saint セント セイント
+salary サラリー
+sale セール
+salmon サーモン
+saloon サルーン
+salt ソルト
+salvage サルベージ
+sample サンプル
+sampler サンプラー サンプラ
+sampling サンプリング
+sanction サンクション
+sanctuary サンクチュアリ サンクチュアリー
+sand サンド
+sandal サンダル
+sandpaper サンドペーパー
+sandstone サンドストーン
+sandstorm サンドストーム
+sandwich サンドイッチ サンドウィッチ
+sanitary サニタリー
+sapphire サファイア サファイヤ
+sardine サーディン
+sari サリー
+sash サッシ サッシュ
+satellite サテライト
+satire サタイア
+satisfaction サティスファクション
+saturation サチュレーション
+sauce ソース
+saucepan ソースパン
+saucer ソーサー
+sausage ソーセージ
+save セーブ
+saving セービング
+savory セボリー セイボリー
+saw ソー
+saxophone サクソフォン サキソフォン サクソフォーン
+scalar スカラー スケーラー
+scale スケール
+scaling スケーリング
+scallop スカラップ
+scalp スカルプ
+scalping スキャルピング
+scan スキャン
+scandal スキャンダル
+scandalous スキャンダラス
+scanner スキャナー スキャナ
+scanning スキャニング
+scapegoat スケープゴート
+scapegoating スケープゴーティング
+scarecrow スケアクロー
+scarf スカーフ
+scarlet スカーレット
+scavenger スカベンジャー スカベンジャ スキャベンジャー スキャベンジャ
+scenario シナリオ
+scene シーン
+schedule スケジュール
+scheduler スケジューラ スケジューラー
+scheduling スケジューリング
+scheme スキーム
+scholarship スカラシップ スカラーシップ
+school スクール
+schoolboy スクールボーイ
+schooling スクーリング
+schooner スクーナー
+science サイエンス
+scientific サイエンティフィック
+scientist サイエンティスト
+scissors シザーズ
+scoop スクープ
+scooter スクーター
+scope スコープ
+scoping スコーピング
+score スコア
+scorer スコアラー スコアラ
+scoring スコアリング
+scorpion スコーピオン
+scout スカウト
+scouting スカウティング
+scram スクラム
+scramble スクランブル
+scrap スクラップ
+scrapbook スクラップブック
+scraping スクレイピング スクレーピング
+scratch スクラッチ
+screen スクリーン
+screening スクリーニング
+screw スクリュー
+screwdriver スクリュードライバー
+script スクリプト
+scroll スクロール
+scrolling スクローリング
+scrub スクラブ
+scruple スクループル
+sculpture スカルプチュア スカルプチャー
+sea シー
+seafood シーフード
+seal シール
+sealing シーリング
+seam シーム
+search サーチ
+searchlight サーチライト
+seaside シーサイド
+season シーズン
+seasonal シーズナル シーゾナル
+seasoning シーズニング
+seat シート
+secession セセッション
+second セカンド セコンド
+secondary セカンダリー セカンダリ
+secret シークレット
+secretary セクレタリー
+sect セクト
+section セクション
+sectioning セクショニング
+sector セクター セクタ
+secure セキュア
+security セキュリティ セキュリティー
+sedan セダン
+seed シード
+seeding シーディング
+seeds シーズ
+seeing シーイング
+seek シーク
+seesaw シーソー
+segment セグメント
+segmentation セグメンテーション
+selecting セレクティング
+selection セレクション
+selfish セルフィッシュ
+seller セラー
+selling セリング
+semantic セマンティック
+semantics セマンティクス セマンティックス
+semester セメスター
+semiconductor セミコンダクタ セミコンダクター
+seminar セミナー
+seminary セミナリー
+senator セネター
+send センド
+senior シニア
+seniority シニオリティー
+sensation センセーション
+sensational センセーショナル
+sensationalism センセーショナリズム
+sense センス
+sensibility センシビリティー
+sensible センシブル
+sensitive センシティブ
+sensor センサー センサ
+sensual センシュアル
+sentence センテンス
+sentiment センチメント
+sentimental センチメンタル センティメンタル
+separate セパレート セパレイト
+separates セパレーツ
+separation セパレーション
+separator セパレータ セパレーター
+sequence シーケンス シークエンス
+sequencing シークエンシング
+sequential シーケンシャル
+sergeant サージャント サージェント
+serial シリアル
+series シリーズ
+serious シリアス
+serum セラム
+servant サーバント サーヴァント
+serve サーブ
+server サーバー サーバ
+service サービス
+serviceman サービスマン
+session セッション
+set セット
+setback セットバック
+setter セッター
+setting セッティング
+seven セブン
+sevens セブンズ
+seventeen セブンティーン
+seventh セブンス
+severe シビア シビアー シビヤ シビヤー
+sewing ソーイング
+sex セックス
+sexism セクシズム
+sexist セクシスト
+sexual セクシャル セクシュアル
+sexuality セクシュアリティ セクシャリティ セクシャリティー セクシュアリティー
+sexy セクシー
+shabby シャビー
+shading シェーディング
+shadow シャドー シャドウ
+shadowing シャドーイング シャドウイング
+shaft シャフト
+shaggy シャギー
+shake シェイク シェーク
+shampoo シャンプー
+shamrock シャムロック
+shape シェイプ シェープ
+shaping シェーピング シェイピング
+share シェア
+shared シェアード
+sharing シェアリング
+shark シャーク
+sharp シャープ
+sharpness シャープネス
+shaver シェーバー シェイバー
+shaving シェービング
+shawl ショール
+shear シヤー シア
+shearing シャリング シャーリング
+sheath シース
+sheep シープ
+sheer シアー シア
+sheet シート
+shelf シェルフ
+shell シェル
+shelter シェルター
+shepherd シェパード
+sherbet シャーベット
+sheriff シェリフ
+sherry シェリー セリー
+shield シールド
+shift シフト
+shin シン
+shingle シングル
+shining シャイニング
+ship シップ
+shipping シッピング
+shire シャイア
+shock ショック
+shocking ショッキング
+shoes シューズ
+shoot シュート
+shooting シューティング
+shop ショップ
+shopper ショッパー
+shopping ショッピング
+shore ショア
+short ショート
+shortening ショートニング
+shorthand ショートハンド
+shorts ショーツ
+shot シュート ショット
+shotgun ショットガン
+shoulder ショルダー
+shovel シャベル ショベル
+show ショー
+showcase ショーケース
+showdown ショウダウン ショーダウン
+shower シャワー
+showman ショーマン
+shrimp シュリンプ
+shrink シュリンク
+shroud シュラウド
+shuffle シャッフル
+shuffling シャッフリング
+shunt シャント
+shut シャット
+shutdown シャットダウン
+shutter シャッター シャッタ シヤッター シヤッタ
+shuttle シャトル シャットル
+shy シャイ
+side サイド
+sideline サイドライン
+sidewalk サイドウォーク
+siding サイディング
+sign サイン
+signal シグナル
+signature シグネチャ シグネチャー シグニチャー シグニチャ
+silence サイレンス
+silent サイレント
+silicon シリコン
+silk シルク
+silo サイロ
+silt シルト
+silver シルバー
+simple シンプル
+simplicity シンプリシティー
+simplify シンプリファイ
+simulation シミュレーション
+simulator シミュレーター シミュレータ
+sincere シンシア
+sine サイン
+singer シンガー
+single シングル
+singles シングルズ
+singularity シンギュラリティ シンギュラリティー
+sink シンク
+sinking シンキング
+siphon サイフォン
+siren サイレン
+sister シスター
+site サイト
+sitter シッター
+situation シチュエーション
+six シックス
+sixteen シックスティーン
+sixth シックス
+sixty シックスティー シックスティ
+size サイズ
+sizing サイジング
+sizzle シズル
+skate スケート
+skateboard スケートボード
+skateboarding スケートボーディング
+skater スケーター
+skating スケーティング
+skeleton スケルトン
+skeptic スケプティック スケプチック
+skepticism スケプチシズム
+sketch スケッチ
+skew スキュー
+ski スキー
+skill スキル
+skillet スキレット
+skillful スキルフル
+skimming スキミング
+skin スキン
+skinny スキニー
+skip スキップ
+skipper スキッパー スキップ
+skirt スカート
+skit スキット
+skull スカル
+skunk スカンク スコンク
+sky スカイ
+skylight スカイライト
+skyline スカイライン
+skyscraper スカイスクレイパー スカイスクレーパー
+slab スラブ
+slack スラック
+slacker スラッカー
+slacks スラックス
+slag スラグ
+slam スラム
+slang スラング
+slant スラント
+slapstick スラップスティック
+slash スラッシュ
+slat スラット
+slate スレート
+slave スレーブ スレイブ スレーヴ スレイヴ
+sleek スレーキ スレキ
+sleep スリープ
+sleeper スリーパー
+sleeve スリーブ スリーヴ
+slender スレンダー
+slice スライス
+slicker スリッカー
+slide スライダー スライダ スライド
+sliding スライディング
+slim スリム
+slime スライム
+slimmer スリーマー
+sling スリング
+slingshot スリングショット
+slip スリップ
+slipper スリッパ
+slit スリット
+sliver スライバー
+slogan スローガン
+slop スロップ
+slope スロープ
+slot スロット
+slow スロー
+sludge スラッジ
+slug スラッグ
+slum スラム
+slump スランプ
+slur スラー
+slush スラッシュ
+slut スラット
+smack スマック
+small スモール
+smart スマート
+smash スマッシュ
+smashing スマッシング
+smear スミアー スメア スメアー
+smell スメル
+smile スマイル
+smock スモック
+smog スモッグ
+smoke スモーク
+smoker スモーカー
+smoking スモーキング
+smooth スムーズ
+smoothing スムージング
+snack スナック
+snake スネーク スネイク
+snap スナップ
+snapshot スナップショット
+snare スネア
+snatch スナッチ
+sneaker スニーカー
+sniper スナイパー
+snippet スニペット
+snob スノッブ スノブ
+snooker スヌーカー
+snooze スヌーズ
+snorkel スノーケル
+snorkeling シュノーケリング スノーケリング
+snow スノー スノウ
+snowflake スノーフレーク
+snowplow スノープラウ スノープロウ
+snuff スナッフ
+soaking ソーキング
+soap ソープ
+soaring ソアリング
+soccer サッカー
+social ソーシャル ソシアル ソシャル
+socialism ソーシャリズム ソシアリズム
+socialist ソーシャリスト ソシアリスト
+society ソサイエティ ソサエティ
+sociology ソシオロジー
+socket ソケット
+socks ソックス
+sodium ソディウム
+sodomy ソドミー
+sofa ソファ ソファー
+soft ソフト
+softball ソフトボール
+software ソフトウェア ソフトウエア
+soil ソイル
+solar ソーラー
+soldier ソルジャー
+sole ソール
+solicitor ソリシター
+solid ソリッド
+solidarity ソリダリティー
+solitaire ソリティア ソリテア
+soloist ソロイスト
+solution ソリューション
+somersault サマーソルト
+something サムシング
+son サン
+song ソング
+sonic ソニック
+sonnet ソネット
+sophistication ソフィスティケーション
+sorcerer ソーサラー
+sorcery ソーサリー
+sorry ソーリー
+sorting ソーティング
+soul ソウル ソール
+sound サウンド
+sounder サウンダー サウンダ
+sounding サウンディング
+soundtrack サウンドトラック
+soup スープ
+sour サワー
+source ソース
+sourcing ソーシング
+south サウス
+southern サザン
+southpaw サウスポー
+souvenir スーベニア
+spa スパ スパー
+space スペース
+spacecraft スペースクラフト
+spacing スペーシング
+span スパン
+spangle スパングル
+spaniel スパニエル
+spanking スパンキング
+spanner スパナ
+spanning スパニング
+spar スパー
+spare スペア
+spark スパーク
+sparkle スパークル
+sparkling スパークリング
+sparring スパーリング
+spasm スパズム
+spats スパッツ
+spattering スパッタリング
+spatula スパチュラ
+speak スピーク
+speaker スピーカー スピーカ
+speaking スピーキング
+spear スピア
+special スペシャル
+specialist スペシャリスト
+specific スペシフィック
+spectacle スペクタクル
+spectacular スペクタクル
+specter スペクター
+spectrum スペクトラム
+speculation スペキュレーション
+speculator スペキュレーター
+speech スピーチ
+speed スピード
+speedboat スピードボート
+speedometer スピードメーター スピードメータ
+speedy スピーディー スピーディ
+spelling スペリング
+spice スパイス
+spicy スパイシー
+spider スパイダー
+spike スパイク
+spin スピン
+spine スパイン
+spiral スパイラル
+spirit スピリット
+spirits スピリッツ
+spiritual スピリチュアル
+splash スプラッシュ
+splatter スプラッター スプラッタ
+splice スプライス
+splicing スプライシング
+splint スプリント
+split スプリット
+spoil スポイル
+spoke スポーク
+spokesman スポークスマン
+spokesperson スポークスパーソン
+spokeswoman スポークスウーマン
+sponge スポンジ
+sponsor スポンサー スポンサ
+sponsorship スポンサーシップ
+spool スプール
+spoon スプーン
+sports スポーツ
+sportsmanship スポーツマンシップ
+spot スポット スパット
+spotlight スポットライト
+sprawl スプロール
+spray スプレー
+spread スプレッド
+spreadsheet スプレッドシート
+spring スプリング
+springboard スプリングボード
+sprinkle スプリンクル
+sprinkler スプリンクラー
+sprint スプリント
+sprinter スプリンター
+sprout スプラウト
+spruce スプルース
+spun スパン
+spur スパー
+spurt スパート
+sputtering スパッタリング
+spy スパイ
+squad スカッド スコッド
+squall スコール
+square スクエア スコヤ
+squash スカッシュ
+squat スクワット
+squatter スクワッター スコッター
+squeeze スクイズ スクイーズ
+squid スクイッド
+stability スタビリティ スタビリティー
+stable ステーブル ステイブル
+stack スタック
+stacking スタッキング
+staff スタッフ
+stage ステージ
+stagnation スタグネーション
+stain ステイン
+stair ステア
+stakes ステークス
+stalemate ステイルメイト
+stalking ストーキング
+stall ストール
+stallion スタリオン
+stamina スタミナ
+stamp スタンプ
+stance スタンス
+stand スタンド
+standard スタンダード
+standing スタンディング
+standpoint スタンドポイント
+stanza スタンザ
+staple ステープル
+stapler ステープラー
+star スター
+starboard スターボード
+starch スターチ
+stardom スターダム
+starlight スターライト
+start スタート
+starter スターター
+starting スターティング
+state ステート ステイト
+statement ステートメント
+statesman ステーツマン
+statesmanship ステーツマンシップ
+static スタティック スタチック
+station ステーション
+stationery ステーショナリー
+statistics スタティスティックス
+statue スタチュー
+status ステータス ステイタス
+stay ステイ ステー
+steady ステディ ステディー
+steak ステーキ
+steal スチール スティール
+stealth ステルス
+steam スチーム
+steamroller スチームローラー
+steel スチール スティール
+steer ステア
+steering ステアリング
+stem ステム
+stencil ステンシル
+stenographer ステノグラファー
+step ステップ
+stepping ステッピング
+steps ステップス
+stereo ステレオ
+stereotype ステレオタイプ ステロタイプ
+sterling スターリング
+stew シチュー
+steward スチュワード
+stewardess スチュワーデス
+stick スティック ステッキ
+sticker ステッカー
+stigma スティグマ
+still スチール スチル
+sting スティング
+stinger スティンガー
+stirrup スターラップ
+stitch ステッチ スティッチ
+stock ストック
+stockbroker ストックブローカー
+stockholder ストックホルダー
+stockyard ストックヤード
+stokes ストークス
+stole ストール
+stomach ストマック
+stomp ストンプ
+stone ストーン
+stop ストップ
+stopover ストップオーバー
+stopper ストッパー
+stopwatch ストップウォッチ ストップウオッチ
+storage ストレージ
+store ストア ストアー
+storm ストーム
+story ストーリー ストーリ
+stout スタウト
+stove ストーブ
+straight ストレート ストレッチ
+strain ストレイン
+strand ストランド
+strangeness ストレンジネス
+stranger ストレンジャー
+strap ストラップ
+strategy ストラテジー
+straw ストロー
+strawberry ストロベリー
+streaking ストリーキング
+stream ストリーム
+streamer ストリーマー ストリーマ
+streaming ストリーミング
+streamline ストリームライン
+street ストリート
+streetcar ストリートカー
+strength ストレングス
+stress ストレス
+stretch ストレッチ
+stretcher ストレッチャー
+stretching ストレッチング
+stride ストライド
+strike ストライキ ストライク
+striker ストライカー
+string ストリング
+strip ストリップ
+stripe ストライプ
+stripper ストリッパー
+stroke ストローク
+strong ストロング
+structure ストラクチャ ストラクチャー
+struggle ストラグル ストラッグル
+stub スタブ
+stud スタッド
+student スチューデント
+study スタディー スタディ
+stuff スタッフ
+stuffing スタッフィング
+stump スタンプ
+stun スタン
+stunt スタント
+stunts スタンツ
+style スタイル
+styling スタイリング
+stylish スタイリッシュ
+stylus スタイラス
+sub サブ
+subgroup サブグループ
+subject サブジェクト
+sublet サブレット
+submarine サブマリン
+submission サブミッション
+subroutine サブルーチン
+subscriber サブスクライバー サブスクライバ
+subscription サブスクリプション
+subset サブセット
+substance サブスタンス
+substitute サブスティテュート サブスティチュート
+substitution サブスティテューション サブスティチューション
+subsystem サブシステム
+subway サブウェイ サブウェー サブウエー
+success サクセス
+suction サクション
+suffix サフィックス
+sugar シュガー
+suggestion サジェスチョン
+suicide スーサイド スイサイド シュイサイド
+suit スート
+suite スイート スウィート
+sulfur サルファ サルファー
+sum サム
+summarize サマライズ
+summary サマリー サマリ
+summer サマー
+summit サミット
+sunburn サンバーン
+sundae サンデー
+sunflower サンフラワー
+sunlight サンライト
+sunny サニー
+sunrise サンライズ
+sunscreen サンスクリーン
+sunset サンセット
+sunshine サンシャイン
+suntan サンタン
+super スーパー スーパ
+supercomputer スーパーコンピュータ スーパーコンピューター
+supermarket スーパーマーケット
+supersonic スーパーソニック
+superstar スーパースター
+supervision スーパービジョン
+supervisor スーパーバイザー スーパーバイザ スーパバイザ
+supper サパー
+supplement サプリメント
+supplier サプライヤー
+supply サプライ
+support サポート
+supporter サポーター サポータ
+supreme シュプリーム スプリーム シュープリーム
+surcharge サーチャージ
+sure シュア シュアー
+surf サーフ
+surface サーフェイス サーフェス サーフィス
+surfboard サーフボード
+surge サージ
+surgeon サージャン
+surgery サージェリー サージャリー
+surging サージング
+surplus サープラス
+surprise サプライズ
+surreal シュール
+surrender サレンダー
+surround サラウンド
+surveillance サーベイランス
+survey サーベイ
+surveyor サーベイヤー サベイヤー サーベーヤー サベーヤー
+survival サバイバル
+suspended サスペンデッド
+suspense サスペンス
+suspension サスペンション
+sustain サスティーン サスティン サステイン
+sustainable サステナブル サステイナブル サスティナブル サステーナブル
+swab スワブ
+swan スワン
+swapping スワッピング
+sway スウェー スエー
+swaying スウェーイング
+sweat スウェット スエット スェット
+sweater セーター
+sweep スイープ スウィープ
+sweeper スイーパー スウィーパー
+sweet スイート スウィート
+sweetheart スウィートハート スイートハート
+sweets スイーツ
+swell スウェル
+swim スイム
+swimming スイミング
+swing スイング スウィング
+swinging スインギング
+swipe スワイプ
+swirling スワリング
+switch スイッチ
+switcher スイッチャ スイッチャー
+switching スイッチング
+swivel スイバル スイベル
+sword ソード
+syllable シラブル
+syllabus シラバス
+symbol シンボル
+symbolic シンボリック
+symbolism シンボリズム
+symbolize シンボライズ
+sympathetic シンパセティック
+sympathy シンパシー
+synagogue シナゴーグ
+synchronization シンクロナイゼーション
+synchronized シンクロナイズド
+synchronous シンクロナス
+syndrome シンドローム
+synonym シノニム
+synopsis シノプシス
+syntax シンタックス シンタクス
+synthesis シンセシス
+synthesizer シンセサイザー シンセサイザ
+synthetic シンセティック
+syringe シリンジ
+syrup シラップ
+system システム
+systematic システマティック システマチック
+systems システムズ
+tab タブ
+tabby タビー
+table テーブル
+tablecloth テーブルクロス
+tablespoon テーブルスプーン
+tablet タブレット
+tabloid タブロイド
+taboo タブー
+tack タック
+tacking タッキング
+tackle タックル
+tact タクト
+tactic タクティック
+tactical タクティカル
+tactics タクティクス
+tag タグ タッグ
+tagging タギング
+tail テール テイル
+tailgate テールゲート
+tailor テーラー テイラー
+tailored テーラード
+take テイク テーク
+takeover テイクオーバー
+talc タルク
+talent タレント
+talisman タリスマン
+talk トーク
+tall トール
+tallow タロウ
+tally タリー
+tambourine タンバリン
+tamper タンパー
+tan タン
+tandem タンデム
+tangent タンジェント
+tangerine タンジェリン
+tangible タンジブル
+tango タンゴ
+tank タンク
+tanker タンカー
+tanner タンナー
+tap タップ
+tape テープ
+taper テーパー
+tapering テーパリング
+tapestry タペストリー タピストリー
+taping テーピング
+tapping タッピング
+tarantula タランチュラ
+target ターゲット
+targeting ターゲティング ターゲッティング
+tariff タリフ
+tart タート
+tartan タータン
+task タスク
+tassel タッセル
+taste テイスト
+tasting テイスティング ティスティング テースティング
+tattoo タトゥー
+tax タックス
+taxi タクシー
+taxiing タキシング
+taxpayer タックスペイヤー
+tea ティー ティ
+teacher ティーチャー ティーチャ
+teaching ティーチング
+teacup ティーカップ
+teak チーク
+team チーム
+teaming チーミング
+teammate チームメイト チームメート
+teamwork チームワーク
+teapot ティーポット
+tear ティア ティアー
+teaspoon ティースプーン
+technical テクニカル
+technician テクニシャン
+technique テクニック
+technologies テクノロジーズ
+technology テクノロジー テクノロジ
+tee ティー
+teenage ティーンエイジ ティーンエージ
+teenager ティーンエイジャー ティーンエージャー
+teens ティーンズ
+telegraph テレグラフ
+telepathy テレパシー
+telephone テレフォン
+telescope テレスコープ
+teletype テレタイプ
+television テレビジョン
+tell テル
+teller テラー
+temper テンパー
+temperament テンペラメント
+template テンプレート
+temple テンプル
+temporary テンポラリー テンポラリ
+ten テン
+tenant テナント
+tendency テンデンシー
+tender タンダー テンダー
+tennis テニス
+tenor テナー
+tense テンス
+tension テンション
+tent テント
+term ターム
+terminal ターミナル
+terminator ターミネータ ターミネイタ ターミネーター
+terminology ターミノロジー
+terrace テラス
+terrestrial テレストリアル
+terrible テリブル
+terrier テリア
+territory テリトリー
+terrorism テロリズム
+terrorist テロリスト
+test テスト
+testament テスタメント
+testing テスティング
+tetanus テタヌス
+tether テザー
+text テキスト テクスト
+textbook テキストブック
+textile テキスタイル テクスタイル
+texture テクスチャ テクスチャー
+textured テクスチャード
+the ザ ジ
+theater シアター
+theatrical シアトリカル
+theoretical セオレティカル セオレテイカル
+theorist セオリスト
+theory セオリー
+therapist セラピスト
+therapy セラピー
+thermal サーマル
+thermometer サーモメーター サーモメータ
+thermostat サーモスタット
+thesaurus シソーラス
+thief シーフ
+thimble シンブル
+thin シン
+think シンク
+thinking シンキング
+thinner シンナー
+third サード
+thirteen サーティーン
+thirteenth サーティーンス
+thirty サーティー サーティ
+thong ソング
+thoroughbred サラブレッド
+thousand サウザンド
+thread スレッド
+three スリー
+thresher スレッシャー
+thrill スリル
+thriller スリラー
+thrilling スリリング
+throat スロート
+throttle スロットル
+throughout スルーアウト
+throughput スループット
+throw スロー
+throwing スローイング
+thrust スラスト
+thumb サム
+thumbing サミング
+thunder サンダー
+tiara ティアラ
+tick チェック ティック
+ticket チケット ティケット
+tidal タイダル
+tide タイド
+tie タイ
+tied タイド
+tier ティア ティアー
+tiger タイガー
+tight タイト
+tightrope タイトロープ
+tights タイツ
+tilde チルダ ティルデ
+tile タイル
+tilt チルト ティルト
+time タイム
+timeless タイムレス
+timely タイムリー
+timer タイマー タイマ
+times タイムズ
+timetable タイムテーブル
+timing タイミング
+tint ティント
+tiny タイニー
+tip チップ ティップ
+tips ティップス チップス
+tire タイヤ
+tissue ティッシュ
+title タイトル
+toad トード
+toast トースト
+toaster トースター
+toboggan トボガン
+today トゥデー
+toddler トドラー
+toe トゥ トウ トー
+toffee トフィー タフィー
+toggle トグル
+toilet トイレット
+token トークン
+tolerance トレランス
+toll トール
+tomahawk トマホーク
+tomato トマト
+tomorrow トゥモロー
+tonal トーナル
+tone トーン
+tonic トニック
+tonight トゥナイト
+tooth トゥース ツース
+top トップ
+topaz トパーズ トッパーズ トパズ
+topic トピック
+topical トピカル
+topics トピックス
+topography トポグラフィー
+topology トポロジー トポロジ
+topping トッピング
+torch トーチ
+torrent トレント
+tortoise トータス
+torture トーチャー トーチャ
+toss トス
+total トータル
+totem トーテム
+touch タッチ
+touchdown タッチダウン
+tough タフ
+toughness タフネス
+tournament トーナメント
+towel タオル
+tower タワー
+town タウン
+toy トイ トーイ
+trace トレース
+tracing トレーシング
+track トラック
+tracking トラッキング
+tract トラクト
+traction トラクション
+tractor トラクター トラクタ
+trade トレード
+trademark トレードマーク
+trader トレーダー
+trading トレーディング
+tradition トラディション
+traditional トラディショナル
+traffic トラフィック
+tragedy トラジディー トラジェディー
+tragic トラジック
+trail トレイル トレール
+trailer トレーラー トレーラ トレイラー トレイラ
+train トレイン トレーン
+trainee トレーニー トレイニー
+trainer トレーナー
+training トレーニング
+trampoline トランポリン
+trance トランス
+tranquilizer トランキライザー
+transaction トランザクション トランズアクション
+transcription トランスクリプション
+transfer トランスファー
+transformation トランスフォーメーション
+transformer トランスフォーマー
+transient トランジェント
+transistor トランジスタ トランジスター
+transit トランジット
+transition トランジション
+translate トランスレート
+translation トランスレーション
+translator トランスレータ トランスレーター
+translucent トランスルーセント
+transmission トランスミッション
+transmitter トランスミッター
+transparency トランスペアレンシー
+transparent トランスペアレント
+transplant トランスプラント
+transport トランスポート
+transportation トランスポーテーション
+trap トラップ
+trapeze トラピーズ
+trapping トラッピング
+trash トラッシュ
+trauma トラウマ
+travel トラベル
+traveler トラベラー
+traveling トラベリング
+traverse トラバース
+tray トレー トレイ
+tread トレッド
+treadmill トレッドミル
+treasure トレジャー
+treasurer トレジャラー
+treatment トリートメント
+treble トレブル
+trekking トレッキング
+trellis トレリス
+trench トレンチ
+trend トレンド
+trendy トレンディー トレンディ
+trestle トレッスル
+trial トライアル
+triangle トライアングル
+tribal トライバル
+tribute トリビュート
+trick トリック
+trickle トリクル
+trickster トリックスター
+tricky トリッキー
+tricycle トライシクル トライサイクル
+trifle トライフル
+trigger トリガー トリガ
+trill トリル
+trillion トリリオン
+trim トリム
+trimmer トリマー トリマ
+trimming トリミング
+trip トリップ
+tripe トライプ
+triple トリプル
+triplet トリプレット
+tripod トライポッド トリポッド
+tripping トリッピング
+trivia トリビア
+trivial トリビアル
+troll トロール トロル
+trolley トロリー
+trolling トローリング
+trombone トロンボーン
+trooper トルーパー
+trophy トロフィー
+tropical トロピカル
+trot トロット
+trouble トラブル
+troublemaker トラブルメーカー
+trough トラフ
+trousers トラウザーズ
+truck トラック
+true トゥルー トルー
+trumpet トランペット
+trunk トランク
+trunks トランクス
+trust トラスト
+trustee トラスティ トラスティー
+truth トゥルース
+try トライ
+tryout トライアウト
+tub タブ
+tuba チューバ テューバ
+tube チューブ
+tubing チュービング
+tuck タック
+tuft タフト
+tulip チューリップ
+tumbler タンブラー
+tumbling タンブリング
+tune チューン
+tuned チューンド
+tuner チューナー チューナ
+tunic チュニック チューニック
+tuning チューニング
+tunnel トンネル
+tunneling トンネリング
+turban ターバン
+turbine タービン
+turbulence タービュランス
+turf ターフ
+turkey ターキー
+turn ターン
+turnaround ターンアラウンド
+turning ターニング
+turnip ターニップ
+turnover ターンオーバー
+turnpike ターンパイク
+turnstile ターンスタイル
+turntable ターンテーブル
+turquoise ターコイズ
+turret ターレット タレット
+turtle タートル
+turtleneck タートルネック
+tutor チューター テューター
+tutorial チュートリアル
+tuxedo タキシード
+twelve トゥエルブ
+twenty トゥエンティー
+twilight トワイライト
+twinkle トウインクル
+twist ツイスト
+twister ツイスター
+type タイプ
+typeface タイプフェース
+typewriter タイプライター タイプライタ
+typhoon タイフーン
+typical ティピカル
+typing タイピング
+typist タイピスト
+tyranny ティラニー
+tyrant タイラント
+ubiquitous ユビキタス ユービキタス
+ugliness アグリネス
+ultimate アルティメット
+ultra ウルトラ
+umbrella アンブレラ
+umpire アンパイア アンパイヤ
+unbelievable アンビリーバブル
+unbreakable アンブレイカブル
+uncle アンクル
+unconscious アンコンシャス
+uncut アンカット
+under アンダー
+undercover アンダーカバー
+undercut アンダーカット アンダカット
+underdog アンダードッグ
+underground アンダーグラウンド アンダーグランド
+underline アンダーライン
+underpass アンダーパス
+underscore アンダースコア
+undershirt アンダーシャート
+undertone アンダートーン
+underwear アンダーウェア アンダーウエア
+undo アンドゥ アンドゥー
+unfair アンフェア
+unhappy アンハッピー
+unicorn ユニコーン
+unicycle ユニサイクル
+unidentified アンアイデンティファイド
+unification ユニフィケーション
+uniform ユニフォーム
+uniformity ユニフォーミティー
+unify ユニファイ
+union ユニオン
+unique ユニーク
+unit ユニット
+united ユナイテッド
+unity ユニティー
+universal ユニバーサル
+universe ユニバース
+university ユニバーシティー
+unknown アンノウン アンノーン
+unlucky アンラッキー
+unpopular アンポピュラー
+unwrap アンラップ
+upbeat アップビート
+update アップデート
+upgrade アップグレード
+upload アップロード
+upon アポン
+upper アッパー
+upright アップライト
+upset アップセット
+upstream アップストリーム
+uptown アップタウン
+upturn アップターン
+urban アーバン
+urbane アーベイン
+urchin アーチン アーチャン
+urge アージ
+urgency アージェンシー アージャンシー
+urgent アージェント アージャント
+use ユース
+used ユーズド
+user ユーザー ユーザ
+users ユーザーズ
+usher アッシャー
+utility ユーティリティー ユーティリティ ユティリティー
+vacation バケーション
+vacuum バキューム
+vagabond バガボンド
+valid バリッド ヴァリッド
+valley バレー
+value バリュー
+valve バルブ ヴァルヴ
+vampire ヴァンパイア バンパイア
+van バン
+vandalism バンダリズム ヴァンダリズム
+vane ベーン
+vanguard ヴァンガード バンガード
+vanilla バニラ ヴァニラ
+vanity バニティー バニティ ヴァニティ ヴァニティー
+variable バリアブル ヴァリアブル
+variant バリアント ヴァリアント
+variation バリエーション ヴァリエーション
+variety バラエティ バラエティー
+varnish バニッシュ バーニッシュ
+vault ヴォールト ボールト
+vector ベクター ベクタ
+vegetable ベジタブル
+vegetarian ベジタリアン ヴェジタリアン
+vegetarianism ベジタリアニズム ヴェジタリアニズム
+vehicle ビークル ヴィークル ビヒクル
+veil ベール ヴェール
+velocity ベロシティ ベロシティー
+velvet ベルベット ヴェルヴェット
+vendor ベンダー ベンダ
+veneer ベニヤ ベニア
+vent ベント
+ventilator ベンチレーター
+venture ベンチャー ベンチャ ヴェンチャー
+veranda ベランダ
+verification ベリフィケーション
+verify ベリファイ
+vermin ヴァーミン
+vernacular ヴァナキュラー バナキュラー
+verse バース ヴァース
+version バージョン
+vertical バーチカル バーティカル
+vertigo バーティゴ
+very ベリー
+vest ベスト ヴェスト
+veteran ベテラン
+vial バイアル
+vibration バイブレーション ヴァイブレーション
+vice バイス ヴァイス
+victim ヴィクティム ビクティム
+victor ビクター ビクタ
+victory ビクトリー ヴィクトリー
+video ビデオ
+view ビュー
+viewer ビューアー ビューア ビューワー ビューワ ビュアー ビュワー ビュア
+viewing ビューイング
+viewpoint ビューポイント
+vigilance ヴィジランス ビジランス
+vigilant ヴィジラント ビジラント
+village ビレッジ ヴィレッジ
+villain ヴィラン
+vinegar ビネガー ヴィネガー
+vineyard ヴィンヤード
+vintage ヴィンテージ ビンテージ
+vinyl ビニール ビニル バイナル
+violation バイオレーション
+violence バイオレンス ヴァイオレンス
+violet バイオレット ヴァイオレット
+violin バイオリン ヴァイオリン
+viper バイパー
+viral バイラル
+virgin バージン ヴァージン
+virginity バージニティー バージニティ
+virtual バーチャル
+virtue バーチュー ヴァーチュー バーチュ ヴァーチュ
+virus バイラス ヴァイラス
+visa ビザ
+vise バイス
+visibility ビジビリティ ビジビリティー
+visible ビジブル
+vision ビジョン ヴィジョン
+visionary ビジョナリー
+visitor ビジター
+visor バイザー
+vista ビスタ
+visual ビジュアル ヴィジュアル
+visualize ビジュアライズ
+vital バイタル
+vitality バイタリティ バイタリティー
+vivid ビビッド ヴィヴィッド
+vocabulary ボキャブラリー
+vocal ボーカル ヴォーカル
+vocalist ボーカリスト ヴォーカリスト
+voice ボイス
+voicing ヴォイシング ボイシング
+void ボイド
+volcano ボルケーノ ヴォルケーノ
+volley ボレー
+volleyball バレーボール
+volt ボルト ヴォルト
+voltage ボルテージ
+volume ボリューム ベリューム
+voluntary ボランタリー ヴォランタリー
+volunteer ボランティア
+voodoo ブードゥー
+vortex ボーテックス
+voucher バウチャー
+voyager ボイジャー ボイエジャ
+vulnerability ヴァルネラビリティ バルネラビリティ バルネラビリティー
+waffle ワッフル
+wage ウェイジ
+wagon ワゴン
+waist ウェスト ウェイスト
+waistline ウェストライン
+wait ウェイト
+waiter ウェイター
+waiting ウェイティング ウェーティング
+waitress ウェイトレス
+waiver ウェーバー
+wake ウェーキ
+walk ウォーク
+walker ウォーカー
+walking ウォーキング
+wall ウォール
+wallet ウォレット ワレット ワーレット
+wallpaper ウォールペーパー
+walnut ウォールナット ウォルナット
+waltz ワルツ
+wand ワンド ウォンド
+wane ウェイン
+wanted ウォンテッド
+wants ウォンツ
+war ウォー
+warden ウォーデン ワーデン
+wardrobe ワードローブ
+warehouse ウェアハウス
+warm ウォーム
+warmer ウォーマー
+warming ウォーミング
+warning ワーニング ウォーニング
+warp ワープ
+warrant ワラント ウォラント ウォーラント
+warrior ウォリアー ウォーリア ウォーリアー
+wars ウォーズ
+wash ウォッシュ
+washable ウォッシャブル
+washer ワッシャー ウォッシャー ワッシャ
+waste ウェイスト
+watch ウォッチ ワッチ
+watchdog ウォッチドッグ
+watching ウォッチング
+watchman ウォッチマン
+water ウォーター ウォータ
+watercolor ウォーターカラー
+waterfall ウォーターフォール ウォータフォール
+waterfront ウォーターフロント
+watermark ウォーターマーク
+watermelon ウォーターメロン
+waterproof ウォータープルーフ
+watertight ウォータータイト
+watt ワット
+wave ウェーブ
+wax ワックス
+way ウェイ ウェー
+weak ウィーク
+weakening ウィークニング
+weapon ウェポン
+wear ウェア
+weasel ウィーゼル
+weather ウェザー ウェザ
+weaving ウィービング
+web ウェブ
+webbing ウェビング
+wedding ウェディング
+wedge ウェッジ
+weed ウィード
+week ウィーク
+weekday ウィークデー ウィークデイ
+weekend ウィークエンド
+weekly ウィークリー
+weight ウェイト ウェート
+welcome ウェルカム
+welfare ウェルフェア
+werewolf ウェアウルフ ワーウルフ
+west ウェスト
+wet ウェット
+whisker ウィスカー
+whiskey ウィスキー ウヰスキー ウィスキ
+whisper ウィスパー
+white ホワイト
+whitening ホワイトニング
+whole ホール
+wholesale ホールセール
+wholesaler ホールセラー
+why ホワイ
+wick ウィク
+wicket ウィッケット ウィケット
+wide ワイド
+widow ウィドー ウィドウ
+widower ウィドウア
+wife ワイフ
+wig ウィッグ
+wild ワイルド
+wildcat ワイルドキャット
+wildlife ワイルドライフ
+will ウィル
+win ウィン
+winch ウィンチ
+wind ウィンド
+winding ワインディング
+windmill ウィンドミル
+window ウィンドウ ウィンドー
+windshield ウィンドシールド
+wine ワイン
+wing ウィング
+wink ウィンク
+winning ウィニング
+winter ウィンター ウィンタ
+wipe ワイプ
+wiping ワイピング
+wire ワイヤ ワイヤー ワイア
+wired ワイヤード
+wiring ワイヤリング
+wise ワイズ
+wish ウィッシュ
+wit ウィット
+witch ウィッチ
+with ウィズ
+wizard ウィザード
+woke ウォーク
+wombat ウォンバット
+women ウィメン
+wonder ワンダー
+wonderful ワンダフル
+wonderland ワンダーランド
+word ワード
+wording ワーディング
+work ワーク
+workbench ワークベンチ
+workbook ワークブック
+worker ワーカー
+working ワーキング
+workload ワークロード
+workout ワークアウト
+works ワークス
+workshop ワークショップ
+workstation ワークステーション
+world ワールド
+worldwide ワールドワイド
+worm ウォーム ワーム
+wormhole ワームホール
+worship ワーシップ
+worst ワースト
+wow ワウ ワオ ワーオ ワオー
+wrapper ラッパー
+wrapping ラッピング
+wreath リース
+wrench レンチ
+wrestler レスラー
+wrestling レスリング
+wrist リスト
+wristwatch リストウォッチ リストウオッチ
+writer ライター
+writing ライティング
+xenophobia ゼノフォビア
+yacht ヨット
+yak ヤク
+yam ヤム
+yard ヤード
+yardstick ヤードスティック
+yarn ヤーン
+year イヤー
+yoke ヨーク
+you ユー
+young ヤング
+youngster ヤングスター ヤングスタ
+yourself ユアセルフ
+youth ユース
+zeal ジール ズィール
+zebra ゼブラ
+zigzag ジグザグ
+zinc ジンク
+zip ジッパー
+zipper ジッパー
+zodiac ゾーディアック ゾディアック ゾウディアック
+zombie ゾンビ
+zone ゾーン
+zoning ゾーニング
+zoo ズー
+zoological ゾゥァラジカル ゾウアラジカル
+zoology ズーオロジー ゾゥアラジィ ゾウオロジー
+zoom ズーム
+zooming ズーミング

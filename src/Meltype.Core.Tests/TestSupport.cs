@@ -10,6 +10,10 @@ internal static class TestSupport
 {
     public static Settings DefaultSettings() => new Settings().Normalize();
 
+    /// <summary>入力中の文字列の処理 (<see cref="Composition.CompositionText"/>) に渡すもの。判定器 detector と、偽の変換エンジン・設定 (無ければ既定)。</summary>
+    public static Composition.CompositionEnv Env(Detection.CompositionDetector detector, Settings? settings = null) =>
+        new(detector, new CompositionTests.FakeConverter(), new Composition.CompositionServices(), settings ?? new Settings()) { Context = () => Composition.TextContext.None, LiveCache = [] };
+
     public static ScoreEngine CreateEngine(Settings? settings = null)
     {
         settings ??= DefaultSettings();

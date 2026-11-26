@@ -15,7 +15,7 @@ internal sealed class ReleaseNotesDialog : Form
     private static ReleaseNotesDialog? _open;
 
     /// <summary>その版のリリースノートを出す (もう出ていれば前に出す)。updated なら「更新しました」と書く。</summary>
-    public static void ShowFor(string version, bool updated)
+    public static void ShowFor(string version, bool updated, MeltypeEngine engine)
     {
         try
         {
@@ -24,7 +24,19 @@ internal sealed class ReleaseNotesDialog : Form
                 _open.Activate();
                 return;
             }
-            _open = new ReleaseNotesDialog(version, updated, Bundled(version));
+            _open = new ReleaseNotesDialog(version, updated, Bundled(version), engine.Settings.ShowReleaseNotesAfterUpdate, showAfterUpdate =>
+            {
+                // チェックは画面の操作から直接呼ばれるので、設定の保存や反映で例外が出ても画面を壊さない
+                try
+                {
+                    if (engine.Settings.ShowReleaseNotesAfterUpdate == showAfterUpdate) return;
+                    engine.EditSettings(settings => settings.ShowReleaseNotesAfterUpdate = showAfterUpdate);
+                }
+                catch (Exception ex)
+                {
+                    Diagnostics.Log.Warn($"リリースノートの自動表示の設定を変えられませんでした: {ex.Message}");
+                }
+            });
             _open.Show();
         }
         catch (Exception ex)
@@ -33,7 +45,7 @@ internal sealed class ReleaseNotesDialog : Form
         }
     }
 
-    private ReleaseNotesDialog(string version, bool updated, string? notes)
+    internal ReleaseNotesDialog(string version, bool updated, string? notes, bool showAfterUpdate = true, Action<bool>? setShowAfterUpdate = null)
     {
         Text = $"Meltype {version} のリリースノート";
         StartPosition = FormStartPosition.CenterScreen;
@@ -50,17 +62,22 @@ internal sealed class ReleaseNotesDialog : Form
             Text = (updated ? $"Meltype を {version} に更新しました。" : $"Meltype {version} です。")
                 + (notes is null ? "\nこの版のリリースノートは、GitHub のリリースのページで見られます。" : "\n新しい機能・直した不具合など、この版で変わったことです。"),
         };
-        var text = new TextBox
+        var text = new RichTextBox
         {
             Dock = DockStyle.Fill,
-            Multiline = true,
             ReadOnly = true,
-            ScrollBars = ScrollBars.Vertical,
+            ScrollBars = RichTextBoxScrollBars.Vertical,
             BackColor = SystemColors.Window,
-            Text = (notes ?? "").ReplaceLineEndings("\r\n"),
+            DetectUrls = false,
         };
         var textPanel = new Panel { Dock = DockStyle.Fill, Padding = new Padding(10, 0, 10, 0), Visible = notes is not null };
         textPanel.Controls.Add(text);
+
+        // 次に更新したときから自動で出さない (設定の「更新後にリリースノートを表示する」と同じ)
+        var dontShow = new CheckBox { Text = "今後表示しない", AutoSize = true, Checked = !showAfterUpdate };
+        dontShow.CheckedChanged += (_, _) => setShowAfterUpdate?.Invoke(!dontShow.Checked);
+        var footer = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, Padding = new Padding(10, 0, 10, 0) };
+        footer.Controls.Add(dontShow);
 
         var close = new Button { Text = "閉じる", AutoSize = true, DialogResult = DialogResult.OK };
         close.Click += (_, _) => Close();
@@ -73,10 +90,50 @@ internal sealed class ReleaseNotesDialog : Form
 
         Controls.Add(textPanel);
         Controls.Add(intro);
+        Controls.Add(footer);
         Controls.Add(buttons);
         AcceptButton = close;
         CancelButton = close;
-        if (notes is null) Height = intro.PreferredHeight + buttons.PreferredSize.Height + LogicalToDeviceUnits(80);
+        // WinForms の TextBox は、選択範囲をコードで指定していないと最初のフォーカスで中身を全選択する (TextBox.OnGotFocus)。
+        // 本文は RichTextBox に替えたので全選択は起きないが、開いたときは「閉じる」にフォーカスを置く。
+        ActiveControl = close;
+        Shown += (_, _) =>
+        {
+            // 書式は RichTextBox のハンドルができてからでないと付かないので、表示するときに描く
+            if (notes is not null && text.TextLength == 0) Render(text, notes);
+            text.Select(0, 0);
+            close.Focus();
+        };
+        if (notes is null) Height = intro.PreferredHeight + footer.PreferredSize.Height + buttons.PreferredSize.Height + LogicalToDeviceUnits(60);
+    }
+
+    /// <summary>見出しは大きく太く、強調は太字、インラインコードは等幅で出す。リンクは文字だけ出す。</summary>
+    private static void Render(RichTextBox text, string markdown)
+    {
+        var baseFont = text.Font;
+        var first = true;
+        foreach (var line in Config.ReleaseNotesMarkdown.Parse(markdown))
+        {
+            if (!first) text.AppendText("\n");
+            first = false;
+            var heading = line.Kind == Config.ReleaseNotesMarkdown.LineKind.Heading;
+            var size = heading
+                ? line.HeadingLevel switch { 1 => 15F, 2 => 12F, 3 => 10.5F, _ => baseFont.Size }
+                : baseFont.Size;
+            if (line.Kind == Config.ReleaseNotesMarkdown.LineKind.Bullet)
+            {
+                text.SelectionFont = baseFont;
+                text.AppendText(new string(' ', line.Indent) + "・");
+            }
+            foreach (var span in line.Spans)
+            {
+                using var font = new Font(span.Code ? "Consolas" : baseFont.FontFamily.Name, size,
+                    span.Bold || heading ? FontStyle.Bold : FontStyle.Regular);
+                text.SelectionFont = font;
+                text.AppendText(span.Text);
+            }
+        }
+        text.Select(0, 0);
     }
 
     /// <summary>配布物に同梱したリリースノート (無い・読めなければ null)。</summary>

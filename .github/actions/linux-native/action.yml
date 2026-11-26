@@ -1,0 +1,36 @@
+# Linux の変換エンジン (Mozc の変換ヘルパーと Zenzai の llama-server) を、ランナーの CPU 向けにビルドして
+# native/mozc/bin/linux/・native/zenzai/bin/linux-<版>/ に置き、NativeAOT のリンクに使う sysroot を MELTYPE_SYSROOT に設定する。
+# linux.yml (IBus・fcitx5) と tui.yml (端末版) が使う。
+name: linux-native
+description: Build the Mozc helper and llama-server for Linux, and prepare the NativeAOT sysroot
+
+runs:
+  using: composite
+  steps:
+    # NATIVE_ASSET・NATIVE_MANYLINUX_IMAGE も設定する
+    - uses: ./.github/actions/linux-mozc
+    - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      id: llama-cache
+      with:
+        path: native/zenzai/bin
+        key: llama-server-manylinux_2_34-${{ env.NATIVE_ASSET }}-${{ hashFiles('native/zenzai/zenzai.env', 'native/zenzai/build-llama-server.sh') }}
+    # Zenzai の llama-server も、Mozc のヘルパーと同じ manylinux のコンテナでビルドする (llama.cpp の Ubuntu 向けのビルドは RHEL 9 系・Debian 12 で動かない)
+    - name: Build llama-server
+      if: steps.llama-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp/home -v "$PWD:/repo" -w /repo \
+          "$NATIVE_MANYLINUX_IMAGE" \
+          native/zenzai/build-llama-server.sh
+    # NativeAOT (本体・設定アプリ) は、同じ manylinux のコンテナの中身を sysroot にしてリンクする (MELTYPE_SYSROOT は src/Directory.Build.props が読む)。
+    # ランナーの glibc (Ubuntu 24.04 は 2.39) に対してリンクすると、RHEL 9 系で動かない (設定アプリが fmod@GLIBC_2.38 を要求した)。
+    # 展開するのは、リンクに要るヘッダー・ライブラリ・gcc-toolset の crt を含むフォルダーだけ (/opt/_internal の Python などは要らない)
+    - name: Sysroot
+      shell: bash
+      run: |
+        sysroot="$RUNNER_TEMP/manylinux-sysroot"
+        mkdir -p "$sysroot"
+        container="$(docker create "$NATIVE_MANYLINUX_IMAGE")"
+        docker export "$container" | tar -x -C "$sysroot" usr/include usr/lib usr/lib64 lib lib64 opt/rh
+        docker rm "$container" > /dev/null
+        echo "MELTYPE_SYSROOT=$sysroot" >> "$GITHUB_ENV"

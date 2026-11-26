@@ -24,8 +24,6 @@ for spec in "arm64-v8a:linux-bionic-arm64:aarch64-linux-android" "x86_64:linux-b
   IFS=: read -r ABI RID TRIPLE <<< "$spec"
   echo "Building $ABI ($RID) ..."
   # NativeAOT uses the NDK clang/LLVM linker. Match the app's minSdk 26.
-  # Root nuget.config clears package sources for offline desktop builds; the
-  # NativeAOT compiler/runtime packs must be restored from official NuGet.
   CC="$TOOLCHAIN/${TRIPLE}26-clang" \
   CXX="$TOOLCHAIN/${TRIPLE}26-clang++" \
   PATH="$TOOLCHAIN:$PATH" \
@@ -33,8 +31,7 @@ for spec in "arm64-v8a:linux-bionic-arm64:aarch64-linux-android" "x86_64:linux-b
     -c Release -r "$RID" \
     -p:PublishAot=true -p:NativeLib=Shared \
     -p:DisableUnsupportedError=true -p:PublishAotUsingRuntimePack=true \
-    -p:AndroidApiLevelMin=26 \
-    -p:RestoreSources=https://api.nuget.org/v3/index.json
+    -p:AndroidApiLevelMin=26
   OUTPUT_DIR="$ROOT/src/Meltype.Core.CApi/bin/Release/net10.0/$RID/publish"
   ls -lah "$OUTPUT_DIR"
   SOURCE="$(find "$OUTPUT_DIR" -maxdepth 1 -type f -name "*.so" -print -quit)"

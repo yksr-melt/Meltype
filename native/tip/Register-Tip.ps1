@@ -2,7 +2,7 @@
 # Copyright (C) 2026 lnkiai
 #
 # Meltype IME (TSF の DLL) を Windows に登録する / 登録を外す。管理者権限が要る (IME の登録は PC 全体の設定のため)。
-#   powershell -ExecutionPolicy Bypass -File Register-Tip.ps1 -Source <x64 と x86 のフォルダーがある所>
+#   powershell -ExecutionPolicy Bypass -File Register-Tip.ps1 -Source <x64・arm64・x86 のフォルダーがある所>
 #   powershell -ExecutionPolicy Bypass -File Register-Tip.ps1 -Unregister
 # DLL は C:\Program Files\Meltype\tip にコピーする (管理者として動くアプリにも読み込まれるので、ユーザーが書き換えられない場所に置く)。
 # 登録する DLL は stub (MeltypeTip.dll) で、stub が impl (impl\<SHA-256>\MeltypeTipImpl.dll) をロードする。
@@ -23,6 +23,10 @@ $target = Join-Path $programFiles 'Meltype\tip'
 $regsvr64 = Join-Path $windows 'System32\regsvr32.exe'
 if (-not [Environment]::Is64BitProcess -and [Environment]::Is64BitOperatingSystem) { $regsvr64 = Join-Path $windows 'Sysnative\regsvr32.exe' }
 $regsvr32 = Join-Path $windows 'SysWOW64\regsvr32.exe'
+# 64 ビットのアプリ用の DLL。ARM64 の Windows では、ARM64 と x64 のアプリのどちらにも読み込める ARM64X の DLL (arm64) を登録する。
+# ARM64 か x64 かは、Windows の設定 (HKLM) から読む (x64 のエミュレーションで動く PowerShell では、プロセスの環境変数が AMD64 になる)
+$nativeArch = [Microsoft.Win32.Registry]::GetValue('HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\Environment', 'PROCESSOR_ARCHITECTURE', '')
+$arch64 = if ($nativeArch -eq 'ARM64') { 'arm64' } else { 'x64' }
 
 function Write-Log([string]$message) {
     Write-Host $message
@@ -42,8 +46,18 @@ function Invoke-Regsvr([string]$exe, [string]$dll, [switch]$Remove) {
 
 $unregisterFailed = $false
 try {
-    foreach ($arch in 'x64', 'x86') {
-        $exe = if ($arch -eq 'x64') { $regsvr64 } else { $regsvr32 }
+    # 登録に要るファイルが揃っているかを、今の登録に触れる前に確かめる (途中で足りないと、前の登録を外したまま止まる)
+    if (-not $Unregister) {
+        foreach ($arch in $arch64, 'x86') {
+            foreach ($name in 'MeltypeTip.dll', 'MeltypeTipImpl.dll', 'MeltypeTipImpl.dll.sha256') {
+                if (-not (Test-Path -LiteralPath (Join-Path $Source "$arch\$name"))) { throw "$arch\$name がありません。" }
+            }
+        }
+    }
+    # 登録を外すときは、どちらの 64 ビットの DLL も外す (無い DLL は Invoke-Regsvr が飛ばす)
+    $architectures = if ($Unregister) { 'x64', 'arm64', 'x86' } else { $arch64, 'x86' }
+    foreach ($arch in $architectures) {
+        $exe = if ($arch -eq 'x86') { $regsvr32 } else { $regsvr64 }
         $dll = Join-Path $target "$arch\MeltypeTip.dll"
         if ($Unregister) {
             # 外せなくても (DLL が壊れているなど)、もう一方の DLL・レジストリ・ファイルは片付ける
@@ -98,6 +112,15 @@ try {
                 }
                 catch { Write-Log "前の DLL に戻せませんでした: $($_.Exception.Message)" }
             }
+            elseif ($arch -eq 'arm64' -and (Test-Path -LiteralPath (Join-Path $target 'x64\MeltypeTip.dll'))) {
+                # ARM64 の Windows に、前は x64 の DLL を登録していた (ARM64 に対応する前に手で登録したもの)。
+                # x64 と arm64 は 64 ビットの同じ登録を使うので、x64 の DLL を登録し直して前の状態に戻す
+                try {
+                    Invoke-Regsvr $exe (Join-Path $target 'x64\MeltypeTip.dll')
+                    Write-Log '前の x64 の DLL の登録に戻しました。'
+                }
+                catch { Write-Log "前の x64 の DLL の登録に戻せませんでした: $($_.Exception.Message)" }
+            }
             throw $registerError
         }
         [IO.File]::WriteAllText((Join-Path $folder 'MeltypeTipImpl.dll.sha256'), $implHash)
@@ -106,6 +129,13 @@ try {
         # 署名する前の中身のハッシュ (次の更新で、同じ DLL なら登録し直さないため)
         $hash = Join-Path $Source "$arch\MeltypeTip.dll.sha256"
         if (Test-Path -LiteralPath $hash) { Copy-Item -LiteralPath $hash -Destination "$dll.sha256" -Force }
+    }
+    if (-not $Unregister) {
+        # この Meltype IME を同梱した Meltype の版。別の版の Meltype の Meltype.exe が「ばーじょん」の候補に出す (無ければ前の版を残さない)
+        $version = Join-Path $Source 'version.txt'
+        $installedVersion = Join-Path $target 'version.txt'
+        if (Test-Path -LiteralPath $version) { Copy-Item -LiteralPath $version -Destination $installedVersion -Force }
+        else { Remove-Item -LiteralPath $installedVersion -Force -ErrorAction SilentlyContinue }
     }
     if ($Unregister) {
         # DLL が無くて regsvr32 で外せなかったときのために、登録をレジストリから直接消す (有っても消してよい。64 ビットと 32 ビットの両方の場所)

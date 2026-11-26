@@ -1,18 +1,19 @@
 # Meltype ホームページ
 
-Meltype の紹介用ウェブサイトと、「問題を報告する」フォーム・報告ダッシュボードです。Cloudflare Workerを使うなら動的サイトにしてもよかったのですが、雪代さんの返信を待っている間に静的で作り始めてしまったのでそのまま静的でいかせてもらいました。
+Meltype の紹介・使い方ガイド・タイピングと、「問題を報告する」フォーム・報告ダッシュボードです。静的ページと Cloudflare Workers・D1 を組み合わせています。
 
 ## テスト
 
 ```bash
+npm ci
 cp .dev.vars.example .dev.vars
-npm run dev
 npm test
+npm run dev
 ```
 
 → `http://localhost:8787`
 
-`npm test` は D1 の代わりに `node:sqlite` を使うので、Node 22.13 以降で動かしてください (CI は Node 24)。`.dev.vars.example` には手元用の値が入っています。TurnstilehaCloudflareのテスト用キーで、テスト用キーの hostname は `example.com` になるので `TURNSTILE_HOSTNAMES` は空にしてあります。`DASHBOARD_DEV_BYPASS=1` のときは、localhostからのダッシュボードだけアクセス確認を飛ばします。
+`npm test` は D1 の代わりに `node:sqlite` を使うので、Node 22.13 以降で動かしてください (CI は Node 24)。`.dev.vars.example` には手元用の値が入っています。Turnstile は Cloudflare のテスト用キーで、テスト用キーの hostname は `example.com` になるので `TURNSTILE_HOSTNAMES` は空にしてあります。`DASHBOARD_DEV_BYPASS=1` のときは、localhostからのダッシュボードだけアクセス確認を飛ばします。
 
 ## 使い方ガイド
 
@@ -22,7 +23,7 @@ npm test
 npm run guide
 ```
 
-`npm run dev`・`npm run deploy` も先に作り直します。ほかの文書へのリンクはガイドのページに、ガイドに無い文書・ソースへのリンクは GitHub に直します。
+`npm run dev`・`npm run deploy` も先に作り直します。ガイドの描画は Markdown の見出し・表・コードブロックに対応し、Mermaid の描画は組み込んでいません。使い方の比較は表で書き、Mermaid の構成図は開発文書で使います。ほかの文書へのリンクはガイドのページに、ガイドに無い文書・ソースへのリンクは GitHub に直します。
 
 ## 画像を作り直す
 
@@ -94,14 +95,12 @@ main に `web/` の変更が入ると、GitHub Actions (`.github/workflows/web.y
 
 トップページの Stars・ダウンロード数・リリースなど (`/api/github`) は、Workers KVの `CACHE` に入れて1時間使い回します。1時間を過ぎたら古いものを返しつつ裏で取り直し、KVの値そのものは1日 (`expirationTtl`) で消えます。GitHubが落ちていても 1日は古い値で表示でき、読めないときは数字の代わりに "-" で表示します。
 
-## Meltype のアプリから送信
+## URL で項目を埋める
 
 フォームはURLで項目を埋められます。`form` (bug / misdetection / dictionary / idea) か、GitHub のテンプレートの名前の `template` (1-bug.yml など) で種類を選び、他は項目の名前 (`os`・`version`・`environment`・`typed` など) で渡します。
 
-アプリの `ProjectInfo.ReportForm` に次の形で入れれば、今の置き換えの仕組み (`=Windows+11`・`=0.0.0`・`=ENV`) のまま使えます。
-
 ```text
-https://meltype.moe/report/?form=bug&os=Windows+11&version=0.0.0&environment=ENV
+https://meltype.moe/report/?form=bug&os=Windows+11&version=1.4.0
 ```
 
 ## Cloudflare Access

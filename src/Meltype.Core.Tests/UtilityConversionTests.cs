@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 aster-void
 
-using Meltype.Composition;
 using Meltype.Composition.Utility;
+using Meltype.Engine;
 using Meltype.Input;
+using Meltype.Learning;
 using static Meltype.Tests.CompositionTests;
 
 namespace Meltype.Tests;
@@ -13,18 +14,13 @@ internal static class UtilityConversionTests
     private static readonly DateTime Tuesday = new(2026, 11, 10, 20, 5, 0);
 
     /// <summary>決めた文節に区切る変換エンジン。</summary>
-    private sealed class SplitConverter(Dictionary<string, ConversionClause[]> clauses) : IKanjiConverter, ILearningConverter
+    private sealed class SplitConverter(Dictionary<string, ConversionClause[]> clauses) : TestConverter
     {
         private readonly FakeConverter _inner = new();
-        public List<string> Learned { get; } = [];
-        public string? Convert(string hiragana) => ConvertClauses(hiragana) is { } parts ? string.Concat(parts.Select(c => c.Text)) : _inner.Convert(hiragana);
-        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) =>
-            clauses.TryGetValue(hiragana, out var result) ? result : _inner.ConvertClauses(hiragana, context);
+        public override string? Convert(string hiragana, string? before) => ConvertClauses(hiragana, before) is { } parts ? string.Concat(parts.Select(c => c.Text)) : _inner.Convert(hiragana, before);
+        public override IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) =>
+            clauses.TryGetValue(hiragana, out var result) ? result : _inner.ConvertClauses(hiragana, before);
 
-        public void Learn(string? context, IReadOnlyList<ConversionClause> learned)
-        {
-            lock (Learned) Learned.Add(string.Join("|", learned.Select(c => $"{c.Reading}={c.Text}")));
-        }
     }
 
     /// <summary>変換して、候補の一覧を広げてから text を選んで確定する。</summary>
@@ -126,18 +122,6 @@ internal static class UtilityConversionTests
         Assert.Equal("火曜日", history.Get("かようび"), "読みに ようび がある 火曜日 は覚える");
     }
 
-    [Test]
-    public static void DigitsNotInTheReading_AreLeftToTheEngineToLearn()
-    {
-        // いちばん → 1番 は Meltype の変換履歴には覚えないが、Mozc には覚えさせる (Mozc は日時の候補を自分で学習しない)
-        var history = new ConversionHistory(null);
-        var converter = new SplitConverter([]);
-        var k = new Keyboard(converter: converter, history: history, moreCandidates: reading => reading == "いちばん" ? ["一番", "1番"] : []);
-        Choose(k, "itiban", "1番");
-        Assert.True(history.Get("いちばん") is null, "Meltype の変換履歴には覚えない");
-        for (var i = 0; i < 100 && converter.Learned.Count == 0; i++) Thread.Sleep(10);
-        lock (converter.Learned) Assert.Equal("いちばん=1番", converter.Learned.SingleOrDefault() ?? "(なし)");
-    }
 
     [Test]
     public static void KanjiNumbers_AreOfferedForDigitsOnly()
@@ -150,7 +134,10 @@ internal static class UtilityConversionTests
         Assert.True(candidates.Contains("二〇二六") && candidates.Contains("二千二十六") && candidates.Contains("弐千弐拾六"), string.Join(",", candidates));
         Choose(new Keyboard(history: history), "12345", "一万二千三百四十五");
         Assert.Equal("一万二千三百四十五", history.Get("12345"), "選んだ漢数字は覚える (issue #672)");
-        Assert.Equal("〇〇一", string.Join("|", KanjiNumberConversion.Candidates("001")), "先頭が 0 の数字は位取りしない");
+        Assert.Equal("〇〇一|(001)|（001）", string.Join("|", KanjiNumberConversion.Candidates("001")), "先頭が 0 の数字は位取りしない");
+        var numbered = new Keyboard();
+        numbered.Type("1 ");
+        Assert.True(numbered.Host.View!.Candidates.Contains("(1)") && numbered.Host.View!.Candidates.Contains("（1）"), "箇条書きの番号 (issue #2256)");
         Assert.Equal(0, KanjiNumberConversion.Candidates("12a").Count, "数字だけでなければ出さない");
         var sentence = new Keyboard();
         sentence.Type("2026nen ");
@@ -178,7 +165,7 @@ internal static class UtilityConversionTests
             Assert.Equal("京", history.Get("きょう"));
             Assert.Equal("火曜日", history.Get("かようび"), "読みに ようび がある語は残す");
             foreach (var (reading, text, kept) in new[] { ("じこう", "晩秋の候", false), ("くりっぷぼーど", "パスワード123", false), ("じこう", "時効", true), ("れいわ8ねん", "2026年", true), ("くりっぷぼーど", "クリップボード", true) })
-                Assert.Equal(!kept, CompositionLearning.IsStale(reading, text), $"{reading} → {text}");
+                Assert.Equal(!kept, StaleWords.IsStale(reading, text), $"{reading} → {text}");
             var phrases = Path.Combine(directory, "phrases.txt");
             File.WriteAllLines(phrases, ["きょうは\t2026/11/10は\t3\t0", "きょうは\t今日は\t3\t0", "きょうの\t今日の！\uFFFC他のメッセージオプション\t3\t0"]);
             Assert.Equal("今日は", string.Join(",", new PhraseHistory(phrases).StartingWith("きょ")), "予測変換の語句も捨てる");
@@ -240,7 +227,7 @@ internal static class UtilityConversionTests
         // よく使う語 (readings.txt) とカタカナ語は、どれも呼び名の並びにならない。なれば、普通の変換が漢字の候補に置き換わる
         foreach (var name in new[] { "readings.txt", "readings-extra.txt", "katakana.txt" })
         {
-            var words = Meltype.Detection.DictionarySource.DataLines(Meltype.Detection.DictionarySource.ReadEmbedded(name)).Select(l => l.Split('\t')[0]);
+            var words = Libraries.Lexicon.DictionarySource.DataLines(Libraries.Lexicon.DictionarySource.ReadEmbedded(name)).Select(l => l.Split('\t')[0]);
             Assert.Equal("", string.Join(",", words.Where(w => Kanji(w).Count > 0).Take(10)), name);
         }
     }
@@ -248,13 +235,41 @@ internal static class UtilityConversionTests
     private static List<string> Kanji(string reading) => KanjiPartsConversion.Find(reading);
 
     [Test]
-    public static void Issue1868_VersionShowsCommitAndFront()
+    public static void Issue1868_VersionShowsCommitFrontAndZenzai()
     {
-        // リリースは版だけ、タグの無い自己ビルドはコミット ID も付ける。どちらも OS とフロントを付ける
-        Assert.Equal("Meltype-1.5.1 (Windows / Meltype IME)", VersionConversion.Text("1.5.1", "Windows / Meltype IME"));
-        Assert.Equal("Meltype-1.5.1+abc1234 (Linux)", VersionConversion.Text("1.5.1+abc1234", "Linux"));
-        Assert.True(Predictor.IsVersionText(VersionConversion.Text("1.5.1+abc1234", "Linux")), "学習・予測には使わない");
-        var candidate = VersionConversion.Candidate(new Meltype.Config.Settings());
-        Assert.True(candidate.StartsWith($"Meltype-{Meltype.Config.ProjectInfo.WithCommit(Meltype.Config.ProjectInfo.CoreVersion)} (", StringComparison.Ordinal) && candidate.EndsWith(')'), candidate);
+        // リリースは版だけ、タグの無い自己ビルドはコミット ID も付ける。どれも OS とフロント・Zenzai の設定を付ける
+        Assert.Equal("Meltype-1.5.1 (Windows / Meltype IME、Zenzai: ON)", VersionConversion.Text("1.5.1", "Windows / Meltype IME", zenzai: true, otherTipVersion: null));
+        Assert.Equal("Meltype-1.5.1+abc1234 (Linux / fcitx5、Zenzai: OFF)", VersionConversion.Text("1.5.1+abc1234", "Linux / fcitx5", zenzai: false, otherTipVersion: null));
+        Assert.True(Predictor.IsVersionText(VersionConversion.Text("1.5.1+abc1234", "Linux", zenzai: true, otherTipVersion: null)), "学習・予測には使わない");
+        var k = new CompositionTests.Keyboard();
+        k.Settings.UseZenzai = false;
+        k.Type("ba-jonn ");
+        Assert.True(k.Host.View!.Candidates.Contains(k.VersionCandidate), string.Join(" ", k.Host.View.Candidates));
+        Assert.True(k.VersionCandidate.StartsWith($"Meltype-{Meltype.Config.ProjectInfo.WithCommit(Meltype.Config.ProjectInfo.CoreVersion)} (", StringComparison.Ordinal) &&
+            k.VersionCandidate.EndsWith("、Zenzai: OFF)", StringComparison.Ordinal), k.VersionCandidate);
+    }
+
+    [Test]
+    public static void Issue1868_VersionShowsOtherTipVersionOnlyWhenItDiffers()
+    {
+        // 登録済みの Meltype IME が別のビルドのときだけ、そのことと、その Meltype IME を同梱した Meltype の版を付ける
+        Assert.Equal("Meltype-1.6.0 (Windows / Meltype キーボード、Zenzai: ON、Meltype IME は別の版: 1.5.1)",
+            VersionConversion.Text("1.6.0", "Windows / Meltype キーボード", zenzai: true, otherTipVersion: "1.5.1"));
+        var stale = new CompositionTests.Keyboard { OtherTipVersion = "1.5.1+abc1234" };
+        stale.Type("ba-jonn ");
+        Assert.True(stale.Host.View!.Candidates.Any(c => c.EndsWith("、Meltype IME は別の版: 1.5.1+abc1234)", StringComparison.Ordinal)), string.Join(" ", stale.Host.View.Candidates));
+        var same = new CompositionTests.Keyboard();
+        same.Type("ba-jonn ");
+        Assert.True(!same.Host.View!.Candidates.Any(c => c.Contains("別の版", StringComparison.Ordinal)), "同じビルドなら付けない");
+    }
+
+    [Test]
+    public static void Issue1868_LinuxFrontFromCommandLine()
+    {
+        // Linux のフロントは、Core を読み込んだプロセスのコマンドラインで分かる
+        Assert.Equal("fcitx5", VersionConversion.LinuxFrontOf(["/usr/bin/fcitx5", "-d"]));
+        Assert.Equal("IBus", VersionConversion.LinuxFrontOf(["python3", "/opt/meltype/ibus-engine-meltype", "--ibus"]));
+        Assert.Equal("端末", VersionConversion.LinuxFrontOf(["/usr/bin/python3", "/home/u/Meltype-tty/meltype-tty"]));
+        Assert.Equal(null, VersionConversion.LinuxFrontOf(["python3", "src/Meltype.Core.CApi/tests/test-native-boundaries.py", "libMeltypeNative.so"]));
     }
 }

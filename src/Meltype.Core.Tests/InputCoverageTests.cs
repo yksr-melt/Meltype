@@ -3,7 +3,9 @@
 
 using Meltype.Composition;
 using Meltype.Config;
+using Meltype.Detection;
 using Meltype.Input;
+using Meltype.Notation;
 
 namespace Meltype.Tests;
 
@@ -12,8 +14,8 @@ internal static class InputCoverageTests
     [Test]
     public static void SpaceAroundEnglish_SeparatesEnglishFromJapanese()
     {
-        Assert.Equal("今日は google で検索", CompositionController.AddSpacesAroundEnglish("今日はgoogleで検索", null, null));
-        Assert.Equal("今日は google で検索", CompositionController.AddSpacesAroundEnglish("今日は google で検索", null, null));
+        Assert.Equal("今日は google で検索", EnglishSpacing.Spaced("今日はgoogleで検索", null, null));
+        Assert.Equal("今日は google で検索", EnglishSpacing.Spaced("今日は google で検索", null, null));
     }
 
     [Test]
@@ -65,7 +67,7 @@ internal static class InputCoverageTests
                 }
                 if (!result.Consumed) output += character;
             }
-            Assert.Equal(phrase, output);
+            Assert.Equal(phrase == "github" ? "GitHub" : phrase, output);
         }
     }
 }

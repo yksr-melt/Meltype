@@ -1,26 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 aster-void
 
+using Meltype.Composition.Utility;
 using Meltype.Detection;
+using Meltype.Dictionary;
+using Meltype.Learning;
 
 namespace Meltype.Composition;
 
 /// <summary>CompositionController が使う辞書・学習データと、設定でない外の入力。設定は <see cref="Config.Settings"/> を別に渡す。</summary>
-public sealed record CompositionServices
+internal sealed record CompositionServices
 {
-    /// <summary>英数 (直接入力) 状態か。</summary>
-    public Func<bool> DirectMode { get; init; } = () => false;
-
-    /// <summary>
-    /// 英数状態で打ち始めた文字がローマ字 (日本語) かを判定する。null なら英数状態では判定しない。
-    /// 引数は (打った英字, もう続きが無いか)。
-    /// </summary>
-    public Func<string, bool, Verdict>? ClassifyDirect { get; init; }
-
-    /// <summary>英数状態での判定結果を知らせる (true: 日本語だったので日本語入力に戻った / false: 英語だった)。</summary>
-    public Action<bool>? DirectDecided { get; init; }
-
-
     /// <summary>同音異義語などの補助候補。</summary>
     public CandidateDictionary? Candidates { get; init; }
 
@@ -31,10 +21,10 @@ public sealed record CompositionServices
     public ConversionHistory? History { get; init; }
 
     /// <summary>
-    /// 読みに対する変換候補の一覧 (Windows の変換候補 API)。時間がかかることがあるので、
+    /// 読みに対する変換エンジンの候補の一覧 (読み, 答えを待ってよい時刻 <see cref="Engine.ConversionRequest.Deadline"/>)。時間がかかることがあるので、
     /// 候補を切り替え始めたときだけ呼ぶ。null なら補助辞書の候補だけ。
     /// </summary>
-    public Func<string, IReadOnlyList<string>>? MoreCandidates { get; init; }
+    public Func<string, long, IReadOnlyList<string>>? MoreCandidates { get; init; }
 
     /// <summary>英訳の候補 (複雑な → complex)。null なら出さない。</summary>
     public TranslationDictionary? Translations { get; init; }
@@ -57,13 +47,7 @@ public sealed record CompositionServices
     /// <summary>ローマ字の打ち間違いを直すもの (onegaishimsu → お願いします)。null なら直さない。</summary>
     public RomajiTypoCorrector? RomajiTypos { get; init; }
 
-    public Func<GitHubIssueTitles?> GitHubTitles { get; init; } = () => null;
-
-    /// <summary>今の時刻 (UTC。タイムゾーンを指定した時計の候補に使う。テストでは差し替える)。</summary>
-    public Func<DateTime> UtcNow { get; init; } = () => DateTime.UtcNow;
-
-    /// <summary>この PC のタイムゾーン (時計の候補にタイムゾーンの名前を付けるかの判定に使う。テストでは差し替える)。</summary>
-    public Func<TimeZoneInfo> LocalTimeZone { get; init; } = () => TimeZoneInfo.Local;
+    internal Func<GitHubIssueTitles?> GitHubTitles { get; init; } = () => null;
 
     /// <summary>ユーザーが英字 / かなに直した語の学習。</summary>
     public LanguageMemory? Languages { get; init; }

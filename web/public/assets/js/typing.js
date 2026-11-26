@@ -3,10 +3,10 @@
 
 // タイピング (/typing/)。誰でも遊べ、打った記録は調査に同意した人だけが送る。
 // 決まり: 同意するまでは打鍵をどこにも送らない (打った記録はこのページのメモリーにだけ置く)。
-// 決まり: 送るのは打鍵だけ。画面に出す打った文字も、打鍵から組み立てる (typing-check.js の replay)。
+// 決まり: 送るのは打鍵だけ。画面に出す打った文字も、打鍵から組み立てる (typing-check.js の replay。Backspace は Meltype と同じく日本語なら 1 音消す)。
 import { detectOs, escapeHtml, getJson, icon, initHeader } from "./common.js";
-import { align, toKana, toRomaji } from "./romaji.js";
-import { compare, replay, suspicious } from "./typing-check.js";
+import { align, toRomaji } from "./romaji.js";
+import { TYPING_VERSION, compare, previewKana, replay, suspicious } from "./typing-check.js";
 import { CONSENT_VERSION } from "./typing-consent.js";
 import { KINDS, SENTENCES } from "./typing-sentences.js";
 
@@ -75,7 +75,6 @@ function nextRound() {
 
 // 同意した参加は、同意文が変わるまで使い続ける (同じ人の打ち方をまとめて見られるように)
 const sessionAlive = () => Boolean(saved.session && saved.session.consent === CONSENT_VERSION);
-// 英語が混ざった文は、英語の部分をかなにすると読めないので、打った文字をそのまま見せる
 const hasEnglish = (sentence) => /[a-z]/.test(sentence.reading);
 
 // ---- 1. はじめる ----
@@ -112,18 +111,19 @@ function loadSentence() {
   state.trial = newTrial();
   $("count").textContent = String(state.index + 1);
   $("text").textContent = sentence.text;
-  $("reading").textContent = hasEnglish(sentence) ? toRomaji(sentence.reading) : sentence.reading;
+  $("reading").textContent = sentence.reading;
+  $("reading-romaji").textContent = toRomaji(sentence.reading);
   $("ime-note").hidden = true;
   render();
 }
 
 function render() {
-  const typed = replay(state.trial.keys);
-  const english = hasEnglish(state.queue[state.index]);
-  const { kana, pending } = english ? { kana: typed, pending: "" } : toKana(typed);
+  const sentence = state.queue[state.index];
+  const typed = replay(state.trial.keys, sentence.reading);
+  const { kana, pending } = previewKana(typed, sentence.reading);
   $("kana").textContent = kana;
   $("pending").textContent = pending;
-  $("romaji").textContent = english ? "" : typed.toLowerCase();
+  $("romaji").textContent = typed.toLowerCase();
 }
 
 // 時刻は performance.now() で測る。event.timeStamp は、ブラウザーや設定 (指紋対策など) によって 0 や粗い値になり、打鍵の間隔が取れないため
@@ -183,7 +183,7 @@ board.addEventListener("blur", () => ($("focus-hint").hidden = false));
 function finishSentence() {
   const trial = state.trial;
   const sentence = state.queue[state.index];
-  if (trial.ime || !replay(trial.keys)) return;
+  if (trial.ime || !replay(trial.keys, sentence.reading)) return;
   const duration = Math.max(1, Math.round(performance.now() - trial.startedAt));
   state.round.push({ sentence, keys: trial.keys, duration });
   saved.done = [...new Set([...saved.done, sentence.id])];
@@ -211,7 +211,7 @@ function showScores() {
   let backspaces = 0;
   const misses = new Map();
   for (const entry of state.round) {
-    const typed = replay(entry.keys);
+    const typed = replay(entry.keys, entry.sentence.reading);
     const ops = compare(entry.sentence.reading, typed);
     chars += ops.filter((op) => op.want).length;
     wrong += ops.filter((op) => op.op !== "same").length;
@@ -347,10 +347,10 @@ async function sendRound() {
   setStatus("info", "送っています");
   let sent = 0;
   // お手本と関係ない入力が続いた文は送らない (サーバーも同じ判定で受け付けない)
-  const sendable = round.filter((entry) => !suspicious(entry.sentence.reading, replay(entry.keys)));
+  const sendable = round.filter((entry) => !suspicious(entry.sentence.reading, replay(entry.keys, entry.sentence.reading)));
   const skipped = round.length - sendable.length;
   for (const entry of sendable) {
-    const body = JSON.stringify({ sentence: entry.sentence.id, keys: entry.keys, duration: entry.duration });
+    const body = JSON.stringify({ sentence: entry.sentence.id, keys: entry.keys, duration: entry.duration, version: TYPING_VERSION });
     try {
       await getJson("/api/typing/trials", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${token}` }, body });
       sent += 1;

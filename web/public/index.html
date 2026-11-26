@@ -57,6 +57,18 @@
   </header>
 
   <main id="main">
+    <!-- 5 万ダウンロードの記念の帯。2027 年 1 月に消す (今の合計はヒーローの data-stat="downloads" に出ている) -->
+    <aside class="milestone" aria-label="5 万ダウンロード記念">
+      <div class="wrap milestone-inner">
+        <svg class="milestone-spark" aria-hidden="true"><use href="/assets/img/icons.svg#i-sparkle"/></svg>
+        <p class="milestone-text">
+          <span class="milestone-number">50,000</span>
+          <span class="milestone-label">ダウンロード突破！</span>
+          <span class="milestone-thanks">みなさん、ありがとうございます</span>
+        </p>
+        <svg class="milestone-spark" aria-hidden="true"><use href="/assets/img/icons.svg#i-sparkle"/></svg>
+      </div>
+    </aside>
     <section class="hero" aria-labelledby="hero-title">
       <canvas class="snow" aria-hidden="true" data-snow></canvas>
       <div class="wrap hero-inner">
@@ -161,8 +173,8 @@
               <p><kbd>F10</kbd> で英字に、<kbd>F6</kbd> でかなに直した語は、次からはその形で出ます。覚えた語はトレイの「学習した語...」で消せます。</p>
             </article>
             <article class="feat">
-              <h4>判定の強さを選べる</h4>
-              <p>積極的・標準・慎重・手動の 4 段階。手動では大文字始まりの語だけを英字にして、ほかは「Tab で英字に」と提案します。</p>
+              <h4>自動判定を止められる</h4>
+              <p>「英語 / 日本語を自動で判定する」を OFF にすると、大文字始まりの語だけを英字にして、ほかは「Tab で英字に」と提案します。主に英語を打つなら「英字を主に入力」で、日本語にしたい語だけ <kbd>変換</kbd> か <kbd>↓</kbd> で変換します。</p>
             </article>
           </div>
         </div>
@@ -170,13 +182,17 @@
         <div class="feature-group" id="f-convert">
           <div class="group-head">
             <h3>変換</h3>
-            <p>Windows では Mozc (Google 日本語入力のオープンソース版) と Microsoft IME の両方で変換し、候補に並べます。</p>
+            <p>同梱の Mozc (Google 日本語入力のオープンソース版) と、ニューラルかな漢字変換の Zenzai で変換します。</p>
           </div>
           <div class="feat-grid">
             <article class="feat">
               <h4>文脈に合わせたリアルタイム変換</h4>
-              <p>4 文字以上は <kbd>Space</kbd> を押さなくても打つそばから漢字に。前後の語や、前に選び直した変換も手がかりにします。</p>
+              <p>2 文字以上のかなは <kbd>Space</kbd> を押さなくても打つそばから漢字に。前後の語や、前に選び直した変換も手がかりにします。</p>
               <p class="ex"><span>この本は + あつい</span><span>厚い</span></p>
+            </article>
+            <article class="feat">
+              <h4>Zenzai</h4>
+              <p>キャレットの前の文を文脈にして、同梱の zenz モデルでかな漢字変換します。計算はこの PC の CPU で行い、設定の「Zenzai を使う」で OFF にできます。</p>
             </article>
             <article class="feat">
               <h4>予測変換</h4>
@@ -285,15 +301,15 @@
           <div class="feat-grid">
             <article class="feat">
               <h4>打った文字は送らない</h4>
-              <p>判定も変換も PC の中で完結します。通信するのは自動更新の確認と、自分で開いた報告のフォームだけです。設定・学習データ・辞書は <code>%LOCALAPPDATA%\Meltype</code> に保存します。</p>
+              <p>判定も変換も PC の中で完結します。通信するのは自動更新の確認と、自分で開いた報告のフォーム、<code>#123</code> を変換したときの GitHub の Issue のタイトルの取得 (リポジトリを設定したときだけ。番号だけを送ります) です。設定・学習データ・辞書は <code>%LOCALAPPDATA%\Meltype</code> に保存します。</p>
             </article>
             <article class="feat">
               <h4>入力しない場所</h4>
-              <p>パスワード欄・サインインや UAC の画面・管理者として動くアプリ・シークレットウィンドウでは何もしません。</p>
+              <p>パスワード欄・サインインや UAC の画面・管理者として動くアプリでは何もしません。ブラウザーのシークレットウィンドウでは、変換はできて、打った語は学習しません。</p>
             </article>
             <article class="feat">
               <h4>自動更新</h4>
-              <p>新しい版は自動で入ります。直したことのある語の表記が変わるときは、入れる前に一覧で見せます。</p>
+              <p>新しい版は自動で入ります。更新したあとの初めての起動で、その版のリリースノートを見せます。</p>
             </article>
             <article class="feat">
               <h4>学習データは自分で消せる</h4>
@@ -322,7 +338,7 @@
           </button>
           <button class="os-tab card" role="tab" id="tab-mac" aria-controls="panel-mac" aria-selected="false" tabindex="-1" data-os="mac">
             <svg class="ic"><use href="/assets/img/icons.svg#i-laptop"/></svg>
-            <span><b>Mac</b><small>macOS 13 以降・プレビュー版</small></span>
+            <span><b>Mac</b><small>macOS 13.3 以降・プレビュー版</small></span>
           </button>
           <button class="os-tab card" role="tab" id="tab-linux" aria-controls="panel-linux" aria-selected="false" tabindex="-1" data-os="linux">
             <svg class="ic"><use href="/assets/img/icons.svg#i-terminal"/></svg>
@@ -344,7 +360,7 @@
             <summary>インストールせずに使う (ポータブル版)</summary>
             <div class="fold-body">
               <p><a href="https://github.com/yksr-melt/Meltype/releases/latest" data-asset-link="windows-portable.zip"><code>Meltype-&lt;version&gt;-windows-portable.zip</code></a> をフォルダーごと展開して <code>Meltype.exe</code> を実行します。設定と学習データは <code>Meltype.exe</code> の隣の <code>data</code> に入ります。Meltype IME・自動起動・自動更新は使えず、Meltype キーボードで動きます。</p>
-              <p>必要なのは Windows 10 / 11 (64bit) と Microsoft IME だけで、.NET は同梱しています。</p>
+              <p>必要なのは Windows 10 / 11 (64bit。ARM64 は Windows 11) だけで、.NET は同梱しています。</p>
             </div>
           </details>
           <details class="fold">
@@ -364,7 +380,7 @@
           <details class="fold">
             <summary>アンインストール</summary>
             <div class="fold-body">
-              <p>トレイのアイコンを右クリックして「アンインストール...」を選ぶか、Windows の「設定」→「アプリ」から消せます。最後に設定と学習データも消すかを聞かれます。</p>
+              <p>トレイのアイコンを右クリックして「アンインストール...」を選ぶか、Windows の「設定」→「アプリ」から消せます。最後に Meltype のデータ (設定・学習データ・ユーザー辞書・打鍵数など) もすべて消すかを聞かれます。</p>
             </div>
           </details>
           <p class="more-link"><a href="https://github.com/yksr-melt/Meltype/blob/main/docs/WINDOWS.md">Windows 版の詳しい説明<svg class="ic"><use href="/assets/img/icons.svg#i-external"/></svg></a></p>
@@ -381,6 +397,13 @@
             <p class="callout is-warn"><svg class="ic"><use href="/assets/img/icons.svg#i-alert"/></svg><span>「開発元が未確認のため開けません」と出たら、右クリック (control + クリック) →「開く」。macOS 15 以降は、システム設定 → プライバシーとセキュリティ の「このまま開く」を押してください。</span></p>
             <p class="callout is-info"><svg class="ic"><use href="/assets/img/icons.svg#i-info"/></svg><span>配布している zip は Apple シリコンの Mac 用です。Intel の Mac ではソースからビルドしてください。</span></p>
           </div>
+          <details class="fold">
+            <summary>Homebrew で入れる</summary>
+            <div class="fold-body">
+              <p>tap を追加してからインストールします。以後は <code>brew upgrade --cask meltype</code> で更新できます。</p>
+              <div class="codebox"><code>brew tap yksr-melt/Meltype https://github.com/yksr-melt/Meltype.git &amp;&amp; brew install --cask yksr-melt/Meltype/meltype</code><button class="copy" type="button" data-copy="brew tap yksr-melt/Meltype https://github.com/yksr-melt/Meltype.git &amp;&amp; brew install --cask yksr-melt/Meltype/meltype"><svg class="ic"><use href="/assets/img/icons.svg#i-copy"/></svg><span class="sr-only">コピー</span></button></div>
+            </div>
+          </details>
           <p class="more-link"><a href="https://github.com/yksr-melt/Meltype/blob/main/docs/MACOS.md">Mac 版の詳しい説明<svg class="ic"><use href="/assets/img/icons.svg#i-external"/></svg></a></p>
         </div>
 
@@ -390,6 +413,9 @@
             <li><b>インストール</b><span><a href="https://github.com/yksr-melt/Meltype/blob/main/docs/LINUX.md#インストール">Linux 版の説明の「インストール」</a>から、使っているディストリビューションの手順を端末で実行します</span></li>
             <li><b>入力ソースを追加</b><span>ログインし直してから、IBus は「設定」→「キーボード」→「入力ソース」で Meltype を追加し、fcitx5 は <code>fcitx5-configtool</code> で追加します</span></li>
           </ol>
+          <div class="callouts">
+            <p class="callout is-info"><svg class="ic"><use href="/assets/img/icons.svg#i-info"/></svg><span>GUI の無いコンソールでは、端末版の <code>meltype-tty</code> を使います。入れ方は <a href="https://github.com/yksr-melt/Meltype/blob/main/docs/TTY.md">TTY.md</a> にあります。</span></p>
+          </div>
           <p class="more-link"><a href="https://github.com/yksr-melt/Meltype/blob/main/docs/LINUX.md">Linux 版の詳しい説明<svg class="ic"><use href="/assets/img/icons.svg#i-external"/></svg></a></p>
         </div>
       </div>
@@ -407,16 +433,16 @@
             </div>
             <div class="mini-card">
               <h3>Meltype キーボード</h3>
-              <p>IME を登録しなかったときや ARM64 の Windows では、カーソルの下の変換ボックスで入力します。</p>
+              <p>IME を登録しなかったときやポータブル版では、カーソルの下の変換ボックスで入力します。</p>
             </div>
             <p class="small">2 つのモードはトレイのアイコンを右クリックして切り替えられます。よく使う言葉は「ユーザー辞書...」から登録できます。</p>
           </div>
           <dl class="keys">
             <div><dt><kbd>Enter</kbd></dt><dd>確定</dd></div>
-            <div><dt><kbd>Space</kbd></dt><dd>変換して候補を選ぶ (4 文字以上は、押さなくても打つそばから漢字になります)</dd></div>
+            <div><dt><kbd>Space</kbd></dt><dd>変換して候補を選ぶ (2 文字以上のかなは、押さなくても打つそばから漢字になります)。英単語で終わっているときは <kbd>Shift</kbd>+<kbd>Space</kbd></dd></div>
             <div><dt><kbd>F7</kbd> <kbd>F10</kbd></dt><dd>カタカナ / 英字。<kbd>F10</kbd> で英字に直した語は次から英字で出ます</dd></div>
             <div><dt><kbd>Tab</kbd></dt><dd>予測変換の候補を選ぶ。「もしかして」が出たときは正しい読みに直す</dd></div>
-            <div><dt><kbd>半角/全角</kbd></dt><dd>英数と日本語の切り替え</dd></div>
+            <div><dt><kbd>半角/全角</kbd></dt><dd>英数と日本語の切り替え。打っている途中なら、その語を日本語 ⇔ 英字に直します</dd></div>
             <div><dt><kbd>Ctrl</kbd>+<kbd>半角/全角</kbd></dt><dd>Meltype を一時停止</dd></div>
           </dl>
         </div>
@@ -454,7 +480,7 @@
           <details class="fold">
             <summary>英語のつもりがかなに、かなのつもりが英字になった</summary>
             <div class="fold-body">
-              <p><kbd>F10</kbd> (英字) か <kbd>F6</kbd> (ひらがな) で直して確定すれば、次からはその形で出ます。</p>
+              <p>打っている途中に <kbd>半角/全角</kbd> を押すか、<kbd>F10</kbd> (英字) / <kbd>F6</kbd> (ひらがな) で直して確定すれば、次からはその形で出ます。</p>
               <p>自動で英字にしてほしくないときは、トレイのメニューの「英語 / 日本語を自動で判定する」を OFF にすると、Shift で打った大文字始まりの語だけ英字になります。</p>
             </div>
           </details>
@@ -589,7 +615,7 @@ Copyright (C) 2026 雪代 / Yukishiro (@yksr_melt / @yksr-melt)
 This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.</pre>
-            <p>ソースファイルには <code>SPDX-License-Identifier: GPL-3.0-or-later</code> を付けています。同梱している .NET ランタイム (MIT) と、使っている Windows の機能については <a href="https://github.com/yksr-melt/Meltype/blob/main/THIRD-PARTY-NOTICES.md">THIRD-PARTY-NOTICES.md</a> を見てください。</p>
+            <p>ソースファイルには <code>SPDX-License-Identifier: GPL-3.0-or-later</code> を付けています。同梱している .NET ランタイム・Mozc・llama.cpp・zenz-v3.2-small のライセンスと、使っている Windows の機能については <a href="https://github.com/yksr-melt/Meltype/blob/main/THIRD-PARTY-NOTICES.md">THIRD-PARTY-NOTICES.md</a> を見てください。</p>
             <p>ロゴは <a href="https://github.com/Crysta1221">@Crysta1221</a> さんに描いていただきました。</p>
           </div>
         </details>

@@ -111,13 +111,15 @@
   (fake-tool work "uname" "echo Darwin")
   (fake-tool work "start-input-method.sh"
              "echo UNEXPECTED_START >> \"$MELTYPE_TEST_LOG\"; exit 99")
-  (fake-tool work "swift" "echo select >> \"$MELTYPE_TEST_LOG\"")
+  (fake-tool work "Meltype.app/Contents/MacOS/MeltypeInstallSupport"
+             "echo \"select:$*\" >> \"$MELTYPE_TEST_LOG\"")
   (fake-tool work "open" "echo UNEXPECTED_OPEN >> \"$MELTYPE_TEST_LOG\"; exit 1")
   (run-script work "update.sh" nil)
   (let ((lines (uiop:read-file-lines (merge-pathnames "calls" work))))
     (assert (equal "build:--test --install" (first lines)))
     (assert (uiop:string-prefix-p "app:--check-inputs " (second lines)))
-    (assert (member "select" lines :test #'equal))
+    (assert (equal (format nil "select:--select ~A" (namestring (merge-pathnames "Meltype.app" work)))
+                   (third lines)))
     (assert (not (member "UNEXPECTED_START" lines :test #'equal)))
     (assert (not (member "UNEXPECTED_OPEN" lines :test #'equal)))))
 
@@ -193,9 +195,11 @@
 (defun copy-install-script (work)
   (write-file (merge-pathnames "install-app.sh" work)
               (replace-text
-               (uiop:read-file-string (merge-pathnames "mac/install-app.sh" *root*))
-               "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
-               "lsregister"))
+               (replace-text
+                (uiop:read-file-string (merge-pathnames "mac/install-app.sh" *root*))
+                "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+                "lsregister")
+               "/usr/sbin/sysctl" "sysctl"))
   (fake-tool work "lsregister" "exit 0")
   (fake-tool work "pgrep" "exit 1")
   (fake-tool work "pkill" "echo UNEXPECTED_KILL >> \"$MELTYPE_TEST_LOG\"; exit 99")
@@ -215,7 +219,7 @@
     ;; suite must never stop or select the developer's installed input method.
     (unless (probe-file fixture)
       (fake-tool work "fixture-support"
-                 (format nil "case \"$1\" in~%--validate-bundle) exit 0 ;;~%--stop) if [[ -f \"$MELTYPE_START_LOG_DIR/running\" ]]; then [[ \"$4\" == - ]] || echo 1 > \"$4\"; rm \"$MELTYPE_START_LOG_DIR/running\"; echo stopped >> \"$MELTYPE_TEST_LOG\"; else [[ \"$4\" == - ]] || echo 0 > \"$4\"; fi; exit 0 ;;~%--restore) if [[ $(cat \"$3\") == 1 ]]; then touch \"$MELTYPE_START_LOG_DIR/running\"; echo restarted >> \"$MELTYPE_TEST_LOG\"; fi; exit 0 ;;~%--start) echo started >> \"$MELTYPE_TEST_LOG\"; exit 0 ;;~%esac~%exec ~S \"$@\"" (namestring *install-tool*))))
+                 (format nil "case \"$1\" in~%--validate-bundle) exit 0 ;;~%--stop) if [[ -f \"$MELTYPE_START_LOG_DIR/running\" ]]; then [[ \"$4\" == - ]] || echo 1 > \"$4\"; rm \"$MELTYPE_START_LOG_DIR/running\"; echo stopped >> \"$MELTYPE_TEST_LOG\"; else [[ \"$4\" == - ]] || echo 0 > \"$4\"; fi; exit 0 ;;~%--restore) if [[ $(cat \"$3\") == 1 ]]; then touch \"$MELTYPE_START_LOG_DIR/running\"; echo restarted >> \"$MELTYPE_TEST_LOG\"; fi; exit 0 ;;~%--start) echo started >> \"$MELTYPE_TEST_LOG\"; exit 0 ;;~%--select) [[ -x \"$2/Contents/MacOS/Meltype\" ]] || exit 23; echo selected >> \"$MELTYPE_TEST_LOG\"; exit 0 ;;~%esac~%exec ~S \"$@\"" (namestring *install-tool*))))
     (ensure-directories-exist tool)
     (uiop:copy-file fixture tool)
     (uiop:run-program (list "chmod" "+x" (namestring tool)))))
@@ -237,15 +241,28 @@
   (copy-install-script work)
   (fake-tool work "ditto" "cp -R \"$1\" \"$2\"")
   (fake-tool work "codesign" "exit 0")
-  (write-file (merge-pathnames "select-input-source.swift" work) "// fake selector")
-  (fake-tool work "swift" "echo selected >> \"$MELTYPE_TEST_LOG\"")
+  (fake-tool work "install-settings-app.sh" "echo settings >> \"$MELTYPE_TEST_LOG\"")
+  ;; 配布先に Swift の開発ツールがなくても、初回は自動で入力ソースを選べる。
+  (fake-tool work "swift" "echo UNEXPECTED_SWIFT >> \"$MELTYPE_TEST_LOG\"; exit 99")
   (dolist (name '("pkill" "killall" "xattr" "lsregister"))
     (fake-tool work name "exit 0"))
   (fake-tool work "killall" "echo UNEXPECTED_MENU_REFRESH >> \"$MELTYPE_TEST_LOG\"")
   (fake-tool work "open" "echo UNEXPECTED_OPEN >> \"$MELTYPE_TEST_LOG\"; exit 1")
   (run-script work "install.sh" nil)
-  (assert (equal '("app:--register-input-source" "started" "selected")
+  (assert (equal '("app:--register-input-source" "started" "settings" "selected")
                  (uiop:read-file-lines (merge-pathnames "calls" work)))))
+
+(defun test-first-install-selection-failure (work)
+  (test-distributed-install work)
+  (uiop:delete-directory-tree (merge-pathnames "installed/Meltype.app/" work) :validate t)
+  (fake-tool work "Meltype.app/Contents/MacOS/MeltypeInstallSupport"
+             (format nil "[[ \"$1\" == --select ]] && exit 2~%exec ~S \"$@\""
+                     (namestring (merge-pathnames "fixture-support" work))))
+  (let ((output (make-string-output-stream)))
+    (let ((*standard-output* output) (*error-output* output))
+      (run-script work "install.sh" nil))
+    (assert (search "入力メニューから Meltype を選んでください" (get-output-stream-string output))))
+  (assert (probe-file (merge-pathnames "installed/Meltype.app/Contents/MacOS/Meltype" work))))
 
 (defun test-update-keeps-input-menu (work)
   (test-distributed-install work)
@@ -260,12 +277,13 @@
     (let ((lines (uiop:read-file-lines (merge-pathnames "calls" work))))
       (assert (member (if update "app:--register-input-source --keep-input-menu"
                          "app:--register-input-source") lines :test #'equal))
-      (assert (member (if update "helper:--keep-input-menu" "helper:initial") lines :test #'equal)))))
+      (assert (member (if update "helper:--keep-input-menu" "helper:initial") lines :test #'equal))
+      (assert (eq (not update) (not (null (member "selected" lines :test #'equal))))))))
 
 (defun test-main-registration-keeps-input-menu (work)
   ;; 本体の登録コマンドをそのままコンパイルし、登録APIとkillallだけをスタブ化する。
   (let* ((source (uiop:read-file-string (merge-pathnames "mac/Sources/MeltypeIME/main.swift" *root*)))
-         (end (search "/// 変換の候補の一覧" source))
+         (end (search "func runIsolatedChecks(" source))
          (binary (merge-pathnames "main-registrar" work))
          (called (merge-pathnames "menu-restart-called" work)))
     (assert end)
@@ -438,7 +456,10 @@
     (write-file (merge-pathnames "Contents/Info.plist" source)
                 "<?xml version=\"1.0\"?><plist version=\"1.0\"><dict><key>CFBundleIdentifier</key><string>local.meltype.SwapTests</string><key>CFBundleExecutable</key><string>Meltype</string><key>CFBundlePackageType</key><string>APPL</string><key>CFBundleVersion</key><string>1</string></dict></plist>")
     (write-file (merge-pathnames "Contents/Resources/version" source) "A")
-    (uiop:run-program (list "cp" "/usr/bin/true" (namestring (merge-pathnames "Contents/MacOS/Meltype" source))))
+    ;; /usr/bin/true は arm64e で、署名し直すと Apple シリコンでは起動時に kill される。
+    (write-file (merge-pathnames "true.c" work) (format nil "int main(void) { return 0; }~%"))
+    (uiop:run-program (list "xcrun" "clang" "-o" (namestring (merge-pathnames "Contents/MacOS/Meltype" source))
+                           (namestring (merge-pathnames "true.c" work))))
     (uiop:run-program (list "/usr/bin/codesign" "--force" "--deep" "--sign" "-" (namestring source)))
     (run-script work "install-app.sh" arguments)
     (let ((first-hash (bundle-hash target))
@@ -488,6 +509,39 @@
         (assert failed))
       (assert (null (uiop:read-file-lines (merge-pathnames "calls" work)))))
     (assert (equal "B" (uiop:read-file-string (merge-pathnames "Contents/Resources/version" target))))))
+
+(defun test-unsupported-cpu-rejected (work)
+  (copy-install-script work)
+  (write-file (merge-pathnames "helper.c" work) (format nil "int main(void) { return 0; }~%"))
+  (ensure-directories-exist (merge-pathnames "source.app/Contents/MacOS/" work))
+  (fake-tool work "ditto" "cp -R \"$1\" \"$2\"")
+  ;; Reaching signature verification (23) means the CPU was accepted.
+  (fake-tool work "codesign" "exit 23")
+  (dolist (case '(("" ("arm64") 1)
+                  ("" ("x86_64") 23)
+                  ("" ("arm64" "x86_64") 23)
+                  ("1" ("arm64") 23)
+                  ("1" ("x86_64") 23)))
+    (destructuring-bind (apple-silicon architectures expected) case
+      (uiop:run-program
+       (append '("xcrun" "clang")
+               (loop for architecture in architectures append (list "-arch" architecture))
+               (list "-o" (namestring (merge-pathnames "source.app/Contents/MacOS/MeltypeInstallSupport" work))
+                     (namestring (merge-pathnames "helper.c" work)))))
+      (fake-tool work "sysctl" (format nil "echo ~A" apple-silicon))
+      (let ((status nil) (output (make-string-output-stream)))
+        (let ((*standard-output* output) (*error-output* output))
+          (handler-case (run-script work "install-app.sh"
+                                    (list (namestring (merge-pathnames "source.app" work))
+                                          (namestring (merge-pathnames "installed/Meltype.app" work))))
+            (uiop:subprocess-error (condition) (setf status (uiop:subprocess-error-code condition)))))
+        (assert (eql expected status))
+        (assert (eq (eql expected 1)
+                    (not (null (search "Apple シリコン用" (get-output-stream-string output))))))
+        ;; Nothing may be staged or left behind for an app that cannot run here.
+        (when (eql expected 1)
+          (assert (not (uiop:directory-exists-p (merge-pathnames "installed/" work)))))
+        (assert (null (directory (merge-pathnames ".meltype-install.*/" work))))))))
 
 (defun test-cross-volume-install-rejected (work)
   (test-install-rollback work)
@@ -973,6 +1027,8 @@
     (format t "PASS failed startup keeps input source~%")
     (call-with-work-directory #'test-distributed-install)
     (format t "PASS distributed installer~%")
+    (call-with-work-directory #'test-first-install-selection-failure)
+    (format t "PASS installed app and input menu guidance after first selection failure~%")
     (call-with-work-directory #'test-update-keeps-input-menu)
     (format t "PASS updates preserve input menu; first install retains refresh~%")
     (call-with-work-directory #'test-main-registration-keeps-input-menu)
@@ -1021,12 +1077,14 @@
     (format t "PASS read-only payload prepared before helper invocation without changing source~%")
     (call-with-work-directory #'test-refused-helper-preserved)
     (format t "PASS refused helper retained without replacing app~%")
+    (call-with-work-directory #'test-unsupported-cpu-rejected)
+    (format t "PASS Apple silicon app rejected on Intel before staging~%")
     (call-with-work-directory #'test-register-without-menu-agent)
     (format t "PASS registrar separates registration failure, pending activation and menu refresh warning~%")
     (call-with-work-directory #'test-pending-activation-keeps-app)
     (format t "PASS pending activation keeps first install/update/Homebrew/source app~%")
     (call-with-work-directory #'test-selection-failure-keeps-update)
-    (format t "PASS selection-only failure retains the installed update~%34/34 passed~%")))
+    (format t "PASS selection-only failure retains the installed update~%36/36 passed~%")))
 
 (handler-case (call-with-work-directory #'run-tests)
   (error (condition)

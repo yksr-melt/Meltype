@@ -16,10 +16,13 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
     /// 本体が最後に返した表示のモード (入力メニューのチェックに使う)
     private var japanese = true
     private var hasMarkedText = false
-    private var candidateList: [String] = []
     private let modeIndicator = ModeIndicator.shared
-    private var auxPanel: NSPanel?
-    private var displayedAux: String?
+    /// 候補と案内のパネル。表示するのは今の入力欄の分だけなので、すべての入力欄で 1 つを共有する。
+    private static let compositionPanel = CompositionPanel(choose: { index in
+        active?.sendCandidate("CandidateClicked", index: index)
+    }, highlight: { index in
+        active?.sendCandidate("CandidateHighlighted", index: index)
+    })
 
     /// ロック画面と OS の認証ダイアログを Password として送り、Core でアプリ別設定より優先する (#1752)。
     private static let authenticationApps: Set<String> = ["com.apple.loginwindow", "com.apple.SecurityAgent"]
@@ -60,7 +63,9 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         if let app, Self.authenticationApps.contains(app) {
             // ユーザー名は通常自動で入るため、SecurityAgent ではユーザー名欄も含めて打鍵を通す。
             // 未確定入力の取消に必要な属性だけを送り、打鍵の内容や周辺文字列は Core に渡さない。
+            // 打鍵は、今の状態だけを受け取る出来事 (StateRequested) にする。
             event["field"] = ["traits": ["Password"]]
+            if keyEvent != nil { event["type"] = "StateRequested" }
         } else {
             if let client {
                 event["field"] = field(of: client, app: app)
@@ -126,19 +131,22 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
     }
 
     override func recognizedEvents(_ sender: Any!) -> Int {
-        Int(NSEvent.EventTypeMask.keyDown.rawValue)
+        // CapsLock は keyDown にならず、flagsChanged だけで届く
+        Int(NSEvent.EventTypeMask.keyDown.rawValue | NSEvent.EventTypeMask.flagsChanged.rawValue)
     }
 
     override func handle(_ event: NSEvent!, client sender: Any!) -> Bool {
-        guard let event, event.type == .keyDown, let client = sender as? IMKTextInput else { return false }
+        guard let event, event.type == .keyDown || event.type == .flagsChanged && Int(event.keyCode) == kVK_CapsLock,
+              let client = sender as? IMKTextInput else { return false }
         return send("KeyPressed", client: client, keyEvent: event)?.result.consumed ?? false
     }
 
     private func key(of event: NSEvent) -> [String: Any] {
         let flags = event.modifierFlags
+        // flagsChanged (CapsLock) の isARepeat・characters は例外になる。characters は KeyMapping.text が読まない
         var key: [String: Any] = ["vk": KeyMapping.virtualKey(for: event),
                                   "shift": flags.contains(.shift), "ctrl": flags.contains(.control),
-                                  "alt": flags.contains(.option), "command": flags.contains(.command), "repeat": event.isARepeat]
+                                  "alt": flags.contains(.option), "command": flags.contains(.command), "repeat": event.type == .keyDown && event.isARepeat]
         // event.characters は「見た目の 1 文字」で、UTF-16 要素が複数のことがある
         // (補助面の文字・結合文字・ZWJ 絵文字・異体字セレクター)。1 スカラーならそのコードポイント、複数ならそのまま渡す
         let text = KeyMapping.text(for: event)
@@ -166,43 +174,8 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         if let client = (sender as? IMKTextInput) ?? self.client() {
             send("CommitRequested", client: client, ["caret": ["moved": true, "passedKey": 0, "focusLeft": true]])
         }
-        candidatesWindow?.hide()
-        auxPanel?.orderOut(nil)
-        displayedAux = nil
-        meaningKey = nil
-        candidateList = []
+        Self.compositionPanel.hide()
         super.deactivateServer(sender)
-    }
-
-    // ---- 変換の候補の一覧 ----
-
-    override func candidates(_ sender: Any!) -> [Any]! {
-        candidateList
-    }
-
-    override func candidateSelected(_ candidateString: NSAttributedString!) {
-        guard let client = self.client(),
-              let string = candidateString?.string,
-              let index = candidateList.firstIndex(of: string) else { return }
-        // クリックした候補が候補ウィンドウで選ばれているので、覚えている位置も合わせる。
-        windowIndex = index
-        send("CandidateClicked", client: client, ["index": index])
-    }
-
-    /// 候補ウィンドウの中で選択が動いた (マウスで選んだときなど)。本体の選択も合わせる (確定はしない)。
-    /// 本体の選択を候補ウィンドウに反映しているとき (selectingFromCore) にも呼ばれるので、そのときは何もしない。
-    /// moveDown / moveUp の通知が遅れて届くと古い番号に戻してしまうので、マウスの操作のときだけ受け付ける。
-    private var selectingFromCore = false
-
-    override func candidateSelectionChanged(_ candidateString: NSAttributedString!) {
-        let mouseTypes: [NSEvent.EventType] = [.leftMouseDown, .leftMouseUp, .leftMouseDragged]
-        guard !selectingFromCore,
-              let type = NSApp.currentEvent?.type, mouseTypes.contains(type),
-              let client = self.client(),
-              let string = candidateString?.string,
-              let index = candidateList.firstIndex(of: string) else { return }
-        windowIndex = index
-        send("CandidateHighlighted", client: client, ["index": index])
     }
 
     // ---- メニュー (メニューバーの入力メニュー) ----
@@ -217,8 +190,8 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         menu.addItem(.separator())
         let importItem = menu.addItem(withTitle: "macOSのユーザー辞書を取り込む…", action: #selector(importUserDictionary(_:)), keyEquivalent: "")
         importItem.target = self
-        let configItem = menu.addItem(withTitle: "Meltype の設定ファイル (config.json) を開く…", action: #selector(openConfigFile(_:)), keyEquivalent: "")
-        configItem.target = self
+        let settingsItem = menu.addItem(withTitle: "Meltype の設定…", action: #selector(openSettings(_:)), keyEquivalent: "")
+        settingsItem.target = self
         menu.addItem(withTitle: "Meltype のデータフォルダを開く (設定・ユーザー辞書)", action: #selector(openDataFolder(_:)), keyEquivalent: "")
         menu.addItem(withTitle: "不具合の報告・提案… (Mac 版はプレビュー版です)", action: #selector(openReport(_:)), keyEquivalent: "")
         return menu
@@ -289,15 +262,16 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         NSWorkspace.shared.open(url)
     }
 
-    /// 設定ファイル (Windows 版と共通の config.json) を、無ければ空の設定で作ってから、既定のエディターで開く (issue #508)。
-    /// 空の設定にも、本体が隣に書く config.schema.json を指定しておく (エディターで項目の補完・説明が出る)。
-    @objc private func openConfigFile(_ sender: Any?) {
-        guard let directory = NativeCore.shared.dataDirectory else { return }
-        let url = URL(fileURLWithPath: directory, isDirectory: true).appendingPathComponent("config.json")
-        if !FileManager.default.fileExists(atPath: url.path) {
-            try? "{\n  \"$schema\": \"./config.schema.json\"\n}\n".write(to: url, atomically: true, encoding: .utf8)
+    /// 設定アプリ (Meltype Settings.app)。install.sh は ~/Applications に、Homebrew は /Applications に入れるので、場所ではなく bundle ID で探す。
+    @objc private func openSettings(_ sender: Any?) {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "io.github.yksr-melt.Meltype.Settings") else {
+            let alert = NSAlert()
+            alert.messageText = "Meltype の設定アプリが見つかりません"
+            alert.informativeText = "Meltype をインストールし直してください (Meltype Settings.app が ~/Applications に入ります)。"
+            alert.runModal()
+            return
         }
-        NSWorkspace.shared.open(url)
+        NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
     }
 
     @objc private func openDataFolder(_ sender: Any?) {
@@ -344,10 +318,7 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         }
         client.setMarkedText(NSAttributedString(attributedString: text), selectionRange: NSRange(location: length, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
         hasMarkedText = length > 0
-        updateCandidates(view.candidates, client: client)
-        // 打ったキー・もしかして・案内を、入力位置の下のパネルに 1 行で出す
-        let aux = [view.typedKeys, view.spellingSuggestion, view.hint].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: "　")
-        showAux(aux.isEmpty ? nil : aux, client: client)
+        showCompositionPanel(view, markedText: view.text as NSString, client: client)
     }
 
     private func hideComposition(client: IMKTextInput) {
@@ -356,50 +327,44 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
             client.setMarkedText(NSAttributedString(string: ""), selectionRange: NSRange(location: 0, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
             hasMarkedText = false
         }
-        candidateList = []
-        candidatesWindow?.hide()
-        auxPanel?.orderOut(nil)
-        displayedAux = nil
-        meaningKey = nil
+        Self.compositionPanel.hide()
     }
 
-    private func showAux(_ text: String?, client: IMKTextInput) {
-        let selection = client.selectedRange()
-        guard let text, selection.location != NSNotFound else {
-            auxPanel?.orderOut(nil)
-            displayedAux = nil
+    private func showCompositionPanel(_ view: CompositionView, markedText: NSString, client: IMKTextInput) {
+        let guide = [view.typedKeys, view.spellingSuggestion, view.hint].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: "　")
+        guard markedText.length > 0, !guide.isEmpty || view.candidates != nil else {
+            Self.compositionPanel.hide()
             return
         }
-        var caret = NSRect.zero
-        _ = client.attributes(forCharacterIndex: selection.location, lineHeightRectangle: &caret)
-        guard caret.minX.isFinite, caret.minY.isFinite,
-              caret.width.isFinite, caret.height.isFinite, caret.height > 0 else {
-            auxPanel?.orderOut(nil)
-            displayedAux = nil
+
+        // IMK は文書全体からの位置ではなく、未確定文字列の先頭からの UTF-16 オフセットを取る。
+        var start = NSRect.zero
+        _ = client.attributes(forCharacterIndex: 0, lineHeightRectangle: &start)
+        var end = start
+        let last = markedText.rangeOfComposedCharacterSequence(at: markedText.length - 1).location
+        if last > 0 {
+            end = .zero
+            _ = client.attributes(forCharacterIndex: last, lineHeightRectangle: &end)
+        }
+        let screen = NSScreen.screens.first { $0.frame.contains(NSPoint(x: start.minX, y: start.midY)) }
+        let caretPlacement = screen.flatMap { screen in
+            screen.frame.contains(NSPoint(x: end.minX, y: end.midY))
+                ? CompositionPanelPlacement(start: start, end: end, visible: screen.visibleFrame) : nil
+        }
+        // 入力位置を返さないアプリでも候補を選べるよう、入力モードの表示と同じくマウスのある画面の下端に出す。
+        let mouseScreen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) }
+        guard let placement = caretPlacement ?? mouseScreen.map({ CompositionPanelPlacement(bottomOf: $0.visibleFrame) }) else {
+            Self.compositionPanel.hide()
             return
         }
-        displayedAux = text
-        let label = NSTextField(labelWithString: text)
-        label.font = .systemFont(ofSize: 13)
-        label.sizeToFit()
-        let size = NSSize(width: label.frame.width + 24, height: label.frame.height + 16)
-        let panel = auxPanel ?? NSPanel(contentRect: NSRect(origin: .zero, size: size),
-            styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-        panel.level = panelLevel(.floating, above: client)
-        panel.hasShadow = true
-        panel.backgroundColor = .windowBackgroundColor
-        panel.ignoresMouseEvents = true
-        panel.setContentSize(size)
-        panel.contentView?.subviews.forEach { $0.removeFromSuperview() }
-        label.frame.origin = NSPoint(x: 12, y: 8)
-        panel.contentView?.addSubview(label)
-        if let screen = NSScreen.screens.first(where: { $0.frame.intersects(caret) }) ?? NSScreen.main {
-            let visible = screen.visibleFrame
-            panel.setFrameOrigin(NSPoint(x: max(visible.minX, min(caret.minX, visible.maxX - size.width)),
-                y: max(visible.minY, min(caret.minY - size.height - 6, visible.maxY - size.height))))
-        }
-        auxPanel = panel
-        panel.orderFrontRegardless()
+
+        Self.compositionPanel.show(guide: guide, list: view.candidates, converting: view.converting, clause: view.selectedClause, placement: placement,
+                   aboveWindowLevel: client.windowLevel())
+    }
+
+    private func sendCandidate(_ event: String, index: Int) {
+        guard let client = client() else { return }
+        send(event, client: client, ["index": index])
     }
 
     private func addMark(_ style: Int, to text: NSMutableAttributedString, range: NSRange) {
@@ -414,83 +379,5 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
             }
         }
         text.addAttributes(attributes, range: range)
-    }
-
-    /// 候補で本体が決めた時間 (meaningDelayMs) 止まったら、その候補の意味を候補ウィンドウの注釈に出す。
-    private var meaningKey: String?
-
-    private func scheduleMeaning(_ list: CandidateList) {
-        let key = list.selectedMeaning.map { "\(list.selected):\($0)" }
-        guard key != meaningKey else { return }
-        meaningKey = key
-        guard let key, let meaning = list.selectedMeaning else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(list.meaningDelayMs)) { [weak self] in
-            guard let self, self.meaningKey == key, let window = candidatesWindow, window.isVisible() else { return }
-            window.showAnnotation(NSAttributedString(string: meaning))
-        }
-    }
-
-    private func updateCandidates(_ list: CandidateList?, client: IMKTextInput) {
-        guard let window = candidatesWindow else { return }
-        guard let list else {
-            meaningKey = nil
-            candidateList = []
-            window.hide()
-            return
-        }
-        // 作り直し・選択で候補ウィンドウから candidateSelectionChanged が来ても、本体に返さない。
-        selectingFromCore = true
-        defer { selectingFromCore = false }
-        // 注記 (候補の種類など) は候補の後ろに付ける
-        let items = zip(list.items, list.notes).map { item, note in note.map { item + "　" + $0 } ?? item }
-        // 一覧を作り直すと選択が先頭に戻るので、中身が変わったとき (別の文節に移ったときなど) だけ作り直す。
-        if candidateList != items || !window.isVisible() {
-            candidateList = items
-            // IMK が入力位置を取り直すよう、更新前にいったん非表示にする。
-            window.hide()
-            window.update()
-            window.show(kIMKLocateCandidatesBelowHint)
-            // macOS 26 の IMK は入力位置の更新前に画面を選ぶため、画面移動直後は以前の画面に収まる。
-            // 更新された入力位置で画面を選び直し、その後で選択位置を本体とそろえる。
-            window.show(kIMKLocateCandidatesBelowHint)
-            windowIndex = 0
-        }
-        setCandidatesWindowLevel(above: client)
-        if list.selected >= 0 && list.selected < list.items.count {
-            selectInWindow(window, index: list.selected)
-        }
-        scheduleMeaning(list)
-    }
-
-    /// 候補ウィンドウで今選ばれている候補の番号 (一覧を作り直すと先頭に戻る)。
-    private var windowIndex = 0
-
-    /// 候補ウィンドウ (IMKUIPanel) のもともとの表示レベル (macOS 15 で確かめた値。IMK のウィンドウはこの 1 つだけだった)。
-    private static let defaultCandidatesLevel = NSWindow.Level(rawValue: 20)
-
-    /// Spotlight のように、ふつうのウィンドウより高い表示レベルの入力欄では、候補ウィンドウや予測候補のパネルが入力欄の裏に隠れる。
-    /// なので、もともとの表示レベルと「入力欄より 1 つ上」の高い方にする。
-    /// 候補ウィンドウはすべての入力欄で共有するので、前の入力欄で上げたままにしないよう、毎回入れ直す。
-    private func panelLevel(_ base: NSWindow.Level, above client: IMKTextInput) -> NSWindow.Level {
-        NSWindow.Level(rawValue: max(base.rawValue, Int(client.windowLevel()) + 1))
-    }
-
-    /// IMKCandidates には表示レベルを変える口が無いので、このプロセスにある IMK のウィンドウ (候補ウィンドウは IMKUIPanel) を探して変える。
-    private func setCandidatesWindowLevel(above client: IMKTextInput) {
-        for window in NSApp.windows where String(describing: type(of: window)).hasPrefix("IMK") {
-            window.level = panelLevel(Self.defaultCandidatesLevel, above: client)
-        }
-    }
-
-    /// 候補ウィンドウの選択を index 番目の候補に合わせる。
-    /// selectCandidate(withIdentifier:) では選択が動かず、selectedCandidate() も今の選択とずれることがある (macOS 26)。
-    /// なので、選択の位置はこちらで覚えておき、矢印キーと同じ moveDown / moveUp でその差だけ動かす。
-    private func selectInWindow(_ window: IMKCandidates, index: Int) {
-        let step = index > windowIndex ? #selector(NSResponder.moveDown(_:)) : #selector(NSResponder.moveUp(_:))
-        guard window.responds(to: step) else { return }
-        for _ in 0..<abs(index - windowIndex) {
-            window.perform(step, with: nil)
-        }
-        windowIndex = index
     }
 }

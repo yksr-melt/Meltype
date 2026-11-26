@@ -29,7 +29,7 @@ if [[ ! "$rpmversion" =~ ^[0-9][A-Za-z0-9.+~]*$ ]]; then
     exit 1
 fi
 
-for f in libMeltypeNative.so ibus-engine-meltype meltype-settings ibus-setup-meltype.desktop meltype.xml icon.png LICENSE THIRD-PARTY-NOTICES.md mozc/meltype_mozc_helper zenzai/llama-server; do
+for f in libMeltypeNative.so ibus-engine-meltype meltype-settings libSkiaSharp.so libHarfBuzzSharp.so ibus-setup-meltype.desktop meltype.xml icon.png LICENSE THIRD-PARTY-NOTICES.md mozc/meltype_mozc_helper zenzai/llama-server; do
     [[ -e "$src/$f" ]] || { echo "必要なファイルがありません: $src/$f (先に linux/build.sh を実行してください)" >&2; exit 1; }
 done
 command -v rpmbuild > /dev/null || { echo "rpmbuild がありません (Fedora なら sudo dnf install rpm-build)" >&2; exit 1; }
@@ -58,7 +58,7 @@ trap 'rm -rf "$stage"' EXIT
 # fcitx5 のアドオンは Fedora の glibc を要求するので、サブパッケージ meltype-fcitx5 に分け、meltype は RHEL 9 系でも入るようにする。
 # meltype-fcitx5 は、fcitx5 が入っていれば dnf が meltype と一緒に入れる (Supplements)。
 # IBus の一覧 (ibus write-cache) は Fedora の ibus パッケージのファイルトリガーが作り直すので、ここでは実行しない
-# Fedora の gtk4 は、起動に要る cairo の typelib (gobject-introspection) と libGLESv2 (libglvnd-gles) を Requires に持たない
+# 設定アプリ (Avalonia) は X11 のライブラリを dlopen で読み、日本語のフォントを fc-match で探すので、自動の Requires に出ない。名前で書く
 cat > "$stage/meltype.spec" << 'EOF'
 %global debug_package %{nil}
 %global _build_id_links none
@@ -74,7 +74,7 @@ Release: 1
 Summary: Japanese input method without the Hankaku/Zenkaku key
 License: GPL-3.0-or-later
 URL: https://github.com/yksr-melt/Meltype
-Requires: libicu, python3 >= 3.9, python3-gobject, gtk4, gobject-introspection, libglvnd-gles
+Requires: libicu, python3 >= 3.9, python3-gobject, fontconfig, libX11, libICE, libSM, libXcursor, libXext, libXfixes, libXi, libXrandr
 Recommends: ibus
 
 %description
@@ -94,8 +94,8 @@ The fcitx5 addon of Meltype.
 
 %install
 mkdir -p %{buildroot}%{target} %{buildroot}%{_datadir}/ibus/component %{buildroot}%{_bindir} %{buildroot}%{_datadir}/applications
-cp -R %{meltype_src}/libMeltypeNative.so %{meltype_src}/ibus-engine-meltype %{meltype_src}/meltype-settings %{meltype_src}/icon.png %{meltype_src}/mozc %{meltype_src}/zenzai %{meltype_src}/LICENSE %{meltype_src}/THIRD-PARTY-NOTICES.md %{buildroot}%{target}/
-chmod 644 %{buildroot}%{target}/libMeltypeNative.so %{buildroot}%{target}/icon.png %{buildroot}%{target}/LICENSE %{buildroot}%{target}/THIRD-PARTY-NOTICES.md
+cp -R %{meltype_src}/libMeltypeNative.so %{meltype_src}/ibus-engine-meltype %{meltype_src}/meltype-settings %{meltype_src}/libSkiaSharp.so %{meltype_src}/libHarfBuzzSharp.so %{meltype_src}/icon.png %{meltype_src}/mozc %{meltype_src}/zenzai %{meltype_src}/LICENSE %{meltype_src}/THIRD-PARTY-NOTICES.md %{buildroot}%{target}/
+chmod 644 %{buildroot}%{target}/libMeltypeNative.so %{buildroot}%{target}/libSkiaSharp.so %{buildroot}%{target}/libHarfBuzzSharp.so %{buildroot}%{target}/icon.png %{buildroot}%{target}/LICENSE %{buildroot}%{target}/THIRD-PARTY-NOTICES.md
 find %{buildroot}%{target}/zenzai -type f -exec chmod 644 {} +
 chmod 755 %{buildroot}%{target}/ibus-engine-meltype %{buildroot}%{target}/meltype-settings %{buildroot}%{target}/mozc/meltype_mozc_helper %{buildroot}%{target}/zenzai/llama-server
 sed "s|@DIR@|%{target}|g" %{meltype_src}/meltype.xml > %{buildroot}%{_datadir}/ibus/component/meltype.xml
@@ -121,6 +121,8 @@ pkill -f %{target}/ibus-engine-meltype > /dev/null 2>&1 || :
 %{target}/libMeltypeNative.so
 %{target}/ibus-engine-meltype
 %{target}/meltype-settings
+%{target}/libSkiaSharp.so
+%{target}/libHarfBuzzSharp.so
 %{target}/icon.png
 %{target}/mozc
 %{target}/zenzai

@@ -11,12 +11,6 @@ public static class ProjectInfo
 {
     public const string SourceUrl = "https://github.com/yksr-melt/Meltype";
 
-    /// <summary>
-    /// 不具合報告のフォーム (Google フォームの「事前入力した URL」。OS に Windows 11、版に 0.0.0、実行環境に ENV を入れて作ったもの)。
-    /// 空なら GitHub の Issue の画面を開く。作り方は tools/report-form/README.md。
-    /// </summary>
-    public const string ReportForm = "";
-
     /// <summary>Meltype.Core の版 (Mac 版・Linux 版の版)。</summary>
     public static string CoreVersion =>
         typeof(ProjectInfo).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0] ?? "?";
@@ -26,6 +20,10 @@ public static class ProjectInfo
     /// </summary>
     public static string? BuildCommit =>
         typeof(ProjectInfo).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+') is [_, var commit, ..] ? commit[..Math.Min(7, commit.Length)] : null;
+
+    /// <summary>.NET SDK が付けた版 (1.5.1+<コミット ID 全体>) のコミット ID を、先頭 7 文字にする (1.5.1+abc1234)。コミット ID が無ければそのまま。</summary>
+    public static string ShortCommit(string version) =>
+        version.Split('+') is [var number, var commit, ..] ? $"{number}+{commit[..Math.Min(7, commit.Length)]}" : version;
 
     /// <summary>版にタグの無い自己ビルドのコミット ID を付けたもの (1.5.1+abc1234)。不具合の報告と「ばーじょん」の候補で同じ版の文字列にする (issue #1868)。</summary>
     public static string WithCommit(string version) => BuildCommit is { } commit ? $"{version}+{commit}" : version;
@@ -69,31 +67,15 @@ public static class ProjectInfo
 
     /// <summary>
     /// 更新したあとの初めての起動で、リリースノートを見せるか (issue #1207)。最後に見せた版と今の版が違えば見せる。
-    /// 初めて起動したとき (新しく入れたとき) は、更新ではないので見せない。
+    /// 初めて起動したとき (新しく入れたとき) は、更新ではないので見せない。autoShow が OFF なら見せない。
     /// </summary>
-    public static bool ShouldShowReleaseNotes(string? shownVersion, string currentVersion, bool firstRun) =>
-        !firstRun && currentVersion != "?" && shownVersion != currentVersion;
-
-    /// <summary>不具合報告のフォーム (ReportForm) があるか。無ければ GitHub の Issue の画面で報告してもらう。</summary>
-    public static bool HasReportForm => ReportForm.Length > 0;
-
-    /// <summary>
-    /// 不具合報告を開く URL。os はフォームの OS の選択肢 (Windows 11 / Mac (プレビュー版) / Linux (プレビュー版))。
-    /// フォームがまだ無ければ GitHub の「不具合の報告」のひな形 (1-bug.yml) を、OS・版・実行環境を入れた状態で開く。
-    /// ひな形を選ぶ画面 (issues/new/choose) を開くと、選んだあとの画面に URL の値が引き継がれず空欄になる (issue #877)。
-    /// </summary>
-    public static string ReportUrl(string os, string version, string environment)
-    {
-        if (!HasReportForm) return GitHubReportUrl("1-bug.yml", os, version, environment);
-        return ReportForm
-            .Replace("=Windows+11", "=" + Uri.EscapeDataString(os))
-            .Replace("=0.0.0", "=" + Uri.EscapeDataString(version))
-            .Replace("=ENV", "=" + Uri.EscapeDataString(environment));
-    }
+    public static bool ShouldShowReleaseNotes(string? shownVersion, string currentVersion, bool firstRun, bool autoShow = true) =>
+        autoShow && !firstRun && currentVersion != "?" && shownVersion != currentVersion;
 
     /// <summary>
     /// GitHub の Issue の作成画面を、OS・版・実行環境を入れた状態で開く URL。
     /// template は .github/ISSUE_TEMPLATE のファイル名 (1-bug.yml / 2-misdetection.yml / 4-idea.yml)。欄は id で入れる。
+    /// ひな形を選ぶ画面 (issues/new/choose) を開くと、選んだあとの画面に URL の値が引き継がれず空欄になる (issue #877)。
     /// </summary>
     public static string GitHubReportUrl(string template, string os, string version, string environment) =>
         $"{SourceUrl}/issues/new?template={Uri.EscapeDataString(template)}&os={Uri.EscapeDataString(os)}" +
@@ -104,7 +86,7 @@ public static class ProjectInfo
     /// 欄の id (typed・actual・expected・key・zenzai・context) は、ひな形と合わせる。
     /// Zenzai の欄は、直したときの「Zenzai を使う」の設定 (Correction.Zenzai) で入れる。分からなければ空のまま (issue #1197)。
     /// </summary>
-    public static string MisdetectionReportUrl(Composition.Correction correction, string os, string version, string environment) =>
+    public static string MisdetectionReportUrl(Meltype.Diagnostics.Correction correction, string os, string version, string environment) =>
         GitHubReportUrl("2-misdetection.yml", os, version, environment) +
         $"&title={Uri.EscapeDataString("[誤判定] " + correction.Typed)}" +
         $"&typed={Uri.EscapeDataString(correction.Typed)}" +

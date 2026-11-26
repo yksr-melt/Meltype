@@ -3,11 +3,12 @@
 
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using Meltype.CApi;
 using Meltype.Composition;
 using Meltype.Config;
+using Meltype.Dictionary;
 using Meltype.Ime;
 using Meltype.Input;
-using Meltype.CApi;
 
 namespace Meltype.Tests;
 
@@ -29,6 +30,8 @@ internal static unsafe class NativeBoundaryTests
         public SnippetStore Snippets { get; } = new(null);
 
         public string? ClipboardText => null;
+
+        public string? OtherTipVersion => null;
 
         /// <summary>最後の応答で変換中の文字があったか。</summary>
         public bool IsComposing { get; private set; }
@@ -77,7 +80,7 @@ internal static unsafe class NativeBoundaryTests
     [Test]
     public static void Native_MultiScalarTextCommitsAndPasses()
     {
-        // tools/test-mac-boundaries.swift と同じ場面 (Mac は 1 回のキーで入る複数のスカラーを text で渡す)
+        // mac/Tests/test-mac-boundaries.swift と同じ場面 (Mac は 1 回のキーで入る複数のスカラーを text で渡す)
         foreach (var (raw, text, f6, expected) in new (string, string, bool, string?)[]
                  {
                      ("e", "\u0301\u0300", false, "e"), ("ka", "\u3099\uFE0F", false, "か"), ("ka", "\U000E0100\U000E0101", false, "か"),
@@ -180,7 +183,8 @@ internal static unsafe class NativeBoundaryTests
     {
         using var native = new NativeSession();
         native.Type("ka", after: "world");
-        using var result = native.Key(0, VirtualKeys.Return);
+        // キャレットの前後は出来事ごとにフロントが送ったものを使う (フロントはキーのたびに送る)
+        using var result = native.Key(0, VirtualKeys.Return, after: "world");
         Assert.True(result.RootElement.GetProperty("consumed").GetBoolean(), "通常の Enter は消費する");
         Assert.Equal("か ", result.RootElement.GetProperty("commits")[0].GetProperty("text").GetString());
     }

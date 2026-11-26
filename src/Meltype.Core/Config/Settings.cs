@@ -11,7 +11,7 @@ namespace Meltype.Config;
 
 /// <summary>Meltype の OS。<see cref="PlatformsAttribute"/> で組にする。</summary>
 [Flags]
-public enum Platform
+internal enum Platform
 {
     Windows = 1,
     Mac = 2,
@@ -23,7 +23,7 @@ public enum Platform
 /// config.schema.json の説明の先頭に「Windows・Mac のみ。」のように出し、x-platforms に OS の名前を出す。
 /// </summary>
 [AttributeUsage(AttributeTargets.Property)]
-public sealed class PlatformsAttribute(Platform platforms) : Attribute
+internal sealed class PlatformsAttribute(Platform platforms) : Attribute
 {
     public Platform Platforms { get; } = platforms;
 }
@@ -67,6 +67,8 @@ public enum CompositionTheme
     [Description("ライト")] Light,
     /// <summary>Windows の「既定のアプリ モード」(ライト / ダーク) に合わせる。</summary>
     [Description("Windows の設定に合わせる")] System,
+    /// <summary>利用者が決めた背景と文字の色 (<see cref="Settings.CompositionCustomBackColor"/>・<see cref="Settings.CompositionCustomTextColor"/>)。</summary>
+    [Description("カスタム")] Custom,
 }
 
 /// <summary>変換ボックスの不透明度。</summary>
@@ -87,6 +89,14 @@ public enum PunctuationStyle
     [Description("，．")] FullWidthCommaPeriod,
     [Description("，。")] FullWidthCommaKuten,
     [Description("、．")] ToutenFullWidthPeriod,
+}
+
+/// <summary>変換ボックスに小さく出す、打ったもの (設定「打ったキーを表示」)。</summary>
+public enum TypedKeysStyle
+{
+    [Description("表示しない")] Off,
+    [Description("打ったキー (kyouhagoogle)")] Keys,
+    [Description("漢字変換前 (きょうはgoogle)")] Kana,
 }
 
 /// <summary>かなのすぐ後ろで打った / に出す文字。</summary>
@@ -125,6 +135,14 @@ public enum ModeIndicatorTiming
     [Description("表示しない")] Never,
     [Description("切り替えたとき")] OnSwitch,
     [Description("切り替えたときと入力欄に入ったとき")] OnSwitchAndFocus,
+}
+
+/// <summary>打鍵数を数えるか。Discord に出すのは数えているときだけなので、1 つの選択肢にする。</summary>
+public enum KeyCountMode
+{
+    [Description("数えない")] Off,
+    [Description("数える")] Count,
+    [Description("数えて Discord に表示する")] CountAndDiscord,
 }
 
 /// <summary>確定した文字をアプリに入れる方法。</summary>
@@ -292,10 +310,6 @@ public sealed class Settings
      Description("日本語入力のときの Space (何も打っていないとき) と Shift + Space で入れるスペースです。標準は Microsoft IME と同じです。英数状態では、どちらも半角スペースです。")]
     public SpaceWidth SpaceWidth { get; set; } = SpaceWidth.Standard;
 
-    [Category("5. 変換"), DisplayName("Enter は見えているとおりに確定"),
-     Description("Enter で確定するとき、打ち間違いの自動修正をせず、変換ボックスに見えているとおりに確定します (Space で変換するときの修正は今までどおりです)。")]
-    public bool EnterCommitsAsShown { get; set; }
-
     [Category("8. キー操作"), DisplayName("F9 / F10 の 1 回目は打ったまま"),
      Description("入力中の表示が英字でも、F10 (Ctrl+O) の 1 回目は常に打ったまま (小文字) の英字にして、2 回目以降で すべて大文字 → 先頭だけ大文字 と切り替えます (Microsoft IME・Google 日本語入力と同じ)。OFF のときは、英字で見えている語の 1 回目の F10 で すべて大文字になります。")]
     public bool AlphanumericKeyStartsAsTyped { get; set; }
@@ -324,6 +338,11 @@ public sealed class Settings
      Description("文節に分けて変換しているとき、Shift + Enter で、選んでいる文節までを確定し、残りの文節は未確定のまま (ひらがなに戻して) 続けて編集できるようにします。")]
     public bool PartialCommit { get; set; }
 
+    // ワークアラウンド: 変換を始めたときに選ぶ文節を、Mozc の区切りと変換の uncertainty から決められるようになったら (#2105) 消す。
+    [Category("8. キー操作"), DisplayName("変換を始めたら最後の文節を選ぶ"),
+     Description("Space・Shift + Space・Tab・変換・↑ ↓ で変換を始めたとき、最後の文節を選びます (OFF のときは先頭の文節)。変換前の ← は最後の文節、→ は先頭の文節を選びます。")]
+    public bool ConversionStartsAtLastClause { get; set; }
+
     [Category("8. キー操作"), DisplayName("Control キーの割り当て"),
      Description("入力中の Control + 英字の割り当てです。標準: Ctrl + U / I / O / P で F6 / F7 / F10 / F9、Ctrl + H で BackSpace。ATOK 風: 標準に加えて、変換中の Ctrl + K で選んでいる文節を縮め、Ctrl + L で伸ばします (Shift + ← → と同じ)。macOS 風: Control + J / K / L をひらがな / カタカナ / 全角英字 (F6 / F7 / F9) に、Control + H / D を前 / 後ろの 1 文字を消す、N / P を次 / 前の候補、B / F / A / E をカーソル移動、O / I を変換中の文節を伸ばす / 縮める、にします (macOS 標準の日本語入力と同じ)。")]
     public ControlKeyLayout ControlKeys { get; set; } = ControlKeyLayout.Standard;
@@ -340,17 +359,9 @@ public sealed class Settings
      Description("数字と + - * / ( ) だけの式を打って Space で変換すると、計算した結果 (1+2*3 → 7) と「式=結果」を候補に出します。")]
     public bool CalculatorCandidates { get; set; }
 
-    [Category("7. 記号・スペース"), DisplayName("かな + w を笑い (ねw・さw) にする"),
-     Description("ね・さ などの 1 文字のかなの後ろの w を、英単語 (new・saw) にせず笑いの w にします (なるほどnew → なるほどねw)。英単語の new や saw を打つ人は OFF のままにしてください。")]
-    public bool LaughterAfterKana { get; set; }
-
     [Category("10. 学習"), DisplayName("英語 / 日本語の学習を前の文脈ごとに分ける"),
      Description("英字 / かなに直した語 (new → ねw など) の学習を、直前が英語だったか日本語だったかごとに別々に覚えます。同じローマ字でも、英語の文の中と日本語の文の中で使い分けられます。ON にする前に覚えた学習は、どちらの文脈でも使います。")]
     public bool ContextualLearning { get; set; }
-
-    [Category("5. 変換"), DisplayName("入力中も変換候補をいくつか表示"),
-     Description("ひらがなを打っている間も、Space を押す前から変換候補を (5 件まで) 変換ボックスに出します。候補をクリックすると、その候補で変換を始めます。")]
-    public bool ShowCandidatesWhileTyping { get; set; }
 
     /// <summary>旧形式の追加キーを読み込むためだけの項目。正規化時に一覧へ移し、保存時には出力しない。</summary>
     [Browsable(false), JsonInclude, JsonPropertyName("ToggleKeyboardShortcuts")]
@@ -370,10 +381,6 @@ public sealed class Settings
      Description("「なう」を変換したとき、今再生している曲 (曲名 / アーティスト) を候補に出します。Windows のメディアの操作 (音量のボタンを押したときに出る再生中の表示) に曲を知らせるアプリ (Spotify・ブラウザーなど) が対象です。ON の間は、曲・再生状態が変わったときに Windows から知らせを受けて今の曲を読みます (変換を待たせないため。変わらない間は読みません)。メモリに今の 1 曲を持つだけで、保存・送信はしません。選んでも学習しません。再生中の曲が無いときは、今までどおり時刻を出します。")]
     public bool NowPlayingCandidates { get; set; } = true;
 
-    [Category("6. 候補"), DisplayName("時計の候補のタイムゾーン"),
-     Description("「とけい」「じこく」「いま」「なう」を変換したときに候補に出す、今の時刻 (19:21 / 19時21分 / 午後7時21分) のタイムゾーン。IANA の ID (例: America/New_York・Europe/London) か Windows の ID (例: Eastern Standard Time) を書きます。空ならこの PC のタイムゾーン (既定)。夏時間も反映します。この PC と違うタイムゾーンなら、「とけい」「じこく」では日付とタイムゾーンの名前を付けた候補も出します。")]
-    public string ClockTimeZone { get; set; } = "";
-
     [Category("1. 全般"), DisplayName("Meltype の一時停止 / 再開のホットキー"), Platforms(Platform.Windows),
      Description("Meltype 全体の一時停止 / 再開に使うキーの組み合わせ (例: Ctrl+Alt+F10)。空のときは Ctrl+Alt+F12 (使えなければ Ctrl+Alt+F11 など)。変更は Meltype を起動し直すと効きます。変換・無変換キーが無い US 配列のキーボード向けです。")]
     public string PauseHotkey { get; set; } = "";
@@ -383,7 +390,7 @@ public sealed class Settings
     public PunctuationStyle Punctuation { get; set; } = PunctuationStyle.Japanese;
 
     [Category("7. 記号・スペース"), DisplayName("英字の後ろの , . も句読点にする"),
-     Description("英字のすぐ後ろで打った , . も、日本語の句読点 (設定「句読点」の形) にします (IME, → IME、)。OFF だと、変換ボックスの中が英字だけなら半角の , . のままです (英文を打つとき)。ON でも、キャレットの前が英語 (Hello + world.) のときと、英単語の中の . (tetr.io) は半角のままです。")]
+     Description("英字のすぐ後ろで打った , . も、日本語の句読点 (設定「句読点」の形) にします (IME, → IME、)。OFF だと、変換ボックスの中が英字だけなら半角の , . のままです (英文を打つとき)。ON でも、キャレットの前が空白で終わる英語 (Hello + world.) のときと、英単語の中の . (tetr.io) は半角のままです。")]
     public bool JapanesePunctuationAfterEnglish { get; set; }
 
     [Category("5. 変換"), DisplayName("ライブ変換"),
@@ -405,10 +412,6 @@ public sealed class Settings
     [Category("5. 変換"), DisplayName("Zenzai: 使う GPU"), Platforms(Platform.Windows),
      Description("GPU 版 (Vulkan・CUDA) の llama-server で、計算に使う GPU の名前 (例: Vulkan0)。llama-server の --device に渡し、GPU に載せる量は llama-server が空いているメモリに合わせて決めます。空なら CPU だけで計算します (既定)。名前は llama-server --list-devices で確かめられます。変えると llama-server を起動し直します。")]
     public string ZenzaiDevice { get; set; } = "";
-
-    [Category("6. 候補"), DisplayName("英訳の候補"),
-     Description("変換の候補の後ろに英訳も出します (複雑な → complex, complicated)。JMdict のよく使う語から。選んだ英訳は少しずつ前に出ます。")]
-    public bool TranslationCandidates { get; set; } = true;
 
     [Category("6. 候補"), DisplayName("予測変換の候補"),
      Description("打っている途中に、続きの候補を変換ボックスの下に出します (前に確定した語句・ユーザー辞書・選び直した変換の学習・よく使うあいさつ・英単語の続き)。Tab / Shift+Tab で選んで Enter で確定します。確定した語句は %LOCALAPPDATA%\\Meltype\\phrases.txt に暗号化せずに覚え (この PC の外には送りません)、「学習データをリセット」で消えます。")]
@@ -442,13 +445,9 @@ public sealed class Settings
      Description("子音だけの略入力 (ast → 明日、ngt → ノート など) を、変換の候補に出します。候補は同梱の candidates.txt の英字の読みから出します。既定は OFF です。")]
     public bool ConsonantAbbreviations { get; set; }
 
-    [Category("9. 表示"), DisplayName("候補の意味を表示"),
-     Description("変換中に同じ候補で少し (約 1.5 秒) 止まると、その候補の意味をウィクショナリー日本語版から候補の一覧の横に出します (日本語の意味が無い語は JMdict の英訳: 橋 → bridge)。同音異義語を選ぶときの手がかりに。")]
-    public bool ShowCandidateMeanings { get; set; } = true;
-
     [Category("9. 表示"), DisplayName("打ったキーを表示"), Platforms(Platform.Windows),
-     Description("打ったキー (ローマ字: kyouhagoogle) を小さく出します。Meltype キーボードでは変換ボックスの文字の下に、Meltype IME では候補の一覧の上に出します。打ち間違いに気づきやすくなります。")]
-    public bool ShowTypedKeys { get; set; } = true;
+     Description("打ったキーを小さく出します。Meltype キーボードでは変換ボックスの文字の下に、Meltype IME では候補の一覧の上に出します。「打ったキー」はローマ字のまま (kyouhagoogle) で、打ち間違いに気づきやすくなります。「漢字変換前」は英語と日本語に分けたあと・漢字にする前の形 (きょうはgoogle) で、ライブ変換の前に何と読んだかを確かめられます。")]
+    public TypedKeysStyle TypedKeys { get; set; } = TypedKeysStyle.Keys;
 
     [Browsable(false), DisplayName("固定の操作ガイドを表示"),
      Description("変換中の表示に Space 変換・F7 カタカナ などの固定ガイドを表示します。OFF でも英字・予測・訂正の提案は表示します。")]
@@ -484,7 +483,6 @@ public sealed class Settings
         : OperatingSystem.IsWindows() ? Mode == InputMode.Keyboard ? ModeIndicatorTiming.OnSwitchAndFocus : ModeIndicatorTiming.Never
         : ModeIndicatorTiming.OnSwitch;
 
-
     [Category("3. 入力モード"), DisplayName("入力モードの表示の色: 日本語 (あ)"), Platforms(Platform.Windows),
      Description("「あ」の背景色を #RRGGBB で書きます (例: #007ACC)。空なら青。壁紙・アプリのテーマで見えにくいときに変えます。")]
     public string ModeIndicatorJapaneseColor { get; set; } = "";
@@ -510,8 +508,16 @@ public sealed class Settings
     public string CompositionFont { get; set; } = "";
 
     [Category("9. 表示"), DisplayName("変換ボックスの色"), Platforms(Platform.Windows),
-     Description("ダーク: 黒っぽい背景に白い文字 (今までの見た目)。ライト: 白っぽい背景に黒い文字。Windows の設定に合わせる: Windows の「既定のアプリ モード」(設定の 個人用設定 > 色) に合わせます。")]
+     Description("ダーク: 黒っぽい背景に白い文字 (今までの見た目)。ライト: 白っぽい背景に黒い文字。Windows の設定に合わせる: Windows の「既定のアプリ モード」(設定の 個人用設定 > 色) に合わせます。カスタム: 「変換ボックスのカスタムの色」の背景と文字の色で出します (Meltype キーボードだけ。Meltype IME の候補の一覧は Windows の色のまま)。")]
     public CompositionTheme CompositionTheme { get; set; } = CompositionTheme.Dark;
+
+    [Category("9. 表示"), DisplayName("変換ボックスのカスタムの色: 背景"), Platforms(Platform.Windows),
+     Description("「変換ボックスの色」が「カスタム」のときの背景色を #RRGGBB で書きます。背景と文字のどちらかが空なら、既定のダーク配色で表示します。")]
+    public string CompositionCustomBackColor { get; set; } = "#202228";
+
+    [Category("9. 表示"), DisplayName("変換ボックスのカスタムの色: 文字"), Platforms(Platform.Windows),
+     Description("「変換ボックスの色」が「カスタム」のときの文字の色を #RRGGBB で書きます。案内の文字・選んでいる候補の目印・下線もこの色で描きます。背景と文字のどちらかが空なら、既定のダーク配色で表示します。")]
+    public string CompositionCustomTextColor { get; set; } = "#FFFFFF";
 
     [Category("9. 表示"), DisplayName("変換ボックスの不透明度"), Platforms(Platform.Windows),
      Description("変換ボックスを少し透かして、後ろの文字を見えるようにします。100% は透けません。")]
@@ -524,6 +530,20 @@ public sealed class Settings
         CompositionTheme.System => windowsLight ?? false,
         _ => false,
     };
+
+    /// <summary>カスタムの変換ボックスの背景と文字の色 (読めない値なら null で、ライト / ダークの色のまま)。</summary>
+    public ((int R, int G, int B) Back, (int R, int G, int B) Text)? CompositionCustomColors() =>
+        CompositionTheme == CompositionTheme.Custom && ParseColor(CompositionCustomBackColor) is { } back && ParseColor(CompositionCustomTextColor) is { } text
+            ? (back, text) : null;
+
+    /// <summary>
+    /// 決めた色で文字が読みにくくなるなら、利用者に見せる警告。保存を止めるかは利用者が決める。
+    /// カスタムでは文字・案内・目印・下線をすべて文字の色で描くので、文字と背景の 1 組だけを確かめれば足りる。
+    /// </summary>
+    public string? ColorWarning() =>
+        CompositionCustomColors() is var (back, text)
+            ? ColorContrast.Warning("変換ボックスのカスタムの色: 文字", text, "変換ボックスのカスタムの色: 背景", back)
+            : null;
 
     /// <summary>変換ボックスの不透明度 (0.7〜1)。</summary>
     [Browsable(false), JsonIgnore]
@@ -546,6 +566,10 @@ public sealed class Settings
     [Category("13. 更新"), DisplayName("プレリリース版も自動で更新する"), Platforms(Platform.Windows),
      Description("ON にすると、正式版の前に公開するプレリリース版 (1.3.1-pre.4 など) も自動更新の対象にします。新しい機能や修正を早く試せますが、不具合や動作の不安定さが含まれることがあります。OFF (標準) では正式版だけを対象にします。")]
     public bool UpdatePrerelease { get; set; }
+
+    [Category("13. 更新"), DisplayName("更新後にリリースノートを表示する"), Platforms(Platform.Windows),
+     Description("新しい版に更新したあとの最初の起動で、その版のリリースノートを表示します。OFF にすると自動では表示しません (インストール版では、トレイの「更新」→「リリースノート...」からいつでも見られます)。リリースノートの画面の「今後表示しない」でも変えられます。全プロファイル共通です。")]
+    public bool ShowReleaseNotesAfterUpdate { get; set; } = true;
 
     [Category("2. 入力方式"), DisplayName("入力方式"), Description("ローマ字入力 / かな入力 (JIS、α版: 試験中)。Meltype キーボードでは、かな入力を選ぶと JIS かな配列で入力し (Shift+E = ぃ, Shift+Z = っ, Shift+ね = 、)、打ったキーの英字が英単語なら英字で見せます。")]
     [JsonConverter(typeof(InputStyleJsonConverter))]
@@ -583,9 +607,11 @@ public sealed class Settings
     private static readonly HashSet<string> SharedKeys =
     [
         SchemaKey, nameof(Profiles), nameof(ActiveProfile), nameof(SettingsVersion),
-        nameof(Enabled), nameof(JapaneseKeyboardOnly), nameof(AllowInjectedInput), nameof(FileLog), nameof(LogTypedText), nameof(AutoUpdate), nameof(UpdatePrerelease),
+        nameof(Enabled), nameof(JapaneseKeyboardOnly), nameof(AllowInjectedInput), nameof(FileLog), nameof(LogTypedText), nameof(AutoUpdate), nameof(UpdatePrerelease), nameof(ShowReleaseNotesAfterUpdate),
         // 入力の方式 (Windows の IME として入力するか) は PC 全体の選び方なので、プロファイルで変えない
         nameof(Mode),
+        // 打鍵数 (keycount.json) は全プロファイルの合計
+        nameof(KeyCount),
     ];
 
     /// <summary>今の設定の値のうち、プロファイルに入れるもの。</summary>
@@ -695,6 +721,7 @@ public sealed class Settings
             if (fileVersion < 9) MigrateToV9(raw);
             if (fileVersion < 10) MigrateToV10(raw, OperatingSystem.IsWindows(), Mode == InputMode.Keyboard);
             if (fileVersion < 11) MigrateToV11(raw);
+            if (fileVersion < 13) MigrateToV13(raw);
             InitializeToggleShortcuts(raw, name.Length == 0 ? "読み込んだプロファイル" : name);
             // 既定の設定に、知っている項目だけを重ねてから読み直す (型の違う値はここで例外になる)
             var merged = JsonSerializer.SerializeToNode(new Settings().Normalize(), JsonType)!.AsObject();
@@ -719,59 +746,6 @@ public sealed class Settings
         current.Profiles.Add(new SettingsProfile { Name = unique, Values = values });
         return current.SwitchProfile(unique);
     }
-
-    /// <summary>
-    /// 設定画面で変えた項目だけを今の設定 (current) に重ねた設定を返す。opened は画面を開いた時点の画面の値、edited は閉じる時点の画面の値。
-    /// 画面を開いている間にトレイなどで変えた項目 (一時停止・動作モード・自動判定・プロファイルなど) は、画面で変えていなければ current のまま。
-    /// プロファイルごとの値はプロファイルの名前ごとに比べる。トレイでプロファイルを切り替えても、画面で変えた値は画面で選んでいたプロファイルに入る。
-    /// 使っているプロファイルは、画面で切り替えたときだけ画面のものにする。プロファイルの一覧 (足す・名前を変える・消す) は画面のもの (トレイでは切り替えるだけ)。
-    /// </summary>
-    public static Settings MergeEdits(Settings opened, Settings edited, Settings current)
-    {
-        if (edited.ToJson() == opened.ToJson()) return current.Clone().Normalize();
-        var openedJson = JsonSerializer.SerializeToNode(opened, JsonType)!.AsObject();
-        var editedJson = JsonSerializer.SerializeToNode(edited, JsonType)!.AsObject();
-        var merged = JsonSerializer.SerializeToNode(current, JsonType)!.AsObject();
-        foreach (var key in SharedKeys)
-        {
-            if (key is nameof(Profiles) or nameof(ActiveProfile)) continue;
-            if (!JsonNode.DeepEquals(openedJson[key], editedJson[key])) merged[key] = editedJson[key]?.DeepClone();
-        }
-        var active = edited.ActiveProfile != opened.ActiveProfile || edited.Profiles.All(p => p.Name != current.ActiveProfile) ? edited.ActiveProfile : current.ActiveProfile;
-        var profiles = new List<SettingsProfile>();
-        foreach (var name in edited.ProfileNames)
-        {
-            var values = MergeValues(opened.ValuesOf(name), edited.ValuesOf(name)!, current.ValuesOf(name));
-            if (name == active)
-            {
-                foreach (var (key, value) in values)
-                {
-                    if (!SharedKeys.Contains(key)) merged[key] = value?.DeepClone();
-                }
-            }
-            profiles.Add(new SettingsProfile { Name = name, Values = values });
-        }
-        var next = merged.Deserialize(JsonType) ?? current.Clone();
-        next.Profiles = profiles;
-        next.ActiveProfile = active;
-        return next.Normalize();
-
-        // 画面で足した (名前を変えた・読み込んだ) プロファイルは、画面の値のまま
-        static JsonObject MergeValues(JsonObject? opened, JsonObject edited, JsonObject? current)
-        {
-            if (opened is null || current is null) return edited.DeepClone().AsObject();
-            var values = current.DeepClone().AsObject();
-            foreach (var (key, value) in edited)
-            {
-                if (!JsonNode.DeepEquals(opened[key], value)) values[key] = value?.DeepClone();
-            }
-            return values;
-        }
-    }
-
-    /// <summary>プロファイルの値。使っているプロファイルは今の値。そのプロファイルが無ければ null。</summary>
-    private JsonObject? ValuesOf(string name) =>
-        name == ActiveProfile ? ProfileValues() : Profiles.FirstOrDefault(p => p.Name == name) is { } profile ? profile.Values ?? [] : null;
 
     /// <summary>旧プロファイルの追加キーを移行する。未設定と明示的な空の一覧は区別する。</summary>
     private static void InitializeToggleShortcuts(JsonObject? values, string profile = DefaultProfileName, bool report = true)
@@ -804,7 +778,7 @@ public sealed class Settings
             }
             var shortcut = new ToggleShortcut
             {
-                Key = ToggleShortcut.NormalizeHankakuKey(parsed.Vk),
+                Key = ToggleShortcut.NormalizeKey(parsed.Vk),
                 Modifiers = (parsed.Ctrl ? ShortcutModifiers.Control : 0) | (parsed.Alt ? ShortcutModifiers.Alt : 0)
                     | (parsed.Shift ? ShortcutModifiers.Shift : 0) | (parsed.Win ? ShortcutModifiers.Win : 0),
             };
@@ -822,7 +796,7 @@ public sealed class Settings
             if (profile is not null) InitializeToggleShortcuts(profile.Values, profile.Name, report);
     }
 
-    public const int CurrentVersion = 12;
+    public const int CurrentVersion = 13;
 
     [Category("10. 学習"), DisplayName("ユーザー学習を使う"),
      Description("OFF にすると、選び直した変換・英字 / かなに直した語・予測変換の語句・選んだ英訳を新しく覚えません (今まで覚えた分は使います)。今まで覚えた分を消すときは、トレイの「学習データを消す」を使います。")]
@@ -858,7 +832,12 @@ public sealed class Settings
     [Category("11. アプリ"), DisplayName("独自の種類"), Description("アプリ別設定の「種類」に使える、自分で作る種類です。一般 / コード を元に、自動判定・ライブ変換を変えられます (「全体と同じ」なら上の設定のまま)。")]
     public List<AppKind> AppKinds { get; set; } = [];
 
-    [Category("12. ログ"), DisplayName("ファイルにログを書く"), Description("%LOCALAPPDATA%\\Meltype\\meltype.log にログを書きます (OFF でも、トレイの「ログ / 判定理由」で見られるログは Meltype が動いている間だけメモリに残ります)。/・$・@ で始まる語を検知したときの先頭の記号 1 文字・アプリ名・入力欄の名前が含まれます。確定した文字列などは「ログに入力した文字を残す」が ON のときだけ残ります。")]
+    // 打った時刻 (日・時間帯) を残すので、使う人が自分で選ぶまで数えない
+    [Category("1. 全般"), DisplayName("打鍵数"),
+     Description("キーごと・日ごと・時間帯ごとの打鍵数を数えて、この PC の中に保存します (打った文字の並びは保存しません)。Windows 以外では、Meltype で入力しているときの打鍵だけを数えます (Shift などの修飾キーは数えません)。端末版と Android では数えません。パスワード欄では数えませんが、macOS ではアプリによってパスワード欄の打鍵も数えることがあります。「Discord に表示する」を選ぶと、今日と合計の打鍵数・1 分あたりの打鍵数・Meltype を起動してからの時間を、この PC の Discord のアプリに送ります。既定は「数えない」です。")]
+    public KeyCountMode KeyCount { get; set; }
+
+    [Category("12. ログ"), DisplayName("ファイルにログを書く"), Description("%LOCALAPPDATA%\\Meltype\\meltype.log にログを書きます (OFF でも、トレイの「ログ / 判定理由」で見られるログは Meltype が動いている間だけメモリに残ります)。アプリ名・入力欄の名前が含まれます。確定した文字列などは「ログに入力した文字を残す」が ON のときだけ残ります。")]
     public bool FileLog { get; set; }
 
     [Category("12. ログ"), DisplayName("ログに入力した文字を残す"), Description("確定した文字列・打った英字・読み・直した語をログに残します (不具合を調べるとき用)。OFF なら文字数だけを残します。パスワード欄では入力を扱わないので残りません。")]
@@ -968,19 +947,19 @@ public sealed class Settings
             {
                 var error = shortcut is null ? ShortcutValidationError.Invalid : ToggleShortcutValidator.Validate(shortcut, this, valid);
                 if (shortcut is not null && error == ShortcutValidationError.None)
-                    valid.Add(shortcut with { Key = ToggleShortcut.NormalizeHankakuKey(shortcut.Key) });
+                    valid.Add(shortcut with { Key = ToggleShortcut.NormalizeKey(shortcut.Key) });
                 else if (reportShortcutExclusions)
                     Diagnostics.ShortcutExclusions.Report(shortcut, error, ActiveProfile);
             }
             ToggleShortcuts = valid;
         }
         ZenzaiDevice = ZenzaiDevice?.Trim() ?? "";
-        ClockTimeZone = ClockTimeZone?.Trim() ?? "";
         // 数値で書いた config.json の、今は無い番号 (消した IME 自動切替・両方を判定) は初期値にする
         if (!Enum.IsDefined(Mode)) Mode = InputMode.Tsf;
         if (!Enum.IsDefined(InputStyle)) InputStyle = InputStyle.Romaji;
         if (!Enum.IsDefined(KanaLayout)) KanaLayout = KanaLayout.Jis;
         if (!Enum.IsDefined(RomajiLayout)) RomajiLayout = RomajiLayout.Qwerty;
+        if (!Enum.IsDefined(KeyCount)) KeyCount = KeyCountMode.Off;
         AppRules ??= [];
         AppKinds ??= [];
         AppRules.RemoveAll(r => r is null || string.IsNullOrWhiteSpace(r.Process));
@@ -1039,6 +1018,7 @@ public sealed class Settings
         // v8: 型を変えた項目は、読み込む前の JSON で移す (MigrateToV8)。
         // v9: Zenzai を既定 ON にした。プロファイルの値にも効くよう、読み込む前の JSON で移す (MigrateToV9)。
         // v11: GitHubIssueCandidates を消した。プロファイルの値にも効くよう、読み込む前の JSON で移す (MigrateToV11)。
+        // v13: ShowTypedKeys (真偽値) を TypedKeys (選択肢) にした。読み込む前の JSON で移す (MigrateToV13)。
         SettingsVersion = CurrentVersion;
         return true;
     }
@@ -1072,6 +1052,17 @@ public sealed class Settings
     {
         var on = values.Remove("GitHubIssueCandidates", out var flag) && flag is JsonValue value && value.TryGetValue<bool>(out var enabled) && enabled;
         if (!on) values.Remove(nameof(GitHubRepository));
+    }
+
+    /// <summary>
+    /// v13: 「打ったキーを表示」を ON・OFF (ShowTypedKeys) から、何を出すかの選択肢 (TypedKeys) にした。ON は「打ったキー」、OFF は「表示しない」にする。
+    /// プロファイルの切り替えは今の値に重ねるので (<see cref="SwitchProfile"/>)、既定と同じ ON も書く。
+    /// config.json の一番上・プロファイルの値・書き出したプロファイルの値 (どれも config.json と同じ形) に使う。
+    /// </summary>
+    internal static void MigrateToV13(JsonObject values)
+    {
+        if (values.Remove("ShowTypedKeys", out var shown) && shown is JsonValue value && value.TryGetValue<bool>(out var on))
+            values[nameof(TypedKeys)] = (on ? TypedKeysStyle.Keys : TypedKeysStyle.Off).ToString();
     }
 
     private static bool IsKeyboardMode(JsonObject values) =>
@@ -1178,9 +1169,10 @@ public sealed class Settings
         catch (Exception ex)
         {
             // 壊れた設定で起動不能にしない。元ファイルは退避して既定値で動く。
+            // 手で書いた値の型が違うと、移行の処理 (MigrateToV8 の GetValue<string> など) が InvalidOperationException を投げるので、型で絞らない (DataFile)
             try { File.Copy(path, path + ".broken", overwrite: true); }
-            catch (Exception copyEx) { Diagnostics.Log.Warn($"{Path.GetFileName(path)} を .broken に残せませんでした: {copyEx.Message}"); }
-            Diagnostics.Log.Warn($"config.json を読み込めなかったため既定値を使います: {ex.Message}");
+            catch (Exception copyEx) when (DataFile.IsFileError(copyEx)) { Diagnostics.Log.Warn($"{Path.GetFileName(path)} を .broken に残せませんでした: {copyEx.Message}"); }
+            DataFile.ReportUnreadable("config.json (既定値を使います) ", ex);
             return new Settings();
         }
     }
@@ -1188,7 +1180,17 @@ public sealed class Settings
     /// <summary><see cref="Load"/> と同じだが、読めなければ例外を投げる (既定値に戻さず、.broken も作らない)。</summary>
     internal static Settings LoadOrThrow(string path)
     {
-        if (!File.Exists(path)) return new Settings();
+        var keyCountPath = Path.Combine(Path.GetDirectoryName(path) ?? "", KeyCounter.FileName);
+        if (!File.Exists(path))
+        {
+            var created = new Settings();
+            if (KeyCounter.LegacyMode(keyCountPath) is { } moved)
+            {
+                created.KeyCount = moved;
+                created.SaveMigrated(path);
+            }
+            return created;
+        }
         var json = File.ReadAllText(path);
         if (JsonNode.Parse(json, documentOptions: DocumentOptions) is not JsonObject values) throw new JsonException("config.json の一番上が { } ではありません");
         var version = values[nameof(SettingsVersion)] is JsonValue number && number.TryGetValue<int>(out var v) ? v : 1;
@@ -1217,20 +1219,31 @@ public sealed class Settings
             foreach (var profile in (values[nameof(Profiles)] as JsonArray ?? []).OfType<JsonObject>())
                 if (profile[nameof(SettingsProfile.Values)] is JsonObject profileValues) MigrateToV11(profileValues);
         }
+        if (version < 13)
+        {
+            MigrateToV13(values);
+            foreach (var profile in (values[nameof(Profiles)] as JsonArray ?? []).OfType<JsonObject>())
+                if (profile[nameof(SettingsProfile.Values)] is JsonObject profileValues) MigrateToV13(profileValues);
+        }
+        // 打鍵数を数えるかは、前の版が keycount.json に書いていた。ここで選んだ値があれば、移さない
+        var legacyKeyCount = values.ContainsKey(nameof(KeyCount)) ? null : KeyCounter.LegacyMode(keyCountPath);
         var settings = values.Deserialize(JsonType) ?? new Settings();
         settings.SettingsVersion = version;
+        if (legacyKeyCount is { } keyCount) settings.KeyCount = keyCount;
         // 動作モードが IME 自動切替 (消した) だった: Meltype IME として読んでいる (InputModeJsonConverter)。保存して名前を書き直す
         var autoSwitch = TopLevelStringIs(json, nameof(Mode), "AutoSwitch");
         var migrated = settings.Migrate();
         // 移行したキーの競合も保存前に除外し、次回起動時の再通知を防ぐ。
         settings.Normalize();
-        if (migrated || autoSwitch)
-        {
-            // 保存できなくても、読み込んだ設定は使う (既定値に戻すと、次の保存でユーザーの設定が消える)。
-            try { settings.Save(path); }
-            catch (Exception ex) { Diagnostics.Log.Warn($"移行した config.json を保存できませんでした: {ex.Message}"); }
-        }
+        if (migrated || autoSwitch || legacyKeyCount is not null) settings.SaveMigrated(path);
         return settings;
+    }
+
+    // 保存できなくても、読み込んだ設定は使う (既定値に戻すと、次の保存でユーザーの設定が消える)。
+    private void SaveMigrated(string path)
+    {
+        try { Save(path); }
+        catch (Exception ex) when (DataFile.IsFileError(ex)) { Diagnostics.Log.Warn($"移行した config.json を保存できませんでした: {ex.Message}"); }
     }
 
     /// <summary>config.json の一番上の項目 property が、文字列の value か (プロファイルの中の値は見ない)。</summary>

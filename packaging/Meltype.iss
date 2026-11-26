@@ -76,6 +76,7 @@ Type: files; Name: "{app}\uninstall.ps1"
 
 [Icons]
 Name: "{userprograms}\Meltype"; Filename: "{app}\Meltype.exe"; WorkingDir: "{app}"; Comment: "Meltype: 日本語と英語を自動で打ち分ける"
+Name: "{userprograms}\Meltype の設定"; Filename: "{app}\MeltypeSettings.exe"; WorkingDir: "{app}"; Comment: "Meltype の設定・ユーザー辞書・定型文・学習データ"
 Name: "{userstartup}\Meltype"; Filename: "{app}\Meltype.exe"; WorkingDir: "{app}"; Comment: "Meltype: 日本語と英語を自動で打ち分ける"; Tasks: startup
 
 [Run]
@@ -88,7 +89,7 @@ Filename: "{app}\Meltype.exe"; Parameters: "--exit"; Flags: runhidden waituntilt
 Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN Meltype /F"; Flags: runhidden waituntilterminated; RunOnceId: "DeleteStartupTask"
 
 [UninstallDelete]
-; 設定と学習データ ({localappdata}\Meltype) は、アンインストールの最後に聞いてから消す (CurUninstallStepChanged)
+; データのフォルダー ({localappdata}\Meltype) は、アンインストールの最後に聞いてから消す (CurUninstallStepChanged)
 Type: filesandordirs; Name: "{app}"
 
 [Code]
@@ -119,7 +120,7 @@ begin
   Result := ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe');
 end;
 
-// 動いている Meltype (と Mozc のヘルパー) を止める。管理者として動いている Meltype も止まるよう、まず --exit で終了の合図を送る。
+// 動いている Meltype (と Mozc のヘルパー・設定アプリ) を止める。管理者として動いている Meltype も止まるよう、まず --exit で終了の合図を送る。
 procedure StopMeltype();
 var
   ResultCode: Integer;
@@ -130,6 +131,7 @@ begin
     Exec(Installed, '--exit', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM Meltype.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM meltype_mozc_helper.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM MeltypeSettings.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Sleep(300);
 end;
 
@@ -143,7 +145,13 @@ var
   Parameters: String;
 begin
   ExtractTemporaryFiles('{app}\tip\Register-Tip.ps1');
+  // ソースから入れるとき (Install-Meltype.ps1) は、その PC に登録するアーキテクチャの DLL しか無い。無いものは展開しない (展開すると失敗する)
+#if DirExists(SourceDir + "\app\tip\x64")
   ExtractTemporaryFiles('{app}\tip\x64\*');
+#endif
+#if DirExists(SourceDir + "\app\tip\arm64")
+  ExtractTemporaryFiles('{app}\tip\arm64\*');
+#endif
   ExtractTemporaryFiles('{app}\tip\x86\*');
   ExtractTemporaryFiles('{app}\meltype-ime.ps1');
   ExtractTemporaryFiles('{app}\setup-ime.ps1');
@@ -216,11 +224,11 @@ begin
     Exec(PowerShell(), Parameters, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 #endif
   end;
-  // 設定と学習データは入れ直したときにも使えるよう、聞いてから消す (既定は残す)。画面の無いアンインストールでは残す。
+  // データのフォルダーは入れ直したときにも使えるよう、聞いてから丸ごと消す (既定は残す)。画面の無いアンインストールでは残す。
   if (CurUninstallStep = usPostUninstall) and not UninstallSilent() then
   begin
     Data := ExpandConstant('{localappdata}\Meltype');
-    if DirExists(Data) and (MsgBox('設定と学習データ (' + Data + ') も削除しますか?' + #13#10 + #13#10 + '「いいえ」なら残します。もう一度インストールしたときに、そのまま使えます。', mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES) then
+    if DirExists(Data) and (MsgBox('Meltype のデータ (' + Data + ') もすべて削除しますか? 設定・学習データ・ユーザー辞書・打鍵数などが消えます。' + #13#10 + #13#10 + '「いいえ」なら残します。もう一度インストールしたときに、そのまま使えます。', mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES) then
       DelTree(Data, True, True, True);
   end;
 end;

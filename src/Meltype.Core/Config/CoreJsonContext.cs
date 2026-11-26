@@ -4,6 +4,8 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Meltype.Composition;
+using Meltype.Detection;
+using Meltype.Learning;
 
 namespace Meltype.Config;
 

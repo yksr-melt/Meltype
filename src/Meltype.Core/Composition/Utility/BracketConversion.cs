@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 aster-void
 
+using Meltype.Composition;
+
 namespace Meltype.Composition.Utility;
 
 /// <summary>
@@ -13,10 +15,10 @@ internal sealed class BracketConversion : IUtilityConversion
 {
     public UtilityCandidates? Convert(UtilityInput input)
     {
-        var text = input.Text;
+        CompositionTextState text = input.Text;
         if (input.Direct || text.Mode is DisplayMode.HalfWidthAlphanumeric or DisplayMode.FullWidthAlphanumeric ||
-            text.Pending.Length > 0 || text.Units.Count is not (1 or 2) || text.ProtectedSpans().Count > 0) return null;
-        var bracket = string.Concat(text.Units.Select(u => !text.KanaInput && u.Raw is "{" or "}" or "<" or ">" ? u.Raw : u.Kana));
+            CompositionText.Pending(text).Length > 0 || CompositionText.Units(text).Count is not (1 or 2) || CompositionText.ProtectedSpans(text).Count > 0) return null;
+        var bracket = string.Concat(CompositionText.Units(text).Select(u => !text.KanaInput && u.Raw is "{" or "}" or "<" or ">" ? u.Raw : u.Kana));
         return BracketCandidates.For(bracket) is { } brackets
             ? new(brackets.Candidates, UtilityPlacement.Replace) { Reading = bracket, Notes = brackets.Notes }
             : null;

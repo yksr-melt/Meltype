@@ -19,11 +19,8 @@ internal static class AppInfo
         Config.ProjectInfo.GitHubReportUrl(template, template.StartsWith("1-", StringComparison.Ordinal) ? Diagnostics.ReportInfo.OsName : "Windows", Version, environment);
 
     /// <summary>自分で直した誤判定を、誤判定のひな形に入れた状態で開く URL (issue #284)。</summary>
-    public static string MisdetectionReportUrl(Composition.Correction correction, string environment) =>
+    public static string MisdetectionReportUrl(Meltype.Diagnostics.Correction correction, string environment) =>
         Config.ProjectInfo.MisdetectionReportUrl(correction, "Windows", Version, environment);
-
-    /// <summary>不具合報告を開く URL (OS・版・実行環境は今のものを入れる)。</summary>
-    public static string ReportUrl(string environment) => Config.ProjectInfo.ReportUrl(Diagnostics.ReportInfo.OsName, Version, environment);
 
     /// <summary>自動更新で最新のリリースを見に行く GitHub のリポジトリ (公開されている必要がある)。</summary>
     public const string UpdateRepository = "yksr-melt/Meltype";

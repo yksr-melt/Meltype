@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
 
-using System.Globalization;
 using System.Diagnostics;
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
-using Meltype.Composition;
+using Meltype.Dictionary;
+using Meltype.Engine;
 
 namespace Meltype.Tests;
 
@@ -20,7 +21,7 @@ namespace Meltype.Tests;
 /// </summary>
 internal static class Performance
 {
-    private const string DefaultCases = "tools/mozc-compare-cases.tsv";
+    private const string DefaultCases = "src/Meltype.Core.Tests/data/perf-cases.tsv";
     public const int DefaultSamples = 5;
 
     private static readonly JsonSerializerOptions Json = new()
@@ -46,7 +47,7 @@ internal static class Performance
 
         var mozc = Henkan.Engine;
         var converter = mozc is null ? null : new TimedConverter(mozc);
-        var more = mozc is null ? null : new TimedCandidates(mozc.Candidates);
+        var more = mozc is null ? null : new TimedCandidates(reading => mozc.Candidates(reading, long.MaxValue));
         CompositionTests.Keyboard Keyboard() => new(live: true, converter: converter, moreCandidates: more is null ? null : more.Lookup,
             userDictionary: new UserDictionary(null), translations: Henkan.TranslationDictionary);
 
@@ -344,7 +345,7 @@ internal static class Performance
         }
     }
 
-    /// <summary>変換エンジンを呼んだ回数と時間を数える (覚えさせない: ILearningConverter を持たない)。</summary>
+    /// <summary>変換エンジンを呼んだ回数と時間を数える (覚えさせない: Learn は何もしない)。</summary>
     private sealed class TimedConverter(IKanjiConverter inner) : IKanjiConverter
     {
         private long _ticks;
@@ -357,9 +358,7 @@ internal static class Performance
             Calls = 0;
         }
 
-        public string? Convert(string hiragana) => Time(() => inner.Convert(hiragana));
-
-        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) => Time(() => inner.ConvertClauses(hiragana, context));
+        public IReadOnlyList<ConversionClause>? Convert(ConversionRequest request) => Time(() => inner.Convert(request));
 
         private T Time<T>(Func<T> call)
         {

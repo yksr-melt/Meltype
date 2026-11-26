@@ -4,7 +4,11 @@
 using System.Text.Json;
 using Meltype.Composition;
 using Meltype.Config;
+using Meltype.Detection;
+using Meltype.Dictionary;
+using Meltype.Ime;
 using Meltype.Input;
+using Meltype.Learning;
 
 namespace Meltype.Tests;
 
@@ -193,6 +197,19 @@ internal static class SessionFacadeTests
                 if (!results[i].Consumed) output += (input + "\n")[i];
             }
             Assert.Equal(expected, output, input);
+        }
+    }
+
+    /// <summary>長い URL の直後に打った英字を、URL の途中の / から始まる /command の名前とみなさない (#2199)。</summary>
+    [Test]
+    public static void Issue2199_RomajiAfterLongUrlComposes()
+    {
+        foreach (var url in new[] { "https://github.com/yksr-melt/Meltype/issues/2199", "https://github.com/Meltype" })
+        {
+            var field = new Field(url);
+            var results = Type(Create(), "kyouha\n", field);
+            Assert.True(results.All(r => r.Consumed), $"{url} の後ろで打った英字はアプリに渡さない");
+            Assert.Equal(url + "きょうは", field.Text);
         }
     }
 
@@ -719,7 +736,7 @@ internal static class SessionFacadeTests
     [Test]
     public static void Json_HasTypedKeys_WhenSettingIsOn()
     {
-        var session = new TestSession(() => new Settings { ShowTypedKeys = true });
+        var session = new TestSession(() => new Settings { TypedKeys = TypedKeysStyle.Keys });
         var json = Type(session, "kyou")[^1].ToJson();
         Assert.True(json.Contains("\"typedKeys\":\"kyou\""), json);
     }
@@ -833,7 +850,7 @@ internal static class SessionFacadeTests
         session.CodeInput = true;
         session.Toggle("echo ");
         Assert.True(!session.CodeEnglishAt("echo "), "明示的な日本語指定を有効にする");
-        session.Send(Ime.ImeEventType.CaretMoved, caret: new Ime.ImeCaret { Moved = true, PassedKey = 0, FocusEntered = true });
+        session.Send(new Ime.ImeEvent.CaretMoved(new Ime.ImeCaret { Moved = true, PassedKey = 0, FocusEntered = true }));
         Assert.True(session.CodeEnglishAt("echo "), "再有効化で明示的な日本語指定を初期化する");
         Assert.True(!Type(session, "k", "echo ").Single().Consumed, "コードの行に戻る");
     }
@@ -887,13 +904,13 @@ internal static class SessionFacadeTests
             foreach (var (steps, expected) in new (string[] Steps, string Expected)[]
             {
                 // 報告された例: 打って、すべて消して、同じものを打つ
-                (["githubnipushsuru\n", new string('\b', "github に push する".Length), "githubnipushsuru\n"], "github に push する"),
-                (["pushsuru\n", "\n", "github\n"], "push する\ngithub"),
-                (["github\n", " ", "ni\n"], "github に"),
-                (["pushsuru\n", " ", "github\n"], "push する github"),
+                (["githubnipushsuru\n", new string('\b', "GitHub に push する".Length), "githubnipushsuru\n"], "GitHub に push する"),
+                (["pushsuru\n", "\n", "github\n"], "push する\nGitHub"),
+                (["github\n", " ", "ni\n"], "GitHub に"),
+                (["pushsuru\n", " ", "github\n"], "push する GitHub"),
                 // 続けて確定したときは、前に確定した文字との間に入れる
-                (["github\n", "ni\n", "push\n", "suru\n"], "github に push する"),
-                (["pushsuru\n", "github\n"], "push する github"),
+                (["github\n", "ni\n", "push\n", "suru\n"], "GitHub に push する"),
+                (["pushsuru\n", "github\n"], "push する GitHub"),
             })
             {
                 var detector = CompositionDetector.CreateDefault();
@@ -922,11 +939,11 @@ internal static class SessionFacadeTests
             {
                 (["sore\n"], "それ"),
                 (["hello\n", "\b\b\b\b\b", "sore\n"], "それ"),
-                (["game\n"], "game"),
-                (["suru\n", "\b\b", "game\n"], "game"),
+                (["tone\n"], "tone"),
+                (["suru\n", "\b\b", "tone\n"], "tone"),
                 // 続けて確定したときは、前の確定の言語を使う
                 (["hello\n", "sore\n"], "hellosore"),
-                (["suru\n", "game\n"], "するがme"),
+                (["suru\n", "tone\n"], "するとね"),
             })
             {
                 var detector = CompositionDetector.CreateDefault();
@@ -1003,6 +1020,12 @@ internal static class SessionFacadeTests
         session = Create();
         session.CodeInput = true;
         Assert.True(Type(session, "/help", new Field("> ")).All(r => !r.Consumed), "AI の入力行の /help はアプリへ");
+        // 打ち始めの / が変換ボックスに入らなかったら (英数でアプリに通した)、後で日本語の後ろに打った / を ・ にしない。
+        session = Create();
+        session.Direct = true;
+        Assert.True(!Type(session, "/", before: "")[0].Consumed, "英数の / はアプリへ");
+        session.Direct = false;
+        Assert.Equal("/", Type(session, "/", before: "あ")[0].View?.Text);
     }
 
     [Test]
@@ -1105,7 +1128,7 @@ internal static class SessionFacadeTests
                 _ => [],
             };
             using var runtime = new MeltypeRuntime(directory);
-            var parts = runtime.SessionParts(new CompositionTests.FakeConverter(), More, _ => null);
+            var parts = runtime.SessionParts(new CompositionTests.FakeConverter(), (reading, _) => More(reading), _ => null);
             var a = new TestSession(parts, () => runtime.Settings.Current);
             var b = new TestSession(parts, () => runtime.Settings.Current);
             void Choose(TestSession session, string typed, string word)

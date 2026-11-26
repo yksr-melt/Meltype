@@ -1,5 +1,5 @@
 # Pull Request のチェック「報告の再現」。
-#   本文の「## 確かめること」の「入力 → 期待」を、Pull Request のコードと最新のリリースの Mozc のヘルパーで確かめる
+#   本文の「## 期待する打鍵と変換」の「入力 → 期待」を、Pull Request のコードと、そこからビルドした Mozc のヘルパーで確かめる
 # 本文を読むので、本文の編集 (edited) でも流す。必須チェックにはしない
 # (edited の run は取り消し合い、最新の run がこのチェックを報告しないまま残ることがある)。
 # pull_request なので、フォークからの Pull Request でも書き込みの権限は持たない (結果は Summary とチェックの成否で返す)。
@@ -24,8 +24,9 @@ defaults:
 jobs:
   expectations:
     name: 報告の再現
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+    runs-on: ubuntu-24.04
+    # MOZC_COMMIT を変えた Pull Request では、Mozc を初めからビルドする
+    timeout-minutes: 90
     permissions:
       contents: read
       pull-requests: read
@@ -39,19 +40,10 @@ jobs:
         uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: 10.0.x
-      - name: Mozc helper from latest release
-        if: steps.cases.outputs.count != '0'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # Fork PR checks must use the same published Mozc helper as upstream.
-          # A fork may have no releases, even when the upstream project does.
-          gh release download --repo "yksr-melt/Meltype" --pattern 'Meltype-*-linux.zip' --dir "$RUNNER_TEMP/release"
-          unzip -q "$RUNNER_TEMP"/release/*.zip -d "$RUNNER_TEMP/release"
-          helper="$RUNNER_TEMP/release/Meltype-linux/mozc/meltype_mozc_helper"
-          chmod +x "$helper"
-          echo "MELTYPE_MOZC=$helper" >> "$GITHUB_ENV"
+      - if: steps.cases.outputs.count != '0'
+        uses: ./.github/actions/linux-mozc
       - if: steps.cases.outputs.count != '0'
         run: |
+          export MELTYPE_MOZC="$PWD/native/mozc/bin/linux/meltype_mozc_helper"
           dotnet run --project src/Meltype.Core.Tests -c Release -- --expect "$RUNNER_TEMP/cases.txt" "$RUNNER_TEMP/cases.json"
           node .github/bot/pr-checks.mjs expect "$RUNNER_TEMP/cases.json"

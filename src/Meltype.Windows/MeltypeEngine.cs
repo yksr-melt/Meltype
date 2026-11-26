@@ -19,9 +19,11 @@ internal sealed class MeltypeEngine : IDisposable
     private readonly KeyboardMonitor _monitor;
     // Chrome リモート デスクトップ・Parsec で操作されているか (#372)
     private readonly RemoteControl _remote = new();
-    // config.json の設定と、動かしている設定 (Running) の写し。フックの中でファイル・レジストリを見ないように、土台が読み直したときに差し替える
+    // config.json の設定と、動かしている設定 (Running)・登録済みの別のビルドの Meltype IME の版 (OtherTipVersion) の写し。
+    // フックの中でファイル・レジストリを見ないように、土台が読み直したときに差し替える
     private volatile Settings _settings = null!;
     private volatile Settings _running = null!;
+    private volatile string? _otherTipVersion;
     private bool _disposed;
 
     /// <summary>動かしている設定 (<see cref="Running"/>) が変わった (前と後)。どのスレッドからも呼ばれる。受け取った側で UI スレッドに移して <see cref="OnSettingsChanged"/> を呼ぶ。</summary>
@@ -34,40 +36,27 @@ internal sealed class MeltypeEngine : IDisposable
 
     /// <summary>打鍵数のカウンター (トレイの「打鍵数...」)。</summary>
     public KeyCounter KeyCounter { get; }
-    private readonly System.Threading.Timer _keyCountTimer;
-    /// <summary>Discord のステータスに打鍵数を出す (打鍵数の「Discord に表示する」が ON の間だけ。入力とは別のスレッドで送る)。</summary>
-    private readonly DiscordPresence _discordPresence;
 
-    private Action<KeyEvent>? _shortcutCapture;
-    private bool _captureHankakuTail;
-    private readonly HashSet<int> _captureDown = [];
     // ほかのソフトが送ったキーを通したことを、1 回だけログに書いたか (#250)
     private bool _injectedHintLogged;
 
-    public MeltypeEngine(Composition.MeltypeRuntime runtime)
+    public MeltypeEngine(Ime.MeltypeRuntime runtime)
     {
         Runtime = runtime;
         // 先に受け取り始める (読んでから受け取り始めるまでに読み直した分を逃さないように。その間に届いた分は、下で読む)
         runtime.SettingsChanged += next =>
         {
             if (_running is not { } previous) return;
-            _running = RunningSettings(_settings, next);
-            _settings = next;
+            Load(next);
             SettingsChanged?.Invoke(previous, _running);
         };
-        var settings = runtime.Settings.Current;
-        _running = RunningSettings(null, settings);
-        _settings = settings;
+        Load(runtime.Settings.Current);
         _monitor = new KeyboardMonitor(OnKey, OnMouseButton, OnForegroundChanged, OnFocusChanged);
-        KeyCounter = new KeyCounter(Path.Combine(runtime.DataDirectory, "keycount.json"));
-        _keyCountTimer = new System.Threading.Timer(_ => KeyCounter.Save(), null, 60_000, 60_000);
-        _discordPresence = new DiscordPresence(
-            () => KeyCounter.DiscordPresence && KeyCounter.Enabled,
-            () => new DiscordPresence.Stats(KeyCounter.OnDay(DateTime.Today), KeyCounter.Total));
+        KeyCounter = runtime.StartKeyCount();
     }
 
     /// <summary>設定・辞書・学習データ (どの OS も同じもの)。</summary>
-    public Composition.MeltypeRuntime Runtime { get; }
+    public Ime.MeltypeRuntime Runtime { get; }
 
     /// <summary>config.json の設定。設定画面・トレイはこれを写して変える (<see cref="Running"/> を写すと、Meltype キーボードを保存してしまう)。</summary>
     public Settings Settings => _settings;
@@ -75,13 +64,26 @@ internal sealed class MeltypeEngine : IDisposable
     /// <summary>動かしている設定。入力・表示・報告はこれを読む。動作モードが Meltype IME でも、使えなければ Meltype キーボード。</summary>
     public Settings Running => _running;
 
-    // 動作モードが Meltype IME なのに使えなければ (ポータブル版・ARM64 の Windows・登録されていない・登録済みの Meltype IME がこの Meltype.exe と別ビルド・
+    /// <summary>
+    /// 動作モードが Meltype IME で、登録済みの Meltype IME がこの Meltype.exe と別ビルドなら、その Meltype IME の版 (<see cref="Tip.TipServer.OtherRegisteredVersion"/>)。
+    /// 動作モードが Meltype キーボードなら、登録済みの Meltype IME は入力に関わらないので null。
+    /// </summary>
+    public string? OtherTipVersion => _otherTipVersion;
+
+    private void Load(Settings next)
+    {
+        _running = RunningSettings(_settings, next);
+        _otherTipVersion = next.Mode == InputMode.Tsf ? Tip.TipServer.OtherRegisteredVersion : null;
+        _settings = next;
+    }
+
+    // 動作モードが Meltype IME なのに使えなければ (ポータブル版・登録されていない・登録済みの Meltype IME がこの Meltype.exe と別ビルド・
     // キーボードの一覧に無い)、Meltype キーボードで動かす。
     // config.json は書き換えないので、Meltype IME を入れ直してから読み直すと Meltype IME で動く
     private static Settings RunningSettings(Settings? previous, Settings next)
     {
         if (next.Mode != InputMode.Tsf || (!AppPaths.IsPortable && Tip.TipServer.IsUsable)) return next;
-        if (previous?.Mode != next.Mode) Log.Warn("Meltype IME を使えない (ポータブル版・ARM64 の Windows・登録されていない・登録済みの Meltype IME がこの Meltype.exe と別ビルド・キーボードの一覧に無い) ので、Meltype キーボードで動かします。");
+        if (previous?.Mode != next.Mode) Log.Warn("Meltype IME を使えない (ポータブル版・登録されていない・登録済みの Meltype IME がこの Meltype.exe と別ビルド・キーボードの一覧に無い) ので、Meltype キーボードで動かします。");
         var running = next.Clone();
         running.Mode = InputMode.Keyboard;
         return running;
@@ -110,36 +112,12 @@ internal sealed class MeltypeEngine : IDisposable
         get => _settings.Enabled;
         set
         {
-            var next = _settings.Clone();
-            next.Enabled = value;
-            ApplySettings(next);
+            EditSettings(settings => settings.Enabled = value);
         }
     }
 
-    public void CaptureShortcut(Action<KeyEvent>? capture) => Volatile.Write(ref _shortcutCapture, capture);
-
     private bool OnKey(KeyEvent e)
     {
-        // 登録画面の取り込みは入力より先。終了後も飲み込んだキー解放は対にする。
-        // 取り込みを終えた F3 解放に続く F4 押下を、通常の切り替えとして実行しない。
-        if (_captureHankakuTail)
-        {
-            _captureHankakuTail = false;
-            if (!e.Injected && e.IsDown && e.Vk == VirtualKeys.OemEnlw && e.Scan == 0x29 && !e.Extended) return true;
-        }
-        var capture = Volatile.Read(ref _shortcutCapture);
-        if (!e.Injected && capture is not null)
-        {
-            if (e.IsDown) _captureDown.Add(e.PhysicalId); else _captureDown.Remove(e.PhysicalId);
-            _captureHankakuTail = e.IsUp && e.Vk == VirtualKeys.OemAuto && e.Scan == 0x29 && !e.Extended;
-            capture(e);
-            return true;
-        }
-        if (e.IsUp && _captureDown.Remove(e.PhysicalId))
-        {
-            _captureHankakuTail = e.Vk == VirtualKeys.OemAuto && e.Scan == 0x29 && !e.Extended;
-            return true;
-        }
         var settings = _running;
         // 遠隔操作 (AnyDesk・VNC) のキーは、ほかのソフトが送ったキー (LLKHF_INJECTED) として届く。設定で許可していれば手で打ったキーとして扱う。
         // Meltype 自身が送り直したキーは、印 (InjectedMarker) でフックの入口で除いているので、ここには来ない (自分の出力を処理し直さない)。
@@ -193,13 +171,25 @@ internal sealed class MeltypeEngine : IDisposable
     }
 
     /// <summary>
-    /// 打鍵数に数えてよいか。Meltype を一時停止しているとき・アプリ別に OFF のとき・パスワード欄では数えない。
+    /// 打鍵数に数えるか。設定「打鍵数」が「数えない」のとき・Meltype を一時停止しているとき・アプリ別に OFF のとき・パスワード欄では数えない。
     /// フォーカスが移った先をまだ調べている間も数えない (前の入力欄の判定のままパスワード欄の打鍵を数えないように)。
     /// </summary>
     private bool KeyCountAllowed(Settings settings) =>
-        settings.Enabled && settings.IsAppEnabled(_foreground.Current.ProcessName) && Focus is { Resolved: true, Current.IsPassword: false };
+        settings.KeyCount != KeyCountMode.Off && settings.Enabled && settings.IsAppEnabled(_foreground.Current.ProcessName) && Focus is { Resolved: true, Current.IsPassword: false };
 
-    public void ApplySettings(Settings settings) => Runtime.Settings.Apply(settings);
+    /// <summary>
+    /// config.json を読み直してから change で 1 項目を変えて保存する (設定アプリが直前に書いた値を戻さない)。
+    /// 保存できなくても、このプロセスでは変えた設定を使う (一時停止などが効かなくならないように)。
+    /// </summary>
+    public void EditSettings(Action<Settings> change) => ReplaceSettings(settings =>
+    {
+        var next = settings.Clone();
+        change(next);
+        return next;
+    });
+
+    /// <summary><see cref="EditSettings"/> と同じで、プロファイルの切り替えなど設定全体を作り直す。</summary>
+    public void ReplaceSettings(Func<Settings, Settings> change) => Runtime.Settings.Edit(change, useUnsaved: true);
 
     /// <summary>設定が変わった後の処理 (UI スレッド)。設定画面で変えたときも、config.json を外で書き換えたときも呼ぶ。</summary>
     public void OnSettingsChanged(Settings previous, Settings next)
@@ -225,9 +215,6 @@ internal sealed class MeltypeEngine : IDisposable
         _disposed = true;
         _monitor.Dispose();
         _remote.Dispose();
-        _keyCountTimer.Dispose();
-        _discordPresence.Dispose();
-        KeyCounter.Save();
         Runtime.Dispose();
         Log.Info("Meltype を終了しました。");
         Log.FlushFile();

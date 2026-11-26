@@ -9,7 +9,7 @@ namespace Meltype.Composition;
 /// (変換ボックスに溜めると、アプリ側の補完の候補が出ない・選べない)。名前の後に空白を打てば普通の入力に戻る。
 /// taro@example.com の @ は前が英字なので対象にしない。どれもキャレットの前の文字 (before) だけで決める。
 /// </summary>
-public static class SigilWord
+internal static class SigilWord
 {
     /// <summary>名前の前に付ける記号。</summary>
     public static bool IsSigil(char c) => c is '/' or '$' or '@';

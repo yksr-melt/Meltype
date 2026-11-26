@@ -3,6 +3,7 @@
 
 using System.Globalization;
 using System.Text.RegularExpressions;
+using Meltype.Composition;
 
 namespace Meltype.Composition.Utility;
 
@@ -17,7 +18,7 @@ internal sealed partial class SlashDateConversion : IUtilityConversion
 
     public UtilityCandidates? Convert(UtilityInput input)
     {
-        var raw = input.Text.Raw;
+        var raw = CompositionText.Raw(input.Text);
         if (input.Text.KanaInput || input.Text.Mode != DisplayMode.Auto || SlashDate().Match(raw) is not { Success: true } date) return null;
         var dates = TypedDateConversion.Dates(int.Parse(date.Groups["m"].Value, CultureInfo.InvariantCulture), int.Parse(date.Groups["d"].Value, CultureInfo.InvariantCulture), input.Context.Now);
         return dates is null ? null : new([raw, .. dates, CompositionText.ToFullWidth(raw)], UtilityPlacement.Replace);

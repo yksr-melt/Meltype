@@ -65,6 +65,32 @@ internal static class SettingsJsonTests
     }
 
     [Test]
+    public static void SettingsJson_ShowTypedKeysMovesToTheChoice()
+    {
+        // v13: ShowTypedKeys (真偽値) を TypedKeys (選択肢) にした。プロファイルごとの ON・OFF も残る
+        var path = Path.GetTempFileName();
+        try
+        {
+            foreach (var (json, expected) in new[]
+            {
+                ("{\"SettingsVersion\":12,\"ShowTypedKeys\":false}", TypedKeysStyle.Off),
+                ("{\"SettingsVersion\":12,\"ShowTypedKeys\":true}", TypedKeysStyle.Keys),
+                ("{\"SettingsVersion\":12}", TypedKeysStyle.Keys),
+            })
+            {
+                File.WriteAllText(path, json);
+                Assert.Equal(expected, Settings.Load(path).TypedKeys, json);
+            }
+            File.WriteAllText(path, "{\"SettingsVersion\":12,\"ShowTypedKeys\":false,\"Profiles\":[{\"Name\":\"別\",\"Values\":{\"ShowTypedKeys\":true}}]}");
+            Assert.Equal(TypedKeysStyle.Keys, Settings.Load(path).SwitchProfile("別").TypedKeys, "OFF のプロファイルから ON のプロファイルに切り替える");
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Test]
     public static void SettingsJson_TsfIndicatorMovesToTheSharedSetting()
     {
         // v10: Meltype IME だけの ShowTsfModeIndicator を ModeIndicator に移す。Meltype キーボードの人の ModeIndicator はそのまま。
@@ -318,9 +344,9 @@ internal static class SettingsJsonTests
         {
             var config = Path.Combine(directory, "config.json");
             var statePath = Path.Combine(directory, "state.json");
-            File.WriteAllText(config, "{ \"SettingsVersion\": 7, \"WelcomeShown\": true, \"TsfIntroduced\": true, \"TsfOffered\": true, \"ReleaseNotesShown\": \"1.4.0\", \"SettingsShowHelp\": false, \"SettingsWheelChangesValue\": false }");
+            File.WriteAllText(config, "{ \"SettingsVersion\": 7, \"WelcomeShown\": true, \"TsfIntroduced\": true, \"TsfOffered\": true, \"ReleaseNotesShown\": \"1.4.0\" }");
             var state = AppState.Load(statePath, config);
-            Assert.True(state is { WelcomeShown: true, TsfIntroduced: true, TsfOffered: true, ReleaseNotesShown: "1.4.0", SettingsShowHelp: false, SettingsWheelChangesValue: false }, "config.json の値を引き継ぐ");
+            Assert.True(state is { WelcomeShown: true, TsfIntroduced: true, TsfOffered: true, ReleaseNotesShown: "1.4.0" }, "config.json の値を引き継ぐ");
             Assert.True(File.Exists(statePath), "すぐに state.json に書く");
 
             Settings.Load(config);
@@ -333,7 +359,7 @@ internal static class SettingsJsonTests
 
             File.Delete(statePath);
             File.Delete(config);
-            Assert.True(AppState.Load(statePath, config) is { WelcomeShown: false, TsfIntroduced: false, SettingsShowHelp: true }, "初めて起動したときは既定値");
+            Assert.True(AppState.Load(statePath, config) is { WelcomeShown: false, TsfIntroduced: false }, "初めて起動したときは既定値");
         }
         finally { Directory.Delete(directory, recursive: true); }
     }

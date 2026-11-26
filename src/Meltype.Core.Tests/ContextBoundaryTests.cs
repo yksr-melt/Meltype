@@ -9,18 +9,18 @@ namespace Meltype.Tests;
 
 internal static class ContextBoundaryTests
 {
-    private static CompositionText Create(string before = "", bool manual = false, LanguageMemory? memory = null)
+    private static (CompositionTextState Text, CompositionEnv Env) Create(string before = "", bool manual = false, LanguageMemory? memory = null)
     {
         var detector = CompositionDetector.CreateDefault();
         detector.Memory = memory;
         detector.IsCommonJapanese = RomajiTypoCorrector.Load(detector.Romaji).IsCommonJapanese;
-        return new CompositionText(detector)
+        var context = TextContext.None with
         {
             PrecedingEnglish = before.Length == 0 ? null : true,
             PrecedingEnglishSentence = before.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length >= 2,
-            PrecedingEnglishName = CompositionController.IsEnglishNameContext(before),
-            Manual = () => manual
+            PrecedingEnglishName = CompositionContext.IsEnglishNameContext(before),
         };
+        return (new CompositionTextState(), TestSupport.Env(detector, new Settings { AutoDetection = !manual }) with { Context = () => context });
     }
 
     [Test]
@@ -28,27 +28,27 @@ internal static class ContextBoundaryTests
     {
         foreach (var word in new[] { "taro", "jirou", "haruto" })
         {
-            var text = Create("my name is ");
-            foreach (var c in word) text.Append(c);
-            Assert.Equal(word, text.Display(final: true), word);
+            var (text, env) = Create("my name is ");
+            foreach (var c in word) CompositionText.Append(text, env, c);
+            Assert.Equal(word, CompositionText.Display(text, env, final: true), word);
         }
         var japaneseMemory = new LanguageMemory(null);
         japaneseMemory.Remember("taro", english: false, explicitChoice: true);
-        foreach (var text in new[] { Create(), Create("my name is ", manual: true), Create("my name is ", memory: japaneseMemory) })
+        foreach (var (text, env) in new[] { Create(), Create("my name is ", manual: true), Create("my name is ", memory: japaneseMemory) })
         {
-            foreach (var c in "taro") text.Append(c);
-            Assert.Equal("たろ", text.Display(final: true));
+            foreach (var c in "taro") CompositionText.Append(text, env, c);
+            Assert.Equal("たろ", CompositionText.Display(text, env, final: true));
         }
-        // 英字に直して覚えた日本語由来の語 (sushi) は英字のまま (tools/test-native-boundaries.py と同じ)
+        // 英字に直して覚えた日本語由来の語 (sushi) は英字のまま (src/Meltype.Core.CApi/tests/test-native-boundaries.py と同じ)
         var englishMemory = new LanguageMemory(null);
         englishMemory.Remember("sushi", english: true, explicitChoice: true);
         englishMemory.Remember("sushi", english: true, explicitChoice: true);
-        var learned = Create(memory: englishMemory);
-        foreach (var c in "sushi") learned.Append(c);
-        Assert.Equal("sushi", learned.Display(final: true), "覚えた sushi");
-        var knownJapanese = Create("I study ");
-        foreach (var c in "nihongo") knownJapanese.Append(c);
-        Assert.Equal("にほんご", knownJapanese.Display(final: true));
+        var (learned, learnedEnv) = Create(memory: englishMemory);
+        foreach (var c in "sushi") CompositionText.Append(learned, learnedEnv, c);
+        Assert.Equal("sushi", CompositionText.Display(learned, learnedEnv, final: true), "覚えた sushi");
+        var (knownJapanese, knownEnv) = Create("I study ");
+        foreach (var c in "nihongo") CompositionText.Append(knownJapanese, knownEnv, c);
+        Assert.Equal("にほんご", CompositionText.Display(knownJapanese, knownEnv, final: true));
     }
 
     [Test]
@@ -77,15 +77,15 @@ internal static class ContextBoundaryTests
     {
         foreach (var (raw, expected) in new[] { ("apinoerror", "apiのerror"), ("apigabug", "apiがbug"), ("apinitests", "apiにtests") })
         {
-            var text = Create();
-            foreach (var c in raw) text.Append(c);
-            Assert.Equal(expected, text.Display(final: true), raw);
+            var (text, env) = Create();
+            foreach (var c in raw) CompositionText.Append(text, env, c);
+            Assert.Equal(expected, CompositionText.Display(text, env, final: true), raw);
         }
         foreach (var (raw, expected) in new[] { ("api", "api"), ("sushinoerror", "すしのerror"), ("kapibara", "かぴばら") })
         {
-            var text = Create();
-            foreach (var c in raw) text.Append(c);
-            Assert.Equal(expected, text.Display(final: true), raw);
+            var (text, env) = Create();
+            foreach (var c in raw) CompositionText.Append(text, env, c);
+            Assert.Equal(expected, CompositionText.Display(text, env, final: true), raw);
         }
     }
 }

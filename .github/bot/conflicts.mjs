@@ -1,13 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
 //
-// コンフリクトのお知らせ (.github/workflows/conflicts.yml)。開いている Pull Request を全部調べる。
-//
-// 2 つのことを知らせる。
-//   1. いまのコンフリクト: main とコンフリクトしている Pull Request に「コンフリクト」のラベルとコメントを付ける。
-//      原因になった Pull Request (分かれば) と、両方で変えたファイルも書く。解消されたらラベルを外し、コメントを書き換える。
-//   2. マージしたあとのコンフリクトの予告: 「この Pull Request をマージすると、どの Pull Request がコンフリクトするか」を、
-//      その Pull Request にコメントする (マージの順番を決めるときに使う)。
+// マージしたあとのコンフリクトの予告 (.github/workflows/conflicts.yml)。開いている Pull Request を全部調べ、
+// 「この Pull Request をマージすると、どの Pull Request がコンフリクトするか」を、その Pull Request にコメントする (マージの順番を決めるときに使う)。
+// いま main とコンフリクトしているかのラベルとコメントは Mergify が付ける (.mergify.yml)。
 //
 // コンフリクトは git merge-tree で、手元の git の中だけで確かめる (作業ツリーには何も書かない)。
 // Pull Request のコードは取ってくるだけで、実行はしない (ビルドもスクリプトも動かさない)。
@@ -15,9 +11,7 @@ import { execFileSync } from 'node:child_process';
 
 const api = process.env.GITHUB_API_URL ?? 'https://api.github.com';
 const repo = process.env.GITHUB_REPOSITORY;
-const NowMarker = '<!-- meltype-bot --><!-- conflict -->';
 const ForecastMarker = '<!-- meltype-bot --><!-- conflict-forecast -->';
-const Label = 'コンフリクト';
 const MaxFiles = 20;
 
 async function gh(method, url, body) {
@@ -113,40 +107,13 @@ async function upsert(number, marker, text, { onlyUpdate = false } = {}) {
   }
 }
 
-async function ensureLabel() {
-  try {
-    await gh('GET', `/labels/${encodeURIComponent(Label)}`);
-  } catch {
-    await gh('POST', '/labels', { name: Label, color: 'e11d48', description: 'main とコンフリクトしています' }).catch(() => {});
-  }
-}
-
 function fileList(files) {
   const lines = files.slice(0, MaxFiles).map(f => `  - \`${f}\``);
   if (files.length > MaxFiles) lines.push(`  - ほか ${files.length - MaxFiles} 件`);
   return lines;
 }
 
-// ---- 1. いまのコンフリクト ----
-
-async function reportNow(pr, files, cause) {
-  const labeled = pr.labels.some(l => l.name === Label);
-  if (files.length && !labeled) {
-    const lines = [`@${pr.user.login} この Pull Request は、main とコンフリクトしています。`];
-    if (cause) lines.push('', `原因になったと思われる変更: #${cause.number} ${cause.title}`);
-    lines.push('', 'コンフリクトしているファイル:', ...fileList(files));
-    lines.push('', '直せるときは main に追従して解消してください。直し方が分からないときや、メンテナー側の変更で起きたときは、この Pull Request のコメントでメンテナーに直すよう頼んでください ([CONTRIBUTING.md](../blob/main/CONTRIBUTING.md))。解消されると、このコメントとラベルは自動で更新されます。');
-    await gh('POST', `/issues/${pr.number}/labels`, { labels: [Label] });
-    await upsert(pr.number, NowMarker, lines.join('\n'));
-    console.log(`#${pr.number}: コンフリクトを知らせました`);
-  } else if (!files.length && labeled) {
-    await gh('DELETE', `/issues/${pr.number}/labels/${encodeURIComponent(Label)}`).catch(() => {});
-    await upsert(pr.number, NowMarker, '✅ main とのコンフリクトは解消されました。ありがとうございます!', { onlyUpdate: true });
-    console.log(`#${pr.number}: 解消を確認しました`);
-  }
-}
-
-// ---- 2. マージしたあとのコンフリクトの予告 ----
+// ---- 予告 ----
 
 /** pr をマージしたあと、いまはきれいな others のうちどれがコンフリクトするか。 */
 function forecast(main, pr, others, changed) {
@@ -182,13 +149,6 @@ async function reportForecast(pr, hits) {
 
 // ---- 本体 ----
 
-async function mergedPull(sha) {
-  if (!sha) return null;
-  const pulls = await gh('GET', `/commits/${sha}/pulls`).catch(() => []);
-  return pulls.find(p => p.merged_at) ?? null;
-}
-
-await ensureLabel();
 git(['fetch', '--quiet', '--no-tags', 'origin', '+refs/heads/main:refs/remotes/origin/main']);
 const main = git(['rev-parse', 'refs/remotes/origin/main']).out.trim();
 
@@ -196,20 +156,11 @@ const open = (await paged('/pulls?state=open')).filter(p => p.base.ref === 'main
 const fetched = fetchHeads(open.map(p => p.number));
 const prs = open.filter(p => fetched.has(p.number));
 
-const now = new Map(); // 番号 → main とコンフリクトしているファイル
-const changed = new Map(); // 番号 → main から変えたファイル
-for (const pr of prs) {
-  now.set(pr.number, conflictFiles(main, ref(pr.number)));
-  changed.set(pr.number, changedFiles(main, ref(pr.number)));
-}
-const clean = prs.filter(p => !now.get(p.number).length);
-
-// main への push なら、その push でマージした Pull Request を原因として書く (定期実行では原因が分からない)
-const cause = process.env.GITHUB_EVENT_NAME === 'push' ? await mergedPull(process.env.GITHUB_SHA) : null;
+const changed = new Map(prs.map(pr => [pr.number, changedFiles(main, ref(pr.number))])); // 番号 → main から変えたファイル
+const clean = prs.filter(pr => !conflictFiles(main, ref(pr.number)).length);
 
 for (const pr of prs) {
   try {
-    await reportNow(pr, now.get(pr.number), cause);
     await reportForecast(pr, forecast(main, pr, clean, changed));
   } catch (e) {
     console.log(`#${pr.number}: ${e.message}`);

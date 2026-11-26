@@ -30,3 +30,21 @@ priority_rules:
       - label = merge:fast
     priority: high
     allow_checks_interruption: false
+
+# main とコンフリクトしている PR に「コンフリクト」のラベルを付け、解消したら外す。
+# Mergify は PR への push と main への push のたびに調べ直す (Actions の定期実行では PR への push を追えない。#1967)。
+# コメントは、コンフリクトするようになったときに 1 回だけ書く。
+pull_request_rules:
+  - name: コンフリクト
+    conditions:
+      - base = main
+      - conflict
+    actions:
+      label:
+        toggle:
+          - コンフリクト
+      comment:
+        message: |
+          @{{ author }} この Pull Request は、main とコンフリクトしています。
+
+          直せるときは main に追従して解消してください。直し方が分からないときや、メンテナー側の変更で起きたときは、この Pull Request のコメントでメンテナーに直すよう頼んでください ([CONTRIBUTING.md](../blob/main/CONTRIBUTING.md))。解消されると「コンフリクト」のラベルは自動で外れます。
