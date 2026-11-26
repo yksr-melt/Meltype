@@ -114,19 +114,19 @@ internal static class KeigoConverter
                 case "gratitude_following": gratitudeFollowing.Add(fields[0]); break;
                 case "polite_adjectives": politeAdjectives.Add(fields[0]); break;
                 case "non_request_te": nonRequestTe.Add(fields[0]); break;
-                case "reading_words": readingWords[fields[0]] = fields[1]; break;
-                case "respectful_readings": respectfulReadings[fields[0]] = fields[1]; break;
-                case "respectful_suffixes": respectfulSuffixes.Add((fields[0], fields[1])); break;
-                case "question_readings": questionReadings[fields[0]] = fields[1]; break;
-                case "question_suffixes": questionSuffixes.Add((fields[0], fields[1])); break;
-                case "tail_readings": tailReadings[fields[0]] = fields[1]; break;
-                case "mid_clause_suffixes": midClauseSuffixes.Add((fields[0], fields[1])); break;
-                case "respectful_mid_clause_suffixes": respectfulMidClauseSuffixes.Add((fields[0], fields[1])); break;
-                case "tekurete_verbs": tekureteVerbs.Add((fields[0], fields[1])); break;
-                case "tail_text_suffixes": tailTextSuffixes.Add((fields[0], fields[1])); break;
-                case "reading_prefixes": readingPrefixes.Add((fields[0], fields[1], fields[2] == "1")); break;
-                case "in_text_replacements": inTextReplacements.Add((fields[0], fields[1], fields[2] == "1")); break;
-                case "suru_or_godan_suffixes": suruOrGodanSuffixes.Add((fields[0], fields[1], fields.Length > 2 ? fields[2] : null)); break;
+                case "reading_words" when fields.Length >= 2: readingWords[fields[0]] = fields[1]; break;
+                case "respectful_readings" when fields.Length >= 2: respectfulReadings[fields[0]] = fields[1]; break;
+                case "respectful_suffixes" when fields.Length >= 2: respectfulSuffixes.Add((fields[0], fields[1])); break;
+                case "question_readings" when fields.Length >= 2: questionReadings[fields[0]] = fields[1]; break;
+                case "question_suffixes" when fields.Length >= 2: questionSuffixes.Add((fields[0], fields[1])); break;
+                case "tail_readings" when fields.Length >= 2: tailReadings[fields[0]] = fields[1]; break;
+                case "mid_clause_suffixes" when fields.Length >= 2: midClauseSuffixes.Add((fields[0], fields[1])); break;
+                case "respectful_mid_clause_suffixes" when fields.Length >= 2: respectfulMidClauseSuffixes.Add((fields[0], fields[1])); break;
+                case "tekurete_verbs" when fields.Length >= 2: tekureteVerbs.Add((fields[0], fields[1])); break;
+                case "tail_text_suffixes" when fields.Length >= 2: tailTextSuffixes.Add((fields[0], fields[1])); break;
+                case "reading_prefixes" when fields.Length >= 3: readingPrefixes.Add((fields[0], fields[1], fields[2] == "1")); break;
+                case "in_text_replacements" when fields.Length >= 3: inTextReplacements.Add((fields[0], fields[1], fields[2] == "1")); break;
+                case "suru_or_godan_suffixes" when fields.Length >= 2: suruOrGodanSuffixes.Add((fields[0], fields[1], fields.Length > 2 ? fields[2] : null)); break;
             }
         }
 
@@ -379,6 +379,13 @@ internal static class KeigoConverter
         if (reading is "よろしく" or "おねがい" && (nextReading.StartsWith("おねがい", StringComparison.Ordinal) || nextReading.StartsWith("いたし", StringComparison.Ordinal))) return true;
         if (reading is "おつかれ" or "おつかれさま" && (nextReading.StartsWith("さま", StringComparison.Ordinal) || nextReading.StartsWith("です", StringComparison.Ordinal))) return true;
         if (reading is "だいじょうぶ" or "もんだいない" && (nextReading.StartsWith("です", StringComparison.Ordinal) || nextText.StartsWith("です", StringComparison.Ordinal))) return true;
+        // お世話 + になっております / お待たせ + いたしました / 失礼 + いたします / お先に + 失礼します 等での重複表現を防ぐ
+        if (reading is "おせわ" && (nextReading.StartsWith("にな", StringComparison.Ordinal) || nextText.StartsWith("にな", StringComparison.Ordinal))) return true;
+        if (reading is "おまたせ" or "しつれい" && (nextReading.StartsWith("いたし", StringComparison.Ordinal) || nextReading.StartsWith("しま", StringComparison.Ordinal))) return true;
+        if (reading is "おわび" or "かんしゃ" && (nextReading.StartsWith("もうし", StringComparison.Ordinal) || nextReading.StartsWith("いたし", StringComparison.Ordinal) || nextReading.StartsWith("しま", StringComparison.Ordinal))) return true;
+        if (reading is "おてすう" && (nextReading.StartsWith("をおかけ", StringComparison.Ordinal) || nextReading.StartsWith("ですが", StringComparison.Ordinal))) return true;
+        if (reading is "おさきに" && (nextReading.StartsWith("しつれい", StringComparison.Ordinal) || nextText.StartsWith("失礼", StringComparison.Ordinal))) return true;
+        if (reading is "りょうかい" && (nextReading.StartsWith("いたし", StringComparison.Ordinal) || nextReading.StartsWith("しま", StringComparison.Ordinal) || nextReading.StartsWith("です", StringComparison.Ordinal))) return true;
         return false;
     }
 

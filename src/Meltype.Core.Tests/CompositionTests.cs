@@ -6822,5 +6822,11 @@ internal static class CompositionTests
         Assert.Equal("思い出しました", KeigoConverter.Convert([new("おもいだした", false, ["思い出した"])])[0].Text);
         Assert.Equal("恐れ入りますが", KeigoConverter.Convert([new("おそれいりますが", false, ["恐れ入りますが"])])[0].Text);
         Assert.Equal("差し支えなければ", KeigoConverter.Convert([new("さしつかえなければ", false, ["差し支えなければ"])])[0].Text);
+
+        // 2 文節に分かれた既敬語の重複防止 (お世話+になっております / 失礼+いたします / お待たせ+いたしました / お先に+失礼します)
+        Assert.Equal("お世話になっております", string.Concat(KeigoConverter.Convert([new("おせわ", false, ["お世話"]), new("になっております", false, ["になっております"])]).Select(c => c.Text)));
+        Assert.Equal("失礼いたします", string.Concat(KeigoConverter.Convert([new("しつれい", false, ["失礼"]), new("いたします", false, ["いたします"])]).Select(c => c.Text)));
+        Assert.Equal("お待たせいたしました", string.Concat(KeigoConverter.Convert([new("おまたせ", false, ["お待たせ"]), new("いたしました", false, ["いたしました"])]).Select(c => c.Text)));
+        Assert.Equal("お先に失礼いたします", string.Concat(KeigoConverter.Convert([new("おさきに", false, ["お先に"]), new("しつれいします", false, ["失礼します"])]).Select(c => c.Text)));
     }
 }

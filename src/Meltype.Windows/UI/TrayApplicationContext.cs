@@ -23,7 +23,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly HotkeyWindow _registerHotkey;
     private readonly Control _invoker = new();
     private readonly Icon _onIcon = CreateIcon("あ", Color.FromArgb(0, 120, 212));
-    private readonly Icon _keigoIcon = CreateIcon("敬", Color.FromArgb(124, 58, 237));
     private readonly Icon _directIcon = CreateIcon("A", Color.FromArgb(0, 120, 212));
     private readonly Icon _offIcon = CreateIcon("A", Color.FromArgb(120, 120, 120));
     private readonly ToolStripMenuItem _keyboardModeItem;
@@ -420,13 +419,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
             {
                 _engine.OnSettingsChanged(previous, next);
                 UpdateStatus();
-                if (previous.KeigoMode != next.KeigoMode)
-                {
-                    var message = next.KeigoMode ? "リアルタイム敬語変換 ON" : "リアルタイム敬語変換 OFF";
-                    _composition.ShowNotice(message, 1200);
-                    if (next.ShowNotifications)
-                        ShowBalloonTip(1500, "Meltype", next.KeigoMode ? "リアルタイム敬語変換を ON にしました" : "リアルタイム敬語変換を OFF にしました");
-                }
                 // 設定アプリで動作モードを Meltype IME にしたが、Windows に登録されていない (Meltype キーボードで動く)
                 if (previous.Mode != InputMode.Tsf && next.Mode == InputMode.Tsf && CanRegisterTsf && !Tip.TipServer.IsUsable)
                     EnableTsf("Meltype IME を Windows に登録しますか？\n\n" +
@@ -549,15 +541,13 @@ internal sealed class TrayApplicationContext : ApplicationContext
         }
         else if (tsf)
         {
-            _tray.Icon = settings.KeigoMode ? _keigoIcon : _onIcon;
-            status = registered
-                ? (settings.KeigoMode ? "Meltype IME (リアルタイム敬語変換 ON)" : "Meltype IME (Win + Space で Meltype を選んで入力)")
-                : "Meltype IME が登録されていません (トレイの「Meltype IME」を選ぶと登録できます)";
+            _tray.Icon = _onIcon;
+            status = registered ? "Meltype IME (Win + Space で Meltype を選んで入力)" : "Meltype IME が登録されていません (トレイの「Meltype IME」を選ぶと登録できます)";
         }
         else
         {
-            _tray.Icon = _keyboard.Japanese ? (settings.KeigoMode ? _keigoIcon : _onIcon) : _directIcon;
-            status = _keyboard.Japanese ? (settings.KeigoMode ? "キーボード: 日本語 (リアルタイム敬語変換 ON)" : "キーボード: 日本語") : "キーボード: 直接入力 (半角/全角 で日本語)";
+            _tray.Icon = _keyboard.Japanese ? _onIcon : _directIcon;
+            status = _keyboard.Japanese ? "キーボード: 日本語" : "キーボード: 直接入力 (半角/全角 で日本語)";
         }
         _statusItem.Text = status;
         var zenzai = _composition.Runtime.ZenzaiStatus();
@@ -656,7 +646,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _registerHotkey.Dispose();
         _tray.Visible = false;
         _tray.Dispose();
-        _keigoIcon.Dispose();
         _invoker.Dispose();
         base.ExitThreadCore();
     }
