@@ -5,20 +5,16 @@
 //   C<TAB>前の文字列<TAB>読み
 //       変換。文節ごとに「読み<US>候補1<US>候補2…」を <RS> でつないで返す (US = 0x1F, RS = 0x1E)。変換できなければ空行。
 //       ユーザー辞書の語を含む候補 (活用した形も) は、頭に <GS> (0x1D) を付ける。
-//   L<TAB>前の文字列<TAB>読み1<US>確定した文字列1<RS>読み2<US>確定した文字列2…
-//       学習。ユーザーが確定した文節の区切りと文字列を Mozc に覚えさせる。覚えたら "OK"、できなければ "NG"。
 //   R<TAB>文字列
 //       逆変換。文字列の読み (ひらがな) を返す。逆変換できなければ空行。
 //   D<TAB>読み1<US>語1<US>品詞1<RS>読み2<US>語2<US>品詞2…
 //       ユーザー辞書。語をすべて入れ替え、変換に使えるようにしてから "OK" (できなければ "NG") を返す。
 //       品詞は Mozc の品詞名 (名詞・人名・動詞ワ行五段…) か、ほかの日本語入力の品詞名 (さ変名詞・ら行五段…)。知らない品詞は名詞。
 //       語はメモリにだけ置き、起動し直したら Meltype が送り直す。
-//   S   学習データを保存する ("OK")。
-//   Q   保存して終了する。
+//   Q   終了する。
 // 起動が終わったら "READY" を 1 行出す。引数 1 つ目は学習データの保存先 (省略可)。
 // ブラウザー版は同じ要求を関数で受ける (ファイルの末尾の __EMSCRIPTEN__)。
 
-#include <cstdint>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -31,7 +27,6 @@
 #include "absl/strings/string_view.h"
 #include "base/init_mozc.h"
 #include "base/system_util.h"
-#include "base/util.h"
 #include "composer/composer.h"
 #include "config/config_handler.h"
 #include "converter/attribute.h"
@@ -96,52 +91,6 @@ class Helper {
     return out;
   }
 
-  // ユーザーが確定した文節 (読みと文字列) を覚えさせる。同じ読みを変換し直し、文節の区切りを合わせて、
-  // 各文節で確定した文字列の候補を選んで確定する (Mozc 自身が確定したときと同じ学習になる)。
-  bool Learn(absl::string_view context, absl::string_view clauses) {
-    std::vector<std::pair<std::string, std::string>> chosen;
-    std::string reading;
-    for (absl::string_view record : absl::StrSplit(clauses, kRecordSeparator)) {
-      const std::vector<std::string> fields = absl::StrSplit(record, kUnitSeparator);
-      if (fields.size() < 2 || fields[0].empty() || fields[1].empty()) return false;
-      reading += fields[0];
-      chosen.emplace_back(fields[0], fields[1]);
-    }
-    if (chosen.empty()) return false;
-
-    mozc::Segments segments;
-    if (!Start(context, reading, &segments)) return false;
-    // 文節の区切りをユーザーが確定したものに合わせる (長さは文字数)。
-    std::vector<uint8_t> sizes;
-    for (const auto& [key, value] : chosen) {
-      const size_t length = mozc::Util::CharsLen(key);
-      if (length == 0 || length > 255) return false;
-      sizes.push_back(static_cast<uint8_t>(length));
-    }
-    if (segments.conversion_segments_size() != chosen.size() ||
-        !SameKeys(segments, chosen)) {
-      if (!converter_->ResizeSegments(&segments, Request(), 0, sizes)) return false;
-    }
-    if (segments.conversion_segments_size() != chosen.size()) return false;
-
-    for (size_t i = 0; i < chosen.size(); ++i) {
-      const mozc::Segment& segment = segments.conversion_segment(i);
-      if (segment.key() != chosen[i].first) return false;
-      int index = -1;
-      for (size_t j = 0; j < segment.candidates_size(); ++j) {
-        if (segment.candidate(j).value == chosen[i].second) {
-          index = static_cast<int>(j);
-          break;
-        }
-      }
-      // Mozc の候補に無い文字列 (Meltype の辞書の候補) は覚えさせられない。
-      if (index < 0) return false;
-      if (!converter_->CommitSegmentValue(&segments, i, index)) return false;
-    }
-    converter_->FinishConversion(Request(), &segments);
-    return true;
-  }
-
   // 逆変換。文字列 (漢字かな混じり) の読みを返す。逆変換できなければ空。
   // 半角の数字は 1 字ずつ読む (2026年 → にぜろにろくねん) ので、全角にして渡し (２０２６年 → ２０２６ねん)、読みの数字は半角に戻す。
   std::string Reverse(absl::string_view text) {
@@ -175,8 +124,6 @@ class Helper {
     return half;
   }
 
-  bool Save() { return engine_->Sync(); }
-
   // ユーザー辞書を words の語で入れ替える。Mozc のユーザー辞書のファイル (user_dictionary.db) は使わない。
   // 品詞は、ほかの日本語入力の品詞名 (Microsoft IME・ATOK など) も Mozc の取り込みと同じ対応表 (ConvertEntry) で読み替える。
   // build-mozc-helper.sh・Build-MozcHelper.ps1 が、取り込みの Bazel の visibility をこのパッケージに広げている。
@@ -206,14 +153,6 @@ class Helper {
   }
 
  private:
-  static bool SameKeys(const mozc::Segments& segments,
-                       const std::vector<std::pair<std::string, std::string>>& chosen) {
-    for (size_t i = 0; i < chosen.size(); ++i) {
-      if (segments.conversion_segment(i).key() != chosen[i].first) return false;
-    }
-    return true;
-  }
-
   mozc::ConversionRequest Request() {
     mozc::ConversionRequest::Options options = {
         .request_type = mozc::ConversionRequest::CONVERSION,
@@ -303,12 +242,19 @@ int main(int argc, char** argv) {
   std::string line;
   while (std::getline(std::cin, line)) {
     if (!line.empty() && line.back() == '\r') line.pop_back();
-    if (absl::string_view(line).substr(0, line.find('\t')) == "Q") break;
-    std::cout << Answer(helper, line) << "\n";
+    const std::vector<absl::string_view> fields = absl::StrSplit(line, '\t');
+    if (fields.empty() || fields[0] == "Q") break;
+    if (fields[0] == "C" && fields.size() >= 3) {
+      std::cout << helper.Convert(fields[1], fields[2]) << "\n";
+    } else if (fields[0] == "R" && fields.size() >= 2) {
+      std::cout << helper.Reverse(fields[1]) << "\n";
+    } else if (fields[0] == "D" && fields.size() >= 2) {
+      std::cout << (helper.SetDictionary(fields[1]) ? "OK" : "NG") << "\n";
+    } else {
+      std::cout << "\n";
+    }
     std::cout.flush();
   }
-  // 入力が閉じた (Meltype が終了した) ときも学習データを保存する。
-  helper.Save();
   return 0;
 }
 #endif

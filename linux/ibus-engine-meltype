@@ -26,6 +26,7 @@ _lib.meltype_init.argtypes = [ctypes.c_char_p]
 _lib.meltype_init.restype = ctypes.c_int
 _lib.meltype_set_conversion_ready.argtypes = [ctypes.CFUNCTYPE(None)]
 _lib.meltype_set_conversion_ready.restype = None
+_lib.meltype_start_key_count.restype = None
 _lib.meltype_ime_create.restype = ctypes.c_void_p
 _lib.meltype_ime_handle.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
 _lib.meltype_ime_handle.restype = ctypes.c_void_p
@@ -182,6 +183,8 @@ class MeltypeEngine(IBus.Engine):
         self._alt_keys = False
         self._alt_down = 0
         self._alt_interrupted = False
+        # 押しているキーの keycode。IBus は自動の繰り返しかを知らせない
+        self._held_keycodes = set()
         self._mode_property = IBus.Property(key="InputMode", prop_type=IBus.PropType.NORMAL, label=IBus.Text.new_from_string("あ"),
                                             symbol=IBus.Text.new_from_string("あ"), sensitive=False, visible=True)
         self._properties.append(self._mode_property)
@@ -242,12 +245,17 @@ class MeltypeEngine(IBus.Engine):
         if vk in ALT_KEYS:
             return self._alt_key(vk, keyval, keycode, state, released)
         if released:
+            self._held_keycodes.discard(keycode)
             return False
+        repeat = keycode in self._held_keycodes
+        # keycode の無い (0) キーは、ソフトが送ったもの
+        if keycode:
+            self._held_keycodes.add(keycode)
         if self._alt_down:
             self._alt_interrupted = True
         if vk is None:
             return False
-        output = self.send("KeyPressed", key=self._key(vk, character, state))
+        output = self.send("KeyPressed", key={**self._key(vk, character, state), "repeat": repeat})
         return bool(output and output["result"]["consumed"])
 
     @staticmethod
@@ -289,7 +297,8 @@ class MeltypeEngine(IBus.Engine):
         表示中の preedit は IBus がそのまま確定する (COMMIT モード)。エンジンがここで送る文字はフォーカスが外れたあとで
         届かないうえ、届いても順序が壊れるので、本体には「表示のまま確定された」と伝える。
         """
-        # Alt + Tab などでフォーカスが移ると、Alt を離したことはこのエンジンに届かない。本体には、割り込まれて離したと伝える
+        # Alt + Tab などでフォーカスが移ると、キーを離したことはこのエンジンに届かない。本体には、Alt を割り込まれて離したと伝える
+        self._held_keycodes.clear()
         if self._alt_down:
             vk, self._alt_down, self._alt_interrupted = self._alt_down, 0, False
             self.send("KeyReleased", key={"vk": vk, "interrupted": True})
@@ -557,8 +566,9 @@ def main():
         component = IBus.Component.new("org.freedesktop.IBus.Meltype", "Meltype", "1.2.2-pre.2", "GPL-3.0-or-later", "Yukishiro", "https://github.com/yksr-melt/Meltype", "", "")
         component.add_engine(IBus.EngineDesc.new("meltype", "Meltype", "Meltype", "ja", "GPL-3.0-or-later", "Yukishiro", "", "default"))
         bus.register_component(component)
+    _lib.meltype_start_key_count()
     loop.run()
-    # Zenzai の llama-server を終わらせ、Mozc の学習を保存する (呼ばずに終わると、次に起動した Meltype が終わらせるまで llama-server が残る)
+    # Zenzai の llama-server を含む変換エンジンを止める (呼ばずに終わると、次に起動した Meltype が終わらせるまで llama-server が残る)
     _lib.meltype_shutdown()
 
 

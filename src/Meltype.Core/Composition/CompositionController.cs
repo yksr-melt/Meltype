@@ -2,6 +2,8 @@
 // Copyright (C) 2026 Yukishiro
 // Copyright (C) 2026 yksr-melt
 
+using Meltype.Notation;
+
 namespace Meltype.Composition;
 
 /// <summary>
@@ -81,14 +83,6 @@ internal static class CompositionController
 
     private static void SelectCandidateAt(CompositionState state, CompositionEnv env, int index)
     {
-        // 入力中に出した候補 (設定「入力中も変換候補をいくつか表示」) をクリックしたら、変換を始めてからその候補を選ぶ
-        // 入力中の候補は読み全体の候補なので、変換を始めて文節に分かれると一覧が変わり、番号が別の語を指す。
-        // 見えていた一覧のまま、読み全体 1 つの文節にして、クリックした語を選ぶ
-        if (state.Scene is CompositionScene.Typing { Input: var input } && CompositionPresentation.TypingCandidates(input, env) is { } typing)
-        {
-            if (index < 0 || index >= typing.Count) return;
-            CompositionLifecycle.Convert(state, input, new Conversion([new Clause(CompositionText.AllKana(input.Text, env, final: false), false, typing) { Raw = CompositionText.Raw(input.Text), Expanded = true }], ConversionTrigger.Other, preferJapanese: false));
-        }
         if (state.Scene is not CompositionScene.Converting converting) return;
         var clause = converting.Conversion.SelectedClause;
         if (index < 0 || index >= clause.Candidates.Count) return;

@@ -45,13 +45,22 @@ do {
         try startInputMethod(at: URL(fileURLWithPath: arguments[1]))
         exit(0)
     }
+    if arguments.count == 2, arguments[0] == "--select" {
+        try selectJapaneseInputSource(at: URL(fileURLWithPath: arguments[1]))
+        exit(0)
+    }
+    // 有効なら 0、まだ有効でなければ 2。DMG のインストーラーが、利用者が有効化を許可するまで繰り返し呼ぶ。
+    if arguments.count == 2, arguments[0] == "--enabled" {
+        exit(try isJapaneseInputSourceEnabled(at: URL(fileURLWithPath: arguments[1])) ? 0 : 2)
+    }
     if arguments.count == 2, arguments[0] == "--validate-bundle" {
         try validateBundleLayout(at: URL(fileURLWithPath: arguments[1]))
         exit(0)
     }
 } catch let error as InputSelectionFailure {
     // 登録・起動済みで選択だけ失敗した場合は、呼び出し元で新版を維持できるよう区別する。
-    fputs("Input method started, but selection could not be restored: \(error.localizedDescription). Select Meltype from the input menu.\n", stderr)
+    // --restore では戻す先が Meltype とは限らないので、選び直す入力ソースの案内は呼び出し元が出す。
+    fputs("入力ソースを切り替えられませんでした: \(error.localizedDescription)\n", stderr)
     exit(2)
 } catch {
     fputs("Installation operation failed: \(error.localizedDescription)\n", stderr)
@@ -59,7 +68,7 @@ do {
 }
 
 guard CommandLine.arguments.count == 3 else {
-    fputs("Usage: MeltypeInstallSupport directory directory | --lock file executable [arguments...] | --stop app reference state [manual-job-label] | --restore app state | --start app | --validate-bundle app\n", stderr)
+    fputs("Usage: MeltypeInstallSupport directory directory | --lock file executable [arguments...] | --stop app reference state [manual-job-label] | --restore app state | --start app | --select app | --enabled app | --validate-bundle app\n", stderr)
     exit(1)
 }
 let paths = Array(CommandLine.arguments.dropFirst())
