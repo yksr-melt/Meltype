@@ -236,8 +236,8 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         return new ImeKey { Vk = e.ShortcutKey, Ch = ch, Physical = Physical(e), Shift = shift, Ctrl = ctrl, Alt = alt, Command = command, CapsLock = KeyText.CapsLockOn, Repeat = repeat };
     }
 
-    // ほかのソフトが送り込んだキー (SendInput) はスキャンコードが 0 のことがある
-    private static PhysicalKey.Windows? Physical(KeyEvent e) => e.Scan != 0 ? new PhysicalKey.Windows(e.Scan, e.Extended) : null;
+    // ほかのソフトが送り込んだキー (SendInput) はスキャンコードが 0 のことがある。VK_PACKET (0xE7) のスキャンコードは、送り込んだ文字の UTF-16
+    private static PhysicalKey.Windows? Physical(KeyEvent e) => e.Scan != 0 && e.Vk != 0xE7 ? new PhysicalKey.Windows(e.Scan, e.Extended) : null;
 
     // ---- UI スレッド ----
 

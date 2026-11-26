@@ -64,7 +64,7 @@ internal static class CompositionKeys
         {
             if (VirtualKeys.IsLetter(vk) && !state.Shift && !state.Modifier)
             {
-                CompositionDirectInput.Hold(state, judging, env, e);
+                CompositionDirectInput.Hold(state, judging, env, e, position);
                 return;
             }
             // 母音の後の - は長音 (ro-maji → ろーまじ、de-ta → でーた)。英単語の途中にはまず出てこないので、ローマ字として
@@ -76,6 +76,7 @@ internal static class CompositionKeys
             {
                 var prefix = !judging.Letters.ToString().Contains('-') && CompositionDetector.IsHyphenPrefix(part);
                 judging.Letters.Append('-');
+                judging.Positions.Add(0);
                 judging.LastKeyTime = e.TimeMs;
                 if (prefix)
                 {
@@ -405,7 +406,7 @@ internal static class CompositionKeys
                 PassKey(state);
                 CompositionLifecycle.StartEnglishWord(state);
             }
-            else CompositionDirectInput.Hold(state, CompositionLifecycle.StartJudging(state), env, e);
+            else CompositionDirectInput.Hold(state, CompositionLifecycle.StartJudging(state), env, e, position);
             return;
         }
         // 句読点・かぎかっこ・長音・中黒・数字でも入力を始める (、。「」ー・)。英数状態ではそのまま通す。

@@ -42,6 +42,9 @@ internal abstract class CompositionScene
     {
         public readonly StringBuilder Letters = new();
 
+        /// <summary>Letters の各文字を打ったキーの位置 (<see cref="KeyPress.Position"/>)。かな入力で日本語に戻すとき、かなを位置で決める。- は 0。</summary>
+        public readonly List<int> Positions = [];
+
         /// <summary>アプリに通した文字 (文字の無いキーは \0)。</summary>
         public readonly StringBuilder Sent = new();
 

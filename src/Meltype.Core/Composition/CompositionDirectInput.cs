@@ -23,9 +23,10 @@ internal static class CompositionDirectInput
 
     // - を付けて使う英語の接頭辞 (e-mail、re-do、co-op、x-ray)
 
-    internal static void Hold(CompositionState state, CompositionScene.Judging judging, CompositionEnv env, KeyEvent e)
+    internal static void Hold(CompositionState state, CompositionScene.Judging judging, CompositionEnv env, KeyEvent e, int position)
     {
         judging.Letters.Append(VirtualKeys.ToLetter(e.Vk));
+        judging.Positions.Add(position);
         judging.LastKeyTime = e.TimeMs;
         Send(state, judging, e);
         Decide(state, judging, env, final: false);
@@ -73,9 +74,9 @@ internal static class CompositionDirectInput
         // 判定を待たずに送っていた英字を消して、変換ボックスに入れ直す。
         CompositionOutput.DeleteHeld(state.Out, judging.Sent.ToString());
         var input = CompositionLifecycle.BeginFromJudging(state, judging, env);
-        foreach (var c in judging.Letters.ToString())
+        foreach (var (c, position) in judging.Letters.ToString().Zip(judging.Positions))
         {
-            if (input.Text.KanaInput && Detection.KanaDetector.KanaForKey(char.ToUpperInvariant(c), char.IsAsciiLetterUpper(c)) is { } kana) CompositionText.AppendKana(input.Text, c, kana);
+            if (input.Text.KanaInput && Detection.KanaDetector.KanaForKey(position, char.IsAsciiLetterUpper(c)) is { } kana) CompositionText.AppendKana(input.Text, c, kana);
             else CompositionText.Append(input.Text, env, c);
         }
     }

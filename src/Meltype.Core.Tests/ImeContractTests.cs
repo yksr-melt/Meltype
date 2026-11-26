@@ -1290,6 +1290,13 @@ internal static class ImeContractTests
         middle.Event("KeyReleased", extra: $",\"key\":{{\"vk\":{(int)'H'},\"physical\":{Physical("Evdev", 36)}}}");
         middle.Event("KeyReleased", extra: $",\"key\":{{\"vk\":{(int)'E'},\"physical\":{Physical("Evdev", 32)}}}");
         Assert.Equal("お", middle.Composition["t1"], middle.Trace);
+        // 英数状態で打った語を日本語に戻すときも、かなは位置で決める (Dvorak の k・a は QWERTY の v・a の位置)
+        var direct = new Front { ClassifyDirect = (letters, _, _) => letters == "ka" ? Verdict.Japanese : Verdict.Undecided };
+        direct.Settings.InputStyle = InputStyle.Kana;
+        direct.Event("AlphanumericModeSelected");
+        PhysicalKey(direct, Physical("Evdev", 47), 'k');
+        PhysicalKey(direct, Physical("Evdev", 30), 'a');
+        Assert.Equal("ひち", direct.Composition["t1"], direct.Trace);
     }
 
     [Test]
