@@ -508,6 +508,17 @@ internal sealed partial class CompositionDetector
     }
 
     /// <summary>
+    /// start の \ と、すぐ後ろに続く英字 (\n、\frac) の終わり。無ければ -1。\ の後ろの英字は 1 文字でもローマ字として読まない (￥ん になっていた: issue #1543)。
+    /// </summary>
+    private static int EscapeEnd(IReadOnlyList<CompositionUnit> units, int start, string pending)
+    {
+        if (units[start].Raw != "\\") return -1;
+        var end = start + 1;
+        while (end < units.Count && units[end].Raw is { Length: > 0 } raw && raw.All(char.IsAsciiLetter)) end++;
+        return end > start + 1 || end == units.Count && pending.Length > 0 ? end : -1;
+    }
+
+    /// <summary>
     /// start から始まる - の入った英単語 (e-mail、co-op) の終わり。無ければ -1。
     /// 後ろに日本語が続いてもよい (e-mail|de) ので、- の後ろは長い方から英単語になる所を探す。
     /// </summary>

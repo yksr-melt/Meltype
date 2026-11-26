@@ -15,7 +15,7 @@ namespace Meltype.Detection;
 /// - 知っている英単語は、英単語の書き方の大文字・小文字 (its・Its・ITS・GitHub) のときだけノードにする (iTs は its にしない)。
 /// - 1 文字の英単語 (a・i・u・r) は、前後を英字以外で区切ったときだけノードにする。
 /// - 自動判定を使わないなら、Shift を押して打った大文字で始まる語だけを英語のノードにする。
-/// - 記号・数字の決まり (ドメイン・拡張子・ユーザー名・- の入った語・数字を挟んだ略語・英文の中の記号) は、コストで比べずにその区間を英語にする。
+/// - 記号・数字の決まり (ドメイン・拡張子・ユーザー名・\ + 英字・- の入った語・数字を挟んだ略語・英文の中の記号) は、コストで比べずにその区間を英語にする。
 /// - 技術用語の綴りのすぐ後ろが する の活用 (share|して・make|します) なら、その綴りを日本語の語 (しゃれ・まけ) として読まない (しゃれする・まけします は日本語でない)。ただし一段動詞の使役形 (make|させた) は日本語のまま。
 /// - ローマ字入力では 1 文字ずつを区切りの位置にする (単位の途中で区切れる: get|Element、medal|s|ha)。かな入力では打った単位の境目だけ。
 /// </summary>
@@ -102,7 +102,7 @@ internal sealed partial class CompositionDetector
     }
 
     /// <summary>コストで比べずに、その区間を英語にする記号・数字の決まり (<see cref="CompositionDetector"/> の説明の一覧)。</summary>
-    private enum LexemeRule { None, Dotfile, UserName, HyphenatedWord, Numeronym, ProperNounWithDigits, VersionSuffix }
+    private enum LexemeRule { None, Dotfile, UserName, Escape, HyphenatedWord, Numeronym, ProperNounWithDigits, VersionSuffix }
 
     /// <summary>
     /// 1 つの位置から始まる字句。Rule が None でなければ、End (単位の番号) までを英語にする。
@@ -286,6 +286,7 @@ internal sealed partial class CompositionDetector
             if (LeadingDotfileEnd(prepared, learning, units, unit, pending, manual) is >= 0 and var dotfile) return new(LexemeRule.Dotfile, dotfile, domain, technical);
             if (UserNameEnd(prepared, units, unit, pending) is >= 0 and var user) return new(LexemeRule.UserName, user, domain, technical);
             if (!englishLevel) return new(LexemeRule.None, -1, domain, technical);
+            if (EscapeEnd(units, unit, pending) is >= 0 and var escape) return new(LexemeRule.Escape, escape, domain, technical);
             if (HyphenatedWordEnd(prepared, learning, units, unit, pending) is >= 0 and var hyphenated) return new(LexemeRule.HyphenatedWord, hyphenated, domain, technical);
             if (NumeronymEnd(prepared, units, unit, pending) is >= 0 and var numeronym) return new(LexemeRule.Numeronym, numeronym, domain, technical);
             if (ProperNounWithDigitsEnd(prepared, units, unit, pending) is >= 0 and var proper) return new(LexemeRule.ProperNounWithDigits, proper, domain, technical);
