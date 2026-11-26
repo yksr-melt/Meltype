@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Yukishiro
 
 using System.Text;
+using Meltype.Input;
 using Meltype.Detection;
 using Meltype.Dictionary;
 using Meltype.Libraries.Chars;
@@ -45,7 +46,43 @@ internal static partial class CompositionText
 
     public static IReadOnlyList<CompositionUnit> Units(CompositionTextState state) => state.Units;
     public static string Pending(CompositionTextState state) => state.Pending.ToString();
-    public static bool IsEmpty(CompositionTextState state) => state.Units.Count == 0 && state.Pending.Length == 0;
+    public static bool IsEmpty(CompositionTextState state) => state.Units.Count == 0 && state.Pending.Length == 0 && state.Tail.Count == 0;
+
+    /// <summary>読みの途中を直していたら、カーソルより後ろを戻す (カーソルを末尾にする)。</summary>
+    public static void MergeTail(CompositionTextState state)
+    {
+        if (state.Tail.Count == 0) return;
+        state.Units.AddRange(state.Tail);
+        state.Tail.Clear();
+    }
+
+    /// <summary>読みの途中を直すカーソルを動かす (← → Home End)。打ちかけのローマ字があれば動かさない。動かしたら true。</summary>
+    public static bool MoveCaret(CompositionTextState state, int vk)
+    {
+        if (state.Pending.Length > 0) return false;
+        switch (vk)
+        {
+            case VirtualKeys.Left when state.Units.Count > 0:
+                state.Tail.Insert(0, state.Units[^1]);
+                state.Units.RemoveAt(state.Units.Count - 1);
+                return true;
+            case VirtualKeys.Right when state.Tail.Count > 0:
+                state.Units.Add(state.Tail[0]);
+                state.Tail.RemoveAt(0);
+                return true;
+            case VirtualKeys.Home:
+                state.Tail.InsertRange(0, state.Units);
+                state.Units.Clear();
+                return true;
+            case VirtualKeys.End:
+                MergeTail(state);
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>カーソルより後ろに見えている文字 (読みの途中を直している間だけ。ひらがなで見せる)。</summary>
+    public static string TailText(CompositionTextState state) => string.Concat(state.Tail.Select(u => u.Kana));
 
     private static bool EffectiveManual(CompositionTextState state, TextEnv env) => !state.SuggestionAccepted && !env.Settings.AutoDetection;
 

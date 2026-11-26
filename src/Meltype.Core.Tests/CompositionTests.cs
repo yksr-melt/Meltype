@@ -2641,6 +2641,32 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void EscRevertedReading_CanBeEditedInTheMiddle()
+    {
+        // #972: Esc でひらがなに戻した読みは、← → でカーソルを動かして途中だけを打ち直せる
+        var k = new Keyboard { EscStepsBack = true };
+        k.Type("momijifariniikimasu");
+        k.Press(VirtualKeys.F7);
+        k.Press(VirtualKeys.Escape);
+        Assert.Equal("もみじふぁりにいきます", k.Showing);
+        for (var i = 0; i < 6; i++) k.Press(VirtualKeys.Left);
+        Assert.Equal("もみじふぁりにいきます", k.Showing, "カーソルを動かしても読みは変わらない");
+        Assert.Equal(6, k.Host.View!.CaretBack, "カーソルは「ふぁ」の後ろ");
+        k.Press(VirtualKeys.Back);
+        Assert.Equal("もみじりにいきます", k.Showing, "BackSpace はカーソルの前を消す");
+        k.Type("ga");
+        Assert.Equal("もみじがりにいきます", k.Showing, "カーソルの位置で消して打つ");
+        Assert.Equal(6, k.Host.View!.CaretBack);
+        k.Press(VirtualKeys.End);
+        Assert.Equal(0, k.Host.View!.CaretBack, "End で末尾へ");
+        k.Press(VirtualKeys.Home);
+        k.Press(VirtualKeys.Delete);
+        Assert.Equal("みじがりにいきます", k.Showing, "Delete はカーソルの後ろを消す");
+        k.Type("\n");
+        Assert.Equal("みじがりにいきます", k.Host.Document, "確定は直した読みのまま");
+    }
+
+    [Test]
     public static void Issue676_EscStepsBackOneLevelAtATime()
     {
         var k = new Keyboard { EscStepsBack = true };

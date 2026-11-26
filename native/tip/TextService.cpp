@@ -1853,10 +1853,15 @@ void TextService::ApplyComposition(TfEditCookie ec, ITfContext* context, const J
         SetAttribute(ec, context, range, atomInput_);
     }
 
-    // キャレットは変換中の文字の後ろ
+    // キャレットは変換中の文字の後ろ。読みの途中を直している間は、末尾から caretBack 文字 (UTF-16) 前
     ITfRange* caretRange = nullptr;
     if (SUCCEEDED(range->Clone(&caretRange))) {
         caretRange->Collapse(ec, TF_ANCHOR_END);
+        if (const int back = view[L"caretBack"].Int(); back > 0) {
+            LONG moved = 0;
+            caretRange->ShiftStart(ec, -back, &moved, nullptr);
+            caretRange->Collapse(ec, TF_ANCHOR_START);
+        }
         TF_SELECTION caret = {};
         caret.range = caretRange;
         caret.style.ase = TF_AE_NONE;

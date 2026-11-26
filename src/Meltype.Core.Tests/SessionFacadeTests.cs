@@ -696,7 +696,7 @@ internal static class SessionFacadeTests
     public static void Json_IsEscaped()
     {
         var result = new SessionResult(true, [new TextEdit(2, "a\"b\\c\n", "\"\\")], new CompositionView("x", [], -1, true, "h", ["x"], 0));
-        const string expected = """{"consumed":true,"commits":[{"text":"a\"b\\c\n","removeBefore":"\"\\","currentWord":null,"moveCaretBack":0,"insertByPaste":false}],"view":{"text":"x","converting":true,"clauses":["x"],"selectedClause":0,"hint":"h","spellingSuggestion":null,"typedKeys":null,"candidates":null}}""";
+        const string expected = """{"consumed":true,"commits":[{"text":"a\"b\\c\n","removeBefore":"\"\\","currentWord":null,"moveCaretBack":0,"insertByPaste":false}],"view":{"text":"x","converting":true,"clauses":["x"],"selectedClause":0,"caretBack":0,"hint":"h","spellingSuggestion":null,"typedKeys":null,"candidates":null}}""";
         Assert.Equal(expected, result.ToJson());
     }
 

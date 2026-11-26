@@ -152,6 +152,15 @@ def _shared_host():
     return _host
 
 
+
+def _caret(text, back):
+    """末尾から UTF-16 で back 個戻した位置 (文字の数)。"""
+    position = len(text)
+    while back > 0 and position > 0:
+        position -= 1
+        back -= 2 if ord(text[position]) > 0xFFFF else 1
+    return position
+
 class MeltypeEngine(IBus.Engine):
     __gtype_name__ = "MeltypeEngine"
 
@@ -395,6 +404,7 @@ class MeltypeEngine(IBus.Engine):
             self._hide_candidates()
 
     def _show_preedit(self, view):
+        # caretBack は末尾から戻す UTF-16 の数。IBus のカーソルは文字 (コードポイント) の位置
         text = view["text"]
         attributes = IBus.AttrList()
         clauses = view["clauses"]
@@ -413,7 +423,7 @@ class MeltypeEngine(IBus.Engine):
         preedit = IBus.Text.new_from_string(text)
         preedit.set_attributes(attributes)
         # IBus は「表示中の preedit」をそのまま確定する (COMMIT モード)。本体は確定される形を出すので、本体の確定と同じになる
-        self.update_preedit_text_with_mode(preedit, len(text), bool(text), IBus.PreeditFocusMode.COMMIT)
+        self.update_preedit_text_with_mode(preedit, _caret(text, view["caretBack"]), bool(text), IBus.PreeditFocusMode.COMMIT)
         self._preedit_visible = bool(text)
         # 打ったキー・もしかして (書き間違い。Tab で直せる)・案内を、補助テキストに 1 行で出す
         aux = "　".join(part for part in (view["typedKeys"], view["spellingSuggestion"], view["hint"]) if part)

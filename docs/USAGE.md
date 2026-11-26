@@ -26,6 +26,8 @@ kyouhagoogledekensaku  →  今日はgoogleで検索
 | 全角英字 / 半角英字 | <kbd>F9</kbd> / <kbd>F10</kbd> |
 | 取り消す | <kbd>Esc</kbd> |
 
+設定「Esc で一段ずつ戻す」を ON にすると、<kbd>Esc</kbd> で漢字 → ひらがな → 打ったローマ字の順に戻します。ひらがなに戻した読みは、<kbd>←</kbd> <kbd>→</kbd> <kbd>Home</kbd> <kbd>End</kbd> でカーソルを動かし、途中だけを消して打ち直せます (<kbd>BackSpace</kbd> はカーソルの前、<kbd>Delete</kbd> は後ろを消します)。
+
 設定「変換中の矢印キーを ATOK と同じにする」を ON にすると、<kbd>←</kbd> <kbd>→</kbd> で区切りを変え、<kbd>Shift</kbd> + <kbd>←</kbd> <kbd>→</kbd> で文節を選び、<kbd>↓</kbd> で選んだ文節までを確定します。
 
 ローマ字の綴りは Microsoft IME と同じです。

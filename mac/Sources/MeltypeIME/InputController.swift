@@ -316,7 +316,8 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         } else {
             addMark(kTSMHiliteRawText, to: text, range: NSRange(location: 0, length: length))
         }
-        client.setMarkedText(NSAttributedString(attributedString: text), selectionRange: NSRange(location: length, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
+        let caret = max(0, length - view.caretBack)
+        client.setMarkedText(NSAttributedString(attributedString: text), selectionRange: NSRange(location: caret, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
         hasMarkedText = length > 0
         showCompositionPanel(view, markedText: view.text as NSString, client: client)
     }

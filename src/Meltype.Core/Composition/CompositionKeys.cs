@@ -171,10 +171,25 @@ internal static class CompositionKeys
             return;
         }
 
+        // 読みの途中を直している間も、カーソルを動かす・打つ・消す以外のキーは、カーソルを末尾に戻してから処理する
+        if (input.Text.Tail.Count > 0 && !(vk is VirtualKeys.Left or VirtualKeys.Right or VirtualKeys.Home or VirtualKeys.End or VirtualKeys.Back or VirtualKeys.Delete ||
+                                          CharOf(e) is { } typed && !char.IsControl(typed) && !state.Modifier))
+            CompositionText.MergeTail(input.Text);
+
         if (scene is CompositionScene.Converting converting && HandleConversionKey(state, converting, env, vk)) return;
 
         switch (vk)
         {
+            case VirtualKeys.Left or VirtualKeys.Right or VirtualKeys.Home or VirtualKeys.End when EditsReading(scene):
+                // Esc でひらがなに戻した読みは、カーソルを動かして途中を直せる (打つ・消すのはカーソルの位置。日英の判定はし直さない)
+                CompositionText.MoveCaret(input.Text, vk);
+                return;
+            case VirtualKeys.Delete when input.Text.Tail.Count > 0:
+                input.Text.Tail.RemoveAt(0);
+                return;
+            case VirtualKeys.Back when input.Text.Tail.Count > 0 && input.Text.Units.Count == 0 && input.Text.Pending.Length == 0:
+                // カーソルが先頭なら消す文字は無い (後ろの読みは残す)
+                return;
             case VirtualKeys.Convert or VirtualKeys.Down when env.Settings.EnglishFirstInput && input.Text.Mode == DisplayMode.HalfWidthAlphanumeric && !input.ModeByKey && !CompositionLifecycle.IsProtectedInput(scene):
                 // 設定「英字を主に入力」: 変換キー / ↓ で、打った英字をローマ字として読んで変換する (issue #839)
                 input.Text.Mode = DisplayMode.Hiragana;
@@ -429,7 +444,8 @@ internal static class CompositionKeys
     {
         var input = scene.Input;
         if (scene is CompositionScene.Converting converting) return CommitOrKeepConversion(state, converting, env);
-        if (input.ModeByKey)
+        // F7・Esc などで表示を変えた後に打ったら、確定して新しく打ち始める。読みの途中を直している (カーソルが末尾でない) 間は、カーソルの位置に打つ
+        if (input.ModeByKey && !(EditsReading(scene) && input.Text.Tail.Count > 0))
         {
             CompositionCommit.Commit(state, scene, env);
             return CompositionLifecycle.Begin(state, env);
@@ -530,6 +546,10 @@ internal static class CompositionKeys
         CompositionText.FixTypos(input.Text, env);
         return CompositionConversion.HasRegisteredReading(input, env) || !SpaceCommitsAsEnglish(input, env);
     }
+
+    /// <summary>Esc でひらがなに戻した読みを直している (← → でカーソルを動かせる)。</summary>
+    private static bool EditsReading(CompositionScene.WithInput scene) =>
+        scene is CompositionScene.Typing { Input: { EscReverted: true, Reconversion: null, Text: { Mode: DisplayMode.Hiragana, KanaInput: false } } };
 
     /// <summary>変換中だけ意味を持つキー。処理したら true。</summary>
     private static bool HandleConversionKey(CompositionState state, CompositionScene.Converting scene, CompositionEnv env, int vk)
