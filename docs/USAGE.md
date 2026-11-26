@@ -38,7 +38,7 @@ kyouhagoogledekensaku  →  今日はgoogleで検索
 | Mac | Launchpad の「Meltype の設定」。メニューバーの入力メニュー →「Meltype の設定…」でも開けます |
 | Linux | アプリの一覧の「Meltype の設定」 |
 
-ユーザー辞書・定型文・学習データ・バックアップも、この「Meltype の設定」で扱います。丸の無い「あ」「A」と Meltype のロゴは Windows の入力モードの表示で、右クリックしても Meltype のメニューは出ません。
+ユーザー辞書・定型文・学習データ・バックアップも、この「Meltype の設定」で扱います。変えた設定は、下の「入力プレビュー」に打って試せます。丸の無い「あ」「A」と Meltype のロゴは Windows の入力モードの表示で、右クリックしても Meltype のメニューは出ません。
 
 <br>
 
@@ -72,6 +72,8 @@ kyouhagoogledekensaku  →  今日はgoogleで検索
 | <kbd>かな</kbd> / <kbd>変換</kbd> | 日本語入力 |
 
 設定「左 Alt で英数 / 右 Alt で日本語」を ON にすると、左右の <kbd>Alt</kbd> だけを押して切り替えられます (Windows・Linux)。
+
+設定「入力モード切り替えキー」に <kbd>CapsLock</kbd>・<kbd>かな</kbd>・<kbd>変換</kbd>・<kbd>無変換</kbd> を登録すると、そのキーだけで日本語入力 ⇔ 英数を切り替えられます。
 
 アプリごとに、動きを 4 つのモードから選べます。設定の「アプリ別設定」の「種類」で変えられます。
 

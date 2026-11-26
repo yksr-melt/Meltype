@@ -8,6 +8,7 @@ using Meltype.Detection;
 using Meltype.Diagnostics;
 using Meltype.Dictionary;
 using Meltype.Engine;
+using Meltype.Input;
 using Meltype.Learning;
 using Meltype.Libraries.Chars;
 using Meltype.Composition.Utility.NowPlaying;
@@ -47,7 +48,6 @@ public sealed class MeltypeRuntime : IDisposable
         // ログの設定を、入力の前に入れる
         _ = Settings.Current;
         Detector = CompositionDetector.CreateDefault(_userDirectory);
-        Detector.UseJapanesePunctuationAfterEnglish = () => Settings.Current.JapanesePunctuationAfterEnglish;
         Learning = new LearningData(dataDirectory);
         Detector.Memory = Learning.LanguageMemory;
         _shared = new CompositionServices
@@ -146,8 +146,35 @@ public sealed class MeltypeRuntime : IDisposable
     /// 入力欄 1 つの本体を作る。辞書・学習データ・変換エンジンは、ほかの入力欄と共有する。
     /// lateResults は、フロントが変換エンジンの答えを後から受け取れるか (<see cref="ConversionReady"/> で refresh を送る)。corrected は、ユーザーが判定を直したとき。
     /// </summary>
-    public ImeHost CreateHost(IImeEnvironment environment, Func<Settings> settings, Func<bool> lateResults, Action<Correction>? corrected = null) =>
-        new(environment, SessionParts(Converter, Converter.Candidates, Converter.Reading, corrected) with { LateResults = lateResults }, settings);
+    /// <param name="countKeys">受け持った打鍵を数える (<see cref="StartKeyCount"/> を呼んだとき)。フックで数える Windows では付けない。</param>
+    public ImeHost CreateHost(IImeEnvironment environment, Func<Settings> settings, Func<bool> lateResults, Action<Correction>? corrected = null, bool countKeys = false) =>
+        new(environment, SessionParts(Converter, Converter.Candidates, Converter.Reading, corrected) with { LateResults = lateResults }, settings, countKeys ? CountKey : null);
+
+    private KeyCounter? _keyCounter;
+    private Timer? _keyCountSave;
+    private DiscordPresence? _discordPresence;
+
+    /// <summary>
+    /// 打鍵数 (keycount.json) を読み、設定「打鍵数」が「数えて Discord に表示する」の間は Discord に出す。プロセスで 1 回だけ呼ぶ。
+    /// keycount.json は丸ごと書き直すので、同時にいくつも動くプロセス (端末) では呼ばない。
+    /// </summary>
+    public KeyCounter StartKeyCount()
+    {
+        var counter = new KeyCounter(Path.Combine(DataDirectory, KeyCounter.FileName));
+        _keyCounter = counter;
+        _keyCountSave = new Timer(_ => counter.Save(), null, 60_000, 60_000);
+        _discordPresence = new DiscordPresence(
+            () => Settings.Current.KeyCount == KeyCountMode.CountAndDiscord,
+            () => new DiscordPresence.Stats(counter.OnDay(DateTime.Today), counter.Total));
+        return counter;
+    }
+
+    // 修飾キーは、フロントが送るもの (左右の Alt) と送らないものがあるので数えない
+    private void CountKey(ImeKey key)
+    {
+        if (_keyCounter is null || key.Repeat || VirtualKeys.IsModifier(key.Vk) || Settings.Current.KeyCount == KeyCountMode.Off) return;
+        _keyCounter.Count(key.Vk, key.Ch, DateTime.Now);
+    }
 
     /// <summary>単語の登録のホットキー (Windows) 用: 選んでいた語の読みを推測する。分からなければ空。</summary>
     public string GuessReading(string word) => Converter.Reading(word) ?? "";
@@ -158,7 +185,7 @@ public sealed class MeltypeRuntime : IDisposable
         // 強制終了された Meltype の llama-server は、Zenzai が OFF でも起動したときに終わらせる
         ZenzaiConverter.EndStaleServers();
         var helper = Path.Combine(appDirectory, "mozc", OperatingSystem.IsWindows() ? "meltype_mozc_helper.exe" : "meltype_mozc_helper");
-        var mozc = new MozcConverter(mozcHelper ?? new MozcHelperProcess(helper, Path.Combine(DataDirectory, "mozc")));
+        var mozc = new MozcConverter(mozcHelper ?? new MozcHelperProcess(helper, MozcProfile()));
         var zenzai = new ZenzaiHolder();
         _converters.Add(mozc);
         _converters.Add(zenzai);
@@ -169,6 +196,29 @@ public sealed class MeltypeRuntime : IDisposable
         ForgetZenzaiHallucinations(converter);
         ConnectUserDictionary(converter);
         return converter;
+    }
+
+    /// <summary>
+    /// Mozc のユーザーデータの場所。Meltype は Mozc に学習させないので、起動のたびに学習データだけを消す。
+    /// 前の版が Mozc に覚えさせた文節の区切りと候補 (boundary.db・segment.db など) は、読みを誤った位置で区切る変換を固定するので捨てる (issue #2014)。
+    /// 場所は残す (渡さないと、Mozc は入れてある Mozc のユーザーデータを読む)。
+    /// </summary>
+    private string MozcProfile()
+    {
+        var profile = Path.Combine(DataDirectory, "mozc");
+        try
+        {
+            // MELTYPE_DATA_DIR がアプリの配置先と同じでも、mozc/ にあるヘルパーや辞書は消さない。
+            // 変換の区切りと候補を覚えるファイルだけを捨てる (#2014)。
+            if (Directory.Exists(profile))
+                foreach (var name in new[] { "boundary.db", "segment.db" }) File.Delete(Path.Combine(profile, name));
+        }
+        catch (Exception ex) when (DataFile.IsFileError(ex))
+        {
+            // ほかのプロセスが開いている・権限が無い場合も、入力の起動は続け、次の起動時に消し直す。
+            Diagnostics.Log.Warn($"前の版の Mozc の学習データを消せませんでした: {ex.Message}");
+        }
+        return profile;
     }
 
     private readonly object _engineDictionaryGate = new();
@@ -189,8 +239,7 @@ public sealed class MeltypeRuntime : IDisposable
                     // 後から変わった語をもう送った
                     if (version < _engineDictionarySent) return;
                     _engineDictionarySent = version;
-                    // userdict.txt は品詞を持たないので名詞にする
-                    converter.SetUserDictionary([.. words.Select(w => (w.Reading, w.Word, "名詞"))]);
+                    converter.SetUserDictionary([.. words.Select(w => (w.Reading, w.Word, w.Pos))]);
                 }
             });
         }
@@ -238,7 +287,11 @@ public sealed class MeltypeRuntime : IDisposable
     {
         _settingsCheck.Dispose();
         _nowPlaying?.Dispose();
+        _keyCountSave?.Dispose();
+        _keyCounter?.Save();
         foreach (var converter in _converters) converter.Dispose();
+        // Discord の応答を待つことがあるので最後
+        _discordPresence?.Dispose();
     }
 
     /// <summary>
@@ -259,7 +312,8 @@ public sealed class MeltypeRuntime : IDisposable
             text.Any(c => KanaChars.IsHiragana(c) || KanaChars.IsKatakana(c)) && !ZenzaiConverter.IsPlausible(reading, text) &&
             !UserDictionary.Lookup(reading).Contains(text) && _shared.Candidates?.Lookup(reading).Contains(text) != true;
         var conversions = History.Entries().Where(e => Suspect(e.Reading, e.Text)).Select(e => (e.Reading, e.Text)).ToList();
-        var phrases = Phrases.Entries().Where(e => Suspect(e.Reading, e.Text)).ToList();
+        // 予測変換の語句は確定した文字のまま (設定の句読点) なので、読みと同じ 、。 にして比べる
+        var phrases = Phrases.Entries().Where(e => Suspect(e.Reading, e.Text.Replace('，', '、').Replace('．', '。'))).ToList();
         if (conversions.Count == 0 && phrases.Count == 0) return;
         ThreadPool.QueueUserWorkItem(_ =>
         {

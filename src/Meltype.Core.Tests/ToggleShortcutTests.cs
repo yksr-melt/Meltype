@@ -143,17 +143,16 @@ internal static class ToggleShortcutTests
                  "ToggleKeyboardShortcuts":"Ctrl+Space; Ctrl+U; Space; Henkan"}
                 """);
             var settings = Settings.Load(path);
-            Assert.Equal(1, settings.EffectiveToggleShortcuts.Count, "有効な Ctrl+Space だけ残す");
+            Assert.Equal(2, settings.EffectiveToggleShortcuts.Count, "有効な Ctrl+Space と Henkan だけ残す");
             var exclusions = Meltype.Diagnostics.ShortcutExclusions.Drain();
-            Assert.Equal(3, exclusions.Length, "初回だけ競合を通知する");
+            Assert.Equal(2, exclusions.Length, "初回だけ競合を通知する");
             Assert.True(exclusions.Any(e => e.Reason == ShortcutValidationError.Conversion)
-                && exclusions.Any(e => e.Reason == ShortcutValidationError.UnmodifiedKey)
-                && exclusions.Any(e => e.Reason == ShortcutValidationError.ConvertKeys), "各除外理由を保持する");
+                && exclusions.Any(e => e.Reason == ShortcutValidationError.UnmodifiedKey), "各除外理由を保持する");
             var saved = JsonNode.Parse(File.ReadAllText(path))!.AsObject();
             Assert.Equal(Settings.CurrentVersion, saved["SettingsVersion"]!.GetValue<int>());
-            Assert.Equal(1, saved["ToggleShortcuts"]!.AsArray().Count, "ファイルにも除外済みの一覧を保存する");
+            Assert.Equal(2, saved["ToggleShortcuts"]!.AsArray().Count, "ファイルにも除外済みの一覧を保存する");
             Assert.True(!saved.ContainsKey("ToggleKeyboardShortcuts"), "旧項目を保存しない");
-            Assert.Equal(1, Settings.Load(path).EffectiveToggleShortcuts.Count);
+            Assert.Equal(2, Settings.Load(path).EffectiveToggleShortcuts.Count);
             Assert.Equal(0, Meltype.Diagnostics.ShortcutExclusions.Drain().Length, "再読み込みで再通知しない");
         }
         finally
@@ -251,7 +250,7 @@ internal static class ToggleShortcutTests
         Meltype.Diagnostics.ShortcutExclusions.Drain();
         try
         {
-            var settings = new Settings { ToggleShortcuts = [new() { Key = 28 }, new() { Key = 29 }, new() { Key = 32, Modifiers = ShortcutModifiers.Control }] };
+            var settings = new Settings { ToggleShortcuts = [new() { Key = 65 }, new() { Key = 66 }, new() { Key = 32, Modifiers = ShortcutModifiers.Control }] };
             var edited = settings.Clone().Normalize(reportShortcutExclusions: false);
             Assert.Equal(1, edited.EffectiveToggleShortcuts.Count, "キーの正規化は既存どおり");
             Assert.Equal(0, Meltype.Diagnostics.ShortcutExclusions.Drain().Length, "編集時は通知しない");
@@ -272,16 +271,16 @@ internal static class ToggleShortcutTests
         try
         {
             var path = Path.Combine(directory, "config.json");
-            File.WriteAllText(path, "{\"SettingsVersion\":6,\"ActiveProfile\":\"仕事\",\"ToggleShortcuts\":[{\"Key\":28},{\"Key\":29},{\"Key\":32,\"Modifiers\":2}]}");
+            File.WriteAllText(path, "{\"SettingsVersion\":6,\"ActiveProfile\":\"仕事\",\"ToggleShortcuts\":[{\"Key\":65},{\"Key\":66},{\"Key\":32,\"Modifiers\":2}]}");
             var settings = Settings.Load(path);
             var exclusions = Meltype.Diagnostics.ShortcutExclusions.Drain();
             Assert.Equal(2, exclusions.Length);
-            Assert.True(exclusions.All(e => e.Reason == ShortcutValidationError.ConvertKeys && e.Profile == "仕事"), "理由とプロファイルを保持");
-            Assert.True(Meltype.Diagnostics.Log.Snapshot().Any(e => e.Level == Meltype.Diagnostics.LogLevel.Warn && e.Message.Contains("Key=28") && e.Message.Contains("ConvertKeys")), "キーと理由を警告ログへ記録");
+            Assert.True(exclusions.All(e => e.Reason == ShortcutValidationError.UnmodifiedKey && e.Profile == "仕事"), "理由とプロファイルを保持");
+            Assert.True(Meltype.Diagnostics.Log.Snapshot().Any(e => e.Level == Meltype.Diagnostics.LogLevel.Warn && e.Message.Contains("Key=65") && e.Message.Contains("UnmodifiedKey")), "キーと理由を警告ログへ記録");
             settings.Clone().Normalize();
             Assert.Equal(0, Meltype.Diagnostics.ShortcutExclusions.Drain().Length, "再正規化は通知しない");
             var values = settings.ProfileValues();
-            values["ToggleShortcuts"] = new JsonArray(new JsonObject { ["Key"] = 28 });
+            values["ToggleShortcuts"] = new JsonArray(new JsonObject { ["Key"] = 65 });
             settings.Profiles.Add(new SettingsProfile { Name = "古い設定", Values = values });
             settings.SwitchProfile("古い設定");
             Assert.Equal("古い設定", Meltype.Diagnostics.ShortcutExclusions.Drain().Single().Profile);
@@ -418,7 +417,7 @@ internal static class ToggleShortcutTests
             [
                 new() { Key = 0x75 }, new() { Key = 0x79, Modifiers = ShortcutModifiers.Shift },
                 new() { Key = 0x55, Modifiers = ShortcutModifiers.Control },
-                new() { Key = 0x1C }, valid, valid,
+                new() { Key = 0x41 }, valid, valid,
             ],
         }.Normalize();
         Assert.Equal(1, settings.EffectiveToggleShortcuts.Count, "Core で衝突と重複を除外");
@@ -444,11 +443,10 @@ internal static class ToggleShortcutTests
                 Assert.Equal(ShortcutValidationError.UnmodifiedKey, ToggleShortcutValidator.Validate(binding, new Settings(), []));
                 Assert.Equal(0, new Settings { ToggleShortcuts = [binding] }.Normalize().EffectiveToggleShortcuts.Count, "読み込み時も通常入力を奪わない");
             }
-        foreach (var key in new[] { 0x19, 0xF3, 0xF4 })
-            Assert.Equal(ShortcutValidationError.None, ToggleShortcutValidator.Validate(new() { Key = key }, new Settings(), []));
-        // 無変換・変換だけは英数・日本語にするキー
-        foreach (var key in new[] { 0x1C, 0x1D })
-            Assert.Equal(ShortcutValidationError.ConvertKeys, ToggleShortcutValidator.Validate(new() { Key = key }, new Settings(), []));
+        // 半角/全角・CapsLock・カタカナ/ひらがな (US キーボードで CapsLock を割り当て直したもの)・変換・無変換
+        foreach (var key in new[] { 0x19, 0xF3, 0xF4, 0x14, 0xF2, 0x1C, 0x1D })
+            foreach (var mods in new[] { ShortcutModifiers.None, ShortcutModifiers.Shift })
+                Assert.Equal(ShortcutValidationError.None, ToggleShortcutValidator.Validate(new() { Key = key, Modifiers = mods }, new Settings(), []));
         Assert.Equal(ShortcutValidationError.None, ToggleShortcutValidator.Validate(
             new() { Key = 0x20, Modifiers = ShortcutModifiers.Control }, new Settings(), []));
     }

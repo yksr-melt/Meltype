@@ -4,6 +4,7 @@ package app.meltype.keyboard.mozc
 
 import android.os.SystemClock
 import android.util.Log
+import org.mozc.android.inputmethod.japanese.protobuf.ProtoCandidateWindow.CandidateAttribute
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands.CompositionMode
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands.Context
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands.Input
@@ -38,33 +39,11 @@ class MozcConverter internal constructor(
             if (values.isEmpty()) return@withSession emptyList()
             clauseReadings(output, reading).mapIndexed { index, clauseReading ->
                 if (index > 0) output = session.focusNextClause()
-                val alternatives = output.allCandidateWords.candidatesList.map { it.value }
-                MozcSegment(clauseReading, (listOf(values[index]) + alternatives).filter { it.isNotEmpty() }.distinct())
+                val words = output.allCandidateWords.candidatesList
+                val userWord = words.any { it.value == values[index] && CandidateAttribute.USER_DICTIONARY in it.attributesList }
+                MozcSegment(clauseReading, (listOf(values[index]) + words.map { it.value }).filter { it.isNotEmpty() }.distinct(), userWord)
             }
         }
-
-    override fun learn(clauses: List<MozcClause>, context: String?): Boolean {
-        if (clauses.isEmpty()) return false
-        val reading = clauses.joinToString("") { it.reading }
-        return withSession(reading, context) { session ->
-            session.compose()
-            var output = session.startConversion()
-            if (clauseReadings(output, reading) != clauses.map { it.reading }) return@withSession false
-            clauses.forEachIndexed { index, clause ->
-                if (index > 0) output = session.focusNextClause()
-                val chosen = output.allCandidateWords.candidatesList.firstOrNull { it.hasId() && it.value == clause.text }
-                    ?: return@withSession false
-                output = session.highlight(chosen.id)
-            }
-            // 選んだ結果が頼まれた表記と違うなら、違うものを覚えさせないよう、確定しない。
-            if (output.preedit.segmentList.joinToString("") { it.value } != clauses.joinToString("") { it.text }) {
-                return@withSession false
-            }
-            session.submit()
-            session.save()
-            true
-        } ?: false
-    }
 
     /**
      * 半角の数字は 1 字ずつ読む (2026年 → にぜろにろくねん) ので、全角にして渡し (２０２６年 → ２０２６ねん)、読みの数字は半角に戻す
@@ -85,7 +64,7 @@ class MozcConverter internal constructor(
         val engine = engine ?: return false
         val dictionary = UserDictionary.newBuilder().setId(1).setName("Meltype")
         for (word in words) {
-            dictionary.addEntries(UserDictionary.Entry.newBuilder().setKey(word.reading).setValue(word.word).setPos(UserDictionary.PosType.NOUN))
+            dictionary.addEntries(UserDictionary.Entry.newBuilder().setKey(word.reading).setValue(word.word).setPos(POS[word.pos] ?: UserDictionary.PosType.NOUN))
         }
         val storage = UserDictionaryStorage.newBuilder().addDictionaries(dictionary).build()
         // 変換の命令の列と混ざらないよう、ほかの操作と同じく 1 つずつ順に行う
@@ -183,25 +162,12 @@ class MozcConverter internal constructor(
         /** 次の文節に移る。返るものに、その文節の候補が入っている。 */
         fun focusNextClause() = key(KeyEvent.SpecialKey.RIGHT, withContext = false)
 
-        fun highlight(candidateId: Int) = command(withContext = false) {
-            setType(SessionCommand.CommandType.HIGHLIGHT_CANDIDATE).setId(candidateId)
-        }
-
-        fun submit() = command(withContext = false, commits = true) { setType(SessionCommand.CommandType.SUBMIT) }
-
-        /** 学習したことをファイルに書く。 */
-        fun save() = send(commits = false) { setType(Input.CommandType.SYNC_DATA) }
-
-        private fun command(
-            withContext: Boolean,
-            commits: Boolean = false,
-            build: SessionCommand.Builder.() -> Unit,
-        ) = send(commits) {
+        private fun command(withContext: Boolean, build: SessionCommand.Builder.() -> Unit) = send {
             setType(Input.CommandType.SEND_COMMAND).setCommand(SessionCommand.newBuilder().apply(build))
             if (withContext) addContext()
         }
 
-        private fun key(key: KeyEvent.SpecialKey, withContext: Boolean) = send(commits = false) {
+        private fun key(key: KeyEvent.SpecialKey, withContext: Boolean) = send {
             setType(Input.CommandType.SEND_KEY).setKey(KeyEvent.newBuilder().setSpecialKey(key))
             if (withContext) addContext()
         }
@@ -210,11 +176,11 @@ class MozcConverter internal constructor(
             if (!precedingText.isNullOrEmpty()) setContext(Context.newBuilder().setPrecedingText(precedingText))
         }
 
-        private fun send(commits: Boolean, build: Input.Builder.() -> Unit): Output {
+        private fun send(build: Input.Builder.() -> Unit): Output {
             if (now() > deadline) throw TimedOut()
             val output = eval(Input.newBuilder().setId(id).apply(build).build()) ?: throw Failed()
-            // 確定を頼んでいないのに確定された文字が返ったら、手順がずれている。
-            if (output.hasResult() != commits) throw Failed()
+            // 確定を頼んでいないのに確定された文字が返ったら、手順がずれている (Mozc に学習させない)。
+            if (output.hasResult()) throw Failed()
             return output
         }
     }
@@ -225,3 +191,51 @@ class MozcConverter internal constructor(
         const val TIMEOUT_MS = 2000L
     }
 }
+
+// Mozc の品詞名 (user_dictionary_storage.proto の PosType の注釈) → 品詞。ほかの日本語入力の品詞名 (ら行五段など) は知らないので名詞にする
+private val POS = mapOf(
+    "名詞" to UserDictionary.PosType.NOUN,
+    "短縮よみ" to UserDictionary.PosType.ABBREVIATION,
+    "サジェストのみ" to UserDictionary.PosType.SUGGESTION_ONLY,
+    "固有名詞" to UserDictionary.PosType.PROPER_NOUN,
+    "人名" to UserDictionary.PosType.PERSONAL_NAME,
+    "姓" to UserDictionary.PosType.FAMILY_NAME,
+    "名" to UserDictionary.PosType.FIRST_NAME,
+    "組織" to UserDictionary.PosType.ORGANIZATION_NAME,
+    "地名" to UserDictionary.PosType.PLACE_NAME,
+    "名詞サ変" to UserDictionary.PosType.SA_IRREGULAR_CONJUGATION_NOUN,
+    "名詞形動" to UserDictionary.PosType.ADJECTIVE_VERBAL_NOUN,
+    "数" to UserDictionary.PosType.NUMBER,
+    "アルファベット" to UserDictionary.PosType.ALPHABET,
+    "記号" to UserDictionary.PosType.SYMBOL,
+    "顔文字" to UserDictionary.PosType.EMOTICON,
+    "副詞" to UserDictionary.PosType.ADVERB,
+    "連体詞" to UserDictionary.PosType.PRENOUN_ADJECTIVAL,
+    "接続詞" to UserDictionary.PosType.CONJUNCTION,
+    "感動詞" to UserDictionary.PosType.INTERJECTION,
+    "接頭語" to UserDictionary.PosType.PREFIX,
+    "助数詞" to UserDictionary.PosType.COUNTER_SUFFIX,
+    "接尾一般" to UserDictionary.PosType.GENERIC_SUFFIX,
+    "接尾人名" to UserDictionary.PosType.PERSON_NAME_SUFFIX,
+    "接尾地名" to UserDictionary.PosType.PLACE_NAME_SUFFIX,
+    "動詞ワ行五段" to UserDictionary.PosType.WA_GROUP1_VERB,
+    "動詞カ行五段" to UserDictionary.PosType.KA_GROUP1_VERB,
+    "動詞サ行五段" to UserDictionary.PosType.SA_GROUP1_VERB,
+    "動詞タ行五段" to UserDictionary.PosType.TA_GROUP1_VERB,
+    "動詞ナ行五段" to UserDictionary.PosType.NA_GROUP1_VERB,
+    "動詞マ行五段" to UserDictionary.PosType.MA_GROUP1_VERB,
+    "動詞ラ行五段" to UserDictionary.PosType.RA_GROUP1_VERB,
+    "動詞ガ行五段" to UserDictionary.PosType.GA_GROUP1_VERB,
+    "動詞バ行五段" to UserDictionary.PosType.BA_GROUP1_VERB,
+    "動詞ハ行四段" to UserDictionary.PosType.HA_GROUP1_VERB,
+    "動詞一段" to UserDictionary.PosType.GROUP2_VERB,
+    "動詞カ変" to UserDictionary.PosType.KURU_GROUP3_VERB,
+    "動詞サ変" to UserDictionary.PosType.SURU_GROUP3_VERB,
+    "動詞ザ変" to UserDictionary.PosType.ZURU_GROUP3_VERB,
+    "動詞ラ変" to UserDictionary.PosType.RU_GROUP3_VERB,
+    "形容詞" to UserDictionary.PosType.ADJECTIVE,
+    "終助詞" to UserDictionary.PosType.SENTENCE_ENDING_PARTICLE,
+    "句読点" to UserDictionary.PosType.PUNCTUATION,
+    "独立語" to UserDictionary.PosType.FREE_STANDING_WORD,
+    "抑制単語" to UserDictionary.PosType.SUPPRESSION_WORD,
+)

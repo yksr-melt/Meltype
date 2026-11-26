@@ -14,7 +14,7 @@ public readonly record struct KeyEvent(int Vk, int Scan, bool Extended, bool IsU
     public int ShortcutKey => ToggleShortcut.NormalizeShortcutKey(Vk, Scan, Extended, UnmodifiedKey);
     public bool IsDown => !IsUp;
     /// <summary>同じ物理キーの押下・解放は、Windows が仮想キーを変更しても対にする。</summary>
-    public int PhysicalId => Scan != 0 ? 0x10000 | Scan | (Extended ? 0x100 : 0) : ToggleShortcut.NormalizeHankakuKey(Vk);
+    public int PhysicalId => Scan != 0 ? 0x10000 | Scan | (Extended ? 0x100 : 0) : ToggleShortcut.NormalizeKey(Vk);
     public override string ToString() => $"{(IsUp ? "↑" : "↓")}{Vk:X2}";
 }
 

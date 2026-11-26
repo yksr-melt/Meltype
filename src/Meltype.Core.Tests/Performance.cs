@@ -21,7 +21,7 @@ namespace Meltype.Tests;
 /// </summary>
 internal static class Performance
 {
-    private const string DefaultCases = "tools/mozc-compare-cases.tsv";
+    private const string DefaultCases = "src/Meltype.Core.Tests/data/perf-cases.tsv";
     public const int DefaultSamples = 5;
 
     private static readonly JsonSerializerOptions Json = new()

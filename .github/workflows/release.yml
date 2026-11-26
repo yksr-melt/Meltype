@@ -90,12 +90,12 @@ jobs:
           path: dist
       - name: Homebrew cask
         run: |
-          node tools/make-manifests.mjs "${GITHUB_REF_NAME#v}" "dist/Meltype-${GITHUB_REF_NAME#v}-mac.zip"
+          node packaging/make-manifests.mjs "${GITHUB_REF_NAME#v}" "dist/Meltype-${GITHUB_REF_NAME#v}-mac.zip"
           cat dist/manifests/homebrew/Casks/meltype.rb
       # GitHub App のトークンなら、作成した PR の CI も起動する (bot.yml / sponsors.yml と同じ)。
       - id: app-token
         if: vars.BOT_APP_ID != ''
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
         with:
           app-id: ${{ vars.BOT_APP_ID }}
           private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}

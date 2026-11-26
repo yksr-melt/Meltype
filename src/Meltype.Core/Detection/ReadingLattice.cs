@@ -28,10 +28,13 @@ internal sealed partial class CompositionDetector
     private const double JapaneseWordCost = 1;
     // katakana.txt の語 (ほすてぃんぐ) と brands.txt の読み (ぎっとはぶ)。katakana.txt は英単語をカタカナにした語 (アマゾン) が多いので、同じ綴りの英単語 (amazon) に譲る
     private const double KatakanaWordCost = 1.1;
-    // readings-rare.txt の語 (JMdict のよく使う語でない語の長い読み: かんれんづけ・くるまどめ)。
+    // readings-rare.txt の語 (JMdict のよく使う語でない語の 3 文字以上の読み: ろんぱ・かんれんづけ・くるまどめ)。
     // 英単語への切り替え (関連|duke = 1 + 1 + 1) より軽く、よく使う語どうしの区切りを割らない重みにする。
     // 1.5 では きょうはい|まげ が きょうは|image より軽くなり、3 では 関連づけ が 関連|duke と同じ重みになる
     private const double RareWordCost = 2.5;
+    // readings-rare.txt の 4 文字以下の読み (活用形も含む) は、英単語の一部に重なりやすい (ぜん|ぶち|めにする)。
+    // 日本語の前後に打った英単語 (ぜんぶ|time|にする) より軽くせず、未知音 + 英語 (うち|dome = 3) よりは軽くする。
+    private const double ShortRareWordCost = 2.9;
     // 語にならないかな 1 音、日本語の中に残る読めない英字 1 文字
     internal const double UnknownKanaCost = 3;
     // 語にならない っ・ー、x で打った小書きの母音が語の 1 音目 (だめ|ぇ)
@@ -122,19 +125,14 @@ internal sealed partial class CompositionDetector
     /// <summary>調べる用 (--segments): 区間分けのたびに、最後の状態ごとの一番軽い道と、候補ごとの重み (+) を 1 行ずつ渡す。* が選んだ道。</summary>
     internal Action<string>? LatticeTrace { get; set; }
 
+    /// <summary>
+    /// 区切りの上位 count 案を、軽い順に返す。区間の並びが同じ道 (日本語の語の区切りだけが違う道) は 1 案にまとめる。
+    /// count が 2 以上なら、(位置, 状態) ごとに軽い道を <see cref="PathsPerState"/> 個ずつ残す (k-best Viterbi)。最も軽い案から <see cref="AlternativeMargin"/> より重い案は返さない。
+    /// </summary>
     /// <param name="reasons">渡したら、選んだ道と、言語の割り当てが違う一番軽い道 (次点) を書く関数を足す (確定のログ用。issue #1644)。
     /// キーを打つたびに呼ばれるので、次点を探して文字列にするのは、ログに書くときだけにする。</param>
-    private List<CompositionSegment> FindSpansByReading(Prepared prepared, bool? learning, IReadOnlyList<CompositionUnit> units, string pending, bool? precedingEnglish, bool? followingEnglish,
-        bool manual, bool englishSentence, bool kanaInput, double englishBias = 0, List<Func<string>>? reasons = null) =>
-        FindSpanAlternatives(prepared, learning, units, pending, precedingEnglish, followingEnglish, manual, englishSentence, kanaInput, englishBias, 1, reasons)[0];
-
-    /// <summary>
-    /// 区切りの上位 count 案を、軽い順に返す。先頭は <see cref="FindSpansByReading"/> と同じ。区間の並びが同じ道 (日本語の語の区切りだけが違う道) は 1 案にまとめる。
-    /// count が 2 以上なら、(位置, 状態) ごとに軽い道を <see cref="PathsPerState"/> 個ずつ残す (k-best Viterbi)。最も軽い案から <see cref="AlternativeMargin"/> より重い案は返さない。
-    /// reasons には、いちばん良い案を選んだ理由を足す。
-    /// </summary>
     private List<List<CompositionSegment>> FindSpanAlternatives(Prepared prepared, bool? learning, IReadOnlyList<CompositionUnit> units, string pending, bool? precedingEnglish, bool? followingEnglish,
-        bool manual, bool englishSentence, bool kanaInput, double englishBias, int count, List<Func<string>>? reasons = null)
+        bool manual, bool englishSentence, bool kanaInput, bool punctuateAfterEnglish, double englishBias, int count, List<Func<string>>? reasons = null)
     {
         var text = prepared.Raw + pending;
         var length = text.Length;
@@ -330,7 +328,7 @@ internal sealed partial class CompositionDetector
                         KnownEnglishCost + ReadableDomainLetterCost * (text.IndexOf('.', p) - p));
                 // 英文の中の記号 (, . ! ? -) は半角のまま
                 if (unit >= 0 && !kanaInput && IsAsciiSymbol(units[unit]) && state.PreviousEnglish && state.AllEnglish &&
-                    KeepsPunctuationAfterEnglish(units, unit, pending, precedingEnglish))
+                    KeepsPunctuationAfterEnglish(units, unit, pending, punctuateAfterEnglish))
                 {
                     OfferEdge(node, state, new LatticeEdge(p, p + 1, true, "", false, false), 0);
                     continue;
@@ -490,7 +488,7 @@ internal sealed partial class CompositionDetector
         if (CommonReadings.Phrases.Contains(kana) || _userJapanese.Contains(kana)) return (new LatticeEdge(start, end, false, kana, true, false), JapaneseWordCost);
         if (CommonReadings.Katakana.Contains(kana) || CommonReadings.Brands.Contains(kana)) return (new LatticeEdge(start, end, false, kana, true, false), KatakanaWordCost);
         // readings-rare.txt の読みは katakana.txt とも重なる (おねしゃす) ので、ほかの一覧の軽い重みを先に使う
-        if (RomajiTypoCorrector.IsRareWord(kana)) return (new LatticeEdge(start, end, false, kana, true, false), RareWordCost);
+        if (RomajiTypoCorrector.IsRareWord(kana)) return (new LatticeEdge(start, end, false, kana, true, false), kana.Length < 5 ? ShortRareWordCost : RareWordCost);
         return (new LatticeEdge(start, end, false, kana, true, false), double.NaN);
     }
 
