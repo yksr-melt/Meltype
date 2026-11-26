@@ -23,6 +23,8 @@ The UT project does not state which CC BY-SA version applies, and CC BY-SA 3.0 m
 A UT-merged binary is your own build, not an official Meltype artifact, and is not covered by Meltype's support or warranties.
 Per-dictionary details are in [THIRD-PARTY-NOTICES.md](../../THIRD-PARTY-NOTICES.md) (Japanese) under "Mozc-UT 辞書".
 
+The upstream instructions and measurements below describe the pinned versions in the verification table. Download sizes and defaults may differ in other upstream revisions. The helper scripts in this repository are the source of truth for integration.
+
 ## Getting a UT dictionary
 
 ### Build one with merge-ut-dictionaries (recommended)
@@ -61,11 +63,11 @@ The combination used for the verification (kept here for reproducibility):
 | place names | `98cf8e9d7731695a52e5bc72ed633933c71d1913` |
 | SudachiDict | `13129ddebe1cb8eabb63feccbe157adec4e1de01` |
 | mozcdic-ut.txt produced | 1,142,950 lines, SHA-256 `0c16fa79ca6c4958bb5c4cc7378dadd17d382e987c586b90d82a50e452030c15` |
-| Mozc | `a069a88d4cb5c011de0f9aebb6c149a1c808d904` (`native/mozc/MOZC_COMMIT`) |
+| Mozc used for this measurement | `a069a88d4cb5c011de0f9aebb6c149a1c808d904` (current pin: [MOZC_COMMIT](../../native/mozc/MOZC_COMMIT)) |
 
 ## Build on Linux
 
-The requirements are the same as for a normal build (see `native/mozc/README.md`). Just add the environment variable.
+The requirements are the same as for a normal build (see [native/mozc/README.md](../../native/mozc/README.md)). Just add the environment variable.
 Handling a UT dictionary needs Python 3.10 or later (`PYTHON` selects the interpreter).
 
 ```bash
@@ -156,6 +158,17 @@ These numbers are specific to that machine.
 - Build caching: Bazel keys its cache on input contents, so plain and UT builds cannot be confused. After a UT build, rebuilding plain Mozc produced a binary **byte-for-byte identical** to the original plain build (SHA-256 `84929176b0f5265c41e64690775398312ff9ed7cd8e41ca43937d70ea9e71c82`).
 
 ## How it works
+
+```mermaid
+flowchart TD
+    scripts["Helper build script"] --> supplied{"UT file supplied?"}
+    supplied -->|Yes| merge["Validate, remap POS IDs, deduplicate"]
+    supplied -->|No| empty["Empty dictionary_ut.txt"]
+    merge --> records["dictionary_ut.txt and MOZC-UT.json"]
+    records --> bazel["Bazel: rebuild helper"]
+    empty --> bazel
+```
+
 
 1. The build script adds `dictionary_ut.txt` to the dictionary list in Mozc's `src/data/dictionary_oss/BUILD.bazel` and empties `dictionary_ut.txt`. Mozc's own dictionaries (`dictionary00.txt` to `dictionary09.txt`) are never modified.
 2. When the variable is set, `native/mozc/merge-ut-dictionary.py` reads the given `mozcdic-ut.txt` and validates it: UTF-8 (BOM and NUL bytes rejected), exactly 5 columns, no empty columns, POS IDs (lid/rid) present in `id.def`, cost within 0–65535, and readings in hiragana (a warning by default; an error with `--strict-readings`).
