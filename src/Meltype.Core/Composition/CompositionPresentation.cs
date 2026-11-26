@@ -224,7 +224,15 @@ internal static class CompositionPresentation
 
     // 読みの途中を直している間の、カーソルより前 (後ろはひらがなのまま足す)
     private static ComposedText ComposedBeforeCaret(CompositionInput input, CompositionEnv env, bool final) =>
-        CompositionText.Compose(CompositionText.Read(input.Text, env), env, final, env.Settings.LiveConversion ? (kana, afterEnglish, shown) => CompositionConversion.LiveConvert(input, env, kana, afterEnglish, CompositionConversion.SegmentBefore(env, shown)) : null);
+        CompositionText.Compose(CompositionText.Read(input.Text, env), env, final, LiveAnswer(input, env, wait: false));
+
+    /// <summary>自動の表示の文節の並び (<see cref="CompositionText.Clauses"/>)。ライブ変換の答えは待たない。</summary>
+    internal static IReadOnlyList<TypingClause> AutoClauses(CompositionInput input, CompositionEnv env, bool final) =>
+        CompositionText.Clauses(CompositionText.Read(input.Text, env), env, final, LiveAnswer(input, env, wait: false));
+
+    private static Func<string, bool, string, IReadOnlyList<TypingClause.Japanese>>? LiveAnswer(CompositionInput input, CompositionEnv env, bool wait) => env.Settings.LiveConversion
+        ? (kana, afterEnglish, shown) => CompositionConversion.LiveAnswer(input, env, kana, afterEnglish, CompositionConversion.SegmentBefore(env, shown), wait)
+        : null;
 
     /// <summary><see cref="CurrentComposed"/> の文字。</summary>
     internal static string CurrentDisplay(CompositionInput input, CompositionEnv env, bool final) => CurrentComposed(input, env, final).Text;
@@ -233,11 +241,8 @@ internal static class CompositionPresentation
     /// 変換していないときに確定する文字。答えを後から受け取れるフロントでは、ライブ変換の答えが間に合っていなくても env.Deadline までは答えを待つ
     /// (受け取れないフロントは、表示のときから待っている)。
     /// </summary>
-    internal static ComposedText CommittedDisplay(CompositionInput input, CompositionEnv env) => env.LateResults
-        ? CompositionText.Compose(CompositionText.Read(input.Text, env), env, final: true, env.Settings.LiveConversion
-            ? (kana, afterEnglish, shown) => CompositionConversion.CountsAsLive(kana) ? Composed(CompositionConversion.ConvertJapaneseSegment(input, env, kana, afterEnglish, CompositionConversion.SegmentBefore(env, shown), zenzai: true)) : ComposedText.Kana(kana)
-            : null)
-        : CurrentComposed(input, env, final: true);
+    internal static ComposedText CommittedDisplay(CompositionInput input, CompositionEnv env) =>
+        CompositionText.Compose(CompositionText.Read(input.Text, env), env, final: true, LiveAnswer(input, env, wait: env.LateResults));
 
     /// <summary>文節の文字。</summary>
     internal static ComposedText Composed(IEnumerable<Clause> clauses) => ComposedText.Concat(clauses.Select(c => Candidate(c, c.Text)));
