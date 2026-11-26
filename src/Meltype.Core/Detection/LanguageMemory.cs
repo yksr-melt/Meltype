@@ -14,6 +14,17 @@ public sealed record LearnedLanguage(string Word, bool English, int Count, DateT
 }
 
 /// <summary>
+/// 判定に使う英語 / 日本語の学習と、それを引く文脈 (<see cref="LanguageMemory.Get(string, bool?)"/>)。
+/// Memory が null なら使わない (設定「ユーザー学習を使う」が OFF)。
+/// </summary>
+internal readonly record struct LanguageLearning(LanguageMemory? Memory, bool? Context)
+{
+    public bool? Get(string word) => Memory?.Get(word, Context);
+
+    public bool? Get(ReadOnlySpan<char> word) => Memory?.Get(word, Context);
+}
+
+/// <summary>
 /// 英語とも日本語とも読める語 (api, sushi …) を、ユーザーが自分で英字 / かなに直したときに覚えておく。
 /// 次からその語は、自動の判定より覚えた方を優先する (api と打って F10 で英字にして確定 → 次から api は英字)。
 /// %LOCALAPPDATA%\Meltype\languages.json に「打った英字 → 英語か」だけを保存する。

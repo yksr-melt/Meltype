@@ -256,14 +256,66 @@ public sealed partial class KeyCounter
             keys[key] = keys.GetValueOrDefault(key) + count;
         }
         var sum = Math.Max(keys.Values.Sum(), days.Values.Sum());
-        var added = Math.Max(total ?? 0, sum);
-        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
+        return Add(Encoding.UTF8.GetBytes(text), Math.Max(total ?? 0, sum), keys, days, null);
+    }
+
+    /// <summary>
+    /// ファイルの中身を取り込む。typect の保存ファイル (バイナリ) ならそれを読み、そうでなければテキストとして <see cref="Import(string)"/> で読む
+    /// (UTF-8 で読めなければ Shift_JIS。古い Windows のソフトの書き出し)。
+    /// </summary>
+    public ImportResult ImportFile(byte[] bytes)
+    {
+        if (TryReadTypect(bytes, out var total, out var hours, out var keys)) return Add(bytes, total, keys, [], hours);
+        string text;
+        try { text = new UTF8Encoding(false, true).GetString(bytes); }
+        catch (DecoderFallbackException)
+        {
+            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+            text = Encoding.GetEncoding(932).GetString(bytes);
+        }
+        return Import(text);
+    }
+
+    // typect の保存ファイルは 4 バイトの整数 (リトルエンディアン) の並び:
+    //   [0] 不明, [1..3] 年・月・日, [4] 合計, [5..28] 0〜23 時ごと, [29..284] 仮想キーコードごと, そのあとに曜日ごとなどの表。
+    // 書式の説明は無く、実際のファイルから読み取った。時刻ごとの和が合計と一致することで typect のファイルと見なす
+    // (テキストをこの形と取り違えないため)。キーごとの表は、和が合計と一致するときだけ読む (キーごとに数えない版は表がほぼ 0)。
+    // 日ごとの打鍵数は入っていないので読まない。
+    private static bool TryReadTypect(byte[] bytes, out long total, out long[] hours, out Dictionary<string, long> keys)
+    {
+        total = 0;
+        hours = new long[24];
+        keys = new Dictionary<string, long>(StringComparer.Ordinal);
+        if (bytes.Length % 4 != 0 || bytes.Length < 29 * 4) return false;
+        long Word(int i) => System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(i * 4));
+        if (Word(1) is < 2000 or > 2100 || Word(2) is < 1 or > 12 || Word(3) is < 1 or > 31) return false;
+        total = Word(4);
+        for (var h = 0; h < 24; h++) hours[h] = Word(5 + h);
+        if (total == 0 || hours.Sum() != total) return false;
+        if (bytes.Length < 285 * 4 || Enumerable.Range(0, 256).Sum(vk => Word(29 + vk)) != total) return true;
+        // 0 は仮想キーコードではない (typect がキーを判別できなかった分)。合計には入れたまま、キーごとには数えない
+        for (var vk = 1; vk < 256; vk++)
+        {
+            var count = Word(29 + vk);
+            if (count == 0) continue;
+            var key = KeyName(vk);
+            keys[key] = keys.GetValueOrDefault(key) + count;
+        }
+        return true;
+    }
+
+    /// <summary>取り込んだ分を足す。source は二重に取り込まないためのハッシュの元。</summary>
+    private ImportResult Add(byte[] source, long added, Dictionary<string, long> keys, Dictionary<string, long> days, long[]? hours)
+    {
+        var hash = Convert.ToHexString(SHA256.HashData(source));
         lock (_lock)
         {
             if (added > 0 && _data.ImportedHashes.Contains(hash)) return new ImportResult(0, 0, 0, Duplicate: true);
             _data.Total += added;
             foreach (var (k, v) in keys) _data.Keys[k] = _data.Keys.GetValueOrDefault(k) + v;
             foreach (var (d, v) in days) _data.Days[d] = _data.Days.GetValueOrDefault(d) + v;
+            if (hours is not null)
+                for (var h = 0; h < 24; h++) _data.Hours[h] += hours[h];
             if (added > 0)
             {
                 _data.ImportedHashes.Add(hash);

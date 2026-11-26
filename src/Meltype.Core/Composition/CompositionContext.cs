@@ -12,8 +12,8 @@ namespace Meltype.Composition;
 /// <summary>キャレットの前後と直前の確定から、判定・変換・学習の文脈を作る。</summary>
 internal static class CompositionContext
 {
-    /// <summary>自分の確定の記録に残す文字数。ふつうの入力欄の、キャレットの前の文字 (Ime の ContextLength) と同じ。</summary>
-    private const int OwnTextLength = 20;
+    /// <summary>自分の確定の記録に残す文字数。文脈を使う側で最も長い Zenzai の文脈 (EngineContext.Passage の 100 文字) が入る長さ。</summary>
+    private const int OwnTextLength = 100;
 
     /// <summary>
     /// 入力欄の文脈 (<see cref="TextEnv.Context"/>)。キャレットの前後の文字だけから決める。

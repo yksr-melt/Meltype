@@ -11,7 +11,7 @@ using Meltype.Notation;
 namespace Meltype.Composition;
 
 /// <summary>入力中の文字列の処理 (<see cref="CompositionText"/>) が使う、入力欄の状態でないもの (判定器・入力欄のアプリの設定・ローマ字の打ち間違いの直し方)。</summary>
-internal record TextEnv(CompositionDetector Detector, Config.Settings Settings, RomajiTypoCorrector? RomajiTypos, ConversionHistory? History = null)
+internal record TextEnv(CompositionDetector Detector, Config.Settings Settings, RomajiTypoCorrector? RomajiTypos, ConversionHistory? History = null, LanguageMemory? Languages = null)
 {
     /// <summary>打った英字を読み直す断片なら、読み直す元の入力 (<see cref="CompositionText.FragmentEnv"/>)。断片でなければ null。</summary>
     public FragmentOrigin? Fragment { get; init; }
@@ -49,14 +49,14 @@ internal sealed record TextContext(string? PrecedingText, bool? PrecedingEnglish
     public bool EndsWithEnglishAndSpace => PrecedingEnglish == true && PrecedingText is [.., ' '];
 }
 
-/// <summary>打った英字を読み直す断片が、読み直す元の入力から引き継ぐもの。LearningContext は元の入力の学習の文脈。</summary>
-internal sealed record FragmentOrigin(bool? LearningContext);
+/// <summary>打った英字を読み直す断片が、読み直す元の入力から引き継ぐもの。Languages は元の入力で使う英語 / 日本語の学習。</summary>
+internal sealed record FragmentOrigin(LanguageLearning Languages);
 
 /// <summary>
 /// 変換ボックスの処理が使う、入力欄の状態でないもの (判定器・変換エンジン・辞書・学習データ・入力欄のアプリの設定・OS の機能)。出来事ごとに作って渡す。
 /// </summary>
 internal sealed record CompositionEnv(CompositionDetector Detector, IKanjiConverter Converter, CompositionServices Services, Config.Settings Settings)
-    : TextEnv(Detector, Settings, Services.RomajiTypos, Services.History)
+    : TextEnv(Detector, Settings, Services.RomajiTypos, Services.History, Services.Languages)
 {
     public CompositionLearning Learning { get; } = new(Services, Detector.ProperNouns);
 
