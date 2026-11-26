@@ -6,19 +6,23 @@ namespace Meltype.Libraries.Chars;
 /// <summary>文字列の言語 (英語か日本語か) と、半角・全角の文字の扱い。</summary>
 internal static class TextChars
 {
-    /// <summary>確定済みの文字列の最後の (空白以外の) 文字が英数字なら英語、かな・漢字・全角記号なら日本語。</summary>
+    /// <summary>文字列にかな・漢字が含まれるか。変換と学習で、選んだ候補が日本語かを同じ条件で見る。</summary>
+    public static bool IsJapaneseText(string text) => text.Any(c => c is >= '぀' and <= 'ヿ' or >= '㐀' and <= '䶿' or >= '一' and <= '鿿');
+
+    /// <summary>確定済みの文字列の最後の行の、最後の言語の分かる文字が英字なら英語、かな・漢字・全角記号なら日本語。</summary>
     public static bool? LanguageOf(string? text)
     {
         if (string.IsNullOrEmpty(text)) return null;
         for (var i = text.Length - 1; i >= 0; i--)
         {
+            if (text[i] is '\r' or '\n') return null; // 前の行は別の文
             if (Classify(text[i]) is { } english) return english;
             if (text[i] >= 0x80 && !char.IsWhiteSpace(text[i]) && text[i] != '　') return null;
         }
         return null;
     }
 
-    /// <summary>キャレットの後ろの文字列の最初の (空白以外の) 文字で判断する。</summary>
+    /// <summary>キャレットの後ろの文字列の最初の行の、最初の言語の分かる文字で判断する。</summary>
     public static bool? LanguageOfStart(string? text)
     {
         if (string.IsNullOrEmpty(text)) return null;
@@ -32,12 +36,12 @@ internal static class TextChars
     }
 
     /// <summary>
-    /// 英数字なら英語 (true)、かな・漢字・全角文字・日本語の文で使う記号 (○ ※ ★ 「」 など U+2000 以降) なら日本語 (false)、
-    /// 空白や英文の記号なら判断しない (null)。
+    /// 英字なら英語 (true)、かな・漢字・全角文字・日本語の文で使う記号 (○ ※ ★ 「」 など U+2000 以降) なら日本語 (false)、
+    /// 空白・数字・英文の記号なら判断しない (null)。数字は日本語の文でも半角で打つ (今日は100、)。
     /// </summary>
     private static bool? Classify(char c)
     {
-        if (char.IsAsciiLetterOrDigit(c)) return true;
+        if (char.IsAsciiLetter(c)) return true;
         if (c >= '\u2000' && !char.IsWhiteSpace(c) && c != '\u3000') return false;
         return null;
     }

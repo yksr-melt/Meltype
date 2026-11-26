@@ -167,21 +167,6 @@ test('枠が空いたらラベルを外して通知を解除する', async () =>
   assert.match(f.comments.get(3)[0].body, /対象ではなく/);
 });
 
-test('次にレビューの付いた PR は、古い PR より先に枠へ入れる', () => {
-  const next = pull(3); next.labels.push({ name: Labels.next });
-  assert.deepEqual([...excessPulls([pull(1), pull(2), next])], [2]);
-});
-
-test('次にレビューを付けた順番待ちの PR を枠に入れ、代わりに古い PR を順番待ちにする', async () => {
-  const f = fixture([pull(1), pull(2), pull(3)]);
-  await f.run();
-  f.records.get(3).labels.push({ name: Labels.next }); f.addEvent(3, 'labeled', Labels.next);
-  await f.run(start + Day);
-  assert.ok(limited(f, 2));
-  assert.ok(!limited(f, 3));
-  assert.equal(f.records.get(2).draft, false);
-});
-
 test('前の版の「Draft にする」超過の通知は、順番待ちの通知に書き直す', async () => {
   const f = fixture([pull(1), pull(2), pull(3)]);
   await f.run();

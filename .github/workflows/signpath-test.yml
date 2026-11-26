@@ -8,7 +8,7 @@ on:
   pull_request:
     paths:
       - '.github/workflows/signpath-test.yml'
-      - 'tools/*SignPath*'
+      - 'packaging/*SignPath*'
       - 'packaging/signpath/**'
 
 permissions:
@@ -116,7 +116,7 @@ jobs:
       # API Token はこの公式 Action にだけ渡す。ダウンロードしたアプリは実行しない。
       - name: Submit test signing request
         id: signpath
-        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3
+        uses: signpath/github-action-submit-signing-request@a2c5b60d9c75f073142b653c354b632eedce097b # v3
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
@@ -133,7 +133,7 @@ jobs:
         env:
           SIGNPATH_TEST_CERTIFICATE_SHA256: ${{ vars.SIGNPATH_TEST_CERTIFICATE_SHA256 }}
         run: |
-          . ./tools/Verify-SignPathArtifact.ps1
+          . ./packaging/Verify-SignPathArtifact.ps1
           Test-MeltypeSignPathArtifact -UnsignedDirectory "$env:RUNNER_TEMP/signpath-unsigned" -SignedDirectory "$env:RUNNER_TEMP/signpath-signed" -ExpectedCertificateSha256 $env:SIGNPATH_TEST_CERTIFICATE_SHA256 -ReportPath "$env:RUNNER_TEMP/signpath-verification/report.json" -TrustPinnedTestCertificate
       - name: Upload verified test output (never a Release)
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

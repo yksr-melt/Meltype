@@ -80,9 +80,9 @@ internal static class Quality
         // --- 英語 ---
         new("英語", "hello", "hello"),
         new("英語", "google", "google"),
-        new("英語", "github", "github"),
+        new("英語", "github", "GitHub"),
         new("英語", "python", "python"),
-        new("英語", "javascript", "javascript"),
+        new("英語", "javascript", "JavaScript"),
         new("英語", "thank you", "thank you"),
         new("英語", "good morning", "good morning"),
         new("英語", "I love you", "I love you"),
@@ -168,14 +168,14 @@ internal static class Quality
         new("混在", "selectshita", "selectした"),
         new("混在", "inviteshimashita", "inviteしました"),
         new("混在", "invitewookutta", "inviteをおくった"),
-        new("混在", "githubnipushshita", "githubにpushした"),
+        new("混在", "githubnipushshita", "GitHubにpushした"),
         new("混在", "pythondekaita", "pythonでかいた"),
         new("混在", "korehathin", "これはthin"),
         new("混在", "zoomdekaigi", "zoomでかいぎ"),
         new("混在", "slackderenraku", "slackでれんらく"),
         new("混在", "amazondekaimono", "amazonでかいもの"),
-        new("混在", "youtubewomiru", "youtubeをみる"),
-        new("混在", "chatgptnikiku", "chatgptにきく"),
+        new("混在", "youtubewomiru", "YouTubeをみる"),
+        new("混在", "chatgptnikiku", "ChatGPTにきく"),
         new("混在", "netflixdemiru", "netflixでみる"),
         new("混在", "discordnisanka", "discordにさんか"),
         new("混在", "linewookuru", "lineをおくる"),
@@ -209,7 +209,7 @@ internal static class Quality
         new("英語", "what time is it", "what time is it"),
         new("混在", "reactdekaita", "reactでかいた"),
         new("混在", "dockergaugokanai", "dockerがうごかない"),
-        new("混在", "typescriptnikaeta", "typescriptにかえた"),
+        new("混在", "typescriptnikaeta", "TypeScriptにかえた"),
         new("混在", "excelnofairu", "excelのふぁいる"),
         new("混在", "spotifydekiku", "spotifyできく"),
         new("混在", "microsoftnokaisha", "microsoftのかいしゃ"),
@@ -218,11 +218,11 @@ internal static class Quality
         new("混在", "GitHub no repo", "GitHub のrepo"),
         new("混在", "Google to Apple", "Google とApple"),
         // 助詞「や」+ 英単語 / 英単語 + 助詞「や」(Particles / TrailingParticles に ya)
-        new("混在", "yagithub", "やgithub"),
-        new("混在", "kyouhayagithub", "きょうはやgithub"),
-        new("混在", "hagithub", "はgithub"),
-        new("混在", "githubya", "githubや"),
-        new("混在", "githubni", "githubに"),
+        new("混在", "yagithub", "やGitHub"),
+        new("混在", "kyouhayagithub", "きょうはやGitHub"),
+        new("混在", "hagithub", "はGitHub"),
+        new("混在", "githubya", "GitHubや"),
+        new("混在", "githubni", "GitHubに"),
         // 助詞「や」+ 英単語が 1 語にまとまらないこと (IsUnknownEnglishWord / yap|lay の誤分割)
         new("混在", "yapython", "やpython"),
         new("混在", "yacursor", "やcursor"),
@@ -235,7 +235,7 @@ internal static class Quality
         new("英語", "devote", "devote"),
         new("英語", "morally", "morally"),
         new("混在", "kokodevote", "ここでvote"),
-        new("混在", "githubdevote", "githubでvote"),
+        new("混在", "githubdevote", "GitHubでvote"),
         // 英字のあいだの と は、chotto の っと や、英単語の途中 (stories) では助詞にしない
         new("混在", "chottodehijacked", "ちょっとでhijacked"),
         new("混在", "korekarastories", "これからstories"),
@@ -244,7 +244,7 @@ internal static class Quality
         new("混在", "dottonet", "dotとnet"),
         new("混在", "rdstoredshift", "rdsとredshift"),
         new("混在", "mottopython", "もっとpython"),
-        new("混在", "uikittoswiftui", "uikitとswiftui"),
+        new("混在", "uikittoswiftui", "UIKitとSwiftUI"),
         // 英単語の最後の t + s は つ にしないが、つ まで読むと日本語の語になるなら つ (しゅつ・おちつ)
         new("日本語", "teishutsushita", "ていしゅつした"),
         new("日本語", "ochitsuite", "おちついて"),
@@ -449,7 +449,7 @@ Dictionary<string, (int Pass, int Total)> ByCategory, List<string> Failures, Lis
         foreach (var (category, c) in TypingResults(CompositionTests.Detector)) Add(category, c);
 
         // かな入力 (JIS)
-        foreach (var (keys, expected) in new[] { ("byiaf", "こんにちは"), ("google", "google"), ("t@u", "がな"), ("github", "github") })
+        foreach (var (keys, expected) in new[] { ("byiaf", "こんにちは"), ("google", "google"), ("t@u", "がな"), ("github", "GitHub") })
         {
             var k = new CompositionTests.Keyboard { Kana = true };
             k.TypeKanaKeys(keys);

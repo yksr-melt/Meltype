@@ -5,14 +5,14 @@ namespace Meltype.Composition.Utility;
 
 /// <summary>
 /// いま・なう に今の日時を出す (issue #208)。17:22 / 17時22分 / 午後5時22分 / 2026年10月9日(金) 17時22分 / 10月9日(金) 17:22 …
-/// 時刻は設定「時計の候補のタイムゾーン」のもの。なう には、今再生している曲を時刻より先に出す (issue #1400)。
+/// なう には、今再生している曲を時刻より先に出す (issue #1400)。
 /// </summary>
 internal sealed class NowConversion : IUtilityConversion
 {
     public UtilityCandidates? Convert(UtilityInput input)
     {
         if (input.Reading is not ("いま" or "なう")) return null;
-        var times = Times(input.Context.ClockNow);
+        var times = Times(input.Context.Now);
         if (input.Reading == "なう" && input.Context.Settings.NowPlayingCandidates && Songs(input.Context.NowPlaying()) is { Count: > 0 } songs)
             return new([.. songs, .. times], UtilityPlacement.Append);
         return new(times, UtilityPlacement.Append);

@@ -16,15 +16,18 @@ namespace meltype
     static constexpr unsigned Hankaku = 0x19;
     // バッククォートキー(`)
     static constexpr unsigned Grave = 0xC0;
+    // カタカナ/ひらがな キー (VK_KANA)
+    static constexpr unsigned Kana = 0x15;
 
     // JIS の半角/全角キーは、単独押しと Alt との組み合わせで通知されるキーコードが異なる場合がある。
     // 確認した入力は、単独押しで 0xF3 の解放と 0xF4 の押下、Alt との組み合わせで 0x19 の押下。
     // US の Alt+バッククォートも 0x19 になるため、入力の識別には NormalizeShortcutKey で配列情報も使う。
-    static unsigned NormalizeHankakuKey(unsigned vk) { return vk == 0xF3 || vk == 0xF4 ? Hankaku : vk; }
+    // カタカナ/ひらがな キーは、Windows が VK_OEM_COPY (0xF2)、ほかの OS のフロントが VK_KANA (0x15) で送るので、0x15 にそろえる。
+    static unsigned NormalizeKey(unsigned vk) { return vk == 0xF3 || vk == 0xF4 ? Hankaku : vk == 0xF2 ? Kana : vk; }
 
     static unsigned NormalizeShortcutKey(unsigned vk, unsigned scan, bool extended, unsigned unmodifiedKey) {
-      return scan == 0x29 && !extended && unmodifiedKey == Grave && NormalizeHankakuKey(vk) == Hankaku
-          ? Grave : NormalizeHankakuKey(vk);
+      return scan == 0x29 && !extended && unmodifiedKey == Grave && NormalizeKey(vk) == Hankaku
+          ? Grave : NormalizeKey(vk);
     }
 
     // 通常キー自身が修飾キー単独 (Shift/Ctrl/Alt/Win) かどうか
@@ -37,7 +40,7 @@ namespace meltype
     {
       return !IsModifier(key) &&                   // 登録されているキー自体が修飾キー単独でないこと
              mods == modifiers &&                  // 登録された修飾キーと、今押された修飾キー(modifiers)が一致
-             NormalizeHankakuKey(vk) == NormalizeHankakuKey(key);
+             NormalizeKey(vk) == NormalizeKey(key);
     }
 
     // Meltype の修飾キーフラグを TSF 用に変換する。
@@ -78,12 +81,14 @@ namespace meltype
       key(b.key);
       // JIS 半角/全角のコード変化と、US の Alt+バッククォートが 0x19 になる場合に対応する。
       // 登録通知を受けた後も、配列情報を含めて割り当てとの一致を確認する。
-      if (ToggleShortcut::NormalizeHankakuKey(b.key) == ToggleShortcut::Hankaku || b.key == ToggleShortcut::Grave && gravePosition)
+      if (ToggleShortcut::NormalizeKey(b.key) == ToggleShortcut::Hankaku || b.key == ToggleShortcut::Grave && gravePosition)
       {
         key(ToggleShortcut::Hankaku);
         key(0xF3);
         key(0xF4);
       }
+      if (ToggleShortcut::NormalizeKey(b.key) == ToggleShortcut::Kana)
+        key(0xF2);
     }
     return result;
   }

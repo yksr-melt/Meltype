@@ -20,7 +20,7 @@ internal static partial class CompositionText
         if (state.KanaInput) return null;
         if (segmentIndex < 0 || segmentIndex >= segments.Count) return null;
         var from = segments.Take(segmentIndex).Sum(s => s.Raw.Length);
-        var units = CompositionText.UnitsInRawRange(state, env, state.Units, from, from + segments[segmentIndex].Raw.Length, out var pending);
+        var units = CompositionText.UnitsInRawRange(state, env, TypedMarks.Read(state, env), from, from + segments[segmentIndex].Raw.Length, out var pending);
         var pieces = new List<(string Kana, string Raw)>();
         foreach (var unit in units) pieces.Add((unit.Kana, unit.Raw));
         if (pending.Length > 0) pieces.Add((env.Detector.Romaji.ConvertLenient(pending.ToLowerInvariant(), final: true), pending));
@@ -55,7 +55,7 @@ internal static partial class CompositionText
     {
         var none = new string?[kanas.Count];
         if (state.KanaInput) return none;
-        var units = CompositionText.UnitsInRawRange(state, env, state.Units, 0, CompositionText.Raw(state).Length, out var pending);
+        var units = CompositionText.UnitsInRawRange(state, env, TypedMarks.Read(state, env), 0, CompositionText.Raw(state).Length, out var pending);
         var pieces = new List<(string Kana, string Raw)>();
         foreach (var unit in units) pieces.Add((unit.Kana, unit.Raw));
         if (pending.Length > 0) pieces.Add((env.Detector.Romaji.ConvertLenient(pending.ToLowerInvariant(), final: true), pending));
@@ -84,16 +84,16 @@ internal static partial class CompositionText
         var builder = new StringBuilder();
         if (CompositionText.UnitIndexAt(state, start) is int first && CompositionText.UnitIndexAt(state, Math.Min(end, unitsEnd)) is int last)
         {
-            for (var unit = first; unit < last; unit++) builder.Append(state.Units[unit].Kana);
+            foreach (var unit in TypedMarks.Read(state, env).Take(first..last)) builder.Append(unit.Kana);
             if (end > unitsEnd) builder.Append(CompositionText.PendingText(state, env, final: true));
         }
         else
         {
             // ラティスが単位の途中で区切った (medals|ha の sha): 区間の打った英字を読み直す
             CompositionTextState fragment = new CompositionTextState();
-            var fragmentEnv = FragmentEnv(state, env);
+            var fragmentEnv = FragmentEnv(env);
             foreach (var c in CompositionText.Raw(state)[start..end]) CompositionText.Append(fragment, fragmentEnv, c);
-            foreach (var unit in fragment.Units) builder.Append(unit.Kana);
+            foreach (var unit in TypedMarks.Read(fragment, fragmentEnv)) builder.Append(unit.Kana);
             builder.Append(CompositionText.PendingText(fragment, fragmentEnv, final: true));
         }
         return builder.Length > 0 ? builder.ToString() : null;
@@ -137,6 +137,27 @@ internal static partial class CompositionText
         _ => text,
     };
 
+    /// <summary>
+    /// すべて小文字で打った英単語を、自動で正しい大文字小文字に直した形 (iphone → iPhone、iphone's → iPhone's)。直さないなら null。
+    /// コードの文字列の中 (require('jquery')) や、ユーザーが小文字で確定して覚えた語は直さない。
+    /// </summary>
+    internal static string? AutoCanonical(TextEnv env, string raw)
+    {
+        if (env.CodeString) return null;
+        var stem = raw.EndsWith("'s", StringComparison.Ordinal) ? raw[..^2] : raw;
+        if (env.History?.Get(stem) == stem) return null;
+        return env.Detector.ProperNouns.AutoCanonical(raw);
+    }
+
+    /// <summary>前後の区間と . でつながったドメイン・識別子の一部 (github.com・google.github) か。文末の句点 (github.) や連続する . は含めない。</summary>
+    internal static bool IsDotConnected(IReadOnlyList<CompositionSegment> segments, int index) =>
+        index >= 2 && segments[index - 1].Raw == "." && segments[index - 2].Raw is [.., var prev] && char.IsAsciiLetterOrDigit(prev) ||
+        index + 2 < segments.Count && segments[index + 1].Raw == "." && segments[index + 2].Raw is [var next, ..] && char.IsAsciiLetterOrDigit(next);
+
+    /// <summary>英語の区間の表示テキスト。ドメインの一部 (github.com など) は打ったまま、それ以外は自動で正しい大文字小文字に直す。</summary>
+    internal static string DisplayEnglishSegment(IReadOnlyList<CompositionSegment> segments, int index, TextEnv env) =>
+        IsDotConnected(segments, index) ? segments[index].Raw : AutoCanonical(env, segments[index].Raw) ?? segments[index].Raw;
+
     /// <summary>英語区間は英字のまま、日本語区間はかな (または漢字)。保護範囲は打った原文のまま。</summary>
     private static ComposedText RenderSegments(CompositionTextState state, TextEnv env, bool final, Func<string, bool, string, ComposedText>? convert)
     {
@@ -149,7 +170,7 @@ internal static partial class CompositionText
             var segment = segments[i];
             if (segment.IsEnglish)
             {
-                built += ComposedText.Of(segment.IsProtected ? SpanKind.Protected : SpanKind.English, segment.Raw);
+                built += ComposedText.Of(segment.IsProtected ? SpanKind.Protected : SpanKind.English, DisplayEnglishSegment(segments, i, env));
                 continue;
             }
             var isLast = i == segments.Count - 1;
@@ -178,7 +199,7 @@ internal static partial class CompositionText
     }
 
     /// <summary>英語判定を無視してすべてかなにしたもの (F6)。</summary>
-    public static string AllKana(CompositionTextState state, TextEnv env, bool final) => string.Concat(state.Units.Select(u => u.Kana)) + CompositionText.PendingText(state, env, final);
+    public static string AllKana(CompositionTextState state, TextEnv env, bool final) => string.Concat(TypedMarks.Read(state, env).Select(u => u.Kana)) + CompositionText.PendingText(state, env, final);
 
     /// <summary>
     /// 日本語の部分の読みに書き間違い (ブレスレッド) があれば、その位置 (単位の範囲) と正しい読みを返す。
@@ -201,6 +222,7 @@ internal static partial class CompositionText
             rawOffset = end;
         }
         // 日本語の単位が続く範囲ごとに探す。
+        var units = TypedMarks.Read(state, env);
         var start = 0;
         while (start < state.Units.Count)
         {
@@ -216,7 +238,7 @@ internal static partial class CompositionText
             for (var i = start; i < end; i++)
             {
                 offsets.Add(reading.Length);
-                reading.Append(state.Units[i].Kana);
+                reading.Append(units[i].Kana);
             }
             offsets.Add(reading.Length);
             // 語末の n (まだ ん になっていない) も ん として読む (しゅみれーしょn)。

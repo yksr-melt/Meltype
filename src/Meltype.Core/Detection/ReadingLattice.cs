@@ -28,10 +28,13 @@ internal sealed partial class CompositionDetector
     private const double JapaneseWordCost = 1;
     // katakana.txt の語 (ほすてぃんぐ) と brands.txt の読み (ぎっとはぶ)。katakana.txt は英単語をカタカナにした語 (アマゾン) が多いので、同じ綴りの英単語 (amazon) に譲る
     private const double KatakanaWordCost = 1.1;
-    // readings-rare.txt の語 (JMdict のよく使う語でない語の長い読み: かんれんづけ・くるまどめ)。
+    // readings-rare.txt の語 (JMdict のよく使う語でない語の 3 文字以上の読み: ろんぱ・かんれんづけ・くるまどめ)。
     // 英単語への切り替え (関連|duke = 1 + 1 + 1) より軽く、よく使う語どうしの区切りを割らない重みにする。
     // 1.5 では きょうはい|まげ が きょうは|image より軽くなり、3 では 関連づけ が 関連|duke と同じ重みになる
     private const double RareWordCost = 2.5;
+    // readings-rare.txt の 4 文字以下の読み (活用形も含む) は、英単語の一部に重なりやすい (ぜん|ぶち|めにする)。
+    // 日本語の前後に打った英単語 (ぜんぶ|time|にする) より軽くせず、未知音 + 英語 (うち|dome = 3) よりは軽くする。
+    private const double ShortRareWordCost = 2.9;
     // 語にならないかな 1 音、日本語の中に残る読めない英字 1 文字
     internal const double UnknownKanaCost = 3;
     // 語にならない っ・ー、x で打った小書きの母音が語の 1 音目 (だめ|ぇ)
@@ -490,7 +493,7 @@ internal sealed partial class CompositionDetector
         if (CommonReadings.Phrases.Contains(kana) || _userJapanese.Contains(kana)) return (new LatticeEdge(start, end, false, kana, true, false), JapaneseWordCost);
         if (CommonReadings.Katakana.Contains(kana) || CommonReadings.Brands.Contains(kana)) return (new LatticeEdge(start, end, false, kana, true, false), KatakanaWordCost);
         // readings-rare.txt の読みは katakana.txt とも重なる (おねしゃす) ので、ほかの一覧の軽い重みを先に使う
-        if (RomajiTypoCorrector.IsRareWord(kana)) return (new LatticeEdge(start, end, false, kana, true, false), RareWordCost);
+        if (RomajiTypoCorrector.IsRareWord(kana)) return (new LatticeEdge(start, end, false, kana, true, false), kana.Length < 5 ? ShortRareWordCost : RareWordCost);
         return (new LatticeEdge(start, end, false, kana, true, false), double.NaN);
     }
 

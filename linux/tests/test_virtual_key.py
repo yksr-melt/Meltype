@@ -56,6 +56,10 @@ class VirtualKeyTests(unittest.TestCase):
         for keyval, vk in self.special.items():
             self.assertEqual((vk, 0x20 if keyval == self.ibus.KEY_space else 0), self.virtual_key(keyval))
 
+    def test_caps_lock(self):
+        # 切り替えキーに登録できる CapsLock を本体に渡す
+        self.assertEqual((0x14, 0), self.virtual_key(self.ibus.KEY_Caps_Lock))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
