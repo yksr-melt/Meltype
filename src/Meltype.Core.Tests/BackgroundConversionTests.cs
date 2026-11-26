@@ -116,9 +116,9 @@ internal static class BackgroundConversionTests
         converter.ResultReady += ready.Set;
         var session = Session(converter);
 
-        var watch = Stopwatch.StartNew();
+        // 経過時間で確かめると、プロセスで初めて打鍵を処理するときの JIT の時間も入る。変換エンジンは release まで答えないので、打鍵が答えを待てば ready が立つ
         var results = SessionFacadeTests.Type(session, "nihongo");
-        Assert.True(watch.ElapsedMilliseconds < 2000, $"打鍵は答えを待たない ({watch.ElapsedMilliseconds}ms)");
+        Assert.True(!ready.IsSet, "打鍵は答えを待たない");
         Assert.Equal("にほんご", results[^1].View?.Text);
 
         release.Set();
