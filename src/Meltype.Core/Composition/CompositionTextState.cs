@@ -13,6 +13,10 @@ internal sealed class CompositionTextState
 
     public readonly StringBuilder Pending = new();
 
+    // 読みの途中を直している間の、カーソルより後ろの単位 (Esc でひらがなに戻してから ← で動かした所より後ろ)。
+    // 打つ・消すのはいつもどおり Units の末尾 (= カーソルの位置) で、ほかのキー・確定の前に Units に戻す (CompositionText.MergeTail)
+    public readonly List<CompositionUnit> Tail = [];
+
     public DisplayMode Mode = DisplayMode.Auto;
 
     /// <summary>英字 (F9 / F10) で見せるときの大文字・小文字。</summary>

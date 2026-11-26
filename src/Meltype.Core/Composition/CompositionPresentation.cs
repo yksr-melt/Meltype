@@ -106,7 +106,8 @@ internal static class CompositionPresentation
         return new ComposedView(display, [], -1, false, hint,
             Suggestion: Suggestion(misspelling),
             Predictions: predictions.Count > 0 ? predictions.Select(p => ComposedText.Of(SpanKind.Japanese, p.Text)).ToList() : null, SelectedPrediction: predictionIndex, Typed: TypedKeys(input, null, env),
-            Committed: selected ?? CurrentComposed(input, env, final: true), ContextHint: contextHint);
+            Committed: selected ?? CurrentComposed(input, env, final: true), ContextHint: contextHint,
+            CaretBack: selected is null ? CompositionText.TailText(input.Text).Length : 0);
     }
 
     /// <summary>文節 clause の候補 candidate の文字。文全体の文節の案は、確定と同じく案の文節から作る (<see cref="CompositionConversion.SplitWholeSentence"/>)。</summary>
@@ -213,6 +214,10 @@ internal static class CompositionPresentation
 
     /// <summary>今の表示 (確定するときと同じく打ち間違いを直した形。ライブ変換が有効なら日本語区間は漢字に変換済み)。</summary>
     internal static ComposedText CurrentComposed(CompositionInput input, CompositionEnv env, bool final) =>
+        ComposedBeforeCaret(input, env, final) + ComposedText.Kana(CompositionText.TailText(input.Text));
+
+    // 読みの途中を直している間の、カーソルより前 (後ろはひらがなのまま足す)
+    private static ComposedText ComposedBeforeCaret(CompositionInput input, CompositionEnv env, bool final) =>
         CompositionText.AsCommitted(input.Text, env, text => CompositionText.Compose(text, env, final, env.Settings.LiveConversion ? (kana, afterEnglish, shown) => CompositionConversion.LiveConvert(input, env, kana, afterEnglish, CompositionConversion.SegmentBefore(env, shown)) : null));
 
     /// <summary><see cref="CurrentComposed"/> の文字。</summary>

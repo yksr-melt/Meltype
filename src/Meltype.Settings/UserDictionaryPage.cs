@@ -28,29 +28,60 @@ internal static class UserDictionaryPage
         var preview = Pages.Hint("");
         preview.VerticalAlignment = VerticalAlignment.Center;
         var word = new TextBox { PlaceholderText = "単語", Width = 220, Text = newWord?.Word };
+        // 分類: 登録・取り込み・「分類を変える」で語に付ける名前 (Google 日本語入力の辞書を分ける使い方の代わり)
+        var category = new AutoCompleteBox { PlaceholderText = "分類 (なくてもよい)", Width = 220, FilterMode = AutoCompleteFilterMode.Contains };
+        const string AllCategories = "すべての分類";
+        const string NoCategory = "分類なし";
+        var categoryFilter = new ComboBox { MinWidth = 160 };
         var message = Pages.Message();
         var filter = new TextBox { PlaceholderText = "絞り込み (読み・単語)", Width = 220 };
         var list = new ListBox
         {
             SelectionMode = SelectionMode.Multiple,
             MaxHeight = 420,
-            ItemTemplate = new FuncDataTemplate<UserWord>((w, _) => new TextBlock { Text = w is null ? "" : $"{w.Reading}　→　{w.Word}" }),
+            ItemTemplate = new FuncDataTemplate<UserWord>((w, _) => new TextBlock { Text = w is null ? "" : $"{w.Reading}　→　{w.Word}" + (w.Category.Length > 0 ? $"　［{w.Category}］" : "") }),
         };
         var count = Pages.Hint("");
 
+        // 絞り込みの一覧を作り直すと SelectionChanged が出るので、作り直している間は読み直さない
+        var reloading = false;
         void Reload()
+        {
+            if (reloading) return;
+            reloading = true;
+            try
+            {
+                Fill();
+            }
+            finally
+            {
+                reloading = false;
+            }
+        }
+
+        void Fill()
         {
             var query = (filter.Text ?? "").Trim();
             var dictionary = Open();
+            var categories = dictionary.Categories;
+            var chosen = categoryFilter.SelectedItem as string ?? AllCategories;
+            List<string> choices = [AllCategories, NoCategory, .. categories];
+            if (!choices.Contains(chosen)) chosen = AllCategories;
+            categoryFilter.ItemsSource = choices;
+            categoryFilter.SelectedItem = chosen;
+            category.ItemsSource = categories;
             // 新しく登録したものから
-            list.ItemsSource = dictionary.Words.Reverse().Where(w => query.Length == 0 || w.Reading.Contains(query) || w.Word.Contains(query, StringComparison.CurrentCultureIgnoreCase)).ToList();
-            count.Text = $"{dictionary.Count} 語";
+            var shown = dictionary.Words.Reverse()
+                .Where(w => chosen == AllCategories || w.Category == (chosen == NoCategory ? "" : chosen))
+                .Where(w => query.Length == 0 || w.Reading.Contains(query) || w.Word.Contains(query, StringComparison.CurrentCultureIgnoreCase)).ToList();
+            list.ItemsSource = shown;
+            count.Text = shown.Count == dictionary.Count ? $"{dictionary.Count} 語" : $"{shown.Count} / {dictionary.Count} 語";
         }
 
         void Register()
         {
             var kana = typed.ToHiragana(reading.Text ?? "");
-            if (Open().Add(kana, word.Text ?? "") is { } error)
+            if (Open().Add(kana, word.Text ?? "", category.Text ?? "") is { } error)
             {
                 Pages.Show(message, error, error: true);
                 return;
@@ -79,6 +110,27 @@ internal static class UserDictionaryPage
             Reload();
         }
 
+        void SetCategoryOfSelected()
+        {
+            var selected = list.SelectedItems?.OfType<UserWord>().ToList() ?? [];
+            if (selected.Count == 0) return;
+            var name = (category.Text ?? "").Trim();
+            try
+            {
+                Open().SetCategory(selected, name);
+                Pages.Show(message, name.Length > 0 ? $"{selected.Count} 語を「{name}」に分けました。" : $"{selected.Count} 語の分類を外しました。");
+            }
+            catch (Exception ex) when (ex is IOException or ArgumentException)
+            {
+                Pages.Show(message, $"分類を変えられませんでした: {ex.Message}", error: true);
+            }
+            Reload();
+        }
+
+        categoryFilter.SelectionChanged += (_, _) =>
+        {
+            Reload();
+        };
         reading.TextChanged += (_, _) => preview.Text = (reading.Text ?? "").Any(char.IsAsciiLetter) ? "→ " + typed.ToHiragana(reading.Text!) : "";
         filter.TextChanged += (_, _) => Reload();
         foreach (var box in new[] { reading, word })
@@ -99,7 +151,9 @@ internal static class UserDictionaryPage
             try
             {
                 var result = UserDictionaryFile.Parse(bytes);
-                var added = Open().AddRange(result.Words);
+                // 取り込んだ語には、分類の欄の名前を付ける (辞書ファイルごとに分けられるように)
+                var name = (category.Text ?? "").Trim();
+                var added = Open().AddRange(result.Words.Select(w => w with { Category = name }));
                 var duplicates = result.Words.Count - added;
                 Pages.Show(message, $"{added} 語を登録しました。" + (duplicates > 0 ? $" 登録済みの語: {duplicates}。" : "") +
                     (result.Skipped > 0 ? $" 読みがかなでない・短すぎるなどで飛ばした行: {result.Skipped}。" : ""));
@@ -117,15 +171,17 @@ internal static class UserDictionaryPage
                 Pages.Show(message, $"{dictionary.Count} 語を書き出しました。Microsoft IME・Google 日本語入力・ATOK の辞書ツールで取り込めます。");
         });
         var remove = SettingEditors.Button("選んだ語を削除", RemoveSelected);
+        var setCategory = SettingEditors.Button("選んだ語を分類の欄の名前に分ける", SetCategoryOfSelected);
 
         Reload();
-        return Pages.Layout(Title, "登録した語は、読みを変換したときに候補の先頭に出ます。読みはローマ字でも打てます。",
+        return Pages.Layout(Title, "登録した語は、読みを変換したときに候補の先頭に出ます。読みはローマ字でも打てます。分類を付けると、分類ごとに絞り込めます。",
             Pages.Card(
                 Pages.Row(reading, preview),
                 Pages.Row(word, SettingEditors.Button("登録", Register)),
+                Pages.Row(category),
                 message),
-            Pages.Row(filter, count),
+            Pages.Row(filter, categoryFilter, count),
             list,
-            Pages.Row(remove, import, export));
+            Pages.Row(remove, setCategory, import, export));
     }
 }

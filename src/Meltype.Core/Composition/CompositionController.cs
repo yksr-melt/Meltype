@@ -97,6 +97,7 @@ internal static class CompositionController
         CompositionOutput.Begin(state.Out);
         if (state.Scene is CompositionScene.Typing { Input: var input } && CompositionPresentation.CurrentPredictions(input, env) is var predictions && index >= 0 && index < predictions.Count)
         {
+            CompositionText.MergeTail(input.Text, env);
             CompositionCommit.CommitPrediction(state, input, env, predictions[index]);
             CompositionPresentation.UpdateView(state, env);
         }
@@ -117,6 +118,7 @@ internal static class CompositionController
     private static void CommitAll(CompositionState state, CompositionEnv env, bool preserveLatinRaw, bool preserveText)
     {
         env = env.WaitingForInput();
+        if (state.Scene is CompositionScene.WithInput { Input.Text: var editing }) CompositionText.MergeTail(editing, env);
         if (state.Scene is CompositionScene.Judging) CompositionDirectInput.ReleaseAsEnglish(state);
         // e + 結合アクセントを「え + アクセント」にしない。明示した表示モード・候補・かな入力は尊重する。
         // ASCII 英字だけの原文に Latin アクセントが続く場合に限り、変換や学習を経由せず確定する。

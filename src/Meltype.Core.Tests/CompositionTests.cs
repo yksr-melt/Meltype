@@ -2641,6 +2641,67 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void EscRevertedReading_CanBeEditedInTheMiddle()
+    {
+        // #972: Esc でひらがなに戻した読みは、← → でカーソルを動かして途中だけを打ち直せる
+        var k = new Keyboard { EscStepsBack = true };
+        k.Type("momijifariniikimasu");
+        k.Press(VirtualKeys.F7);
+        k.Press(VirtualKeys.Escape);
+        Assert.Equal("もみじふぁりにいきます", k.Showing);
+        for (var i = 0; i < 6; i++) k.Press(VirtualKeys.Left);
+        Assert.Equal("もみじふぁりにいきます", k.Showing, "カーソルを動かしても読みは変わらない");
+        Assert.Equal(6, k.Host.View!.CaretBack, "カーソルは「ふぁ」の後ろ");
+        k.Press(VirtualKeys.Back);
+        Assert.Equal("もみじりにいきます", k.Showing, "BackSpace はカーソルの前を消す");
+        k.Type("ga");
+        Assert.Equal("もみじがりにいきます", k.Showing, "カーソルの位置で消して打つ");
+        Assert.Equal(6, k.Host.View!.CaretBack);
+        k.Press(VirtualKeys.End);
+        Assert.Equal(0, k.Host.View!.CaretBack, "End で末尾へ");
+        k.Press(VirtualKeys.Home);
+        k.Press(VirtualKeys.Delete);
+        Assert.Equal("みじがりにいきます", k.Showing, "Delete はカーソルの後ろを消す");
+        k.Type("\n");
+        Assert.Equal("みじがりにいきます", k.Host.Document, "確定は直した読みのまま");
+    }
+
+    [Test]
+    public static void EscRevertedReading_KeepsPendingRomajiAtTheCaret()
+    {
+        // 打ちかけのローマ字があるまま確定しても、見えていた位置 (カーソル) に残す
+        var k = new Keyboard { EscStepsBack = true };
+        k.Type("momijifariniikimasu");
+        k.Press(VirtualKeys.F7);
+        k.Press(VirtualKeys.Escape);
+        for (var i = 0; i < 6; i++) k.Press(VirtualKeys.Left);
+        k.Type("k");
+        Assert.Equal("もみじふぁkりにいきます", k.Showing);
+        k.Type("\n");
+        Assert.Equal("もみじふぁkりにいきます", k.Host.Document);
+        // 打ちかけの n は、末尾で確定するときと同じく ん
+        var n = new Keyboard { EscStepsBack = true };
+        n.Type("momijifariniikimasu");
+        n.Press(VirtualKeys.F7);
+        n.Press(VirtualKeys.Escape);
+        for (var i = 0; i < 6; i++) n.Press(VirtualKeys.Left);
+        n.Type("n");
+        Assert.Equal("もみじふぁんりにいきます", n.Showing);
+        n.Type("\n");
+        Assert.Equal("もみじふぁんりにいきます", n.Host.Document);
+        // 途中に入ってから末尾に戻して打っても、同じ読みの続き (確定して新しく始めない)
+        var end = new Keyboard { EscStepsBack = true };
+        end.Type("kyou");
+        end.Press(VirtualKeys.F7);
+        end.Press(VirtualKeys.Escape);
+        end.Press(VirtualKeys.Left);
+        end.Press(VirtualKeys.End);
+        end.Type("ha");
+        Assert.Equal("", end.Host.Document, "確定しない");
+        Assert.Equal("きょうは", end.Showing);
+    }
+
+    [Test]
     public static void Issue676_EscStepsBackOneLevelAtATime()
     {
         var k = new Keyboard { EscStepsBack = true };
@@ -2800,6 +2861,41 @@ internal static class CompositionTests
         Assert.Equal("とる", k.Showing, "残りは未確定のまま");
         k.Type("\n");
         Assert.Equal("単位をとる", k.Host.Document);
+    }
+
+    [Test]
+    public static void AtokConversionKeys_ArrowsResizeAndDownCommitsUpToTheSelectedClause()
+    {
+        // #2128: ATOK と同じく、Shift + ← で文節を移り、↓ で選んだ文節までを確定する。← は区切りを変える
+        var k = new Keyboard();
+        k.Settings.AtokConversionKeys = true;
+        k.Type("tanniwotoru ");
+        var before = string.Join("|", k.Host.View!.Clauses!);
+        k.Press(VirtualKeys.Left);
+        Assert.True(string.Join("|", k.Host.View!.Clauses!) != before, "← で区切りが変わる: " + before);
+        var clauses = k.Host.View!.Clauses!;
+        k.Host.PhysicalShift = true;
+        k.Key(VirtualKeys.LShift);
+        k.Press(VirtualKeys.Left);
+        k.Key(VirtualKeys.LShift, up: true);
+        k.Host.PhysicalShift = false;
+        k.Press(VirtualKeys.Down);
+        Assert.Equal(clauses[0], k.Host.Document, "選んでいる文節までを確定");
+        Assert.True(k.Showing is { Length: > 0 }, "残りは未確定のまま");
+    }
+
+    [Test]
+    public static void UserDictionary_EnglishReadingConvertsToTheRegisteredWord()
+    {
+        // #764: 英字の読み (atm) に英単語 (Atmosphere) を登録したら、その読みだけを打って変換したときに出す
+        var dictionary = new UserDictionary(null);
+        dictionary.Add("atm", "Atmosphere");
+        var k = new Keyboard(userDictionary: dictionary);
+        k.Type("atm \n");
+        Assert.Equal("Atmosphere", k.Host.Document);
+        var sentence = new Keyboard(userDictionary: dictionary);
+        sentence.Type("atmdeharau\n");
+        Assert.True(!sentence.Host.Document.Contains("Atmosphere"), "文の中の atm は登録語にしない: " + sentence.Host.Document);
     }
 
     [Test]

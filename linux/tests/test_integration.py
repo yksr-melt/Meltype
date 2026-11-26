@@ -522,7 +522,7 @@ class IntegrationTests(unittest.TestCase):
     def test_aux_shows_typed_suggestion_and_hint(self):
         shown = []
         self.engine.update_auxiliary_text = lambda text, visible: shown.append(text.get_text())
-        self.engine._apply({"commits": [], "view": {"text": "かん", "converting": False, "clauses": [], "selectedClause": -1,
+        self.engine._apply({"commits": [], "view": {"text": "かん", "converting": False, "clauses": [], "selectedClause": -1, "caretBack": 0,
                                                     "hint": "Space 変換", "spellingSuggestion": "もしかして", "typedKeys": "kan", "candidates": None}})
         self.assertEqual(["kan　もしかして　Space 変換"], shown)
 

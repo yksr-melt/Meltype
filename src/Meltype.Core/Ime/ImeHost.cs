@@ -129,7 +129,9 @@ public sealed class ImeHost
             if (!active || e is not (ImeEvent.KeyPressed or ImeEvent.ModeToggleRequested or ImeEvent.JapaneseModeSelected or ImeEvent.AlphanumericModeSelected) ||
                 e.Field?.Composing == true || _sessions.Count >= MaxSessions)
             {
-                return new(ImeSession.InitialState(active, e.ImeOpen ?? true, current.ForApp(e.Field?.App), ImeSession.IsGame(current, e.Field), ImeSession.AnnouncesFocus(e), NextRev()), Pass);
+                // 入力欄に入ったら、前にその入力欄で切り替えたモードにする (切り替えたのは、キーでセッションを作ってから)
+                var open = e is ImeEvent.WithCaret { Caret.FocusEntered: true } && active && ImeSession.LearnedMode(env, e.Field) is { } learned ? learned : e.ImeOpen ?? true;
+                return new(ImeSession.InitialState(active, open, current.ForApp(e.Field?.App), ImeSession.IsGame(current, e.Field), ImeSession.AnnouncesFocus(e), NextRev()), Pass);
             }
             session = ImeSession.Create(env);
             _sessions[id] = session;
