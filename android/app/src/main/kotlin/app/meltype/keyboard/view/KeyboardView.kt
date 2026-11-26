@@ -63,7 +63,7 @@ class KeyboardView(context: Context) : View(context) {
             requestLayout()
             invalidate()
         }
-    var shift: ShiftState = ShiftState.OFF
+    var shift: ShiftState = ShiftState.Off
         set(value) { field = value; rebuildFaces(); invalidate() }
 
     /** 確定キーが何をするか。キーの絵を決める。 */

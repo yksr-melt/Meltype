@@ -6,6 +6,7 @@ using Meltype.Config;
 using Meltype.Dictionary;
 using Meltype.Learning;
 using Meltype.Libraries.Chars;
+using Meltype.Notation;
 
 namespace Meltype.Composition;
 
@@ -102,9 +103,7 @@ internal static class CompositionPresentation
         }
         var selected = predictionIndex >= 0 ? PredictionText(predictions[predictionIndex]) : null;
         var display = selected ?? CurrentComposed(input, env, final: false);
-        // 設定「入力中も変換候補をいくつか表示」: Space の前から候補を出す (issue #666)
-        var preview = selected is null && misspelling is null ? TypingCandidates(input, env) : null;
-        return new ComposedView(display, [.. (preview ?? []).Select(c => ComposedText.Of(SpanKind.Japanese, c))], preview?.IndexOf(display.Text) ?? -1, false, hint,
+        return new ComposedView(display, [], -1, false, hint,
             Suggestion: Suggestion(misspelling),
             Predictions: predictions.Count > 0 ? predictions.Select(p => ComposedText.Of(SpanKind.Japanese, p.Text)).ToList() : null, SelectedPrediction: predictionIndex, Typed: TypedKeys(input, null, env),
             Committed: selected ?? CurrentComposed(input, env, final: true), ContextHint: contextHint);
@@ -118,16 +117,6 @@ internal static class CompositionPresentation
 
     /// <summary>書き間違いの修正の案内 (もしかして)。</summary>
     private static ComposedText? Suggestion(string? suggestion) => suggestion is null ? null : ComposedText.Of(SpanKind.Japanese, suggestion);
-
-    /// <summary>設定「入力中も変換候補をいくつか表示」: 今打っているひらがなの変換候補 (5 件まで)。出さないときは null。</summary>
-    internal static List<string>? TypingCandidates(CompositionInput input, CompositionEnv env)
-    {
-        if (!env.Settings.ShowCandidatesWhileTyping || input.Text.Mode != DisplayMode.Auto || input.Text.KanaInput || CompositionText.IsAlphanumeric(input.Text, env)) return null;
-        var kana = CompositionText.AllKana(input.Text, env, final: false);
-        if (kana.Length < 2 || !kana.All(c => c is >= 'ぁ' and <= 'ゖ' or 'ー')) return null;
-        var candidates = CompositionConversion.JapaneseCandidates(env.WithoutWaiting(), kana, null, CompositionConversion.SegmentBefore(env, ""), zenzai: true).Take(5).ToList();
-        return candidates.Count > 1 ? candidates : null;
-    }
 
     /// <summary>変換ボックスに出す、打ったもの (設定「打ったキーを表示」)。漢字変換前は、変換中なら文節の読み、変換していなければ確定される形 (<see cref="CurrentComposed"/>) を漢字にせずに出す。</summary>
     private static string? TypedKeys(CompositionInput input, Conversion? conversion, CompositionEnv env) => env.Settings.TypedKeys switch
@@ -155,7 +144,7 @@ internal static class CompositionPresentation
     {
         if (env.Services.Predictor is not { } predictor || !env.Settings.PredictiveCandidates || input.Text.Mode != DisplayMode.Auto) return [];
         var raw = CompositionText.Raw(input.Text);
-        IEnumerable<string> PredictEnglish() => predictor.PredictEnglish(raw).Select(w => CompositionText.AutoCanonical(env, w) ?? w);
+        IEnumerable<string> PredictEnglish() => Predictor.PredictEnglish(raw).Select(w => NotationRules.Word(w, env.ProperNoun));
         if (CompositionText.IsAlphanumeric(input.Text, env))
         {
             // 英単語 1 語の打ちかけ (decis → decisions)
@@ -179,7 +168,7 @@ internal static class CompositionPresentation
                     heads.Length == 0 ? words : words.Where(w => heads.Any(h => w.StartsWith(h, StringComparison.Ordinal)));
                 Add(Connected(predictor.PredictJapanese(reading)), before, reading);
                 // 英字で書く社名・サービス名 (しゃお → Xiaomi)。日本語の予測の後ろに足す
-                if (env.Settings.EnglishNamePredictions) Add(Connected(predictor.PredictEnglishNames(reading)), before, reading);
+                if (env.Settings.EnglishNamePredictions) Add(Connected(Predictor.PredictEnglishNames(reading)), before, reading);
             }
         }
         // 長い英単語は、打ち終わるまでローマ字として見えていることがある (decis → でしs)。英字だけを 4 文字以上打っていれば英単語の続きも出す

@@ -6,6 +6,11 @@ namespace Meltype.Libraries.Lexicon;
 /// <summary>組み込み辞書 (dictionaries/*.txt を埋め込んだもの) とユーザー辞書を読む。</summary>
 internal static class DictionarySource
 {
+    // 英単語の判定と予測は同じ一覧を引くため、本文と索引は一度だけ用意する。
+    private static readonly Lazy<PackedWordSet> EnglishWordList = new(() => PackedWordSet.FromLines(ReadEmbedded("english-words.txt")));
+
+    internal static PackedWordSet EnglishWords => EnglishWordList.Value;
+
     public static string ReadEmbedded(string name)
     {
         var assembly = typeof(DictionarySource).Assembly;

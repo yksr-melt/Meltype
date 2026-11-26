@@ -11,14 +11,14 @@ namespace Meltype.Detection;
 /// </summary>
 internal sealed class BuiltInWordChecker
 {
-    private static readonly Lazy<BuiltInWordChecker> SharedInstance = new(() => new BuiltInWordChecker(DictionarySource.ReadEmbedded("english-words.txt")));
+    private static readonly Lazy<BuiltInWordChecker> SharedInstance = new(() => new BuiltInWordChecker(DictionarySource.EnglishWords));
 
     /// <summary>同梱の一覧を読んだもの (最初に使うときに読む)。</summary>
     public static BuiltInWordChecker Shared => SharedInstance.Value;
 
     private readonly PackedWordSet _words;
 
-    private BuiltInWordChecker(string text) => _words = PackedWordSet.FromLines(text);
+    private BuiltInWordChecker(PackedWordSet words) => _words = words;
 
     /// <summary>小文字の英単語 (a-z だけ) が、一覧にあるか。</summary>
     public bool IsWord(string lower) => _words.Contains(lower);

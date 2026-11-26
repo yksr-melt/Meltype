@@ -4,7 +4,6 @@ package app.meltype.keyboard.core
 
 import app.meltype.keyboard.PerfLog
 import app.meltype.keyboard.mozc.MozcBackend
-import app.meltype.keyboard.mozc.MozcClause
 import app.meltype.keyboard.mozc.MozcWord
 
 /**
@@ -46,14 +45,6 @@ internal class CoreMozcCallbacks(
                     }
                     ?: segments?.let { "" }
             }
-            "L" -> {
-                val (context, records) = fields.drop(1)
-                val clauses = records.split(RECORD).map { record ->
-                    val (reading, text) = record.split(UNIT)
-                    MozcClause(reading, text)
-                }
-                if (converter.learn(clauses, context.ifEmpty { null })) "OK" else "NG"
-            }
             "R" -> converter.reading(fields[1]) ?: ""
             "D" -> {
                 val words = fields[1].split(RECORD).filter { it.isNotEmpty() }.map { record ->
@@ -62,8 +53,6 @@ internal class CoreMozcCallbacks(
                 }
                 if (converter.setUserDictionary(words)) "OK" else "NG"
             }
-            // 覚えさせるたびに保存している (MozcConverter.learn)
-            "S" -> "OK"
             else -> throw IllegalArgumentException("Unknown Mozc helper request: ${fields[0]}")
         }
     }

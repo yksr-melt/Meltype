@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
 
+using Meltype.Config;
 using Meltype.Input;
 
 namespace Meltype.Tests;
@@ -11,12 +12,10 @@ internal static class KeyCounterTests
     private static KeyEvent Down(int vk) => new(vk, 0, false, false, false, 0);
     private static KeyEvent Up(int vk) => new(vk, 0, false, true, false, 0);
 
-    private static KeyCounter OnCounter(string? path = null) => new(path) { Enabled = true };
-
     [Test]
     public static void Count_IgnoresAutoRepeatAndMergesModifiers()
     {
-        var counter = OnCounter();
+        var counter = new KeyCounter(null);
         var day = new DateTime(2026, 10, 19);
         counter.Count(Down(0x41), day, true);
         counter.Count(Down(0x41), day, true); // 押しっぱなしの繰り返し
@@ -35,7 +34,7 @@ internal static class KeyCounterTests
     public static void Count_PairsDownAndUpByPhysicalKey()
     {
         // 押下と解放で仮想キーコードが変わっても (同じスキャンコード)、離したことにして次の打鍵を数える
-        var counter = OnCounter();
+        var counter = new KeyCounter(null);
         var day = new DateTime(2026, 10, 19);
         counter.Count(new KeyEvent(0xF3, 0x29, false, false, false, 0), day, true);
         counter.Count(new KeyEvent(0xF4, 0x29, false, true, false, 0), day, true);
@@ -44,14 +43,10 @@ internal static class KeyCounterTests
     }
 
     [Test]
-    public static void Count_DoesNothingWhenOffOrNotAllowed()
+    public static void Count_DoesNothingWhenNotAllowed()
     {
-        var off = new KeyCounter(null);
-        off.Count(Down(0x41), DateTime.Today, true);
-        Assert.Equal(0L, off.Total);
-
         // 一時停止中などは数えないが、離したことは覚えるので、次の打鍵は数える
-        var counter = OnCounter();
+        var counter = new KeyCounter(null);
         var day = new DateTime(2026, 10, 19);
         counter.Count(Down(0x41), day, false);
         counter.Count(Up(0x41), day, false);
@@ -63,7 +58,7 @@ internal static class KeyCounterTests
     [Test]
     public static void Import_ReadsKeysDaysAndTotal()
     {
-        var counter = OnCounter();
+        var counter = new KeyCounter(null);
         var result = counter.Import("キー,回数\r\n\"A\",\"1,234\"\r\nSpace\t500\r\nF1: 3回\r\nLShift 10\r\n2026/10/18,800\r\n合計 99,999\r\n");
         Assert.Equal(99999L, result.Total);
         Assert.Equal(99999L, counter.Total);
@@ -78,7 +73,7 @@ internal static class KeyCounterTests
     [Test]
     public static void Import_WithoutTotalUsesSumOfKeys()
     {
-        var counter = OnCounter();
+        var counter = new KeyCounter(null);
         counter.Count(Down(0x42), DateTime.Today, true);
         counter.Import("a=5\nb=7\n");
         Assert.Equal(13L, counter.Total);
@@ -88,7 +83,7 @@ internal static class KeyCounterTests
     [Test]
     public static void Import_SameTextTwice_CountsOnce()
     {
-        var counter = OnCounter();
+        var counter = new KeyCounter(null);
         const string text = "A,10\nB,20\n";
         Assert.True(!counter.Import(text).Duplicate, "最初の取り込みは足す");
         var again = counter.Import(text);
@@ -98,13 +93,12 @@ internal static class KeyCounterTests
     }
 
     [Test]
-    public static void Reset_ClearsCountsButKeepsOnSetting()
+    public static void Reset_ClearsCounts()
     {
-        var counter = OnCounter();
+        var counter = new KeyCounter(null);
         counter.Count(Down(0x41), DateTime.Today, true);
         counter.Reset();
         Assert.Equal(0L, counter.Total);
-        Assert.True(counter.Enabled, "数えるかどうかの設定は残す");
     }
 
     [Test]
@@ -113,11 +107,10 @@ internal static class KeyCounterTests
         var path = Path.Combine(Path.GetTempPath(), $"meltype-keycount-{Guid.NewGuid():N}.json");
         try
         {
-            var counter = OnCounter(path);
+            var counter = new KeyCounter(path);
             counter.Count(Down(VirtualKeys.Space), new DateTime(2026, 1, 2), true);
             counter.Save();
             var loaded = new KeyCounter(path);
-            Assert.True(loaded.Enabled, "設定も保存される");
             Assert.Equal(1L, loaded.Total);
             Assert.Equal(1L, loaded.OnDay(new DateTime(2026, 1, 2)));
             Assert.Equal("Space", loaded.TopKeys()[0].Key);
@@ -128,7 +121,7 @@ internal static class KeyCounterTests
     [Test]
     public static void Analyze_SummarizesDaysHoursAndHands()
     {
-        var counter = OnCounter();
+        var counter = new KeyCounter(null);
         var today = new DateTime(2026, 10, 19);
         void Press(int vk, DateTime at) { counter.Count(Down(vk), at, true); counter.Count(Up(vk), at, true); }
         Press(0x41, today.AddHours(9)); // A (左手)
@@ -147,14 +140,16 @@ internal static class KeyCounterTests
     }
 
     [Test]
-    public static void Reset_KeepsDiscordPresenceSetting()
+    public static void Count_NamesTypedCharactersLikeKeys()
     {
-        var counter = OnCounter();
-        counter.DiscordPresence = true;
-        counter.Count(Down(0x41), DateTime.Today, true);
-        counter.Reset();
-        Assert.Equal(0L, counter.Total);
-        Assert.True(counter.DiscordPresence, "Discord に出す設定は残す");
-        Assert.True(!new KeyCounter(null).DiscordPresence, "既定は OFF");
+        // フックの無い OS: 文字を入力するキーは仮想キーコードが無い
+        var counter = new KeyCounter(null);
+        var day = new DateTime(2026, 10, 19);
+        counter.Count(0, 'a', day);
+        counter.Count(0, 'A', day);
+        counter.Count(VirtualKeys.Space, ' ', day);
+        counter.Count(0, 0, day);
+        Assert.Equal(4L, counter.OnDay(day));
+        Assert.Equal("A=2,Space=1", string.Join(",", counter.TopKeys().Select(p => $"{p.Key}={p.Value}")));
     }
 }
