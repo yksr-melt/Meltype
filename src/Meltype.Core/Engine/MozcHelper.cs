@@ -211,7 +211,7 @@ internal sealed class MozcHelperProcess(string helperPath, string? profileDirect
         }
     }
 
-    /// <summary>保存して終わらせる (Q)。</summary>
+    /// <summary>終わらせる (Q)。</summary>
     public void Dispose()
     {
         if (_process is not { } process) return;

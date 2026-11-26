@@ -251,6 +251,12 @@ internal static class CompositionConversion
     }
 
     /// <summary>
+    /// 文脈の手がかり (ContextRules) を探すキャレットの前: 近くの 20 文字だけ。手がかりは同じ話題の近くの語 (気温 → 暑い) で、
+    /// 入力欄の前のほうにある語まで見ると、別の話題の語でも当たる。
+    /// </summary>
+    private static string CueBefore(CompositionEnv env) => env.Context().PrecedingText is { } before ? before[^Math.Min(20, before.Length)..] : "";
+
+    /// <summary>
     /// 文全体の文節 (<see cref="Clause.Alternatives"/>) を、選んでいる案の文節に分ける。文節ごとに候補を選び直す・区切りを動かす・確定する前に呼ぶ。
     /// 文節が 1 つの案の候補を選んでいれば、その文節でその候補を選ぶ。
     /// 文全体の文節でなければ何もしない。どの案にも無い文 (打ち始めの ・ を Space で / にした文) を選んでいれば、分けずに学習しない文節にする。
@@ -323,7 +329,7 @@ internal static class CompositionConversion
     {
         var clause = new Clause(reading, false, JapaneseCandidates(env, reading, string.Concat(clauses.Select(c => c.Text)), null, zenzai: true)) { Raw = CompositionText.Raw(input.Text) };
         // 文の中の文節と同じく、文脈の手がかりか、前に選び直した語を最初の候補にする (ConvertWithEngine)
-        var surrounding = (env.Context().PrecedingText ?? "") + EnglishInComposition(input, env) + (env.Context().FollowingText ?? "");
+        var surrounding = CueBefore(env) + EnglishInComposition(input, env) + (env.Context().FollowingText ?? "");
         if ((env.Services.ContextRules?.Choose(reading, surrounding, clause.Text, text => Standalone(env, text)) ?? env.Learning.LearnedConversion(reading)) is { } preferred)
             Prefer(clause, preferred);
         KeepTypedSymbols(input, [clause], reading);
@@ -478,7 +484,8 @@ internal static class CompositionConversion
         // 読み全体が補助辞書・絵文字の辞書の語 (かんがえるかお → 🤔) なら、文節に分けずに 1 つの文節にして候補を出す。
         if (parts.Count > 1 && env.Services.Candidates?.Contains(kana) == true)
         {
-            parts = [new ConversionClause(kana, string.Concat(parts.Select(p => p.Text)))];
+            // 注記は候補全体の出典を示すので、すべての文節が Zenzai の答えのときに引き継ぐ。
+            parts = [new ConversionClause(kana, string.Concat(parts.Select(p => p.Text)), Zenzai: parts.All(p => p.Zenzai))];
         }
         parts = JoinSmallKana(env, parts, before, zenzai);
         var clauses = parts.Select(p =>
@@ -489,7 +496,7 @@ internal static class CompositionConversion
         for (var i = 0; i < clauses.Count; i++)
         {
             var others = string.Concat(clauses.Where((_, k) => k != i).Select(c => c.Text));
-            var surrounding = (env.Context().PrecedingText ?? "") + EnglishInComposition(input, env) + others + (env.Context().FollowingText ?? "");
+            var surrounding = CueBefore(env) + EnglishInComposition(input, env) + others + (env.Context().FollowingText ?? "");
             var preferred = env.Services.ContextRules?.Choose(clauses[i].Reading, surrounding, clauses[i].Text, text => Standalone(env, text)) ?? env.Learning.LearnedConversion(clauses[i].Reading);
             // 変換エンジンは、文節が「から」だけだと記号 (～) にしてしまう。記号だけの変換結果は、ひらがなの後ろに回す。
             // ユーザー辞書・同梱の語句の記号 (なかてん → ・) はそのまま

@@ -200,6 +200,19 @@ internal static class SessionFacadeTests
         }
     }
 
+    /// <summary>長い URL の直後に打った英字を、URL の途中の / から始まる /command の名前とみなさない (#2199)。</summary>
+    [Test]
+    public static void Issue2199_RomajiAfterLongUrlComposes()
+    {
+        foreach (var url in new[] { "https://github.com/yksr-melt/Meltype/issues/2199", "https://github.com/Meltype" })
+        {
+            var field = new Field(url);
+            var results = Type(Create(), "kyouha\n", field);
+            Assert.True(results.All(r => r.Consumed), $"{url} の後ろで打った英字はアプリに渡さない");
+            Assert.Equal(url + "きょうは", field.Text);
+        }
+    }
+
     [Test]
     public static void Romaji_ComposesAndEnterCommits()
     {

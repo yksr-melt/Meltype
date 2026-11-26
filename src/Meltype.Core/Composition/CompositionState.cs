@@ -58,7 +58,7 @@ internal sealed record FragmentOrigin(LanguageLearning Languages);
 internal sealed record CompositionEnv(CompositionDetector Detector, IKanjiConverter Converter, CompositionServices Services, Config.Settings Settings)
     : TextEnv(Detector, Settings, Services.RomajiTypos, Services.History, Services.Languages)
 {
-    public CompositionLearning Learning { get; } = new(Services, Converter, Detector.ProperNouns);
+    public CompositionLearning Learning { get; } = new(Services, Detector.ProperNouns);
 
     /// <summary>
     /// 変換エンジンの答えを後から受け取れるフロント (<see cref="IKanjiConverter.ResultReady"/> を受けて <see cref="CompositionController.RefreshConversion"/> を呼ぶ) か。
