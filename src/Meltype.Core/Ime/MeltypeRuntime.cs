@@ -48,7 +48,6 @@ public sealed class MeltypeRuntime : IDisposable
         // ログの設定を、入力の前に入れる
         _ = Settings.Current;
         Detector = CompositionDetector.CreateDefault(_userDirectory, Settings.Current.RomajiTable);
-        Detector.UseJapanesePunctuationAfterEnglish = () => Settings.Current.JapanesePunctuationAfterEnglish;
         Learning = new LearningData(dataDirectory);
         Detector.Memory = Learning.LanguageMemory;
         _shared = new CompositionServices
@@ -186,7 +185,7 @@ public sealed class MeltypeRuntime : IDisposable
         // 強制終了された Meltype の llama-server は、Zenzai が OFF でも起動したときに終わらせる
         ZenzaiConverter.EndStaleServers();
         var helper = Path.Combine(appDirectory, "mozc", OperatingSystem.IsWindows() ? "meltype_mozc_helper.exe" : "meltype_mozc_helper");
-        var mozc = new MozcConverter(mozcHelper ?? new MozcHelperProcess(helper, Path.Combine(DataDirectory, "mozc")));
+        var mozc = new MozcConverter(mozcHelper ?? new MozcHelperProcess(helper, MozcProfile()));
         var zenzai = new ZenzaiHolder();
         _converters.Add(mozc);
         _converters.Add(zenzai);
@@ -197,6 +196,29 @@ public sealed class MeltypeRuntime : IDisposable
         ForgetZenzaiHallucinations(converter);
         ConnectUserDictionary(converter);
         return converter;
+    }
+
+    /// <summary>
+    /// Mozc のユーザーデータの場所。Meltype は Mozc に学習させないので、起動のたびに学習データだけを消す。
+    /// 前の版が Mozc に覚えさせた文節の区切りと候補 (boundary.db・segment.db など) は、読みを誤った位置で区切る変換を固定するので捨てる (issue #2014)。
+    /// 場所は残す (渡さないと、Mozc は入れてある Mozc のユーザーデータを読む)。
+    /// </summary>
+    private string MozcProfile()
+    {
+        var profile = Path.Combine(DataDirectory, "mozc");
+        try
+        {
+            // MELTYPE_DATA_DIR がアプリの配置先と同じでも、mozc/ にあるヘルパーや辞書は消さない。
+            // 変換の区切りと候補を覚えるファイルだけを捨てる (#2014)。
+            if (Directory.Exists(profile))
+                foreach (var name in new[] { "boundary.db", "segment.db" }) File.Delete(Path.Combine(profile, name));
+        }
+        catch (Exception ex) when (DataFile.IsFileError(ex))
+        {
+            // ほかのプロセスが開いている・権限が無い場合も、入力の起動は続け、次の起動時に消し直す。
+            Diagnostics.Log.Warn($"前の版の Mozc の学習データを消せませんでした: {ex.Message}");
+        }
+        return profile;
     }
 
     private readonly object _engineDictionaryGate = new();

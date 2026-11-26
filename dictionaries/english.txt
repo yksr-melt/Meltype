@@ -271,3 +271,7 @@ inotify
 # Issue #1390: stat・stats (statsuruno → statするの のように英字のまま打つ語)
 stat
 stats
+# Issue #2389 (まとめ) の技術用語
+assignee assignees sideload sideloading linpeas ver
+# 三角関数 (cos・tan はローマ字として読める)
+cos sin tan

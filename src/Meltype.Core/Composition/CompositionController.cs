@@ -2,6 +2,8 @@
 // Copyright (C) 2026 Yukishiro
 // Copyright (C) 2026 yksr-melt
 
+using Meltype.Notation;
+
 namespace Meltype.Composition;
 
 /// <summary>

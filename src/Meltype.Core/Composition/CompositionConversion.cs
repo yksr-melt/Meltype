@@ -10,6 +10,7 @@ using Meltype.Detection;
 using Meltype.Dictionary;
 using Meltype.Engine;
 using Meltype.Libraries.Chars;
+using Meltype.Notation;
 using static Meltype.Libraries.Chars.TextChars;
 
 namespace Meltype.Composition;
@@ -73,6 +74,7 @@ internal static class CompositionConversion
             var typedEnv = CompositionText.FragmentEnv(env) with { Context = () => context };
             foreach (var c in word) CompositionText.Append(typed, typedEnv, c);
             var segments = CompositionText.Segments(typed, typedEnv);
+            var shown = CompositionText.TypedSpans(segments, env);
             for (var i = 0; i < segments.Count; i++)
             {
                 var segment = segments[i];
@@ -85,7 +87,7 @@ internal static class CompositionConversion
                 if (kana.Length > 0) output.Append(Convert(env, kana.ToString(), SegmentBefore(env, output.ToString()), zenzai: true));
                 kana.Clear();
                 if (output.Length > 0 && output[^1] != ' ') output.Append(' ');
-                output.Append(CompositionText.DisplayEnglishSegment(segments, i, env)).Append(' ');
+                output.Append(shown[i].Text).Append(' ');
             }
             englishWords = segments.Count > 0 && segments[^1].IsEnglish ? (segments.Count == 1 ? englishWords + 1 : 1) : 0;
         }
@@ -130,7 +132,7 @@ internal static class CompositionConversion
             List<string> registered = [.. env.Services.UserDictionary?.Lookup(lower) ?? [], .. env.Settings.ConsonantAbbreviations ? env.Services.Candidates?.Lookup(lower) ?? [] : []];
             var reading = RomajiReading(env, typedRaw);
             List<string> romaji = reading is null ? [] : JapaneseCandidates(env, reading, null, SegmentBefore(env, ""), zenzai: true);
-            var english = EnglishCandidates(env, typedRaw, allowAuto: true);
+            var english = EnglishCandidates(env, typedRaw, NotationRules.Word(typedRaw, env.ProperNoun));
             return new Conversion([new Clause(typedRaw, true, preferJapanese
                 ? Distinct([.. registered, .. romaji, .. english])
                 : Distinct([.. registered, .. english, .. romaji])) { Raw = typedRaw, Kana = reading }], trigger, preferJapanese);
@@ -161,6 +163,7 @@ internal static class CompositionConversion
     private static List<Clause> BuildClauses(CompositionInput input, CompositionEnv env, IReadOnlyList<CompositionSegment> segments, bool preferJapanese, bool zenzai)
     {
         var clauses = new List<Clause>();
+        var typed = CompositionText.TypedSpans(segments, env);
         for (var s = 0; s < segments.Count; s++)
         {
             var segment = segments[s];
@@ -171,7 +174,7 @@ internal static class CompositionConversion
                     clauses.Add(new Clause(segment.Raw, true, [segment.Raw]));
                     continue;
                 }
-                var english = Distinct([.. env.Services.UserDictionary?.Lookup(segment.Raw.ToLowerInvariant()) ?? [], .. EnglishCandidates(env, segment.Raw, allowAuto: !CompositionText.IsDotConnected(segments, s))]);
+                var english = Distinct([.. env.Services.UserDictionary?.Lookup(segment.Raw.ToLowerInvariant()) ?? [], .. EnglishCandidates(env, segment.Raw, typed[s].Text)]);
                 // 子音の略入力 (ast → 明日): 英字のまま見える語にも、candidates.txt の英字の読みの候補を足す (issue #62)
                 if (env.Settings.ConsonantAbbreviations && segment.Raw.Length >= 2 && segment.Raw.All(char.IsAsciiLetter) && env.Services.Candidates is { } abbreviations)
                 {
@@ -248,6 +251,12 @@ internal static class CompositionConversion
     }
 
     /// <summary>
+    /// 文脈の手がかり (ContextRules) を探すキャレットの前: 近くの 20 文字だけ。手がかりは同じ話題の近くの語 (気温 → 暑い) で、
+    /// 入力欄の前のほうにある語まで見ると、別の話題の語でも当たる。
+    /// </summary>
+    private static string CueBefore(CompositionEnv env) => env.Context().PrecedingText is { } before ? before[^Math.Min(20, before.Length)..] : "";
+
+    /// <summary>
     /// 文全体の文節 (<see cref="Clause.Alternatives"/>) を、選んでいる案の文節に分ける。文節ごとに候補を選び直す・区切りを動かす・確定する前に呼ぶ。
     /// 文節が 1 つの案の候補を選んでいれば、その文節でその候補を選ぶ。
     /// 文全体の文節でなければ何もしない。どの案にも無い文 (打ち始めの ・ を Space で / にした文) を選んでいれば、分けずに学習しない文節にする。
@@ -320,7 +329,7 @@ internal static class CompositionConversion
     {
         var clause = new Clause(reading, false, JapaneseCandidates(env, reading, string.Concat(clauses.Select(c => c.Text)), null, zenzai: true)) { Raw = CompositionText.Raw(input.Text) };
         // 文の中の文節と同じく、文脈の手がかりか、前に選び直した語を最初の候補にする (ConvertWithEngine)
-        var surrounding = (env.Context().PrecedingText ?? "") + EnglishInComposition(input, env) + (env.Context().FollowingText ?? "");
+        var surrounding = CueBefore(env) + EnglishInComposition(input, env) + (env.Context().FollowingText ?? "");
         if ((env.Services.ContextRules?.Choose(reading, surrounding, clause.Text, text => Standalone(env, text)) ?? env.Learning.LearnedConversion(reading)) is { } preferred)
             Prefer(clause, preferred);
         KeepTypedSymbols(input, [clause], reading);
@@ -360,7 +369,7 @@ internal static class CompositionConversion
         var typedEnv = CompositionText.FragmentEnv(env);
         foreach (var c in raw) CompositionText.Append(typed, typedEnv, c);
         if (CompositionText.Pending(typed).Length > 0) return null;
-        var segments = env.Detector.SegmentLeaningEnglish(CompositionText.LearningContext(env), TypedMarks.Read(typed, typedEnv));
+        var segments = env.Detector.SegmentLeaningEnglish(CompositionText.LearningContext(env), TypedMarks.Read(typed, typedEnv), env.Settings.JapanesePunctuationAfterEnglish);
         if (!segments.Any(s => s.IsEnglish) || segments.All(s => s.IsEnglish)) return null;
         return string.Concat(segments.Select(s => s.IsEnglish ? s.Raw : s.Kana));
     }
@@ -475,7 +484,8 @@ internal static class CompositionConversion
         // 読み全体が補助辞書・絵文字の辞書の語 (かんがえるかお → 🤔) なら、文節に分けずに 1 つの文節にして候補を出す。
         if (parts.Count > 1 && env.Services.Candidates?.Contains(kana) == true)
         {
-            parts = [new ConversionClause(kana, string.Concat(parts.Select(p => p.Text)))];
+            // 注記は候補全体の出典を示すので、すべての文節が Zenzai の答えのときに引き継ぐ。
+            parts = [new ConversionClause(kana, string.Concat(parts.Select(p => p.Text)), Zenzai: parts.All(p => p.Zenzai))];
         }
         parts = JoinSmallKana(env, parts, before, zenzai);
         var clauses = parts.Select(p =>
@@ -486,7 +496,7 @@ internal static class CompositionConversion
         for (var i = 0; i < clauses.Count; i++)
         {
             var others = string.Concat(clauses.Where((_, k) => k != i).Select(c => c.Text));
-            var surrounding = (env.Context().PrecedingText ?? "") + EnglishInComposition(input, env) + others + (env.Context().FollowingText ?? "");
+            var surrounding = CueBefore(env) + EnglishInComposition(input, env) + others + (env.Context().FollowingText ?? "");
             var preferred = env.Services.ContextRules?.Choose(clauses[i].Reading, surrounding, clauses[i].Text, text => Standalone(env, text)) ?? env.Learning.LearnedConversion(clauses[i].Reading);
             // 変換エンジンは、文節が「から」だけだと記号 (～) にしてしまう。記号だけの変換結果は、ひらがなの後ろに回す。
             // ユーザー辞書・同梱の語句の記号 (なかてん → ・) はそのまま
@@ -651,13 +661,13 @@ internal static class CompositionConversion
     }
 
     /// <summary>
-    /// 入力欄に出る文字 (<see cref="CompositionOutput.Render"/>) が同じ候補は、最初の 1 つだけ残す。「，．」の設定では、打った 、 の候補と、変換エンジンが返す ， の候補が同じ ， になる。
+    /// 入力欄に出る文字 (<see cref="NotationRules.Write"/>) が同じ候補は、最初の 1 つだけ残す。「，．」の設定では、打った 、 の候補と、変換エンジンが返す ， の候補が同じ ， になる。
     /// 変換エンジンの候補が入る所 (この関数を呼ぶ所) だけで重複を消す。
     /// </summary>
     private static List<string> DistinctShown(CompositionEnv env, string reading, bool english, IEnumerable<string?> candidates)
     {
         var shown = new HashSet<string>(StringComparer.Ordinal);
-        return [.. candidates.OfType<string>().Where(c => c.Length > 0 && shown.Add(CompositionOutput.Render(env, english ? ComposedText.English(c) : ComposedText.Converted(reading, c))))];
+        return [.. candidates.OfType<string>().Where(c => c.Length > 0 && shown.Add(NotationRules.Write(english ? ComposedText.English(c) : ComposedText.Converted(reading, c), env.Settings.Punctuation)))];
     }
 
     /// <summary>絵文字・顔文字の候補を、最後に並べる順 (逆順: いちばんよく使うものが最後) で。</summary>
@@ -678,14 +688,13 @@ internal static class CompositionConversion
         clause.Index = Math.Max(0, clause.Candidates.IndexOf(current));
     }
 
-    /// <summary>英語の文節の候補: 自動で大文字小文字を直す固有名詞 (iPhone・GitHub) はその形を先頭に、それ以外は打ったまま → 固有名詞の正しい形 → 先頭だけ大文字 → すべて大文字 → 全角。</summary>
-    private static List<string> EnglishCandidates(CompositionEnv env, string raw, bool allowAuto)
+    /// <summary>英語の文節の候補: 見せている表記 (打ったまま、iPhone など自動で大文字小文字を直す固有名詞はその形) → 打ったまま → 固有名詞の正しい形 → 先頭だけ大文字 → すべて大文字 → 全角。</summary>
+    private static List<string> EnglishCandidates(CompositionEnv env, string raw, string shown)
     {
         var lower = raw.ToLowerInvariant();
         var canonical = env.Detector.ProperNouns.Canonical(lower);
-        var auto = allowAuto ? CompositionText.AutoCanonical(env, raw) : null;
         var capitalized = raw.Length > 0 ? char.ToUpperInvariant(raw[0]) + raw[1..] : raw;
-        return Distinct(auto, raw, canonical, capitalized, raw.ToUpperInvariant(), CompositionText.ToFullWidth(raw));
+        return Distinct(shown, raw, canonical, capitalized, raw.ToUpperInvariant(), CompositionText.ToFullWidth(raw));
     }
 
     /// <summary>英語と判定した語を、ローマ字として読んだかな (go → ご)。読み切れなければ null。</summary>
@@ -955,7 +964,7 @@ internal static class CompositionConversion
     internal static ReconversionSelection? ReconversionSelectionNow(CompositionEnv env)
     {
         if (env.Selection is not { Length: > 0 } text) return null;
-        var reading = IsRomajiText(text) ? text : env.ReadingOf(text) is { } read ? CompositionOutput.FromSetting(env.Settings.Punctuation, read) : null;
+        var reading = IsRomajiText(text) ? text : env.ReadingOf(text) is { } read ? NotationRules.Read(read, env.Settings.Punctuation) : null;
         return reading is { Length: > 0 } ? new ReconversionSelection(text, reading) : null;
     }
 }
