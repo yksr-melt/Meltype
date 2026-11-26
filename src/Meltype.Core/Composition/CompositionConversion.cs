@@ -524,9 +524,12 @@ internal static class CompositionConversion
     /// 打った記号を文字の種類と数で見分けているのは、変換の結果が区間の種類を持たない文字列だから。区間の種類を持ち回すようになったら (#1735)、区間で決める。
     /// 最初の候補を決める所 (ConvertWithEngine・Reconvert・WholeClause) の最後に呼ぶ。
     /// </summary>
+    /// <summary>打ったものに英数字があるか (<see cref="KeepTypedSymbols"/> が見る。ライブ変換の控えの key にも入れる)。</summary>
+    private static bool TypedLetterOrDigit(CompositionInput input) => input.Text.TypedRaw.Any(char.IsLetterOrDigit);
+
     private static void KeepTypedSymbols(CompositionInput input, IReadOnlyList<Clause> clauses, string reading)
     {
-        if (!input.Text.TypedRaw.Any(char.IsLetterOrDigit)) return;
+        if (!TypedLetterOrDigit(input)) return;
         var typed = reading.Where(IsSymbol).ToList();
         if (clauses.Sum(c => c.Text.Count(IsSymbol)) != typed.Count) return;
         var next = 0;
@@ -920,7 +923,7 @@ internal static class CompositionConversion
 
     /// <summary>
     /// ライブ変換: Space を押したときと同じく、文脈・手がかり辞書・学習を使って文節ごとに変換した結果を見せる。
-    /// 打つたびに呼ばれるので、かな・文脈・学習の状態が同じならキャッシュを使う。
+    /// 打つたびに呼ばれるので、1 回の入力の間だけ控えを使う。
     /// </summary>
     internal static ComposedText LiveConvert(CompositionInput input, CompositionEnv env, string kana, bool afterEnglish, string before)
     {
@@ -939,7 +942,8 @@ internal static class CompositionConversion
     /// <summary>ライブ変換の文節 (読み・変換エンジンの答え・学習などで選び直した後の文字)。予測変換で最後の文節を探すときも、同じ打鍵で変換した結果を使う。</summary>
     internal static List<(string Reading, string? Engine, string Text)> LiveClauses(CompositionInput input, CompositionEnv env, string kana, bool afterEnglish, string before)
     {
-        var key = string.Join("\u0001", kana, afterEnglish, before, EnglishInComposition(input, env), env.Context().FollowingText, env.Services.History?.Version);
+        // 辞書・学習・変換エンジンは入力の間は変わらない (控えは入力を始めるときに空にする)。打ったものに英数字があるか (KeepTypedSymbols) は入力の途中で変わる
+        var key = string.Join("\u0001", kana, afterEnglish, before, EnglishInComposition(input, env), env.Context().FollowingText, TypedLetterOrDigit(input));
         if (env.LiveCache.TryGetValue(key, out var cached)) return cached;
         var clauses = ConvertJapaneseSegment(input, env.WithoutWaiting(), kana, afterEnglish, before, zenzai: true).Select(c => (c.Reading, c.Engine, c.Text)).ToList();
         if (env.LiveCache.Count > 256) env.LiveCache.Clear();
