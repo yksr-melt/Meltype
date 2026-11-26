@@ -7,6 +7,7 @@ using Meltype.Config;
 using Meltype.Detection;
 using Meltype.Input;
 using Meltype.Libraries.Chars;
+using Meltype.Notation;
 
 namespace Meltype.Composition;
 
@@ -85,7 +86,8 @@ internal static class CompositionKeys
                 return;
             }
             // 英字以外のキー・Shift・Ctrl で判定を打ち切り、英語として出してから、そのキーを普通に処理する。
-            Diagnostics.Log.Info($"英数状態の判定を打ち切り: キー 0x{vk:X2} (Shift {state.Shift})");
+            // 仮想キーコードは打った文字 (数字・記号) を表すので、入力した文字と同じく設定に従う。
+            Diagnostics.Log.Info($"英数状態の判定を打ち切り: {(Diagnostics.Log.RecordText ? $"キー 0x{vk:X2}" : "英字以外のキー")} (Shift {state.Shift})");
             CompositionDirectInput.ReleaseAsEnglish(state);
         }
 

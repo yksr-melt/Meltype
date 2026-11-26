@@ -71,7 +71,7 @@ VS Code やターミナルでは英数が基本で、コメントと文字列の
 
 えがお → 😊 の絵文字変換、ブレスレッド → ブレスレット のような書き間違いの指摘、予測変換、アプリごとの設定など。
 
-<sub>Windows 10 / 11 に対応 (ARM64 は Windows 11)。Mac 版・Linux 版はプレビュー版です。</sub>
+<sub>Windows 10 / 11 に対応 (ARM64 は Windows 11)。Mac 版・Linux 版・Android 版はプレビュー版です。</sub>
 
 <br><br>
 
@@ -86,6 +86,7 @@ VS Code やターミナルでは英数が基本で、コメントと文字列の
 <p align="center"><sub>カードを押すと、それぞれの OS の説明 (インストール・使い方・困ったとき) が開きます</sub></p>
 
 Windows は、[Releases](https://github.com/yksr-melt/Meltype/releases/latest) から `Meltype-<version>-setup.exe` をダウンロードして、案内どおりに進めるだけ！
+Android は [Android の案内](docs/ANDROID.md)、GUI のない Linux 端末では [TTY の案内](docs/TTY.md) を参照してください。文書の一覧は [docs/README.md](docs/README.md) にあります。
 Windows のコード署名の方針は [Code signing policy](docs/CODE-SIGNING.md) にあります。
 あとは、いつもどおりローマ字で打つだけです。キー操作と機能は [docs/USAGE.md](docs/USAGE.md) にあります。
 
@@ -94,14 +95,15 @@ Windows のコード署名の方針は [Code signing policy](docs/CODE-SIGNING.m
 <a name="プライバシー"></a>
 <img src="docs/images/headings/privacy.svg" alt="プライバシー" width="480"><br>
 
-<p align="center">
-  <img src="docs/images/cards/privacy-send.svg" alt="打った文字は送らない: 判定も変換も PC の中で完結" width="32%">
-  <img src="docs/images/cards/privacy-network.svg" alt="既定の通信は 2 つだけ: 自動更新の確認と、自分で開いた報告のフォーム" width="32%">
-  <img src="docs/images/cards/privacy-storage.svg" alt="保存も PC の中: 設定・学習データ・辞書は %LOCALAPPDATA% の中に" width="32%">
-</p>
+| 項目 | 扱い |
+| --- | --- |
+| 日英判定・かな漢字変換・学習 | 端末内で処理。デスクトップ・TTY は Mozc と Zenzai、Android は Mozc |
+| 自動更新 | Windows のインストール版が GitHub へ確認。設定で停止可能 |
+| 不具合の報告 | 自分で開き、内容を確認して送信 |
+| 任意の連携 | 設定した GitHub のリポジトリ・番号の照会、ON にした Discord の打鍵数表示 (Windows・Mac・Linux) など |
+| 保存先 | Windows は `%LOCALAPPDATA%\Meltype`、ポータブル版・Mac・Linux・TTY・Android は [データと学習](docs/USAGE.md#データと学習) を参照 |
 
-保存するのは `%LOCALAPPDATA%\Meltype` の設定・学習データ・ユーザー辞書 (と、ON にしたときの打鍵数とログ、異常終了と自動更新の記録) だけです。
-セキュリティの方針と脆弱性の連絡先は [SECURITY.md](SECURITY.md) にあります。
+打った文字は、利用者が自分で送信する不具合の報告と、設定した連携を除いて外部に送りません。ログと保存データ、各 OS のパスワード欄の対応、脆弱性の連絡先は [SECURITY.md](SECURITY.md) にあります。
 
 <br><br>
 
@@ -238,7 +240,8 @@ General Public License for more details.
 
 - 送り方 → [CONTRIBUTING.md](CONTRIBUTING.md)
 - ビルド・仕組み → [docs/dev/DEVELOPMENT.md](docs/dev/DEVELOPMENT.md)
-- Mac 版のビルド → [mac/README.md](mac/README.md)、Linux 版 (WSL を含む) のビルド → [linux/README.md](linux/README.md)
+- Android 版のビルド → [android/README.md](android/README.md)
+- Mac 版のビルド → [mac/README.md](mac/README.md)、Linux 版 (WSL を含む) のビルド → [linux/README.md](linux/README.md)、TTY 版のビルド → [tui/README.md](tui/README.md)
 
 <br><br>
 
