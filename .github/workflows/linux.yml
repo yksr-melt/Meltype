@@ -1,7 +1,7 @@
 # Linux 版 (linux/、IBus・fcitx5) をビルドしてテストし、ビルド済みのファイルの zip と .deb・.rpm を Artifacts に置く。
 #   app・rpm・rpm-el9 … Linux 版・Mozc のヘルパー・共通部分を変えた main、手動実行、release.yml (タグ) から呼ばれたとき
 #                       Linux 版のコードを変えた Pull Request では、app のビルドとテストだけを流す (.deb・.rpm は作らない)
-#   ime-ci   … IME の E2E の基盤 (tools/ime-tests) の契約のテスト
+#   ime-ci   … IME の E2E の基盤 (linux/ime-tests) の契約のテスト
 #   ime-real … app が作った x64 の zip を、IBus と Chromium で実際に打って確かめる
 # リリースへの添付と apt・dnf のリポジトリの公開は release.yml。
 name: linux
@@ -15,10 +15,9 @@ on:
       - 'native/zenzai/**'
       - 'native/build-core-linux.sh'
       - '.github/actions/linux-native/**'
+      - '.github/actions/linux-mozc/**'
       - 'src/Meltype.Core.CApi/**'
       - 'src/Meltype.Settings/**'
-      - 'tools/test-native-boundaries.py'
-      - 'tools/ime-tests/**'
       - '.github/workflows/linux.yml'
   push:
     branches: [main]
@@ -28,6 +27,7 @@ on:
       - 'native/zenzai/**'
       - 'native/build-core-linux.sh'
       - '.github/actions/linux-native/**'
+      - '.github/actions/linux-mozc/**'
       - 'src/Meltype.Core/**'
       - 'src/Meltype.Core.CApi/**'
       - 'src/Meltype.Settings/**'
@@ -40,8 +40,6 @@ on:
       - 'src/Directory.Build.props'
       - 'src/Directory.Build.targets'
       - 'src/Directory.Packages.props'
-      - 'tools/test-native-boundaries.py'
-      - 'tools/ime-tests/**'
       - '.github/workflows/linux.yml'
   workflow_dispatch:
   workflow_call:
@@ -118,7 +116,7 @@ jobs:
           cmake --build linux/build/fcitx5-test
           HOME="$RUNNER_TEMP/fcitx5-home" MELTYPE_DIR="$PWD/linux/build/fcitx5-native" ctest --test-dir linux/build/fcitx5-test --output-on-failure
       - name: NativeAOT boundary tests
-        run: python3 tools/test-native-boundaries.py linux/build/Meltype-linux/libMeltypeNative.so
+        run: python3 src/Meltype.Core.CApi/tests/test-native-boundaries.py linux/build/Meltype-linux/libMeltypeNative.so
       - name: IBus and real Mozc integration tests
         run: timeout 120 python3 linux/tests/test_integration.py linux/build/Meltype-linux
       - name: Private IBus daemon tests
@@ -278,14 +276,14 @@ jobs:
       - name: IBus and real Mozc integration tests
         run: timeout 120 python3 linux/tests/test_integration.py /opt/meltype
 
-  # IME の E2E の基盤 (tools/ime-tests) 自身の契約のテスト。製品はビルドしない
+  # IME の E2E の基盤 (linux/ime-tests) 自身の契約のテスト。製品はビルドしない
   ime-ci:
     name: IME CI tests
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     defaults:
       run:
-        working-directory: tools/ime-tests
+        working-directory: linux/ime-tests
         shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -295,7 +293,7 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: tools/ime-tests/package-lock.json
+          cache-dependency-path: linux/ime-tests/package-lock.json
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - name: Linux session control tests
@@ -313,7 +311,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ime-tests
-          path: tools/ime-tests/artifacts/
+          path: linux/ime-tests/artifacts/
           if-no-files-found: warn
           retention-days: 14
 
@@ -331,7 +329,7 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: tools/ime-tests/package-lock.json
+          cache-dependency-path: linux/ime-tests/package-lock.json
       # linux_ime.py が実行環境の記録 (session.json) に dotnet の版を書く
       - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
@@ -340,8 +338,8 @@ jobs:
         run: |
           sudo apt-get -o Acquire::Retries=3 update
           sudo apt-get -o Acquire::Retries=3 install -y python3-gi gir1.2-ibus-1.0 ibus ibus-gtk3 dbus-x11 xvfb xauth xdotool x11-xkb-utils
-          npm --prefix tools/ime-tests ci
-          cd tools/ime-tests
+          npm --prefix linux/ime-tests ci
+          cd linux/ime-tests
           npx playwright install --with-deps chromium
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -349,7 +347,7 @@ jobs:
           path: linux/build/artifact
       - run: (cd linux/build && unzip -q artifact/Meltype-*.zip)
       - name: OS keys through IBus, product Core and Chromium
-        working-directory: tools/ime-tests
+        working-directory: linux/ime-tests
         env:
           MELTYPE_PACKAGE_DIR: ${{ github.workspace }}/linux/build/Meltype-linux
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -359,6 +357,6 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ime-real-input-linux
-          path: tools/ime-tests/artifacts/
+          path: linux/ime-tests/artifacts/
           if-no-files-found: warn
           retention-days: 14

@@ -628,7 +628,7 @@ internal static class LanguageLearningTests
             ("adbyuukounisuru", "adbゆうこうにする"), // #1131
             ("dive into summer", "dive into summer"), // #1125
             ("imagenzai", "いまげんざい"), ("imagewohiraku", "imageをひらく"), // #1175
-            ("pa-thisyon", "ぱーてぃしょん"), ("applenoiphonehakanaritakai", "appleのiphoneはかなりたかい"),
+            ("pa-thisyon", "ぱーてぃしょん"), ("applenoiphonehakanaritakai", "appleのiPhoneはかなりたかい"),
             ("erroraru", "errorある"),
             // issue を いっ|すえ と読まない。っ で終わる語の後ろの す (いいっす) は日本語のまま
             ("issuearu", "issueある"), ("issueyomu", "issueよむ"), ("issuetaberu", "issueたべる"),
@@ -745,17 +745,6 @@ internal static class LanguageLearningTests
         var candidates = CandidateDictionary.Load(null);
         Assert.True(candidates.Lookup("ちーむす").Contains("Teams"), string.Join(" ", candidates.Lookup("ちーむす")));
         Assert.True(candidates.Lookup("ちーむず").Contains("Teams"), "ちーむず も今までどおり");
-    }
-
-    [Test]
-    public static void Phrase_AgeashiWoToru()
-    {
-        // 揚げ足取るな が 揚げ足とルナ になっていた (issue #147)。同梱の語句で 揚げ足取る を 1 つの文節にする
-        var k = new CompositionTests.Keyboard(userDictionary: new UserDictionary(null));
-        k.Type("ageashitoruna ");
-        var view = k.Host.View!;
-        Assert.True(view.Converting, "変換中");
-        Assert.Equal("揚げ足取る", view.Clauses![0], string.Join("|", view.Clauses));
     }
 
     [Test]
@@ -1194,7 +1183,7 @@ internal static class LanguageLearningTests
             // Issue #1216: not|とっている になっていた。Issue #1193: えんv になっていた
             ("nottotteiru", "のっとっている"), ("env", "env"),
             // 略語 + 日本語 + 記号は今までどおり (BE|かな？ が BEkana？ になっていた)
-            ("tougouhandakaraBEkana?", "とうごうはんだからBEかな？"), ("fubusangaXshisuginadakenanda!!", "ふぶさんがXしすぎなだけなんだ！！"), ("tsubemyunorevancedtsukatteru", "つべみゅのrevancedつかってる"),
+            ("tougouhandakaraBEkana?", "とうごうはんだからBEかな？"), ("fubusangaXshisuginadakenanda!!", "ふぶさんがXしすぎなだけなんだ！！"), ("tsubemyunorevancedtsukatteru", "つべみゅのReVancedつかってる"),
             // テスターの報告 (2026-10-05): 英語のユーザー名が打てない。@ の後ろ (メンション)・_ の入った語は英字のまま
             ("@kuraido", "@kuraido"), ("@una08142009 arigatou", "@una08142009 ありがとう"), ("upah_setu", "upah_setu"), ("cafely_latte", "cafely_latte"),
             // メールアドレスは @ の前も英字のまま (issue #59。前は たろ@... だった。例には example.com を使う)

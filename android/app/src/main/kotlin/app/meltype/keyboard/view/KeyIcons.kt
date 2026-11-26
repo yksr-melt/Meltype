@@ -24,9 +24,9 @@ fun keyIcon(action: KeyAction, shift: ShiftState, enter: EnterKind): KeyIcon? = 
     }
     KeyAction.Emoji -> KeyIcon.EMOJI
     KeyAction.Shift -> when (shift) {
-        ShiftState.OFF -> KeyIcon.SHIFT
-        ShiftState.ONCE -> KeyIcon.SHIFT_ONCE
-        ShiftState.LOCKED -> KeyIcon.SHIFT_LOCKED
+        ShiftState.Off -> KeyIcon.SHIFT
+        is ShiftState.Once -> KeyIcon.SHIFT_ONCE
+        ShiftState.Locked -> KeyIcon.SHIFT_LOCKED
     }
     is KeyAction.Romaji, is KeyAction.Text,
     KeyAction.Language, is KeyAction.Switch, KeyAction.Back -> null

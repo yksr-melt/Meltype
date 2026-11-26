@@ -104,7 +104,7 @@ internal static class UserDictionaryPage
                 Pages.Show(message, $"{added} 語を登録しました。" + (duplicates > 0 ? $" 登録済みの語: {duplicates}。" : "") +
                     (result.Skipped > 0 ? $" 読みがかなでない・短すぎるなどで飛ばした行: {result.Skipped}。" : ""));
             }
-            catch (Exception ex) when (ex is IOException or InvalidDataException or FormatException)
+            catch (Exception ex) when (ex is IOException or InvalidDataException or FormatException or System.Xml.XmlException)
             {
                 Pages.Show(message, $"取り込めませんでした: {ex.Message}", error: true);
             }
