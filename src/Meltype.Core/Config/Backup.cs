@@ -72,51 +72,49 @@ public static class Backup
         return (stream.ToArray(), count);
     }
 
-    /// <summary>バックアップの中身を確かめる (作った日・版・ファイルの一覧)。読めなければ例外。</summary>
-    public static (string Created, string App, IReadOnlyList<string> Files) Inspect(byte[] content)
-    {
-        using var document = Parse(content);
-        var root = document.RootElement;
-        return (root.GetProperty("created").GetString() ?? "", root.GetProperty("app").GetString() ?? "",
-            root.GetProperty("files").EnumerateObject().Select(p => p.Name).ToList());
-    }
-
     /// <summary>
-    /// バックアップを戻す (同じ名前のファイルは上書き。今のファイルは .before-restore として残す)。戻したファイルの数を返す。
+    /// バックアップを読む (どのファイルも書かない)。戻してよい名前 (<see cref="IsRestorableName"/>) のファイルだけを読み、それ以外は無視する。
+    /// 読めなければ InvalidDataException。
+    /// </summary>
+    public static BackupContents Read(byte[] content)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(content);
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("format", out var format) || format.GetString() != Format)
+                throw new InvalidDataException("Meltype のバックアップのファイルではありません。");
+            return new BackupContents(root.GetProperty("created").GetString() ?? "", root.GetProperty("app").GetString() ?? "",
+                [.. root.GetProperty("files").EnumerateObject().Where(file => IsRestorableName(file.Name)).Select(file => (file.Name, file.Value.GetBytesFromBase64()))]);
+        }
+        // JsonElement は、値の型が違うときも、文字列を UTF-16 にできないとき (不正な UTF-8・片方だけのサロゲート) も InvalidOperationException を投げる
+        catch (Exception ex) when (ex is not InvalidDataException)
+        {
+            throw new InvalidDataException($"バックアップの中身が壊れています ({ex.Message})", ex);
+        }
+    }
+}
+
+/// <summary>読めたバックアップの中身 (<see cref="Backup.Read"/>)。Files は戻すファイルの名前 (データフォルダーからの相対パス) と中身。</summary>
+public sealed record BackupContents(string Created, string App, IReadOnlyList<(string Name, byte[] Bytes)> Files)
+{
+    /// <summary>
+    /// データフォルダーに戻す (同じ名前のファイルは上書き。今のファイルは .before-restore として残す)。戻したファイルの数を返す。
     /// 設定・ユーザー辞書・学習データ・定型文は、入力している Meltype が書き換えに気づいて読み直す。dictionaries/ と state.json は、Meltype を起動し直すまで読まない。
     /// </summary>
-    public static int Restore(byte[] content, string dataDirectory)
+    public int Restore(string dataDirectory)
     {
-        using var document = Parse(content);
-        // 先にすべて読む (読めないファイルがあれば、どれも書かずに例外にする。途中まで戻した状態にしない)
-        var files = new List<(string Path, byte[] Bytes)>();
-        foreach (var file in document.RootElement.GetProperty("files").EnumerateObject())
+        var root = Path.GetFullPath(dataDirectory).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        var restored = 0;
+        foreach (var (name, bytes) in Files)
         {
-            // バックアップに入れるファイルと同じ名前だけを戻す (それ以外の名前は無視)
-            var name = file.Name;
-            if (!IsRestorableName(name)) continue;
             var path = Path.GetFullPath(Path.Combine(dataDirectory, name));
-            if (!path.StartsWith(Path.GetFullPath(dataDirectory).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) continue;
-            files.Add((path, Convert.FromBase64String(file.Value.GetString() ?? "")));
-        }
-        foreach (var (path, bytes) in files)
-        {
+            if (!path.StartsWith(root, StringComparison.OrdinalIgnoreCase)) continue;
             if (File.Exists(path)) File.Copy(path, path + ".before-restore", overwrite: true);
             // 入力している Meltype が書きかけのファイルを読み直さないように、書き終えてから置き換える
             DataFile.Write(path, temp => File.WriteAllBytes(temp, bytes));
+            restored++;
         }
-        return files.Count;
-    }
-
-    private static JsonDocument Parse(byte[] content)
-    {
-        var document = JsonDocument.Parse(content);
-        if (document.RootElement.ValueKind != JsonValueKind.Object ||
-            !document.RootElement.TryGetProperty("format", out var format) || format.GetString() != Format)
-        {
-            document.Dispose();
-            throw new InvalidDataException("Meltype のバックアップのファイルではありません。");
-        }
-        return document;
+        return restored;
     }
 }
