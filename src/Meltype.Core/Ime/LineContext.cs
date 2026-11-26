@@ -98,7 +98,7 @@ internal static class LineContext
             }
             // 1 行のコメント: 行の終わりまで飛ばす。
             // ターミナルの引数の // (//src/work/* など) も飛ばす。後ろの /* を、次の行まで続くコメントの始まりにしない
-            if (StartsWith(text, i, "//") || IsHashComment(text, i) || IsDashComment(text, i, atStart, terminal: false) ||
+            if (StartsWith(text, i, "//") || IsHashComment(text, i, terminal: false) || IsDashComment(text, i, terminal: false) ||
                 (atStart && StartsWithIgnoreCase(text, i, "rem ")))
             {
                 while (i + 1 < text.Length && text[i + 1] is not ('\r' or '\n')) i++;
@@ -162,8 +162,8 @@ internal static class LineContext
                 i = close + 2;
                 continue;
             }
-            if (IsHashComment(line, i)) return LineKind.Comment;
-            if (IsDashComment(line, i, atStart, terminal)) return LineKind.Comment;
+            if (IsHashComment(line, i, terminal)) return LineKind.Comment;
+            if (IsDashComment(line, i, terminal)) return LineKind.Comment;
             // 複数行コメントの途中の行 ( * …)
             if (atStart && c == '*' && (i + 1 == line.Length || line[i + 1] == ' ')) return LineKind.Comment;
             // REM コメント (バッチファイル)
@@ -172,23 +172,33 @@ internal static class LineContext
         return quote is null ? LineKind.Code : LineKind.String;
     }
 
-    // ターミナルでは、シェルの引数 (Bazel の //src/main:app、Git Bash の //c/work) と、中で動くエディター (Vim など) の // コメントの両方を打つ。
-    // # と同じく、直後が空白か ASCII 以外 (確定した日本語) のときだけコメントにする。打ったばかりの // も、続く引数を直接入力するためにコードとする。
-    private static bool IsSlashComment(string text, int index, bool terminal) =>
-        StartsWith(text, index, "//") &&
-        (!terminal || index + 2 < text.Length && (text[index + 2] is > '~' || char.IsWhiteSpace(text[index + 2])));
+    // ターミナルのシェルでは、コメントの記号は語の先頭 (行頭か空白の後) にあるときだけコメント。語の途中の # は $#・${#name}・${path#*/}・16#ff・.#pkg。
+    // 語の先頭でも、直後に ASCII が続く // -- はコマンドの引数 (Bazel の //src/main:app、bash --kyouha) なので、直後が空白か ASCII 以外 (確定した日本語) のときだけコメントにする。
+    // 打ったばかりの記号も、続く引数を直接入力するためにコードとする。中で動くエディター (Vim など) のコメントも、記号の後に空白を打てば日本語で書ける。
+    private static bool IsTerminalComment(string text, int index, int length) =>
+        IsWordStart(text, index) && index + length < text.Length && StartsCommentBody(text[index + length]);
 
-    // #1623: # の直後に日本語 (「」※ や全角の文字も) を確定してもコメントのままにする。
+    private static bool IsWordStart(string text, int index) => index == 0 || char.IsWhiteSpace(text[index - 1]);
+
+    // コメントの本文の始まり: 空白か、確定した日本語 (「」※ や全角の文字も)。
+    private static bool StartsCommentBody(char c) => c is > '~' || char.IsWhiteSpace(c);
+
+    private static bool IsSlashComment(string text, int index, bool terminal) =>
+        StartsWith(text, index, "//") && (!terminal || IsTerminalComment(text, index, 2));
+
+    // #1623: # の直後に日本語を確定してもコメントのままにする。## (区切り) もコメント。
     // # の直後が ASCII の文字なら、#include・#region・r#type のような指令や名前なのでコードのまま。
-    private static bool IsHashComment(string text, int index) =>
-        text[index] == '#' && (index + 1 == text.Length || text[index + 1] is '#' or > '~' || char.IsWhiteSpace(text[index + 1]));
+    private static bool IsHashComment(string text, int index, bool terminal) =>
+        text[index] == '#' && (terminal
+            ? IsWordStart(text, index) && index + 1 < text.Length && (text[index + 1] == '#' || StartsCommentBody(text[index + 1]))
+            : index + 1 == text.Length || text[index + 1] == '#' || StartsCommentBody(text[index + 1]));
 
     // #1623: -- コメント (SQL・Lua・Haskell) は、直後に日本語・全角の本文を確定してもコメントのままにする。
     // 直前の境界は x-- の減算、直後の ASCII は --count のようなオプションと区別するために残す。
-    // ターミナルでは // と同じく、打ったばかりの -- もコードとする。bash --kyouha のようなオプションの名前を、続けて直接入力するため (#1665)。
-    private static bool IsDashComment(string text, int index, bool atStart, bool terminal) =>
-        StartsWith(text, index, "--") && (atStart || index > 0 && char.IsWhiteSpace(text[index - 1])) &&
-        (index + 2 == text.Length ? !terminal : text[index + 2] is > '~' || char.IsWhiteSpace(text[index + 2]));
+    private static bool IsDashComment(string text, int index, bool terminal) =>
+        StartsWith(text, index, "--") && (terminal
+            ? IsTerminalComment(text, index, 2)
+            : IsWordStart(text, index) && (index + 2 == text.Length || StartsCommentBody(text[index + 2])));
 
     /// <summary>
     /// 行コメントの // にすぐ続けて打った記号 c か (C# の ///、Rust の //!、区切りの //---- //==== //****)。

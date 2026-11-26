@@ -1111,10 +1111,14 @@ internal static class SessionFacadeTests
     }
 
     [Test]
-    public static void CodeInput_TerminalShellOptionsAfterDoubleDashRemainDirect()
+    public static void CodeInput_TerminalShellWordsWithCommentMarkersRemainDirect()
     {
-        // #1665: ターミナルのシェルの -- のオプションは、続けて打つ名前も英数のまま入れる。
-        foreach (var command in new[] { "bash --kyouha", "git log --oneline", "--kyouha", "ls\t--all" })
+        // #1665: ターミナルのシェルの -- のオプションと、語の途中の # (引数の数・長さ・前方一致の削除・基数・flake) は、続けて打つ語も英数のまま入れる。
+        foreach (var command in new[]
+        {
+            "bash --kyouha", "git log --oneline", "--kyouha", "ls\t--all",
+            "echo $# ima", "echo ${#name}", "echo ${path#*/} ima", "echo ${path##*/} ima", "echo $((16#ff)) ima", "nix build .#hello",
+        })
         {
             var session = Create();
             session.CodeInput = true;
@@ -1123,8 +1127,8 @@ internal static class SessionFacadeTests
             Assert.True(Type(session, command, field).All(r => !r.Consumed && r.View is null), command);
             Assert.Equal(command, field.Text);
         }
-        // -- コメント (SQL・Lua) は、-- の後に空白を打てば日本語で書ける。
-        foreach (var prefix in new[] { "-- ", "kome -- " })
+        // 語の先頭の記号の後に空白を打てば、コメント (シェル・SQL・Lua) を日本語で書ける。
+        foreach (var prefix in new[] { "-- ", "kome -- ", "# ", "ls # ", "## " })
         {
             var session = Create();
             session.CodeInput = true;
@@ -1180,7 +1184,8 @@ internal static class SessionFacadeTests
     [Test]
     public static void CodeInput_TerminalWithoutSurroundingTextContinuesLineComments()
     {
-        foreach (var marker in new[] { "#", "// " })
+        // ターミナルのコメントは、記号の後に空白を打った時点で始まる
+        foreach (var marker in new[] { "# ", "// " })
         {
             var session = Create();
             session.CodeInput = true;
