@@ -49,7 +49,7 @@ Windows は `Build-Package.ps1` が、入っている最新の 10.0 のランタ
 ## GitHub の設定
 
 - Settings → Security → **Private vulnerability reporting** を ON にする ([SECURITY.md](../../SECURITY.md) の報告先)
-- Settings → Rules → Rulesets で main の ruleset を作り、必須のチェック (Require status checks to pass) に **test**・**core (ubuntu-latest)**・**core (macos-latest)**・**精度の比較** を入れる (「CLA」は入れない。同意の確認はレビューする人がする)
+- Settings → Rules → Rulesets で main の ruleset を作り、必須のチェック (Require status checks to pass) に **test**・**core**・**精度の比較** を入れる (「CLA」は入れない。同意の確認はレビューする人がする)
 - (任意) bot の名前を変える: GitHub App を作り、変数 `BOT_APP_ID` と秘密 `BOT_APP_PRIVATE_KEY` を登録する
 
 ## パッケージマネージャー
@@ -57,7 +57,7 @@ Windows は `Build-Package.ps1` が、入っている最新の 10.0 のランタ
 リリースの配布物から、winget・Homebrew のマニフェストを作れます。Linux の .deb と .rpm は linux.yml が作ります。
 
 ```
-node tools/make-manifests.mjs 1.2.0 dist/Meltype-1.2.0-mac.zip dist/Meltype-1.2.0-setup.exe
+node packaging/make-manifests.mjs 1.2.0 dist/Meltype-1.2.0-mac.zip dist/Meltype-1.2.0-setup.exe
 ```
 
 `dist/manifests/` にできたものを出します。
@@ -70,7 +70,7 @@ node tools/make-manifests.mjs 1.2.0 dist/Meltype-1.2.0-mac.zip dist/Meltype-1.2.
   brew tap yksr-melt/Meltype https://github.com/yksr-melt/Meltype.git
   brew install --cask yksr-melt/Meltype/meltype
   ```
-  次回から `brew upgrade --cask meltype` で更新できます。Mac の zip から cask を作る場合は `node tools/make-manifests.mjs 1.2.0 dist/Meltype-1.2.0-mac.zip` です
+  次回から `brew upgrade --cask meltype` で更新できます。Mac の zip から cask を作る場合は `node packaging/make-manifests.mjs 1.2.0 dist/Meltype-1.2.0-mac.zip` です
   - cask は Meltype.app を `~/Library/Input Methods` に入れ、`mac/install.sh` と同じく、隔離属性を外す・入力ソースに登録する・GUI のセッションで起動するところまでします。`brew upgrade` で更新、`brew uninstall --cask meltype` で外せます (`--zap` で設定と学習データも)
   - 署名と公証 (mac.yml の秘密) が無い版は、自分用の署名 (ad hoc) です。cask は隔離属性を外しますが、Homebrew の本家 (homebrew/cask) には出せません (自分の tap なら使えます)
 - **apt (.deb)**: linux.yml が amd64 / arm64 の `.deb` を作り、release.yml がリリースに付けます。署名鍵を登録すると、release.yml が署名付き apt リポジトリを GitHub Pages に自動公開します。

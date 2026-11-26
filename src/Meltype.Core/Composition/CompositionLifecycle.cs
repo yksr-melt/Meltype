@@ -221,7 +221,7 @@ internal static class CompositionLifecycle
     /// <summary>フォーカスが変わったときなど。前の入力欄の文脈を持ち越さない。</summary>
     internal static void ResetContext(CompositionState state)
     {
-        state.Last = null;
+        state.Own = null;
         state.Correctable.Clear();
     }
 
@@ -232,11 +232,9 @@ internal static class CompositionLifecycle
     /// <summary>キャレットが動いたかもしれないとき (Meltype を通らなかったキー・クリック)。直前の語は確定し直さない。</summary>
     internal static void ForgetLastCommit(CompositionState state)
     {
-        state.Correctable.Clear();
         CompositionOutput.ForgetCommitted(state.Out);
         // キャレットが動いた・アプリが文字を入れた: キャレットの前は自分が確定した語ではないので、読めたらアプリの文字を使う。
-        // 読めなければ前の文字も、それが英語だったかも分からないものとして扱う (消した後・行の先頭に、英単語の前後の空白を足さない)
-        state.LastCommitTime = long.MinValue / 2;
-        state.Last = null;
+        // 読めなければ前の文字は分からないものとして扱う (消した後・行の先頭に、英単語の前後の空白を足さない)
+        ResetContext(state);
     }
 }
