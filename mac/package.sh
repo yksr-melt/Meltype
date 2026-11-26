@@ -20,7 +20,7 @@ trap cleanup EXIT
 package="$stage/Meltype-mac"
 mkdir -p "$package"
 cp -R "$here/build/Meltype.app" "$here/build/Meltype Settings.app" "$package/"
-cp "$here/install.sh" "$here/Install Meltype.command" "$here/install-app.sh" "$here/install-settings-app.sh" "$here/start-input-method.sh" "$here/select-input-source.swift" "$package/"
+cp "$here/install.sh" "$here/Install Meltype.command" "$here/install-app.sh" "$here/install-settings-app.sh" "$here/start-input-method.sh" "$package/"
 cp "$here/TESTER-README.txt" "$package/はじめにお読みください.txt"
 cp "$root/LICENSE" "$root/THIRD-PARTY-NOTICES.md" "$package/"
 chmod +x "$package/install.sh" "$package/Install Meltype.command" "$package/start-input-method.sh" "$package/install-settings-app.sh"
