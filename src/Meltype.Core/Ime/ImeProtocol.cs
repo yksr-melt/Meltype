@@ -25,6 +25,7 @@ namespace Meltype.Ime;
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
 [JsonDerivedType(typeof(KeyPressed), nameof(KeyPressed))]
 [JsonDerivedType(typeof(KeyReleased), nameof(KeyReleased))]
+[JsonDerivedType(typeof(KeyHeld), nameof(KeyHeld))]
 [JsonDerivedType(typeof(ModeToggleRequested), nameof(ModeToggleRequested))]
 [JsonDerivedType(typeof(JapaneseModeSelected), nameof(JapaneseModeSelected))]
 [JsonDerivedType(typeof(AlphanumericModeSelected), nameof(AlphanumericModeSelected))]
@@ -59,6 +60,7 @@ public abstract record ImeEvent
     {
         public required Func<KeyPressed, T> KeyPressed { get; init; }
         public required Func<KeyReleased, T> KeyReleased { get; init; }
+        public required Func<KeyHeld, T> KeyHeld { get; init; }
         public required Func<ModeToggleRequested, T> ModeToggleRequested { get; init; }
         public required Func<JapaneseModeSelected, T> JapaneseModeSelected { get; init; }
         public required Func<AlphanumericModeSelected, T> AlphanumericModeSelected { get; init; }
@@ -94,6 +96,12 @@ public abstract record ImeEvent
     public sealed record KeyReleased(ImeKeyRelease Key) : ImeEvent
     {
         internal override T Match<T>(Cases<T> cases) => cases.KeyReleased(this);
+    }
+
+    /// <summary>指定された時間まで最初のキーが押されたまま。Meltype キーボードが .NET の呼び出しで知らせる。</summary>
+    public sealed record KeyHeld(long PressRevision) : ImeEvent
+    {
+        internal override T Match<T>(Cases<T> cases) => cases.KeyHeld(this);
     }
 
     /// <summary>キーを使わない日本語 ⇔ 英数の切り替え (タスクバーのボタンなど)。</summary>
@@ -339,6 +347,12 @@ public sealed record ImeShortcut(int Vk, int Modifiers);
 /// </summary>
 public sealed record ImeOutput(ImeState State, SessionResult Result)
 {
+    /// <summary>同じプロセスで動く Meltype キーボード向け。今回受け取ったキーがこの時間 (ms) 経っても離されなければ KeyHeld を送る。0 なら待たない。</summary>
+    public int GameKeyHoldMs { get; init; }
+
+    /// <summary>同じプロセスで動く Meltype キーボード向け。KeyHeld で日本語入力を取り消し、押したままのキーの押下をゲームに送る。</summary>
+    public bool ReplayHeldKey { get; init; }
+
     /// <summary>{"version":…,"state":{…},"result":{…}}。result は <see cref="SessionResult.ToJson"/> と同じ形。</summary>
     public string ToJson()
     {

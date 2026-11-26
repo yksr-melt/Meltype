@@ -63,6 +63,8 @@ internal static class ImeContractTests
 
         public void CloseAll() => Host.CloseAll();
 
+        public ImeOutput Send(ImeEvent e) => Host.Handle(e);
+
         public string Document { get; set; } = "";
 
         /// <summary>OS の IME の開閉 (TSF の OPENCLOSE)。</summary>
@@ -687,6 +689,54 @@ internal static class ImeContractTests
         front.Settings.DirectModeAutoDetect = true;
         Assert.True(front.Type("ka").All(key => Active(key) && !Consumed(key) && !Japanese(key)), "英数のキーが本体に届いても日本語を判定しない\n" + front.Trace);
         Assert.Equal("ka", front.Document, front.Trace);
+    }
+
+    [Test]
+    public static void Keyboard_GameHoldCancelsOnlyTheFirstCharacterAndReturnsItToTheGame()
+    {
+        var front = new Front { InputMethod = InputMode.Keyboard };
+        front.Settings.Mode = InputMode.Keyboard;
+        front.Settings.AppRules.Add(new AppRule { Process = "VRChat.exe", Profile = AppProfile.Game, TextInput = true });
+        var field = new ImeField { App = "VRChat.exe", Traits = [ImeTrait.NonText] };
+        ImeOutput Send(ImeEvent e) => front.Send(e with { Field = field });
+
+        Send(new ImeEvent.JapaneseModeSelected());
+        // 操作キーの割り当てはゲームごとに違うので、WASD 以外の文字キーも受け取る。
+        var press = Send(new ImeEvent.KeyPressed(new ImeKey { Vk = 'I', Ch = 'i' }));
+        Assert.True(press.Result.Consumed && press.Result.View is not null, "短く押したときと同じように入力を始める");
+        Assert.Equal(250, press.GameKeyHoldMs, "最初のキーは長押しを待つ");
+        Send(new ImeEvent.ConversionFinished());
+        var held = Send(new ImeEvent.KeyHeld(press.State.Revision));
+        Assert.True(held.ReplayHeldKey && held.State.LanguageMode == ImeLanguageMode.Alphanumeric, "押下をゲームに送り、英数に戻す");
+        Assert.True(held.Result.View is null && held.Result.Commits.Count == 0, "打ちかけはゲームに確定しない");
+        Assert.True(!held.State.Capture.PrintableAscii && !Send(new ImeEvent.KeyHeld(press.State.Revision)).ReplayHeldKey, "押下は一度だけ渡し、次の移動キーは横取りしない");
+    }
+
+    [Test]
+    public static void Keyboard_GameHoldKeepsChatInputAfterAnotherKeyOrFocusChange()
+    {
+        var front = new Front { InputMethod = InputMode.Keyboard };
+        front.Settings.Mode = InputMode.Keyboard;
+        front.Settings.AppRules.Add(new AppRule { Process = "VRChat.exe", Profile = AppProfile.Game, TextInput = true });
+        var field = new ImeField { App = "VRChat.exe", Traits = [ImeTrait.NonText] };
+        ImeOutput Send(ImeEvent e) => front.Send(e with { Field = field });
+
+        Send(new ImeEvent.JapaneseModeSelected());
+        var press = Send(new ImeEvent.KeyPressed(new ImeKey { Vk = 'K', Ch = 'k' }));
+        var next = Send(new ImeEvent.KeyPressed(new ImeKey { Vk = 'A', Ch = 'a' }));
+        Assert.Equal(0, next.GameKeyHoldMs, "打ちかけがあるときは待たない");
+        var held = Send(new ImeEvent.KeyHeld(press.State.Revision));
+        Assert.True(!held.ReplayHeldKey && held.State.LanguageMode == ImeLanguageMode.Japanese, "次のキーを打った後に古い押下を渡さない");
+        var commit = Send(new ImeEvent.KeyPressed(new ImeKey { Vk = VirtualKeys.Return }));
+        Assert.Equal("か", commit.Result.Commits.Single().Text, "続けて打った文字は通常どおり確定する");
+
+        press = Send(new ImeEvent.KeyPressed(new ImeKey { Vk = 'A', Ch = 'a' }));
+        Send(new ImeEvent.CaretMoved(new ImeCaret { FocusLeft = true }));
+        Assert.True(!Send(new ImeEvent.KeyHeld(press.State.Revision)).ReplayHeldKey, "フォーカスが移った後は押下を渡さない");
+        Send(new ImeEvent.CommitRequested());
+        field = new ImeField { App = "notepad.exe" };
+        press = Send(new ImeEvent.KeyPressed(new ImeKey { Vk = 'A', Ch = 'a' }));
+        Assert.Equal(0, press.GameKeyHoldMs, "一般のアプリは長押しを待たない");
     }
 
     [Test]

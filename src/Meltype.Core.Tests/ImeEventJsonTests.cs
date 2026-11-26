@@ -17,6 +17,7 @@ internal static class ImeEventJsonTests
         ("""{"key":{"ch":97,"shift":true}}""", new ImeEvent.KeyPressed(new ImeKey { Ch = 97, Shift = true })),
         ("""{"key":{"vk":164,"interrupted":true}}""", new ImeEvent.KeyReleased(new ImeKeyRelease(164, Interrupted: true))),
         ("""{"key":{"vk":29}}""", new ImeEvent.KeyReleased(new ImeKeyRelease(29))),
+        ("""{"pressRevision":42}""", new ImeEvent.KeyHeld(42)),
         ("{}", new ImeEvent.ModeToggleRequested()),
         ("{}", new ImeEvent.JapaneseModeSelected()),
         ("{}", new ImeEvent.AlphanumericModeSelected()),
@@ -66,6 +67,7 @@ internal static class ImeEventJsonTests
                  {
                      ("KeyPressed", "{}"), ("KeyPressed", """{"key":null}"""),
                      ("KeyReleased", "{}"), ("KeyReleased", """{"key":{}}"""), ("KeyReleased", """{"key":{"interrupted":true}}"""),
+                     ("KeyHeld", "{}"),
                      ("CommittedByApp", "{}"), ("CommittedByApp", """{"caret":null}"""),
                      ("CaretMoved", "{}"), ("CaretMoved", """{"caret":null}"""),
                      ("CandidateClicked", "{}"), ("CandidateClicked", """{"index":null}"""),

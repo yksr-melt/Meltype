@@ -30,6 +30,8 @@ internal sealed class ImeSessionState
 
     // 前の出来事の入力欄がゲームだった
     public bool Game;
+    // 長押しを待っている最初のキーの応答の世代。0 なら待っていない
+    public long GameKeyHoldRevision;
 
     // ---- 左右の Alt の単独押し (設定「左 Alt で英数 / 右 Alt で日本語」) ----
     // 押している左右の Alt と、単独押しにしない理由 (null なら、まだ単独押しの途中)

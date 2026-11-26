@@ -32,10 +32,13 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
     private readonly ImeHost _host;
     private readonly Func<string?> _otherTipVersion;
     private readonly System.Threading.Timer _pollTimer;
+    private readonly System.Windows.Forms.Timer _holdTimer = new();
     private readonly object _gate = new();
     private readonly Queue<Input> _queue = new();
     // 押している物理キー (自動の繰り返しを見分ける)。フックのスレッドだけが使う
     private readonly HashSet<int> _held = [];
+    // 単独で押された最初のキー。押したままかと、監視を本体から頼まれたかを _gate でそろえる。
+    private HeldPress? _pendingHold;
     // 本体が使った押下 (離したこともアプリに通さない)。_gate で守る
     private readonly HashSet<int> _consumed = [];
     // ワークアラウンド (ImeEvent.KeyReleased): 離したことも本体に送る押下。_gate で守る
@@ -61,11 +64,18 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
 
     /// <summary>
     /// 並べる入力。Key だけなら離したキー、Event は押したキー、AltRelease は本体に答えを聞いて送り直す左右の Alt の解放、Caret はアプリに通した入力の知らせ。
-    /// Notice は、アプリに通した左右の Alt の押下の知らせ (Caret と同じく、後のキーを並ばせない)。
+    /// Notice は、アプリに通した左右の Alt の押下の知らせ (Caret と同じく、後のキーを並ばせない)。Hold は押したまま時間が経ったキー。
     /// </summary>
-    private readonly record struct Input(KeyEvent? Key = null, MouseButtonEvent? Mouse = null, ImeKey? Event = null, ImeKeyRelease? AltRelease = null, ImeCaret? Caret = null, bool Notice = false)
+    private readonly record struct Input(KeyEvent? Key = null, MouseButtonEvent? Mouse = null, ImeKey? Event = null, ImeKeyRelease? AltRelease = null,
+        ImeCaret? Caret = null, bool Notice = false, HeldPress? Hold = null)
     {
         public bool Waits => Caret is null && !Notice;
+    }
+
+    private sealed record HeldPress(KeyEvent Key, ImeKey Press, IntPtr Window)
+    {
+        public long Revision { get; set; }
+        public long Deadline { get; set; }
     }
 
     /// <param name="createHost">入力の本体を作る (設定は本体に渡す。フロントは読まない)。</param>
@@ -77,6 +87,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         _otherTipVersion = otherTipVersion;
         _host = createHost(this);
         _state = new ImeState { Capture = new ImeCapture() };
+        _holdTimer.Tick += (_, _) => QueueHeldKey();
         composition.Focus.TreatsWindowAsTextInput = () => WindowInputApps.Contains(_foreground.Current.ProcessName);
         composition.Focus.ForegroundProcessName = () => _foreground.Current.ProcessName;
         // 入力欄でない所・パスワード欄に移った: 本体が受け持たなくなったら、変換中の文字は入れる先が無いので捨てる
@@ -141,15 +152,16 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         if (altRelease) _alt = 0;
         lock (_gate)
         {
+            if ((!repeat && e.IsDown) || (e.IsUp && _pendingHold?.Key.PhysicalId == e.PhysicalId)) _pendingHold = null;
             if (altRelease) return Enqueue(input with { AltRelease = new ImeKeyRelease(e.Vk, _altInterrupted) });
-            if (_waiting > 0 || _busy || _composing || e.IsUp && _releaseFollows.Contains(e.PhysicalId)) return Enqueue(input);
+            if (_waiting > 0 || _busy || _composing || e.IsUp && _releaseFollows.Contains(e.PhysicalId)) return EnqueueKey(input);
             if (e.IsUp) return UpOutside(e);
             if (announce)
             {
                 Enqueue(input with { Key = null, Notice = true });
                 return false;
             }
-            if (Captures(e)) return Enqueue(input);
+            if (Captures(e)) return EnqueueKey(input);
             // アプリに通したキーはキャレットを動かすかもしれない (後のキーより先に本体に知らせる)
             if (!VirtualKeys.IsModifier(e.Vk)) Enqueue(new Input(Caret: new ImeCaret { Moved = true, PassedKey = e.Vk, Ctrl = IsDown(VirtualKeys.Control) }));
         }
@@ -163,6 +175,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         if (down && _alt != 0) _altInterrupted = true;
         lock (_gate)
         {
+            if (down) _pendingHold = null;
             if (_waiting > 0 || _busy || _composing) return Enqueue(new Input(Mouse: e));
             if (!down) return false;
             _composition.Focus.NoteClick();
@@ -179,6 +192,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
     public void OnForegroundChanged(IntPtr window)
     {
         _stale = true;
+        lock (_gate) _pendingHold = null;
         _foreground.Refresh(window);
         Abandon();
     }
@@ -190,7 +204,11 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
     public void OnFocusChanged()
     {
         _stale = true;
-        lock (_gate) Enqueue(new Input(Caret: new ImeCaret { Moved = true, PassedKey = 0, FocusLeft = true }));
+        lock (_gate)
+        {
+            _pendingHold = null;
+            Enqueue(new Input(Caret: new ImeCaret { Moved = true, PassedKey = 0, FocusLeft = true }));
+        }
     }
 
     // 受け取るキーか。本体の状態 (capture) どおりにする。ただし、フォーカスが移ってから本体の状態をまだ受け取っていないときと、
@@ -218,6 +236,13 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
     /// <summary>Alt の単独押しの解放 release の代わりに送るキー (0xE8 の押下・解放のあとに、release をそのまま。右 Alt の拡張キーの印も残す)。</summary>
     internal static KeyEvent[] MaskedAltRelease(KeyEvent release) =>
         [new KeyEvent(0xE8, 0, false, false, false, 0), new KeyEvent(0xE8, 0, false, true, false, 0), release];
+
+    private bool EnqueueKey(Input input)
+    {
+        if (!_composing && _held.Count == 1 && input.Key is { IsDown: true } key && input.Event is { Repeat: false } press)
+            _pendingHold = new HeldPress(key, press, Native.GetForegroundWindow());
+        return Enqueue(input);
+    }
 
     private bool Enqueue(Input input)
     {
@@ -279,6 +304,11 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
     /// <param name="caretFollows">次もキャレットの動き。入力欄を読むのは、続いた動きの最後の 1 回だけでよい (途中はキーの情報だけ送る)。</param>
     private void Process(Input input, bool caretFollows)
     {
+        if (input.Hold is { } hold)
+        {
+            ProcessHeldKey(hold);
+            return;
+        }
         if (input.Caret is { } caret)
         {
             Send(new ImeEvent.CaretMoved(caret), readField: !caretFollows);
@@ -322,6 +352,12 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
             if (!consumed && e.IsUp) _composition.Replay(e);
             return;
         }
+        // OS の自動リピートで先頭の 1 文字を増やすと、時間が来たときに元の打鍵だけを取り消せなくなる。
+        if (key.Repeat)
+        {
+            lock (_gate)
+                if (_pendingHold is { Revision: > 0 } pending && pending.Key.PhysicalId == e.PhysicalId) return;
+        }
         if (_state.Capture.KeyReleases && !VirtualKeys.IsModifier(e.Vk))
         {
             key = key with { ReleaseFollows = true };
@@ -339,11 +375,65 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         // 修飾キーは、本体が使った押下でも離したことはアプリに通す。押下がアプリに届いたあとの自動の繰り返し
         // (変換ボックスを出す前から押していた Shift など) を本体が使うと、離したことを止めたときアプリと OS では押したままになり、
         // 打つ文字もクリックもすべて Shift 付きになる。押していないキーを離しても何も起きない
-        if (!VirtualKeys.IsModifier(e.Vk)) lock (_gate) _consumed.Add(e.PhysicalId);
+        if (!VirtualKeys.IsModifier(e.Vk))
+        {
+            lock (_gate)
+            {
+                _consumed.Add(e.PhysicalId);
+                if (output.GameKeyHoldMs > 0 && _pendingHold is { } pending && ReferenceEquals(pending.Press, input.Event))
+                {
+                    pending.Revision = output.State.Revision;
+                    pending.Deadline = e.TimeMs + output.GameKeyHoldMs;
+                    RestartHoldTimer(pending.Deadline - Environment.TickCount64);
+                }
+            }
+        }
         // 修飾キーと一緒に押したキーを使うと、アプリには修飾キーだけを押して離したように見える。Alt・Win ではメニューに移り
         // (US 配列の Alt + ` など)、Shift・Ctrl では単独押しに割り当てた機能が動く (JetBrains の IDE の Shift 2 回で Search Everywhere、
         // 変換中の Shift + ← を 2 回など) ので、何もしないキー (0xE8、割り当てなし) を送る
         if (key.Alt || key.Command || key.Shift || key.Ctrl) KeyInjector.SendKey(0xE8);
+    }
+
+    private void RestartHoldTimer(long remaining)
+    {
+        _holdTimer.Stop();
+        _holdTimer.Interval = (int)Math.Max(1, remaining);
+        _holdTimer.Start();
+    }
+
+    private void QueueHeldKey()
+    {
+        _holdTimer.Stop();
+        lock (_gate)
+        {
+            if (_pendingHold is not { Revision: > 0 } pending) return;
+            var remaining = pending.Deadline - Environment.TickCount64;
+            if (remaining > 0) RestartHoldTimer(remaining);
+            else Enqueue(new Input(Hold: pending));
+        }
+    }
+
+    private void ProcessHeldKey(HeldPress hold)
+    {
+        lock (_gate)
+        {
+            if (!ReferenceEquals(hold, _pendingHold)) return;
+            _pendingHold = null;
+        }
+        if (hold.Window == IntPtr.Zero || Native.GetForegroundWindow() != hold.Window) return;
+        var output = Send(new ImeEvent.KeyHeld(hold.Revision), readField: false);
+        if (!output.ReplayHeldKey || Native.GetForegroundWindow() != hold.Window) return;
+        // 終わるまで後ろの打鍵 (解放も含む) は Pump の並びに入る。押下に成功したら解放もアプリに通す。
+        if (_injector.Inject([hold.Key]))
+        {
+            lock (_gate) _consumed.Remove(hold.Key.PhysicalId);
+        }
+        else if (Native.GetForegroundWindow() == hold.Window)
+        {
+            // 送り直せなかったときは、元の入力欄に打ちかけの文字を戻す。
+            Send(new ImeEvent.JapaneseModeSelected(), readField: false);
+            Send(new ImeEvent.KeyPressed(hold.Press), readField: false);
+        }
     }
 
     /// <summary>出来事を送り、返ってきた確定・表示・入力モードを反映する。</summary>
@@ -423,6 +513,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
 
     private void ReplayQueued()
     {
+        _holdTimer.Stop();
         List<Input> inputs;
         lock (_gate)
         {
@@ -430,6 +521,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
             _queue.Clear();
             _waiting = 0;
             _consumed.Clear();
+            _pendingHold = null;
         }
         foreach (var input in inputs)
         {
@@ -580,5 +672,6 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
     {
         _pollTimer.Dispose();
         Stop();
+        _holdTimer.Dispose();
     }
 }

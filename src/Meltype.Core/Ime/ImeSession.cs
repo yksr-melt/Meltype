@@ -87,6 +87,9 @@ internal static class ImeSession
 
     public static ImeOutput Handle(ImeSessionState state, ImeEnv env, ImeEvent e, long rev)
     {
+        var holdRevision = state.GameKeyHoldRevision;
+        // 背景の変換で表示を更新しても、打ったキーは同じ。ほかの出来事で元の打鍵を取り消せなくする。
+        if (e is not ImeEvent.ConversionFinished) state.GameKeyHoldRevision = 0;
         var previousApp = state.Field?.App;
         var field = e.Field ?? state.Field;
         CompositionController.SetPrivate(state.Composition, ForbidsLearning(field));
@@ -123,6 +126,9 @@ internal static class ImeSession
         var before = LineBefore(state, e.Field);
         var wasJapanese = ShowsJapanese(state, before);
         var composing = IsComposing(state);
+        var gameKeyboard = active && game && env.Environment.InputMethod == InputMode.Keyboard;
+        var replayHeldKey = gameKeyboard && wasJapanese && composing && holdRevision != 0 &&
+            e is ImeEvent.KeyHeld held && held.PressRevision == holdRevision && string.Equals(previousApp, field?.App, StringComparison.OrdinalIgnoreCase);
         // view が null だと、フロントは変換中の表示を消す。表示を変えない出来事は今の表示を返す
         var handled = e.Match(new ImeEvent.Cases<Handled>
         {
@@ -130,6 +136,7 @@ internal static class ImeSession
             KeyReleased = released => !active ? Unchanged(state, env)
                 : released.Key.Vk is VirtualKeys.LMenu or VirtualKeys.RMenu ? AltReleased(state, env, released.Key, before, settings)
                 : HandleKeyUp(state, env, ToggleShortcut.NormalizeKey(released.Key.Vk)),
+            KeyHeld = _ => replayHeldKey ? ReturnToGame(state, env, before) : Unchanged(state, env),
             ModeToggleRequested = _ => active ? Switch(state, env, !wasJapanese, before, toggle: true) : Unchanged(state, env),
             JapaneseModeSelected = _ => active ? Switch(state, env, true, before, toggle: false) : Unchanged(state, env),
             AlphanumericModeSelected = _ => active ? Switch(state, env, false, before, toggle: false) : Unchanged(state, env),
@@ -154,6 +161,9 @@ internal static class ImeSession
             if (closesChat) CompositionController.SetDirect(state.Composition, true);
         }
         TrackLine(state, e, result);
+        var watchHold = gameKeyboard && wasJapanese && !composing && result.Consumed && result.View is not null && result.Commits.Count == 0 &&
+            e is ImeEvent.KeyPressed { Key: { Ch: > ' ' and <= '~', Shift: false, Ctrl: false, Alt: false, Command: false, Repeat: false, ReleaseFollows: false } };
+        if (watchHold) state.GameKeyHoldRevision = rev;
         var snippetKeys = SnippetKeys(state, env, e, result, settings);
         // キーでアプリの文字が変わったあとの位置は、フロントが次の出来事 (caret) で知らせる
         var japanese = ShowsJapanese(state, before);
@@ -168,7 +178,20 @@ internal static class ImeSession
             ModeIndicatorMs = active && indicate && result.View is null ? ModeIndicatorMs : 0,
             Capture = Capture(active, Direct(state), japanese, DirectEnglishWord(state), settings, game, ComposingControlKeys(state, env), snippetKeys),
             Revision = rev,
-        }, result);
+        }, result)
+        {
+            GameKeyHoldMs = watchHold ? GameKeyHoldMs : 0,
+            ReplayHeldKey = replayHeldKey,
+        };
+    }
+
+    // 最初の 1 打鍵だけを対象にし、通常の文字入力で押している時間と移動の反応時間を両立する初期値。
+    private const int GameKeyHoldMs = 250;
+
+    private static Handled ReturnToGame(ImeSessionState state, ImeEnv env, string? before)
+    {
+        CompositionController.CancelPending(state.Composition);
+        return Switch(state, env, false, before, toggle: false);
     }
 
     /// <param name="ExplicitChange">入力モードを明示的に切り替えた。</param>
