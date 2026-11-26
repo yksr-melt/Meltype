@@ -1846,6 +1846,31 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void CandidateDictionary_MergedClausesKeepZenzaiAttribution()
+    {
+        var candidates = new CandidateDictionary();
+        candidates.Add("つるまきまき", ["弦巻マキ"]);
+        foreach (var zenzai in new[] { true, false })
+        {
+            var converter = new SplitConverter(new()
+            {
+                ["つるまきまき"] = [new("つるまき", "ツルマキ", zenzai), new("まき", "マキ", zenzai)],
+            });
+            var session = new TestSession(() => new Settings { LiveConversion = false }, converter,
+                new CompositionServices { Candidates = candidates });
+            var view = SessionFacadeTests.Type(session, "tsurumakimaki ")[^1].View!;
+
+            Assert.Equal("ツルマキマキ", view.Candidates[view.SelectedIndex]);
+            Assert.Equal(zenzai ? "Zenzai" : null, view.ContextHint);
+            Assert.Equal(zenzai ? CandidateNote.Zenzai : CandidateNote.None, view.Notes?[view.SelectedIndex] ?? CandidateNote.None);
+
+            var dictionaryIndex = view.Candidates.ToList().IndexOf("弦巻マキ");
+            Assert.True(dictionaryIndex >= 0, "補助辞書の候補が出る");
+            Assert.True(view.Notes?[dictionaryIndex] is not CandidateNote.Zenzai, "補助辞書の候補に Zenzai の注記は付けない");
+        }
+    }
+
+    [Test]
     public static void CorpusContextRules_PreferChatFormsWhenCued()
     {
         var rules = ContextRules.Load(null);
@@ -6374,6 +6399,37 @@ internal static class CompositionTests
             Assert.True(CompositionText.Display(plain, plainEnv, final: false) != "にゅう", "表が無ければ ngh は にゅう にならない");
         }
         finally { Directory.Delete(dir, recursive: true); }
+    }
+
+    [Test]
+    public static void Issue1945_DirectModeLogHidesTypedKeyUnlessRecordTextIsOn()
+    {
+        // 英数状態の判定を数字で打ち切ったログに、打った数字のキーコード (kana1 の 1 で 0x31) が設定に関係なく残っていた。
+        var recordText = Meltype.Diagnostics.Log.RecordText;
+        try
+        {
+            // 数字のほか、記号 (, は 0xBC)  で打ち切ったときも同じ。
+            // 逆向き: OFF でもログ自体は残し (判定を打ち切ったことは調べるときに要る)、ON ならキーを残す。
+            foreach (var (keys, code) in new[] { ("kana1", "0x31"), ("kana,", "0xBC") })
+            {
+                foreach (var withText in new[] { false, true })
+                {
+                    Meltype.Diagnostics.Log.RecordText = withText;
+                    var version = Meltype.Diagnostics.Log.Version;
+                    new Keyboard(direct: true).Type(keys);
+                    var logged = Meltype.Diagnostics.Log.Snapshot().TakeLast((int)Math.Min(Meltype.Diagnostics.Log.Version - version, 1000)).Select(e => e.Message).ToList();
+                    var entry = logged.LastOrDefault(m => m.StartsWith("英数状態の判定を打ち切り", StringComparison.Ordinal));
+                    Assert.True(entry is not null, $"{keys}: 設定に関係なく打ち切りのログは残す");
+                    Assert.Equal(withText, entry!.Contains(code), $"{keys}: 打ったキーは設定どおり: " + entry);
+                    // OFF なら、この打鍵で出たどのログにも打った英字が出ない
+                    if (!withText) Assert.True(!logged.Any(m => m.Contains("kana")), $"{keys}: 打った英字を残さない: " + string.Join(" / ", logged));
+                }
+            }
+        }
+        finally
+        {
+            Meltype.Diagnostics.Log.RecordText = recordText;
+        }
     }
 
     [Test]
