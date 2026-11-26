@@ -147,13 +147,15 @@ private final class Installer: NSObject, NSApplicationDelegate, NSWindowDelegate
             """
         volumeToEject = diskImageVolume()
         if volumeToEject != nil { close.title = "取り出して閉じる" }
-        guard waited else { return }
-        // 許可のあとで macOS が Meltype に切り替えるとは限らないので、待っていた初回だけ一度選ぶ。選べなくても案内で対処できる。
-        launch(installedApp.appendingPathComponent("Contents/MacOS/MeltypeInstallSupport"), ["--select", installedApp.path]) { _, _ in }
-        // 許可を押した直後はシステム設定が前面にあり、macOS 14 以降の activate() だけでは前に出ないことがある。
+        // 有効になった時点で確認にはもう答えているので、前に出しても確認を隠さない。インストール中に許可したときは
+        // 待たずにここへ来るが、そのときもシステム設定が前面にあるので前に出す。
+        // macOS 14 以降は activate() だけでは前に出ないことがある。
         window.orderFrontRegardless()
         NSApp.requestUserAttention(.informationalRequest)
         activate()
+        guard waited else { return }
+        // 許可のあとで macOS が Meltype に切り替えるとは限らないので、待っていた初回だけ一度選ぶ。選べなくても案内で対処できる。
+        launch(installedApp.appendingPathComponent("Contents/MacOS/MeltypeInstallSupport"), ["--select", installedApp.path]) { _, _ in }
     }
 
     private func activate() {
