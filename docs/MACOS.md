@@ -37,7 +37,7 @@ Mac 版のインストール・設定・困ったときの説明です。キー�
 <img src="images/headings/mac/01.svg" alt="動く環境" height="53"><br>
 
 - macOS 13.3 以降
-- 配布している zip は Apple シリコン (M1 / M2 / M3 / M4 …) の Mac 用です。Intel の Mac では、[ソースからビルド](../mac/README.md#ビルドする)してください (ビルドした CPU 向けのアプリができるので、Apple シリコン版と Intel 版は互換ではありません)
+- 配布している zip と DMG は Apple シリコン (M1 / M2 / M3 / M4 …) の Mac 用です。Intel の Mac では、[ソースからビルド](../mac/README.md#ビルドする)してください (ビルドした CPU 向けのアプリができるので、Apple シリコン版と Intel 版は互換ではありません)
 
 <br>
 
@@ -45,6 +45,12 @@ Mac 版のインストール・設定・困ったときの説明です。キー�
 <img src="images/headings/mac/02.svg" alt="インストール" height="53"><br>
 
 Meltype はアプリではなく「入力ソース」(日本語入力) です。`Meltype.app` をダブルクリックしても何も起きません。
+ZIP・DMG・Homebrew のどれかで入れます。
+
+インストールの途中で macOS から Meltype の有効化を求められたら「許可」を押してください。自動で切り替わらなかったときは、入力メニューから Meltype を選んでください。
+起動エラーが出たときは、入力メニューから ABC または標準の日本語入力を選んでください。入力メニューに Meltype が出てこないときは、[困ったとき](#困ったとき)を見てください。
+
+### ZIP で入れる
 
 1. [Releases](https://github.com/yksr-melt/Meltype/releases/latest) から `Meltype-<version>-mac.zip` をダウンロードして、**zip 全体を**展開する
 2. 「Install Meltype.command」をダブルクリック
@@ -53,12 +59,21 @@ Meltype はアプリではなく「入力ソース」(日本語入力) です。
    - それでも開けないときは、「ターミナル」で `bash ~/Downloads/Meltype-mac/install.sh` を実行する
 3. インストーラーが Meltype を登録・起動します。初回は同梱の補助ツールで Meltype の選択を試み、配布 ZIP の更新時は更新前の入力ソースへ戻します
 
-macOS から Meltype の有効化を求められたら「許可」を押してください。自動で切り替わらなかったときは、入力メニューから Meltype を選んでください。
-起動エラーが出たときは、入力メニューから ABC または標準の日本語入力を選んでください。入力メニューに Meltype が出てこないときは、[困ったとき](#困ったとき)を見てください。
-
 配布 ZIP からの更新も同じ手順です。`Meltype.app` を先に削除したり、手で上書きしたりせず、新しい ZIP 全体を展開してインストーラーを実行してください。ソースビルドからの更新も、外側のアプリを残して内容を交換します。更新時は入力メニューを再起動せず、更新前の入力ソースへ戻します。
 
-Homebrew から入れる場合は、最初に tap を追加してからインストールします。以後は `brew upgrade --cask meltype` で更新できます。
+### DMG で入れる
+
+1. [Releases](https://github.com/yksr-melt/Meltype/releases/latest) から `Meltype-<version>-mac.dmg` をダウンロードして開く
+2. 中の「Install Meltype」をダブルクリック
+   - 「“Install Meltype.app” は開いていません」と出たら「完了」を押し、システム設定 → プライバシーとセキュリティ → 下のほうの「このまま開く」を押して、パスワードなどで認証する
+3. 「インストール」を押す。途中で「"Meltype" が "Meltype" を有効にすることを許可しますか?」と出たら「許可」を押す
+4. 完了画面が出たら、入力メニューが Meltype になっていることを確かめて「取り出して閉じる」を押す (DMG も取り出されます)
+
+DMG からの更新も同じ手順です。更新では許可の確認は出ず、更新前の入力ソースへ戻します。
+
+### Homebrew で入れる
+
+最初に tap を追加してからインストールします。以後は `brew upgrade --cask meltype` で更新できます。
 
 ```bash
 brew tap yksr-melt/Meltype https://github.com/yksr-melt/Meltype.git
