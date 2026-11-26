@@ -79,6 +79,7 @@ internal static class UtilityConversions
         new CalculatorConversion(),
         new SlashDateConversion(),
         new GitHubIssueConversion(),
+        new ColorConversion(),
         new TypedDateConversion(),
         new KanjiNumberConversion(),
         new TodayConversion(),

@@ -272,4 +272,27 @@ internal static class UtilityConversionTests
         Assert.Equal("端末", VersionConversion.LinuxFrontOf(["/usr/bin/python3", "/home/u/Meltype-tty/meltype-tty"]));
         Assert.Equal(null, VersionConversion.LinuxFrontOf(["python3", "src/Meltype.Core.CApi/tests/test-native-boundaries.py", "libMeltypeNative.so"]));
     }
+
+    [Test]
+    public static void ColorConversion_ConvertsHexRgbAndHsl()
+    {
+        Assert.Equal("#3b82f6|rgb(59, 130, 246)|hsl(217, 91%, 60%)", string.Join("|", ColorConversion.Candidates("#3b82f6")));
+        Assert.Equal("#f00|#ff0000|rgb(255, 0, 0)|hsl(0, 100%, 50%)", string.Join("|", ColorConversion.Candidates("#f00")));
+        Assert.Equal("rgb(59, 130, 246)|#3b82f6|#3B82F6|hsl(217, 91%, 60%)", string.Join("|", ColorConversion.Candidates("rgb(59, 130, 246)")));
+        Assert.Equal("hsl(217, 91%, 60%)|#3c83f6|#3C83F6|rgb(60, 131, 246)", string.Join("|", ColorConversion.Candidates("hsl(217, 91%, 60%)")));
+        Assert.Equal("rgba(255, 0, 0, 0.5)|#ff000080|#FF000080|hsla(0, 100%, 50%, 0.5)", string.Join("|", ColorConversion.Candidates("rgba(255, 0, 0, 0.5)")));
+        Assert.Equal(0, ColorConversion.Candidates("rgb(256, 0, 0)").Count);
+        Assert.Equal(0, ColorConversion.Candidates("#12345").Count);
+
+        var k = new Keyboard();
+        k.Type("#3b82f6");
+        k.Press(VirtualKeys.Convert);
+        Assert.Equal("#3b82f6", k.Host.View!.Candidates[0]);
+        Assert.True(k.Host.View.Candidates.Contains("rgb(59, 130, 246)") && k.Host.View.Candidates.Contains("hsl(217, 91%, 60%)"), string.Join(",", k.Host.View.Candidates));
+
+        // Space は英数字の確定＋空白のまま邪魔しない
+        var space = new Keyboard();
+        space.Type("#3b82f6 ");
+        Assert.Equal("#3b82f6 ", space.Host.Document);
+    }
 }
