@@ -6,6 +6,10 @@
   タグの無い自己ビルドでは付けたままにし、「ばーじょん」の候補でどのコミットか分かるようにする (issue #1868)。
 
   Meltype の版は、ここの Version の 1 か所に書く (Meltype.exe・Meltype.Core・設定アプリが同じ版になる)。/release (meltype-bot.mjs) はここを確かめる。
+
+  環境変数 MELTYPE_SYSROOT があれば、NativeAOT はその sysroot の glibc に対してリンクする。
+  CI (.github/actions/linux-native) は、サポートする中で一番古い glibc (2.34、RHEL 9 系) の manylinux の中身を渡す。
+  無ければビルドするマシンの glibc に対してリンクし、それより古い glibc では動かない。
 -->
 <Project>
   <PropertyGroup>
@@ -13,5 +17,9 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(GITHUB_REF_TYPE)' == 'tag'">
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(MELTYPE_SYSROOT)' != ''">
+    <SysRoot>$(MELTYPE_SYSROOT)</SysRoot>
+    <LinkerFlavor>lld</LinkerFlavor>
   </PropertyGroup>
 </Project>

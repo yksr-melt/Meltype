@@ -73,7 +73,7 @@ internal static partial class CompositionText
             .Append(env.Context().FollowingEnglish switch { true => 'E', false => 'J', null => '-' })
             .Append(env.Context().PrecedingEnglishSentence ? 'S' : '-').Append(state.KanaInput ? 'K' : '-')
             .Append(env.Context().PrecedingEnglishName ? 'N' : '-').Append(state.FullWidthParentheses ? 'W' : '-')
-            .Append(CompositionText.EffectiveManual(state, env) ? 'M' : '-').Append(':').Append(env.Detector.Memory?.Version ?? -1).Append(':').Append(LearningContext(state, env) switch { true => 'e', false => 'j', null => '-' });
+            .Append(CompositionText.EffectiveManual(state, env) ? 'M' : '-').Append(':').Append(env.Detector.Memory?.Version ?? -1).Append(':').Append(LearningContext(env) switch { true => 'e', false => 'j', null => '-' });
         return key.ToString();
     }
 
@@ -83,7 +83,7 @@ internal static partial class CompositionText
     /// </summary>
     private static bool IsNameInEnglishSentence(CompositionTextState state, TextEnv env) =>
         !state.KanaInput && env.Context().PrecedingEnglishName && env.Context().FollowingEnglish != false && !CompositionText.EffectiveManual(state, env) &&
-        CompositionText.Raw(state) is { Length: > 0 } raw && raw.All(char.IsAsciiLetter) && env.Detector.Memory?.Get(raw.ToLowerInvariant(), LearningContext(state, env)) != false;
+        CompositionText.Raw(state) is { Length: > 0 } raw && raw.All(char.IsAsciiLetter) && env.Detector.Memory?.Get(raw.ToLowerInvariant(), LearningContext(env)) != false;
 
     /// <summary>
     /// 区間分けと、その英日の区切りの別案 (軽い順に count 案まで。先頭が表示・確定に使う区切り)。reasons には先頭の区切りの理由を足す。
@@ -98,13 +98,13 @@ internal static partial class CompositionText
             reasons.Add(() => "名前を紹介する英文の続きなので英字のまま");
             return [[new CompositionSegment(true, "", CompositionText.Raw(state))]];
         }
-        var alternatives = CompositionText.SegmentWithProtection(state, env, state.Units, reasons, CompositionText.EffectiveManual(state, env) ? 1 : count);
-        if (CompositionText.HalfWidthOpeners(state, alternatives[0]) is { } adjusted)
+        var alternatives = CompositionText.SegmentWithProtection(state, env, TypedMarks.Read(state, env), reasons, CompositionText.EffectiveManual(state, env) ? 1 : count);
+        if (CompositionText.HalfWidthOpeners(state, alternatives[0]) is { Count: > 0 } halfWidth)
         {
             // 区切り直した結果だけが確定するので、最初の区切りの理由は捨てる
             reasons.Clear();
             reasons.Add(() => "後ろが英語なので開きの記号を半角にして区切り直した");
-            return CompositionText.SegmentWithProtection(state, env, adjusted, reasons, 1);
+            return CompositionText.SegmentWithProtection(state, env, TypedMarks.Read(state, env, halfWidth), reasons, 1);
         }
         return alternatives;
     }
@@ -114,7 +114,7 @@ internal static partial class CompositionText
     {
         var spans = CompositionText.ProtectedSpans(state);
         if (spans.Count == 0)
-            return env.Detector.SegmentAlternatives(LearningContext(state, env), units, CompositionText.Pending(state), env.Context().PrecedingEnglish, env.Context().FollowingEnglish, CompositionText.EffectiveManual(state, env), env.Context().PrecedingEnglishSentence, state.KanaInput, count, reasons);
+            return env.Detector.SegmentAlternatives(LearningContext(env), units, CompositionText.Pending(state), env.Context().PrecedingEnglish, env.Context().FollowingEnglish, CompositionText.EffectiveManual(state, env), env.Context().PrecedingEnglishSentence, state.KanaInput, count, reasons);
         var raw = CompositionText.Raw(state);
         var result = new List<CompositionSegment>();
         var start = 0;
@@ -133,7 +133,7 @@ internal static partial class CompositionText
         {
             if (from == to) return;
             var gapUnits = CompositionText.UnitsInRawRange(state, env, units, from, to, out var pending);
-            var segments = env.Detector.Segment(LearningContext(state, env), gapUnits, pending, from == 0 ? env.Context().PrecedingEnglish : false,
+            var segments = env.Detector.Segment(LearningContext(env), gapUnits, pending, from == 0 ? env.Context().PrecedingEnglish : false,
                 to == raw.Length ? env.Context().FollowingEnglish : false, CompositionText.EffectiveManual(state, env),
                 from == 0 && env.Context().PrecedingEnglishSentence, state.KanaInput, reasons);
             // 内部の区切りの子音は後の保護文字列とは結合しない。末尾の Pending は表示側が扱う。
@@ -163,10 +163,10 @@ internal static partial class CompositionText
         {
             // 構造の境界がローマ字単位の途中に入った場合だけ、その区間の原文を読み直す。
             CompositionTextState fragment = new CompositionTextState();
-            var fragmentEnv = FragmentEnv(state, env);
+            var fragmentEnv = FragmentEnv(env);
             foreach (var c in CompositionText.Raw(state)[from..to]) CompositionText.Append(fragment, fragmentEnv, c);
             pending = CompositionText.Pending(fragment);
-            return [.. CompositionText.Units(fragment)];
+            return [.. TypedMarks.Read(fragment, fragmentEnv)];
         }
         pending = to > offset ? CompositionText.Raw(state)[Math.Max(from, offset)..to] : "";
         return selected;
@@ -181,12 +181,12 @@ internal static partial class CompositionText
 
     /// <summary>
     /// 開きの記号 (「(」「"」) は打った時点ではまだ後ろが分からないので全角になる。後ろが分かったら、
-    /// すぐ後ろが英語 ((Ooh) か、対になる閉じの記号が半角 ("…Go Through!") なら、開きの記号も半角にした単位の並びを返す。変えなければ null。
+    /// すぐ後ろが英語 ((Ooh) か、対になる閉じの記号が半角 ("…Go Through!") なら、開きの記号も半角にする。半角にする単位の番号を返す。
     /// ("打ち上げ話はGo Through!" の最初の " だけ全角 ” になっていた、(Ooh … wow…) の ( だけ全角 （ になっていた)
     /// </summary>
-    private static List<CompositionUnit>? HalfWidthOpeners(CompositionTextState state, IReadOnlyList<CompositionSegment> segments)
+    private static HashSet<int> HalfWidthOpeners(CompositionTextState state, IReadOnlyList<CompositionSegment> segments)
     {
-        if (state.KanaInput || !state.Units.Any(u => Openers.ContainsKey(u.Raw) && u.Kana != u.Raw)) return null;
+        if (state.KanaInput || !state.Units.Any(u => Openers.ContainsKey(u.Raw) && u.Kana != u.Raw)) return [];
         // 打った英字の 1 文字ずつが英語の区間か
         var english = new List<bool>();
         foreach (var segment in segments) foreach (var _ in segment.Raw) english.Add(segment.IsEnglish);
@@ -194,7 +194,7 @@ internal static partial class CompositionText
         for (int i = 0, offset = 0; i < state.Units.Count; offset += state.Units[i].Raw.Length, i++) offsets[i] = offset;
         bool IsHalf(int i) => state.Units[i].Kana == state.Units[i].Raw || (offsets[i] < english.Count && english[offsets[i]]);
 
-        List<CompositionUnit>? adjusted = null;
+        var halfWidth = new HashSet<int>();
         for (var i = 0; i < state.Units.Count; i++)
         {
             if (!Openers.TryGetValue(state.Units[i].Raw, out var closer) || state.Units[i].Kana == state.Units[i].Raw) continue;
@@ -214,20 +214,19 @@ internal static partial class CompositionText
             var unclosedBeforeEnglish = closing < 0 && Enumerable.Range(i + 1, state.Units.Count - i - 1)
                 .Any(k => offsets[k] < english.Count && english[offsets[k]] && char.IsAsciiLetter(state.Units[k].Raw[0]));
             if (!nextIsEnglish && !(closing >= 0 && IsHalf(closing)) && afterEnglish < 0 && !unclosedBeforeEnglish) continue;
-            adjusted ??= [.. state.Units];
-            adjusted[i] = state.Units[i] with { Kana = state.Units[i].Raw };
-            for (var k = afterEnglish + 1; afterEnglish >= 0 && k <= closing; k++) adjusted[k] = state.Units[k] with { Kana = state.Units[k].Raw };
+            halfWidth.Add(i);
+            for (var k = afterEnglish + 1; afterEnglish >= 0 && k <= closing; k++) halfWidth.Add(k);
         }
-        return adjusted;
+        return halfWidth;
     }
 
     /// <summary>自動判定を使わないとき、自動判定なら英字にする部分 (提案)。無ければ null。</summary>
     public static string? Suggestion(CompositionTextState state, TextEnv env)
     {
         if (state.Mode != DisplayMode.Auto || !CompositionText.EffectiveManual(state, env) || CompositionText.IsNumeric(state)) return null;
-        var suggested = env.Detector.Segment(LearningContext(state, env), state.Units, CompositionText.Pending(state), env.Context().PrecedingEnglish, env.Context().FollowingEnglish, false, env.Context().PrecedingEnglishSentence, state.KanaInput);
+        var suggested = env.Detector.Segment(LearningContext(env), TypedMarks.Read(state, env), CompositionText.Pending(state), env.Context().PrecedingEnglish, env.Context().FollowingEnglish, false, env.Context().PrecedingEnglishSentence, state.KanaInput);
         if (!suggested.Any(s => s.IsEnglish) || suggested.SequenceEqual(CompositionText.Segments(state, env))) return null;
-        return string.Join(" ", suggested.Where(s => s.IsEnglish).Select(s => s.Raw));
+        return string.Join(" ", suggested.Select((s, i) => (s, i)).Where(x => x.s.IsEnglish).Select(x => DisplayEnglishSegment(suggested, x.i, env)));
     }
 
     /// <summary>変換用の区間分け。末尾の入力途中の子音は確定扱い (n → ん) にして日本語区間の読みに含める。</summary>

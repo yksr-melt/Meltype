@@ -1,43 +1,46 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Yukishiro
 // Copyright (C) 2026 aster-void
+// Copyright (C) 2026 yksr-melt
 
-using System.Globalization;
-using System.Text;
-using Meltype.Config;
 using static Meltype.Libraries.Chars.TextChars;
 
 namespace Meltype.Composition;
 
-/// <summary>入力欄の文脈: キャレットの前後の文字 (英語か日本語か)、変換エンジンに渡す文脈、学習の文脈。</summary>
-internal static partial class CompositionController
+/// <summary>キャレットの前後と直前の確定から、判定・変換・学習の文脈を作る。</summary>
+internal static class CompositionContext
 {
-    private static void BeginComposition(CompositionState state, CompositionEnv env, bool privateInput = false)
-    {
-        state.PrivateComposition = Private(state) || privateInput;
-        state.KeptChoices.Clear();
-        state.ModeByKey = false;
-        state.EscReverted = false;
-        // 設定「英字を主に入力」: 判定せず、打った英字のまま見せる (issue #839)
-        if (env.Settings.EnglishFirstInput && !KanaInput(state, env) && state.Text.Mode == DisplayMode.Auto) state.Text.Mode = DisplayMode.HalfWidthAlphanumeric;
-        state.Text.KanaInput = KanaInput(state, env);
-        state.Text.FullWidthParentheses = env.Settings.FullWidthParentheses;
-        state.Text.SquareBrackets = env.Settings.SquareBrackets;
-    }
+    /// <summary>自分の確定の記録に残す文字数。ふつうの入力欄の、キャレットの前の文字 (Ime の ContextLength) と同じ。</summary>
+    private const int OwnTextLength = 20;
 
     /// <summary>
-    /// 入力欄の文脈 (<see cref="TextEnv.Context"/>)。フロントが渡したキャレットの前後の文字 (この出来事で確定した文字を入れたもの) から決める。
-    /// 自分が確定した直後と、キャレットの前が読めないときは、自分の確定の記録 (最後に確定した語) を使う。
+    /// 入力欄の文脈 (<see cref="TextEnv.Context"/>)。キャレットの前後の文字だけから決める。
+    /// キャレットの前の文字は、フロントが渡した文字 (この出来事で確定した文字を入れたもの)。読めないときと、最後に確定したときのまま変わっていないときは、確定の記録を使う:
+    /// Meltype キーボード・fcitx5・IBus は、確定した文字がアプリに入る前の文字を渡すことがある (Meltype キーボードは、変換中は変換を始めたときに読んだ文字を渡し続ける)。
     /// </summary>
     internal static TextContext ContextOf(CompositionState state, CompositionEnv env)
     {
+        var before = state.Own is { } own && (env.Before is null || env.Before == own.Shown) ? own.Text : CompositionOutput.Before(state.Out, env);
         var after = CompositionOutput.After(env);
-        // 自分が確定した直後は、アプリ側のテキストがまだ更新されていないかもしれないので自分の記録を信じる。
-        var recentOwnCommit = env.NowMs - state.LastCommitTime < OwnCommitTrustMs;
-        if (!recentOwnCommit && CompositionOutput.Before(state.Out, env) is { } before)
-            return new TextContext(before, LanguageOf(before) ?? state.Last?.English, IsEnglishSentence(before), IsEnglishNameContext(before), after, LanguageOfStart(after));
-        var last = state.Last;
-        return new TextContext(last?.Text, last?.English,
-            last is { English: true } && IsEnglishSentence(last.Text), last is { English: true } && IsEnglishNameContext(last.Text), after, LanguageOfStart(after));
+        return new TextContext(before, LanguageBefore(before), IsEnglishSentence(before), IsEnglishNameContext(before), after, LanguageOfStart(after));
+    }
+
+    /// <summary>
+    /// キャレットの前の言語。日本語の文の中の英単語・数字のすぐ後ろは、日本語の続き (今日はGitHub + でも) とも英語 (今日はGitHub + issue) とも決めない。
+    /// 英単語の後ろに空白があれば、Space で英単語を確定して英語を続けるところ (今日はsample + issue)。
+    /// </summary>
+    private static bool? LanguageBefore(string? before)
+    {
+        if (before is [.., > ' ' and < '\x7F'] && IsJapaneseText(before[(before.LastIndexOfAny(['\r', '\n']) + 1)..])) return null;
+        return LanguageOf(before);
+    }
+
+    /// <summary>確定する text を記録する。text を入れる前に、キャレットの前を deleteBefore 文字だけ消す。</summary>
+    internal static void NoteCommit(CompositionState state, CompositionEnv env, int deleteBefore, ComposedText text)
+    {
+        var before = env.Context().PrecedingText ?? "";
+        var committed = before[..^Math.Min(deleteBefore, before.Length)] + CompositionOutput.FromSetting(env.Settings.Punctuation, CompositionOutput.Render(env, text));
+        state.Own = new OwnCommit(env.Before, committed.Length > OwnTextLength ? committed[^OwnTextLength..] : committed);
     }
 
     /// <summary>
