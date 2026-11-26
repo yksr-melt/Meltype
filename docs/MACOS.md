@@ -3,7 +3,8 @@
 </p>
 
 <a name="meltype-for-mac"></a>
-<p align="center"><img src="images/headings/mac/title.svg" alt="Meltype for Mac" height="80"></p>
+
+# Meltype for Mac
 
 <p align="center"><b>雪解けのように、半角/全角の壁を溶かす日本語入力。</b></p>
 
@@ -31,18 +32,16 @@ Mac 版のインストール・設定・困ったときの説明です。キー�
 
 > **プレビュー版です。** 動かないところやビルドエラーがあれば、エラーの全文とあわせて [Issues](https://github.com/yksr-melt/Meltype/issues) で教えてください！
 
-<br>
-
 <a name="動く環境"></a>
-<img src="images/headings/mac/01.svg" alt="動く環境" height="53"><br>
+
+## 動く環境
 
 - macOS 13.3 以降
 - 配布している zip は Apple シリコン (M1 / M2 / M3 / M4 …) の Mac 用です。Intel の Mac では、[ソースからビルド](../mac/README.md#ビルドする)してください (ビルドした CPU 向けのアプリができるので、Apple シリコン版と Intel 版は互換ではありません)
 
-<br>
-
 <a name="インストール"></a>
-<img src="images/headings/mac/02.svg" alt="インストール" height="53"><br>
+
+## インストール
 
 Meltype はアプリではなく「入力ソース」(日本語入力) です。`Meltype.app` をダブルクリックしても何も起きません。
 
@@ -65,10 +64,9 @@ brew tap yksr-melt/Meltype https://github.com/yksr-melt/Meltype.git
 brew install --cask yksr-melt/Meltype/meltype
 ```
 
-<br>
-
 <a name="使い方"></a>
-<img src="images/headings/mac/03.svg" alt="使い方" height="53"><br>
+
+## 使い方
 
 入力メニューの「日本語・英語の自動判定」で使います。JIS キーボードの <kbd>英数</kbd> / <kbd>かな</kbd> で、英数 (直接入力) / 日本語に切り替えます。
 
@@ -76,10 +74,11 @@ brew install --cask yksr-melt/Meltype/meltype
 
 設定・ユーザー辞書・定型文・学習データは、Launchpad の「Meltype の設定」(入力メニューの「Meltype の設定…」でも開けます) で変えます。ファイルは `~/Library/Application Support/Meltype` にあります (入力メニューの「Meltype のデータフォルダを開く」)。
 
-かな漢字変換は、同梱の Mozc で行います。Zenzai (llama.cpp の llama-server と zenz-v3.2-small、同梱) で、キャレットの前の文を文脈にして変換します (既定で ON。CPU で計算します)。使わないときは `config.json` の `"UseZenzai": false`、自分の llama-server・モデルを使うときは `"ZenzaiServerPath"`・`"ZenzaiModelPath"` に場所を書きます。
+かな漢字変換は、同梱の Mozc で行います。Zenzai (llama.cpp の llama-server と zenz-v3.2-small、同梱) で、キャレットの前の文を文脈にして変換します (既定で ON。CPU で計算します)。使わないときは「Meltype の設定」の「Zenzai を使う」を OFF にします。自分の llama-server・モデルは「Zenzai: llama-server の場所」「Zenzai: モデル (GGUF) の場所」で指定できます (`config.json` では `UseZenzai`・`ZenzaiServerPath`・`ZenzaiModelPath`)。
 
 <a name="入力モードのショートカット"></a>
-<img src="images/headings/mac/s06.svg" alt="入力モードのショートカット" height="40">
+
+### 入力モードのショートカット
 
 入力メニューのモード (日本語・英語の自動判定 / 英数の直接入力) は、macOS の「サービス」にキーを割り当てて切り替えられます。最初はキーを割り当てていません。
 
@@ -99,9 +98,10 @@ brew install --cask yksr-melt/Meltype/meltype
 - VS Code・ターミナルなど「コード」のアプリでは、コメント・文字列の外は英数のまま入ります (Windows 版と同じアプリ別設定。既定で主なエディター・ターミナルが入っています)
 
 <a name="ユーザー辞書"></a>
-<img src="images/headings/mac/s02.svg" alt="ユーザー辞書" height="40">
 
-ユーザー辞書は、データフォルダ (`~/Library/Application Support/Meltype`) の `userdict.txt` に、1 行に「読み<Tab>単語」(UTF-8、読みはひらがな) で書きます。動詞・形容詞などは「読み<Tab>単語<Tab>品詞」と 3 列目に品詞 (`動詞ラ行五段`・`形容詞` など。Google 日本語入力・Microsoft IME の品詞名も使えます) を書くと、活用した形も変換できます。品詞を書かなければ名詞です。登録した語は Mozc のユーザー辞書に入り、ほかの語の途中の読み (わたしのことがすき の しの) には当てはめません。
+### ユーザー辞書
+
+「Meltype の設定」の「ユーザー辞書」で登録・編集できます。ファイルを直接編集する場合は、Meltype を終了してから、データフォルダ (`~/Library/Application Support/Meltype`) の `userdict.txt` に、1 行に「読み<Tab>単語」(UTF-8、読みはひらがな) で書きます。動詞・形容詞などは「読み<Tab>単語<Tab>品詞」と 3 列目に品詞 (`動詞ラ行五段`・`形容詞` など。Google 日本語入力・Microsoft IME の品詞名も使えます) を書くと、活用した形も変換できます。品詞を書かなければ名詞です。登録した語は Mozc のユーザー辞書に入り、ほかの語の途中の読み (わたしのことがすき の しの) には当てはめません。
 
 macOS の「ユーザ辞書」の語は、次の手順で `userdict.txt` に取り込めます。
 
@@ -112,15 +112,15 @@ macOS の「ユーザ辞書」の語は、次の手順で `userdict.txt` に取�
 - 空の読みと、タブや改行を含む語は取り込みません
 
 <a name="windows-版との違い"></a>
-<img src="images/headings/mac/s03.svg" alt="Windows 版との違い (今のところ)" height="40">
+
+### Windows 版との違い (今のところ)
 
 - トレイはありません (入力メニューから操作します)
 - 設定「カッコを打ったら中にカーソルを移動」は未対応です
 
-<br>
-
 <a name="困ったとき"></a>
-<img src="images/headings/mac/04.svg" alt="困ったとき" height="53"><br>
+
+## 困ったとき
 
 - **入力ソースに出てこない**: まず入力メニューを見る。無ければ、ターミナルで次を実行する
   ```bash
@@ -154,10 +154,9 @@ Chrome でパスワード欄にフォーカスしたまま別のアプリに切�
 
 Safari や一般のネイティブアプリのパスワード欄は、現在 Meltype で判別できません。入力メニューで入力ソースを ABC に変更してから、パスワードを入力してください。
 
-<br>
-
 <a name="アンインストール"></a>
-<img src="images/headings/mac/05.svg" alt="アンインストール" height="53"><br>
+
+## アンインストール
 
 入力ソースから Meltype を外してから、ターミナルで次を実行します。
 

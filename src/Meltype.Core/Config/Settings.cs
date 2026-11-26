@@ -803,7 +803,7 @@ public sealed class Settings
     public const int CurrentVersion = 13;
 
     [Category("10. 学習"), DisplayName("ユーザー学習を使う"),
-     Description("OFF にすると、選び直した変換・英字 / かなに直した語・予測変換の語句・選んだ英訳を新しく覚えません (今まで覚えた分は使います)。今まで覚えた分を消すときは、トレイの「学習データを消す」を使います。")]
+     Description("OFF にすると、選び直した変換・英字 / かなに直した語・予測変換の語句・選んだ英訳を新しく覚えず、今まで覚えた分も使いません。今まで覚えた分は消えず、ON に戻すとまた使います。消すときは、設定の「学習データ」を使います。")]
     public bool LearningEnabled { get; set; } = true;
 
     /// <summary>このアプリの確定した文字の入れ方 (<see cref="AppRule.Commit"/>)。アプリ別設定に無ければ自動。</summary>
