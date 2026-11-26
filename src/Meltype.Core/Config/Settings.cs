@@ -460,12 +460,8 @@ public sealed class Settings
     public bool CorrectTypos { get; set; } = true;
 
     [Category("5. 変換"), DisplayName("リアルタイム敬語変換"),
-     Description("入力中の文や変換候補を、リアルタイムで丁寧語・謙譲語・ビジネス敬語に変換します (りょうかい → 承知いたしました、きょうはいく → 本日は伺います、かくにんした → 確認いたしました)。Space で元の表現にも戻せます。")]
+     Description("入力中の文や変換候補を、リアルタイムで丁寧語・謙譲語・ビジネス敬語に変換します (りょうかい → 承知いたしました、きょうはいく → 本日は伺います、かくにんした → 確認いたしました)。Ctrl+Alt+K で ON / OFF、Space で元の表現にも戻せます。")]
     public bool KeigoMode { get; set; }
-
-    [Category("5. 変換"), DisplayName("リアルタイム敬語変換の ON / OFF のホットキー"), Platforms(Platform.Windows),
-     Description("リアルタイム敬語変換の ON / OFF に使うキーの組み合わせ (例: Ctrl+Alt+K)。空のときは Ctrl+Alt+K (使えなければ Ctrl+Shift+Alt+K など)。変更は Meltype を起動し直すと効きます。")]
-    public string KeigoHotkey { get; set; } = "";
 
     [Category("7. 記号・スペース"), DisplayName("かなの後ろの /"),
      Description("かなのすぐ後ろで打った / を、中黒「・」(いーろん/ますく → イーロン・マスク) か全角のスラッシュ「／」にします。英字・数字の後ろ (and/or、3/4、URL) は / のままです。文章の入力欄の打ち始めの / は、この設定に関係なく「・」になり、Space で / にできます。「/ のまま」のときも、z/ (設定「z + 記号・hjkl で記号・矢印を入れる」が ON のとき) または / を打って Space で「・」にできます。")]

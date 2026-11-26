@@ -52,6 +52,15 @@ internal static class CompositionController
         return Result(state, env, consumed: true) with { Consumed = false };
     }
 
+    /// <summary>設定の切り替え後に今の表示を作り直す (変換ボックスが空なら消費した応答だけ返す)。</summary>
+    public static SessionResult RefreshView(CompositionState state, CompositionEnv env)
+    {
+        CompositionOutput.Begin(state.Out);
+        if (state.Scene is CompositionScene.Typing or CompositionScene.Converting)
+            CompositionPresentation.UpdateView(state, env);
+        return Result(state, env, consumed: true);
+    }
+
     private static SessionResult Result(CompositionState state, CompositionEnv env, bool consumed) => CompositionOutput.Result(state.Out, env, consumed && !state.Out.PassedCurrent, env.Settings);
 
     /// <summary>出来事を処理した後。表示を作り直し、入力が終わったら押したキーを忘れる。</summary>

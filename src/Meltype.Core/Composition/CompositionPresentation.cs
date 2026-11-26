@@ -66,22 +66,14 @@ internal static class CompositionPresentation
         if (!selected.Expanded) CompositionConversion.Expand(env, selected);
         // 出している文節に Zenzai の答えがあれば、説明の頭に「Zenzai」と出す (学習・選び直しで変わった文節は数えない。issue #1152)
         var zenzai = conversion.Clauses.Any(c => c.ZenzaiText is { } z && c.Text == z);
-        var keigo = env.Settings.KeigoMode;
-        var prefix = (keigo ? "リアルタイム敬語変換 ON · " : "") + (zenzai ? "Zenzai · " : "");
-        var contextHint = (keigo, zenzai) switch
-        {
-            (true, true) => "リアルタイム敬語変換 ON · Zenzai",
-            (true, false) => "リアルタイム敬語変換 ON",
-            (false, true) => "Zenzai",
-            _ => null,
-        };
+        var contextHint = JoinHints(env.Settings.KeigoMode ? "リアルタイム敬語変換 ON" : null, zenzai ? "Zenzai" : null);
         var clauses = conversion.Clauses.Select(c => Composed([c])).ToList();
         return new ComposedView(
             ComposedText.Concat(clauses),
             [.. selected.Candidates.Select(c => Candidate(selected, c))],
             selected.Index,
             true,
-            prefix + "←→ 文節　Space/↓ 候補　1〜9 選択　Shift+←→ 区切り　Enter 確定　Esc 戻る",
+            PrependContextHint(contextHint, "←→ 文節　Space/↓ 候補　1〜9 選択　Shift+←→ 区切り　Enter 確定　Esc 戻る"),
             clauses,
             conversion.Selected,
             CandidateNotes(selected),
@@ -101,19 +93,10 @@ internal static class CompositionPresentation
         var predictions = input.Predictions?.Items ?? [];
         var predictionIndex = input.Predictions?.Index ?? -1;
         var tabConverts = env.Settings.TabConversion && misspelling is null && suggestion is null && predictions.Count == 0;
-        var hint = CompositionText.IsAlphanumeric(input.Text, env) ? "Enter 確定　Space 確定+空白　Shift+Space 日本語で変換　半角/全角 日本語に" : (tabConverts ? "Space/Tab 変換" : "Space 変換") + "　←→ 文節　Enter 確定　F7 カタカナ　F10 英字";
-        var contextHint = suggestion is null ? null : $"Tab → {suggestion} (英字に)";
-        if (contextHint is not null) hint = contextHint + "　" + hint;
-        if (predictions.Count > 0)
-        {
-            contextHint = "Tab 予測の候補を選ぶ";
-            hint = contextHint + "　" + hint;
-        }
-        if (env.Settings.KeigoMode)
-        {
-            contextHint = contextHint is null ? "リアルタイム敬語変換 ON" : $"リアルタイム敬語変換 ON · {contextHint}";
-            hint = "リアルタイム敬語変換 ON · " + hint;
-        }
+        var baseHint = CompositionText.IsAlphanumeric(input.Text, env) ? "Enter 確定　Space 確定+空白　Shift+Space 日本語で変換　半角/全角 日本語に" : (tabConverts ? "Space/Tab 変換" : "Space 変換") + "　←→ 文節　Enter 確定　F7 カタカナ　F10 英字";
+        var actionHint = predictions.Count > 0 ? "Tab 予測の候補を選ぶ" : suggestion is null ? null : $"Tab → {suggestion} (英字に)";
+        var contextHint = JoinHints(env.Settings.KeigoMode ? "リアルタイム敬語変換 ON" : null, actionHint);
+        var hint = PrependContextHint(contextHint, baseHint, actionHint is not null ? "　" : " · ");
         var selected = predictionIndex >= 0 ? PredictionText(predictions[predictionIndex]) : null;
         var display = selected ?? CurrentComposed(input, env, final: false);
         // 設定「入力中も変換候補をいくつか表示」: Space の前から候補を出す (issue #666)
@@ -123,6 +106,19 @@ internal static class CompositionPresentation
             Predictions: predictions.Count > 0 ? predictions.Select(p => ComposedText.Of(SpanKind.Japanese, p.Text)).ToList() : null, SelectedPrediction: predictionIndex, Typed: TypedKeys(input, null, env),
             Committed: selected ?? CurrentComposed(input, env, final: true), ContextHint: contextHint);
     }
+
+    private static string? JoinHints(params ReadOnlySpan<string?> parts)
+    {
+        var nonEmpty = new List<string>(parts.Length);
+        foreach (var part in parts)
+        {
+            if (!string.IsNullOrEmpty(part)) nonEmpty.Add(part);
+        }
+        return nonEmpty.Count == 0 ? null : string.Join(" · ", nonEmpty);
+    }
+
+    private static string PrependContextHint(string? contextHint, string baseHint, string separator = " · ") =>
+        contextHint is null ? baseHint : $"{contextHint}{separator}{baseHint}";
 
     /// <summary>文節 clause の候補 candidate の文字。文全体の文節の案は、確定と同じく案の文節から作る (<see cref="CompositionConversion.SplitWholeSentence"/>)。</summary>
     internal static ComposedText Candidate(Clause clause, string candidate) =>

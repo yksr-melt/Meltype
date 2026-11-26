@@ -366,6 +366,17 @@ internal static class ImeSession
             return PassThrough(state, env);
         }
         var toggle = settings.EffectiveToggleShortcuts.Any(shortcut => shortcut.Matches(vk, modifiers));
+        // 固定のショートカット Ctrl+Alt+K: どの OS でも Core でリアルタイム敬語変換の ON / OFF を切り替える
+        if (vk == KeigoToggleKey && modifiers == KeigoToggleModifiers)
+        {
+            if (key.Repeat) return Consumed;
+            if (env.Parts.ToggleKeigoMode is not { } toggleKeigo) return PassThrough(state, env);
+            var next = toggleKeigo();
+            var nextSettings = env.Settings.Clone();
+            nextSettings.KeigoMode = next;
+            var updatedEnv = ForField(state, env with { Settings = nextSettings });
+            return CompositionController.RefreshView(state.Composition, Env(state, updatedEnv));
+        }
         // 押しっぱなしで、入力モードを何度も切り替えない
         if (key.Repeat && (toggle || plain && vk is ToggleShortcut.Hankaku or VirtualKeys.OemAttn or VirtualKeys.Kana)) return Consumed;
         if (toggle && !composing) return Switch(state, env, !ShowsJapanese(state, before), before, toggle: true);
@@ -530,6 +541,7 @@ internal static class ImeSession
         var keys = settings.EffectiveToggleShortcuts.Where(shortcut => !ToggleShortcut.IsModifier(shortcut.Key))
             .Select(shortcut => new ImeShortcut(shortcut.Key, (int)shortcut.Modifiers))
             .Concat(ModeKeys.Select(key => new ImeShortcut(key, 0)))
+            .Append(new ImeShortcut(KeigoToggleKey, (int)KeigoToggleModifiers))
             .ToList();
         // 英数でもローマ字を見分ける (英語の語を打っている途中は、続きの英字をそのまま通す)
         // ゲームの英数では判定しない: 英字を受け取って送り直すと、移動のキーが一回目に反応しない・離しても押したままになる (#1447)
@@ -554,6 +566,9 @@ internal static class ImeSession
     /// <summary>設定によらず受け取る、モードを切り替えるキー (半角/全角 の 3 つのキーコード・英数・かな・変換・無変換)。</summary>
     private static readonly int[] ModeKeys =
         [ToggleShortcut.Hankaku, VirtualKeys.OemAuto, VirtualKeys.OemEnlw, VirtualKeys.OemAttn, VirtualKeys.Kana, VirtualKeys.Convert, VirtualKeys.NonConvert];
+
+    private const int KeigoToggleKey = 0x4B; // K
+    private const ShortcutModifiers KeigoToggleModifiers = ShortcutModifiers.Control | ShortcutModifiers.Alt;
 
     private static SessionResult Pass => new(false, [], null);
 

@@ -20,7 +20,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly ToolStripMenuItem _zenzaiItem = new() { Enabled = false, Visible = false };
     private readonly ToolStripMenuItem _enabledItem;
     private readonly HotkeyWindow _hotkey;
-    private readonly HotkeyWindow _keigoHotkey;
     private readonly HotkeyWindow _registerHotkey;
     private readonly Control _invoker = new();
     private readonly Icon _onIcon = CreateIcon("あ", Color.FromArgb(0, 120, 212));
@@ -95,7 +94,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         // 英語 / 日本語の自動判定 (OFF なら提案だけ出し、Tab で英字にする)
         _autoDetectionItem = new ToolStripMenuItem("英語 / 日本語を自動で判定する", null, (_, _) => ToggleAutoDetection());
         menu.Items.Add(_autoDetectionItem);
-        _keigoModeItem = new ToolStripMenuItem("リアルタイム敬語変換", null, (_, _) => ToggleKeigoMode());
+        _keigoModeItem = new ToolStripMenuItem("リアルタイム敬語変換 (Ctrl+Alt+K)", null, (_, _) => ToggleKeigoMode());
         menu.Items.Add(_keigoModeItem);
         // プロファイル (仕事用・趣味用・SNS 用など)。一覧は開くたびに作る (設定画面で足したもの・名前を変えたものを出す)
         _profileItem = new ToolStripMenuItem("プロファイル");
@@ -143,11 +142,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _tray = new NotifyIcon { ContextMenuStrip = menu, Visible = true };
         _tray.DoubleClick += (_, _) => ToggleEnabled();
         _hotkey = new HotkeyWindow(ToggleEnabled, HotkeyWindow.WithCustom(_engine.Settings.PauseHotkey, HotkeyWindow.ToggleKeys));
-        _keigoHotkey = new HotkeyWindow(ToggleKeigoMode, HotkeyWindow.WithCustom(_engine.Settings.KeigoHotkey, HotkeyWindow.KeigoToggleKeys), "リアルタイム敬語変換の ON/OFF");
         _registerHotkey = new HotkeyWindow(RegisterSelectedWord, HotkeyWindow.RegisterWordKeys, "単語の登録");
         _engine.ToggleRequested += OnToggleRequested;
         _enabledItem.Text = _hotkey.Name is { } hotkey ? $"Meltype を有効にする (Ctrl+半角/全角, {hotkey})" : "Meltype を有効にする (Ctrl+半角/全角)";
-        if (_keigoHotkey.Name is { } keigoHotkey) _keigoModeItem.Text = $"リアルタイム敬語変換 ({keigoHotkey})";
         _updater = new Updater(() => !AppPaths.IsPortable && _engine.Settings.AutoUpdate, () => Prerelease);
         _updater.Ready += OnUpdateReady;
         ShowUpdateItem();
@@ -513,12 +510,12 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     private void ToggleKeigoMode()
     {
-        _engine.EditSettings(settings => settings.KeigoMode = !settings.KeigoMode);
+        var keigoMode = _engine.Runtime.ToggleKeigoMode();
         UpdateStatus();
-        var message = _engine.Settings.KeigoMode ? "リアルタイム敬語変換 ON" : "リアルタイム敬語変換 OFF";
+        var message = keigoMode ? "リアルタイム敬語変換 ON" : "リアルタイム敬語変換 OFF";
         _composition.ShowNotice(message, 1200);
         if (_engine.Settings.ShowNotifications)
-            ShowBalloonTip(1500, "Meltype", _engine.Settings.KeigoMode ? "リアルタイム敬語変換を ON にしました" : "リアルタイム敬語変換を OFF にしました");
+            ShowBalloonTip(1500, "Meltype", keigoMode ? "リアルタイム敬語変換を ON にしました" : "リアルタイム敬語変換を OFF にしました");
     }
 
     private void SetMode(InputMode mode)
@@ -663,7 +660,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _welcomeForm?.Close();
         _updater.Dispose();
         _hotkey.Dispose();
-        _keigoHotkey.Dispose();
         _registerHotkey.Dispose();
         _tray.Visible = false;
         _tray.Dispose();
@@ -711,14 +707,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
             (MOD_CONTROL | MOD_ALT, 0x7A, "Ctrl+Alt+F11"),
             (MOD_CONTROL | MOD_ALT | MOD_SHIFT, 0x41, "Ctrl+Shift+Alt+A"),
             (MOD_CONTROL | MOD_ALT, 0x13, "Ctrl+Alt+Pause"),
-        ];
-
-        // 敬語モードの ON / OFF。他のアプリと衝突したら順に次の候補を試す。
-        public static readonly (uint Modifiers, uint Key, string Name)[] KeigoToggleKeys =
-        [
-            (MOD_CONTROL | MOD_ALT, 0x4B, "Ctrl+Alt+K"),
-            (MOD_CONTROL | MOD_ALT | MOD_SHIFT, 0x4B, "Ctrl+Shift+Alt+K"),
-            (MOD_CONTROL | MOD_ALT, 0x79, "Ctrl+Alt+F10"),
         ];
 
         // 選んでいる語をユーザー辞書に登録する (Microsoft IME の単語の登録と同じ Ctrl+F7)

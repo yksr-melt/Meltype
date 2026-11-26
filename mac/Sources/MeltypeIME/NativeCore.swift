@@ -14,6 +14,7 @@ private typealias FreeFunction = @convention(c) (UnsafeMutableRawPointer?) -> Vo
 private typealias ConversionReadyCallback = @convention(c) () -> Void
 private typealias SetConversionReadyFunction = @convention(c) (ConversionReadyCallback) -> Void
 private typealias ShutdownFunction = @convention(c) () -> Void
+private typealias KeigoModeFunction = @convention(c) () -> Int32
 
 // ---- 本体から呼ばれる関数 ----
 
@@ -90,6 +91,8 @@ final class NativeCore {
     private let freeFunction: FreeFunction?
     private let setConversionReadyFunction: SetConversionReadyFunction?
     private let shutdownFunction: ShutdownFunction?
+    private let keigoModeFunction: KeigoModeFunction?
+    private let toggleKeigoModeFunction: KeigoModeFunction?
 
     private init() {
         let path = (Bundle.main.privateFrameworksPath ?? "") + "/libMeltypeNative.dylib"
@@ -112,6 +115,8 @@ final class NativeCore {
         freeFunction = symbol("meltype_free", as: FreeFunction.self)
         setConversionReadyFunction = symbol("meltype_set_conversion_ready", as: SetConversionReadyFunction.self)
         shutdownFunction = symbol("meltype_shutdown", as: ShutdownFunction.self)
+        keigoModeFunction = symbol("meltype_keigo_mode", as: KeigoModeFunction.self)
+        toggleKeigoModeFunction = symbol("meltype_toggle_keigo_mode", as: KeigoModeFunction.self)
     }
 
     /// 変換エンジンを用意する。Mozc のヘルパー (mozc/) と Zenzai (zenzai/) は Contents/Resources に置く (build.sh)。
@@ -166,4 +171,10 @@ final class NativeCore {
         defer { freeFunction?(pointer) }
         return URL(string: String(cString: pointer))
     }
+
+    /// リアルタイム敬語変換の ON / OFF。切り替えの判断と永続化は Core に置く。
+    var keigoMode: Bool { (keigoModeFunction?() ?? 0) != 0 }
+
+    @discardableResult
+    func toggleKeigoMode() -> Bool { (toggleKeigoModeFunction?() ?? 0) != 0 }
 }

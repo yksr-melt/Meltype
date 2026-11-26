@@ -152,6 +152,15 @@ public sealed class MeltypeRuntime : IDisposable
     /// <summary>単語の登録のホットキー (Windows) 用: 選んでいた語の読みを推測する。分からなければ空。</summary>
     public string GuessReading(string word) => Converter.Reading(word) ?? "";
 
+    /// <summary>リアルタイム敬語変換の ON / OFF を切り替え、保存後の状態を返す。</summary>
+    public bool ToggleKeigoMode() =>
+        Settings.Edit(s =>
+        {
+            var next = s.Clone();
+            next.KeigoMode = !next.KeigoMode;
+            return next;
+        }, useUnsaved: true)?.KeigoMode ?? Settings.Current.KeigoMode;
+
     /// <summary>変換エンジン (テストでは <see cref="StartConverter"/> を通さずに作って直接使う)。</summary>
     internal HybridConverter CreateConverter(string appDirectory, IMozcHelper? mozcHelper = null)
     {
@@ -219,6 +228,7 @@ public sealed class MeltypeRuntime : IDisposable
             ReadingOf = readingOf,
             NowPlaying = () => _nowPlaying?.Read(),
             Corrected = corrected,
+            ToggleKeigoMode = ToggleKeigoMode,
         };
     }
 

@@ -167,6 +167,36 @@ public static unsafe class Exports
     [UnmanagedCallersOnly(EntryPoint = "meltype_version")]
     public static byte* Version() => ToUtf8(Config.ProjectInfo.CoreVersion);
 
+    /// <summary>リアルタイム敬語変換が有効なら 1、無効なら 0。</summary>
+    [UnmanagedCallersOnly(EntryPoint = "meltype_keigo_mode")]
+    public static int KeigoMode()
+    {
+        try
+        {
+            return Runtime.Settings.Current.KeigoMode ? 1 : 0;
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Error($"敬語変換の状態を読めませんでした: {ex}");
+            return 0;
+        }
+    }
+
+    /// <summary>リアルタイム敬語変換を切り替え、切り替え後が有効なら 1、無効なら 0 を返す。</summary>
+    [UnmanagedCallersOnly(EntryPoint = "meltype_toggle_keigo_mode")]
+    public static int ToggleKeigoMode()
+    {
+        try
+        {
+            return Runtime.ToggleKeigoMode() ? 1 : 0;
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Error($"敬語変換を切り替えられませんでした: {ex}");
+            return 0;
+        }
+    }
+
     /// <summary>
     /// 不具合報告を開く URL (OS・版・実行環境を入れたもの)。platform は "Mac" か "Linux"。meltype_free で解放する。
     /// </summary>

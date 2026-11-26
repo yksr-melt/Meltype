@@ -198,4 +198,7 @@ internal sealed record SessionParts(CompositionDetector Detector, IKanjiConverte
     /// 出来事ごとに読む (フロントは入力欄を作った後に、答えを後から受け取ると知らせることがある: fcitx5)。
     /// </summary>
     public Func<bool> LateResults { get; init; } = () => false;
+
+    /// <summary>リアルタイム敬語変換の ON / OFF を切り替え、切り替え後の状態を返す (全 OS 共通の判断を Core に集約)。</summary>
+    public Func<bool>? ToggleKeigoMode { get; init; }
 }

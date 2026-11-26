@@ -177,6 +177,13 @@ const dictionaries = {
     commentAt: line => line.trimStart().startsWith('#') ? 0 : -1,
     untrimmed: true,
   },
+  // リアルタイム敬語変換の語彙・表現辞書 (# [セクション名] の後にタブ区切り)
+  'keigo.txt': {
+    format: () => [],
+    commentAt: line => line.trimStart().startsWith('#') ? 0 : -1,
+    keysOf: () => [],
+    sections: keigoSection,
+  },
 };
 // 国名の語 (tools/make-countries.mjs で作る)。Core は propernouns.txt と同じく読む
 dictionaries['countries.txt'] = dictionaries['propernouns.txt'];
@@ -233,6 +240,68 @@ function japaneseOriginSection() {
       line.split(' ').some(w => /[\t\u3000,]/.test(w.trim())) ? '日本語由来の節では語をタブ・全角空白・, で区切れない (Core は半角空白でだけ区切る)' : null,
       /[A-Z]/.test(line) ? '日本語由来の節では大文字を使えない (Core は小文字にせずに読むので、小文字で引いても見つからない)' : null,
     ].filter(Boolean);
+  };
+}
+
+/**
+ * keigo.txt のセクション形式の検査を作る。
+ * Core (KeigoConverter) は「# [セクション名]」でセクションを切り替え、各行をタブ区切りで読む。
+ */
+function keigoSection() {
+  const columns = {
+    already_keigo: 1,
+    already_polite: 1,
+    particles: 1,
+    other_subjects: 1,
+    self_subjects: 1,
+    gratitude_following: 1,
+    polite_adjectives: 1,
+    reading_words: 2,
+    respectful_readings: 2,
+    respectful_suffixes: 2,
+    question_readings: 2,
+    question_suffixes: 2,
+    tail_readings: 2,
+    mid_clause_suffixes: 2,
+    respectful_mid_clause_suffixes: 2,
+    tekurete_verbs: 2,
+    tail_text_suffixes: 2,
+    reading_prefixes: [3, 3],
+    in_text_replacements: [3, 3],
+    suru_or_godan_suffixes: [2, 3],
+  };
+  let section = null;
+  let seen = null;
+  return line => {
+    const trimmed = line.trim();
+    if (trimmed === '') return [];
+    const header = /^#\s*\[([a-z_]+)\]$/.exec(trimmed);
+    if (header) {
+      if (!(header[1] in columns)) return [`知らないセクション名「${header[1]}」`];
+      section = header[1];
+      seen = new Map();
+      return [];
+    }
+    if (trimmed.startsWith('#')) return [];
+    if (!section) return ['セクション見出し (# [...]) より前にデータ行がある'];
+    const fields = line.split('\t');
+    const [minCols, maxCols] = Array.isArray(columns[section]) ? columns[section] : [columns[section], columns[section]];
+    if (fields.length < minCols || fields.length > maxCols) {
+      return [`[${section}] のタブ区切りの欄が ${fields.length} 個 (${minCols === maxCols ? minCols : `${minCols}〜${maxCols}`} 個のはず)`];
+    }
+    if (fields.some(f => f !== f.trim())) return ['欄の前後に空白がある'];
+    if (fields[0] === '') return ['1 列目が空'];
+    if (fields.length >= 2 && fields[1] === '') return ['2 列目が空'];
+    if (fields.length === 3 && fields[2] === '') return ['3 列目が空'];
+    if ((section === 'reading_prefixes' || section === 'in_text_replacements') && fields[2] !== '0' && fields[2] !== '1') {
+      return [`[${section}] の 3 列目は 0 または 1 のはず (「${fields[2]}」)`];
+    }
+    const key = fields[0];
+    const value = fields.slice(1).join('\t');
+    const prev = seen.get(key);
+    if (prev) return [`[${section}] で「${key}」が重複 (${prev === value ? '同じ内容' : `「${prev}」と「${value}」`})`];
+    seen.set(key, value);
+    return [];
   };
 }
 

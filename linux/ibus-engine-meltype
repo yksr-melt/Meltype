@@ -31,6 +31,8 @@ _lib.meltype_ime_handle.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
 _lib.meltype_ime_handle.restype = ctypes.c_void_p
 _lib.meltype_ime_destroy.argtypes = [ctypes.c_void_p]
 _lib.meltype_shutdown.restype = None
+_lib.meltype_keigo_mode.restype = ctypes.c_int
+_lib.meltype_toggle_keigo_mode.restype = ctypes.c_int
 
 # 本体のプロトコルの版 (ImeHost.Version)
 IME_VERSION = 1
@@ -185,6 +187,12 @@ class MeltypeEngine(IBus.Engine):
         self._mode_property = IBus.Property(key="InputMode", prop_type=IBus.PropType.NORMAL, label=IBus.Text.new_from_string("あ"),
                                             symbol=IBus.Text.new_from_string("あ"), sensitive=False, visible=True)
         self._properties.append(self._mode_property)
+        self._keigo_state = bool(_lib.meltype_keigo_mode())
+        self._keigo_property = IBus.Property.new(
+            "keigo_mode", IBus.PropType.TOGGLE, IBus.Text.new_from_string("リアルタイム敬語変換 (Ctrl+Alt+K)"),
+            "", IBus.Text.new_from_string(""), True, True,
+            IBus.PropState.CHECKED if self._keigo_state else IBus.PropState.UNCHECKED, IBus.PropList())
+        self._properties.append(self._keigo_property)
         self._properties.append(IBus.Property.new(
             "report", IBus.PropType.NORMAL, IBus.Text.new_from_string("不具合の報告・提案… (Linux 版はプレビュー版です)"),
             "", IBus.Text.new_from_string(""), True, True, IBus.PropState.UNCHECKED, IBus.PropList()))
@@ -216,7 +224,15 @@ class MeltypeEngine(IBus.Engine):
                 self._pending_mode = mode
             else:
                 self._show_mode(*mode)
+        self._sync_keigo_property(_lib.meltype_keigo_mode())
         return output
+
+    def _sync_keigo_property(self, enabled):
+        enabled = bool(enabled)
+        if enabled != self._keigo_state:
+            self._keigo_state = enabled
+            self._keigo_property.set_state(IBus.PropState.CHECKED if enabled else IBus.PropState.UNCHECKED)
+            self.update_property(self._keigo_property)
 
     def do_set_cursor_location(self, x, y, w, h):
         if self._pending_mode:
@@ -310,6 +326,7 @@ class MeltypeEngine(IBus.Engine):
     def do_focus_in(self):
         global _focused
         _focused = self
+        self._sync_keigo_property(_lib.meltype_keigo_mode())
         self.register_properties(self._properties)
         self._defer_mode = True
         try:
@@ -347,7 +364,9 @@ class MeltypeEngine(IBus.Engine):
         self.send("CandidateClicked", index=page * self._lookup.get_page_size() + index)
 
     def do_property_activate(self, prop_name, state):
-        if prop_name == "report":
+        if prop_name == "keigo_mode":
+            self._sync_keigo_property(_lib.meltype_toggle_keigo_mode())
+        elif prop_name == "report":
             try:
                 subprocess.Popen(["xdg-open", _report_url()])
             except OSError as error:
