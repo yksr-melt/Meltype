@@ -2,6 +2,9 @@
 // Copyright (C) 2026 Yukishiro
 
 using System.Runtime.InteropServices;
+using Meltype.Diagnostics;
+using Meltype.Dictionary;
+using Meltype.Ime;
 using Meltype.Input;
 
 namespace Meltype.Composition;
@@ -18,8 +21,6 @@ internal sealed class CompositionService : IDisposable
     private readonly ModeIndicatorWindow _indicator = new();
     private readonly Func<Config.Settings> _settings;
     private readonly KeyInjector _injector = new();
-    // Mozc (同梱の mozc\meltype_mozc_helper.exe) と Zenzai (zenzai\)
-    private readonly HybridConverter _hybrid;
 
     /// <param name="runtime">設定・辞書・学習データ (どの OS も同じもの)。</param>
     /// <param name="settings">Meltype の設定 (入力欄ごとの設定は <see cref="Ime.ImeHost"/> が決める)。変換ボックスの見た目を決める。</param>
@@ -28,35 +29,22 @@ internal sealed class CompositionService : IDisposable
         _invoker = invoker;
         Runtime = runtime;
         _settings = settings;
-        _hybrid = runtime.CreateConverter(AppContext.BaseDirectory);
-        _hybrid.ResultReady += () => ConversionReady?.Invoke();
-        _hybrid.WarmUp();
-        // 直したときの「Zenzai を使う」も覚えておく (報告を開くまでに設定を変えても、直したときの設定で報告する。issue #1197)
-        Parts = runtime.SessionParts(_hybrid, _hybrid.Candidates, _hybrid.Reading, correction => Corrections.Add(correction with { Zenzai = _settings().UseZenzai })) with { LateResults = () => true };
+        // Mozc (同梱の mozc\meltype_mozc_helper.exe) と Zenzai (zenzai\)
+        runtime.StartConverter(AppContext.BaseDirectory);
+        runtime.ConversionReady += () => ConversionReady?.Invoke();
     }
 
     public MeltypeRuntime Runtime { get; }
 
     /// <summary>
-    /// 入力欄の本体を作る部品 (2 つのフロントの <see cref="Ime.ImeHost"/> に渡す)。辞書・学習データ・変換エンジンは、ほかの入力欄・変換ボックスと共有する
-    /// (UI スレッドからだけ使うので排他は要らない)。
+    /// 2 つのフロントの入力欄の本体を作る。辞書・学習データ・変換エンジンは、ほかの入力欄・変換ボックスと共有する (UI スレッドからだけ使うので排他は要らない)。
     /// </summary>
-    public SessionParts Parts { get; }
+    public ImeHost CreateHost(IImeEnvironment environment, Func<Config.Settings> settings) =>
+        // 直したときの「Zenzai を使う」も覚えておく (報告を開くまでに設定を変えても、直したときの設定で報告する。issue #1197)
+        Runtime.CreateHost(environment, settings, () => true, correction => Corrections.Add(correction with { Zenzai = _settings().UseZenzai }));
 
     /// <summary>背景の変換の結果が届いた (入力欄に知らせる)。ワーカーのスレッドで呼ぶ。</summary>
     public event Action? ConversionReady;
-
-    /// <summary>選び直した変換の学習データ (トレイの「学習データをリセット」で消す)。</summary>
-    public ConversionHistory History => Runtime.History;
-
-    /// <summary>ユーザーが英字 / かなに直した語の学習 (トレイの「学習データをリセット」で消す)。</summary>
-    public LanguageMemory Languages => Runtime.Languages;
-
-    /// <summary>選んだ英訳の記録 (トレイの「学習データをリセット」で消す)。</summary>
-    public TranslationHistory TranslationHistory => Runtime.TranslationHistory;
-
-    /// <summary>予測変換のために覚えた、確定した語句。</summary>
-    public PhraseHistory Phrases => Runtime.Phrases;
 
     /// <summary>ユーザー辞書 (トレイの「ユーザー辞書...」で編集する)。</summary>
     public UserDictionary UserDictionary => Runtime.UserDictionary;
@@ -67,29 +55,6 @@ internal sealed class CompositionService : IDisposable
     /// <summary>最近自分で直した誤判定 (メモリの中だけ。トレイの「直した誤判定を報告...」: issue #284)。</summary>
     public CorrectionLog Corrections { get; } = new();
 
-
-    /// <summary>
-    /// ユーザー辞書の登録画面用: 入力された読み (ローマ字でもよい) をひらがなにする。
-    /// </summary>
-    public string ToReading(string input)
-    {
-        var text = input.Trim();
-        return text.Any(char.IsAsciiLetter) ? Runtime.Detector.Romaji.ConvertLenient(text.ToLowerInvariant(), final: true) : text;
-    }
-
-    /// <summary>ユーザー辞書の登録画面用: 語の読みを推測する。分からなければ空。</summary>
-    public string GuessReading(string word) => _hybrid.Reading(word) ?? "";
-
-    // 登録画面は入力のスレッド (UI スレッド) から呼ぶ。入力のように待たずに返すと、ヘルパーが答える前の空の一覧になる
-    private const int SuggestWaitMs = 1500;
-
-    /// <summary>ユーザー辞書の登録画面用: 読みの変換候補 (Mozc の候補 → カタカナ)。</summary>
-    public IReadOnlyList<string> SuggestWords(string reading)
-    {
-        var list = _hybrid.Candidates(reading, Environment.TickCount64 + SuggestWaitMs).Where(word => word.Length > 0).ToList();
-        if (CompositionText.ToKatakana(reading) is { Length: > 0 } katakana && !list.Contains(katakana)) list.Add(katakana);
-        return list;
-    }
 
     public FocusInspector Focus { get; } = new();
 

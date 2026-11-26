@@ -10,18 +10,30 @@
 | `src/Meltype.Core/` | OS に依存しない部分 (Windows・Mac・Linux 共通)。英語 / 日本語の判定・ローマ字・変換ボックスの中身・辞書・学習・設定 |
 | `src/Meltype.Windows/` | Windows 版 (キーボードフック・変換ボックスの画面・IMM32 / TSF・UI Automation・トレイ) |
 | `src/Meltype.Core.CApi/` | Mac・Linux・Android 版の IME から呼ぶ C の関数 (Meltype.Core を NativeAOT で dylib・so にする) |
+| `src/Meltype.Settings/` | 設定アプリ (Windows・Mac・Linux 共通、Avalonia)。設定・ユーザー辞書・定型文・学習データ・バックアップ。各 OS のビルドが NativeAOT で同梱する |
 | `mac/` | Mac 版の IME (Swift、Input Method Kit) |
 | `linux/` | Linux 版 (IBus・fcitx5 のエンジン) |
 | `native/` | Meltype IME (Windows の TSF の DLL) と Mozc のヘルパー ([native/mozc/README.md](../../native/mozc/README.md)。Mozc-UT の辞書は [MOZC-UT.md](MOZC-UT.md)) |
 | `src/Meltype.Core.Tests/` | 共通部分のテスト (判定・変換ボックス・学習・品質テスト)。Mac・Linux でも動く |
 | `src/Meltype.Windows.Tests/` | Windows 版のテストと調査用の道具 (共通部分のテストもまとめて流す) |
+| `src/Meltype.Benchmark/` | 打鍵の処理の計測 ([README](../../src/Meltype.Benchmark/README.md)) |
 | `dictionaries/` | 組み込みの辞書 |
+| `tools/` | 辞書の生成と検査 |
 | `packaging/` | 配布用のファイル (インストーラー・自動更新・Meltype IME の登録) |
 | `web/` | 公式サイトと報告フォーム (Cloudflare Workers) |
 | `docs/` | 利用者向けの文書 (使い方・OS ごとの説明)。`docs/release-notes/` はリリースノート |
 | `docs/dev/` | 開発者向けの文書 (開発・設計・リリースの手順) |
 
-`src/Meltype.Core/` の中は、`Ime/` (`ImeSession`。入力の判断を受け持ち、各 OS のフロントはこれを呼ぶ)、`Composition/` (変換ボックスの中身: 英語の区間の判定・変換の流れ・候補・文脈・学習・ユーザー辞書・もしかして)、`Detection/` (ローマ字・英語・辞書・かな・打ち間違いの判定)、`Input/` (キーの表し方・コードの行の判定)、`NowPlaying/` (再生中の曲を OS から読む)、`Config/`・`Diagnostics/` (設定・ログ) に分かれています。
+`src/Meltype.Core/` の中は、次のように分かれています。参照の向きは AGENTS.md の「構成」のとおりです。
+
+- `Ime/`: `ImeHost`・`ImeSession` (入力の判断を受け持ち、各 OS のフロントはこれを呼ぶ)・部品の組み立て (`MeltypeRuntime`)・コードの行の判定
+- `Composition/`: 変換ボックスの中身 (変換の流れ・候補・文脈・確定・学習の呼び出し)。`Composition/Utility/` はユーティリティ変換 (計算・日付・再生中の曲など)
+- `Detection/`: ローマ字・英語・辞書・かな・打ち間違いの判定と、英語か日本語かの学習
+- `Learning/`: 変換の学習と予測変換
+- `Engine/`: 変換エンジン (Mozc・Zenzai)
+- `Dictionary/`: ユーザー辞書・補助辞書・英訳・意味・もしかしての辞書・スニペット
+- `Libraries/Chars/`・`Libraries/Lexicon/`: どこからでも使う文字の判定と、同梱の辞書の読み込み
+- `Input/`・`Config/`・`Diagnostics/`: キーの表し方・設定・ログと誤判定の報告
 
 ## Windows でビルドして試す
 
@@ -85,6 +97,7 @@ dotnet run --project src/Meltype.Core.Tests                 # すべてのテス
 dotnet run --project src/Meltype.Core.Tests -- --eval       # 品質テスト
 dotnet run --project src/Meltype.Core.Tests -- --version    # 版 (Meltype.Core)
 dotnet run --project src/Meltype.Core.Tests -- --repro kyouhagoogle enter   # 打ったときの見え方と確定の結果
+dotnet run --project src/Meltype.Core.Tests -- --repro 26niti space --learn "niti → （日）"  # 先に niti を （日） と確定して学習させてから打つ (--learn は 5 つまで)
 dotnet run --project src/Meltype.Core.Tests -- --mixed-bench out.json       # 日本語の文の中の英単語が正しく分かれるか (約 550 例)
 dotnet run --project src/Meltype.Core.Tests -- --expect src/Meltype.Core.Tests/data/issue-cases.tsv out.json  # 報告された誤変換 (MELTYPE_MOZC が要る)
 dotnet run -c Release --project src/Meltype.Core.Tests -- --perf perf.json  # 変換エンジンの遅延 (p95 / p99)・候補の数・控え・メモリ・正解率 (MELTYPE_MOZC が要る)
@@ -98,7 +111,7 @@ Windows のアプリ本体は GUI アプリ (WinExe) なので、cmd では版�
 
 `--mixed-bench` は `MELTYPE_BENCH_OFFSET=31` などで調べる語を変えられます。
 
-機能を足す前と後で変換エンジンの速さ・精度を比べるときは、両方の版で `--perf` を動かして `--perf-compare 前.json 後.json` で比べます。測る項目と比べ方は [tools/performance](../../tools/performance/README.md) にあります。
+機能を足す前と後で変換エンジンの速さ・精度を比べるときは、両方の版で `--perf` を動かして `--perf-compare 前.json 後.json` で比べます。測る項目と比べ方は [src/Meltype.Benchmark](../../src/Meltype.Benchmark/README.md) にあります。
 
 ### 品質テスト
 
@@ -166,11 +179,11 @@ GitHub Actions の配布ジョブは、公開する前に Microsoft Defender の
 手元で配布するときも、管理者の PowerShell で次を実行してください。
 
 ```powershell
-tools/Scan-WindowsPackage.ps1 -Path @('dist/Meltype', 'dist/Meltype-<version>-setup.exe')
+packaging/Scan-WindowsPackage.ps1 -Path @('dist/Meltype', 'dist/Meltype-<version>-setup.exe')
 ```
 
 検査は駆除せずに行い、検出した内容をコマンドの出力に残します。検出されたら、対象のファイル・版・ハッシュ・Defender の定義の版を確かめ、誤検知が疑われるときは [Microsoft の審査窓口](https://www.microsoft.com/en-us/wdsi/filesubmission) に出してください。
-検査に通ったことは、その時点の判定で、安全や将来の判定を保証するものではありません。検査に失敗したときの動きは `powershell -NoProfile -File tools/Test-WindowsPackageScan.ps1` で確かめられます。
+検査に通ったことは、その時点の判定で、安全や将来の判定を保証するものではありません。検査に失敗したときの動きは `powershell -NoProfile -File packaging/Test-WindowsPackageScan.ps1` で確かめられます。
 
 ## 動作の仕組み
 

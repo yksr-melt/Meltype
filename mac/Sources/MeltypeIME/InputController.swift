@@ -63,7 +63,9 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         if let app, Self.authenticationApps.contains(app) {
             // ユーザー名は通常自動で入るため、SecurityAgent ではユーザー名欄も含めて打鍵を通す。
             // 未確定入力の取消に必要な属性だけを送り、打鍵の内容や周辺文字列は Core に渡さない。
+            // 打鍵は、今の状態だけを受け取る出来事 (StateRequested) にする。
             event["field"] = ["traits": ["Password"]]
+            if keyEvent != nil { event["type"] = "StateRequested" }
         } else {
             if let client {
                 event["field"] = field(of: client, app: app)
@@ -129,19 +131,22 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
     }
 
     override func recognizedEvents(_ sender: Any!) -> Int {
-        Int(NSEvent.EventTypeMask.keyDown.rawValue)
+        // CapsLock は keyDown にならず、flagsChanged だけで届く
+        Int(NSEvent.EventTypeMask.keyDown.rawValue | NSEvent.EventTypeMask.flagsChanged.rawValue)
     }
 
     override func handle(_ event: NSEvent!, client sender: Any!) -> Bool {
-        guard let event, event.type == .keyDown, let client = sender as? IMKTextInput else { return false }
+        guard let event, event.type == .keyDown || event.type == .flagsChanged && Int(event.keyCode) == kVK_CapsLock,
+              let client = sender as? IMKTextInput else { return false }
         return send("KeyPressed", client: client, keyEvent: event)?.result.consumed ?? false
     }
 
     private func key(of event: NSEvent) -> [String: Any] {
         let flags = event.modifierFlags
+        // flagsChanged (CapsLock) の isARepeat・characters は例外になる。characters は KeyMapping.text が読まない
         var key: [String: Any] = ["vk": KeyMapping.virtualKey(for: event),
                                   "shift": flags.contains(.shift), "ctrl": flags.contains(.control),
-                                  "alt": flags.contains(.option), "command": flags.contains(.command), "repeat": event.isARepeat]
+                                  "alt": flags.contains(.option), "command": flags.contains(.command), "repeat": event.type == .keyDown && event.isARepeat]
         // event.characters は「見た目の 1 文字」で、UTF-16 要素が複数のことがある
         // (補助面の文字・結合文字・ZWJ 絵文字・異体字セレクター)。1 スカラーならそのコードポイント、複数ならそのまま渡す
         let text = KeyMapping.text(for: event)
@@ -185,8 +190,8 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         menu.addItem(.separator())
         let importItem = menu.addItem(withTitle: "macOSのユーザー辞書を取り込む…", action: #selector(importUserDictionary(_:)), keyEquivalent: "")
         importItem.target = self
-        let configItem = menu.addItem(withTitle: "Meltype の設定ファイル (config.json) を開く…", action: #selector(openConfigFile(_:)), keyEquivalent: "")
-        configItem.target = self
+        let settingsItem = menu.addItem(withTitle: "Meltype の設定…", action: #selector(openSettings(_:)), keyEquivalent: "")
+        settingsItem.target = self
         menu.addItem(withTitle: "Meltype のデータフォルダを開く (設定・ユーザー辞書)", action: #selector(openDataFolder(_:)), keyEquivalent: "")
         menu.addItem(withTitle: "不具合の報告・提案… (Mac 版はプレビュー版です)", action: #selector(openReport(_:)), keyEquivalent: "")
         return menu
@@ -257,15 +262,16 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         NSWorkspace.shared.open(url)
     }
 
-    /// 設定ファイル (Windows 版と共通の config.json) を、無ければ空の設定で作ってから、既定のエディターで開く (issue #508)。
-    /// 空の設定にも、本体が隣に書く config.schema.json を指定しておく (エディターで項目の補完・説明が出る)。
-    @objc private func openConfigFile(_ sender: Any?) {
-        guard let directory = NativeCore.shared.dataDirectory else { return }
-        let url = URL(fileURLWithPath: directory, isDirectory: true).appendingPathComponent("config.json")
-        if !FileManager.default.fileExists(atPath: url.path) {
-            try? "{\n  \"$schema\": \"./config.schema.json\"\n}\n".write(to: url, atomically: true, encoding: .utf8)
+    /// 設定アプリ (Meltype Settings.app)。install.sh は ~/Applications に、Homebrew は /Applications に入れるので、場所ではなく bundle ID で探す。
+    @objc private func openSettings(_ sender: Any?) {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "io.github.yksr-melt.Meltype.Settings") else {
+            let alert = NSAlert()
+            alert.messageText = "Meltype の設定アプリが見つかりません"
+            alert.informativeText = "Meltype をインストールし直してください (Meltype Settings.app が ~/Applications に入ります)。"
+            alert.runModal()
+            return
         }
-        NSWorkspace.shared.open(url)
+        NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
     }
 
     @objc private func openDataFolder(_ sender: Any?) {

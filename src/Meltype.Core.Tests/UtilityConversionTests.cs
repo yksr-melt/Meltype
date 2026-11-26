@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 aster-void
 
-using Meltype.Composition;
 using Meltype.Composition.Utility;
+using Meltype.Engine;
 using Meltype.Input;
+using Meltype.Learning;
 using static Meltype.Tests.CompositionTests;
 
 namespace Meltype.Tests;
@@ -178,7 +179,7 @@ internal static class UtilityConversionTests
             Assert.Equal("京", history.Get("きょう"));
             Assert.Equal("火曜日", history.Get("かようび"), "読みに ようび がある語は残す");
             foreach (var (reading, text, kept) in new[] { ("じこう", "晩秋の候", false), ("くりっぷぼーど", "パスワード123", false), ("じこう", "時効", true), ("れいわ8ねん", "2026年", true), ("くりっぷぼーど", "クリップボード", true) })
-                Assert.Equal(!kept, CompositionLearning.IsStale(reading, text), $"{reading} → {text}");
+                Assert.Equal(!kept, StaleWords.IsStale(reading, text), $"{reading} → {text}");
             var phrases = Path.Combine(directory, "phrases.txt");
             File.WriteAllLines(phrases, ["きょうは\t2026/11/10は\t3\t0", "きょうは\t今日は\t3\t0", "きょうの\t今日の！\uFFFC他のメッセージオプション\t3\t0"]);
             Assert.Equal("今日は", string.Join(",", new PhraseHistory(phrases).StartingWith("きょ")), "予測変換の語句も捨てる");
@@ -240,7 +241,7 @@ internal static class UtilityConversionTests
         // よく使う語 (readings.txt) とカタカナ語は、どれも呼び名の並びにならない。なれば、普通の変換が漢字の候補に置き換わる
         foreach (var name in new[] { "readings.txt", "readings-extra.txt", "katakana.txt" })
         {
-            var words = Meltype.Detection.DictionarySource.DataLines(Meltype.Detection.DictionarySource.ReadEmbedded(name)).Select(l => l.Split('\t')[0]);
+            var words = Libraries.Lexicon.DictionarySource.DataLines(Libraries.Lexicon.DictionarySource.ReadEmbedded(name)).Select(l => l.Split('\t')[0]);
             Assert.Equal("", string.Join(",", words.Where(w => Kanji(w).Count > 0).Take(10)), name);
         }
     }
@@ -283,6 +284,6 @@ internal static class UtilityConversionTests
         Assert.Equal("fcitx5", VersionConversion.LinuxFrontOf(["/usr/bin/fcitx5", "-d"]));
         Assert.Equal("IBus", VersionConversion.LinuxFrontOf(["python3", "/opt/meltype/ibus-engine-meltype", "--ibus"]));
         Assert.Equal("端末", VersionConversion.LinuxFrontOf(["/usr/bin/python3", "/home/u/Meltype-tty/meltype-tty"]));
-        Assert.Equal(null, VersionConversion.LinuxFrontOf(["python3", "tools/test-native-boundaries.py", "libMeltypeNative.so"]));
+        Assert.Equal(null, VersionConversion.LinuxFrontOf(["python3", "src/Meltype.Core.CApi/tests/test-native-boundaries.py", "libMeltypeNative.so"]));
     }
 }

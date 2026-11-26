@@ -25,10 +25,14 @@ internal static class Program
             case "--eval":
                 Quality.Print(Quality.Run());
                 return 0;
+            case "--tune-weights":
+                // 日英の区切りの辺をつなぐ重みを 1 つずつ動かして、品質テストの打鍵の例が崩れない範囲と、外れが減る重みの組を出す (WeightTuning)
+                WeightTuning.Run();
+                return 0;
             case "--repro":
                 // 打ったキーをそのまま打ってみて、結果を JSON で返す (GitHub の bot が報告を再現するのに使う)。
-                //   --repro nihongowohanasu [enter|space|none]
-                Repro.Type(args.ElementAtOrDefault(1) ?? "", args.ElementAtOrDefault(2) ?? "enter");
+                //   --repro nihongowohanasu [enter|space|none] [--learn "打ったキー → 確定した語"]…
+                Repro.Type(args[1..]);
                 return 0;
             case "--segments":
                 // 調べる用: 打った文字の単位と、英語 / 日本語の区間分け (Enter の前) と、区間分けのラティスの道と重み
@@ -37,7 +41,7 @@ internal static class Program
                     var env = TestSupport.Env(CompositionTests.Detector);
                     foreach (var c in args.ElementAtOrDefault(1) ?? "") Composition.CompositionText.Append(text, env, c);
                     Console.OutputEncoding = new System.Text.UTF8Encoding(false);
-                    Console.WriteLine("units: " + string.Join(" ", Composition.CompositionText.Units(text).Select(u => $"{u.Raw}={u.Kana}")) + (Composition.CompositionText.Pending(text).Length > 0 ? $" +{Composition.CompositionText.Pending(text)}" : ""));
+                    Console.WriteLine("units: " + string.Join(" ", Composition.TypedMarks.Read(text, env).Select(u => $"{u.Raw}={u.Kana}")) + (Composition.CompositionText.Pending(text).Length > 0 ? $" +{Composition.CompositionText.Pending(text)}" : ""));
                     CompositionTests.Detector.LatticeTrace = Console.WriteLine;
                     var segments = Composition.CompositionText.Segments(text, env);
                     CompositionTests.Detector.LatticeTrace = null;
@@ -55,13 +59,8 @@ internal static class Program
                 // --mixed-bench 出力ファイル: 日本語の文の中に英単語を入れて打ち、英単語と日本語に正しく分かれるかを数える (区切りの点数化の試作の比較用)
                 Checks.MixedBench(args[1]);
                 return 0;
-            case "--mozc-compare":
-                // --mozc-compare 入力ファイル 出力ファイル: 今の変換と、文を丸ごと Mozc に渡す変換を比べる (MELTYPE_MOZC が要る)
-                MozcCompare.Run(args[1], args[2]);
-                Henkan.Shutdown();
-                return 0;
             case "--perf":
-                // --perf 出力ファイル [例文のファイル] [回数]: 変換エンジンの遅延・段階ごとの時間・候補の数・控えの使い回し・メモリ・正解率 (tools/performance/README.md)
+                // --perf 出力ファイル [例文のファイル] [回数]: 変換エンジンの遅延・段階ごとの時間・候補の数・控えの使い回し・メモリ・正解率 (src/Meltype.Benchmark/README.md)
                 Performance.Measure(args[1], args.ElementAtOrDefault(2), args.Length > 3 ? int.Parse(args[3], CultureInfo.InvariantCulture) : Performance.DefaultSamples);
                 Henkan.Shutdown();
                 return 0;

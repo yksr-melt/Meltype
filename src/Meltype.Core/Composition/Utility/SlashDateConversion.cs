@@ -3,6 +3,7 @@
 
 using System.Globalization;
 using System.Text.RegularExpressions;
+using Meltype.Composition;
 
 namespace Meltype.Composition.Utility;
 

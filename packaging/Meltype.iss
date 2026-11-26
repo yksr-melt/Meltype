@@ -76,6 +76,7 @@ Type: files; Name: "{app}\uninstall.ps1"
 
 [Icons]
 Name: "{userprograms}\Meltype"; Filename: "{app}\Meltype.exe"; WorkingDir: "{app}"; Comment: "Meltype: 日本語と英語を自動で打ち分ける"
+Name: "{userprograms}\Meltype の設定"; Filename: "{app}\MeltypeSettings.exe"; WorkingDir: "{app}"; Comment: "Meltype の設定・ユーザー辞書・定型文・学習データ"
 Name: "{userstartup}\Meltype"; Filename: "{app}\Meltype.exe"; WorkingDir: "{app}"; Comment: "Meltype: 日本語と英語を自動で打ち分ける"; Tasks: startup
 
 [Run]
@@ -119,7 +120,7 @@ begin
   Result := ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe');
 end;
 
-// 動いている Meltype (と Mozc のヘルパー) を止める。管理者として動いている Meltype も止まるよう、まず --exit で終了の合図を送る。
+// 動いている Meltype (と Mozc のヘルパー・設定アプリ) を止める。管理者として動いている Meltype も止まるよう、まず --exit で終了の合図を送る。
 procedure StopMeltype();
 var
   ResultCode: Integer;
@@ -130,6 +131,7 @@ begin
     Exec(Installed, '--exit', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM Meltype.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM meltype_mozc_helper.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM MeltypeSettings.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Sleep(300);
 end;
 

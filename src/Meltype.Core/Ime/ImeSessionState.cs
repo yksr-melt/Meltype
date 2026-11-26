@@ -4,6 +4,7 @@
 using System.Text;
 using Meltype.Composition;
 using Meltype.Config;
+using Meltype.Dictionary;
 
 namespace Meltype.Ime;
 

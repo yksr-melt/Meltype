@@ -2,8 +2,9 @@
 // Copyright (C) 2026 Eisenferik
 
 using System.Globalization;
-using Meltype.Composition;
 using Meltype.Detection;
+using Meltype.Dictionary;
+using Meltype.Libraries.Lexicon;
 
 namespace Meltype.Tests;
 

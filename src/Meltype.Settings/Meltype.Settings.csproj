@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Meltype の設定アプリ (Windows・Mac・Linux 共通)。設定のほか、ユーザー辞書・定型文・学習データ・バックアップを扱う。
+    入力する Meltype とは別のプロセスで、データフォルダーのファイルを Meltype.Core で読み書きする (入力する側は、変わったファイルを読み直す)。
+    配布物は NativeAOT でビルドする (各 OS の build スクリプト):
+      dotnet publish src/Meltype.Settings -c Release -r <RID>
+  -->
+  <PropertyGroup>
+    <!-- WinExe: Windows でコンソールの窓を出さない (Mac・Linux では Exe と同じ) -->
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>MeltypeSettings</AssemblyName>
+    <RootNamespace>Meltype.SettingsApp</RootNamespace>
+    <Product>Meltype</Product>
+    <ApplicationIcon>..\..\native\tip\meltype.ico</ApplicationIcon>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <BuiltInComInteropSupport>false</BuiltInComInteropSupport>
+    <!-- 配布物は NativeAOT で publish する。各 OS の build スクリプトは -r <RID> だけを付ける -->
+    <PublishAot>true</PublishAot>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Desktop" Version="12.2.0" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.2.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Meltype.Core\Meltype.Core.csproj" />
+    <!-- 設定の項目は Settings のプロパティと属性 (DisplayName など) を reflection で読む。NativeAOT で削られないようにする -->
+    <TrimmerRootAssembly Include="Meltype.Core" />
+  </ItemGroup>
+</Project>

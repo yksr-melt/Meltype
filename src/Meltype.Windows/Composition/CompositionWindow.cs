@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Yukishiro
 
 using System.Drawing.Drawing2D;
+using Meltype.Dictionary;
 
 namespace Meltype.Composition;
 

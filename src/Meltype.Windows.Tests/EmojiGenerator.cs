@@ -19,7 +19,7 @@ internal static class EmojiGenerator
 
     public static void Run(string annotations, string derived, string output)
     {
-        using var converter = new Composition.MozcConverter(new Composition.MozcHelperProcess(TestRunner.MozcHelper() ?? throw new InvalidOperationException("MELTYPE_MOZC に Mozc の変換ヘルパーを指定してください"),
+        using var converter = new Engine.MozcConverter(new Engine.MozcHelperProcess(TestRunner.MozcHelper() ?? throw new InvalidOperationException("MELTYPE_MOZC に Mozc の変換ヘルパーを指定してください"),
             Path.Combine(Path.GetTempPath(), "meltype-mozc-profile")));
         var readingCache = new Dictionary<string, string?>();
         string? ReadingOf(string term)

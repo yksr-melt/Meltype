@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 aster-void
 
+using Meltype.Composition;
+
 namespace Meltype.Composition.Utility;
 
-/// <summary>設定「計算式を変換すると結果を候補に出す」: 数字と + - * / ( ) だけの式に、結果と「式=結果」を出す (issue #295)。</summary>
+/// <summary>設定「計算式を変換すると結果を候補に出す」: 数字と + - * / ^ ( ) だけの式に、結果と「式=結果」を出す (issue #295)。</summary>
 internal sealed class CalculatorConversion : IUtilityConversion
 {
     public UtilityCandidates? Convert(UtilityInput input)

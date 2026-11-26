@@ -4,7 +4,7 @@
 using System.Globalization;
 using System.Text;
 using Meltype.Composition;
-using Meltype.Detection;
+using Meltype.Ime;
 
 namespace Meltype;
 
@@ -40,53 +40,14 @@ internal static class SelfTest
             Directory.CreateDirectory(Config.AppPaths.DataDirectory);
             return Config.AppPaths.DataDirectory;
         });
-        Check("設定", () => new Config.Settings().Clone().Normalize().Mode.ToString());
-        Check("設定の保存と読み込み", () =>
-        {
-            var path = Path.Combine(Path.GetTempPath(), $"meltype-selftest-{Guid.NewGuid():N}.json");
-            try
-            {
-                new Config.Settings().Save(path);
-                return Config.Settings.Load(path).Mode.ToString();
-            }
-            finally
-            {
-                File.Delete(path);
-            }
-        });
-        Check("判定 (英数状態の検知)", () => ScoreEngine.CreateDefault(() => new Config.Settings())
-            .Evaluate(new DetectionInput("konn", [], false)).Verdict.ToString());
-        var detector = CompositionDetector.CreateDefault();
-        Check("変換ボックスの英語判定", () =>
-        {
-            var text = new CompositionTextState();
-            var env = new TextEnv(detector, new Config.Settings(), null) { Context = () => TextContext.None };
-            foreach (var c in "kyouhagoogle") CompositionText.Append(text, env, c);
-            return CompositionText.Display(text, env, final: false);
-        });
-        Check("書き間違い辞書", () => MisspellingDictionary.Load(null).Find("ぶれすれっど")?.Right ?? "(見つからない)");
-        Check("補助辞書", () => string.Join(",", CandidateDictionary.Load(null).Lookup("はし")));
-        Check("文脈の手がかり辞書", () => ContextRules.Load(null).Choose("あつい", "気温", "厚い", _ => null) ?? "(なし)");
-        Check("ユーザー辞書", () => new UserDictionary(null).Add("きごうとう", "記号等") ?? "登録できる");
-        Check("変換エンジン (Mozc)", () =>
-        {
-            using var data = new TemporaryData();
-            using var runtime = new MeltypeRuntime(data.Directory);
-            var converter = runtime.CreateConverter(AppContext.BaseDirectory);
-            if (!converter.MozcInstalled) return "(Mozc のヘルパーが無い)";
-            // Zenzai (llama-server) は起動しない
-            return $"{(converter.Convert(new ConversionRequest("きょうはいいてんき", null) { Zenzai = false }) is { } clauses ? string.Concat(clauses.Select(c => c.Text)) : "(変換できない)")} / 漢字 → {converter.Reading("漢字") ?? "(逆変換できない)"}";
-        });
+        foreach (var (name, run) in SelfCheck.Checks(AppContext.BaseDirectory)) Check(name, run);
         Check("UI Automation", () => { var result = ""; var thread = new Thread(() => result = FocusInspector.Probe()); thread.SetApartmentState(ApartmentState.MTA); thread.Start(); thread.Join(); return result; });
         Check("画面", () =>
         {
             using var data = new TemporaryData();
             using var engine = new MeltypeEngine(new MeltypeRuntime(data.Directory));
-            using var invoker = new Control();
-            invoker.CreateControl();
-            using var service = new CompositionService(invoker, engine.Runtime, () => engine.Settings);
             var names = new List<string>();
-            foreach (var form in new Form[] { new UI.SettingsForm(engine, new Config.AppState()), new UI.UserDictionaryForm(service), new UI.LogForm(engine) })
+            foreach (var form in new Form[] { new UI.LogForm(engine) })
             {
                 using (form)
                 {
@@ -109,23 +70,6 @@ internal static class SelfTest
             tray.ExitThread();
             return "OK";
         });
-        Check("学習データ・ログの保存", () =>
-        {
-            var directory = Path.Combine(Path.GetTempPath(), $"meltype-selftest-{Guid.NewGuid():N}");
-            try
-            {
-                new ConversionHistory(Path.Combine(directory, "conversions.json")).Remember("はしを", "箸を");
-                Diagnostics.Log.SetFileOutput(Path.Combine(directory, "meltype.log"));
-                Diagnostics.Log.Info("自己診断");
-                Diagnostics.Log.SetFileOutput(null);
-                return string.Join(",", Directory.GetFiles(directory).Select(Path.GetFileName));
-            }
-            finally
-            {
-                Directory.Delete(directory, recursive: true);
-            }
-        });
-
         Check("クリップボード", () =>
         {
             // 報告の画面の「ログをコピー」・ログの画面の「コピー」・貼り付けで入力するアプリが使う。
@@ -141,51 +85,12 @@ internal static class SelfTest
             return copied ? "コピーできる" : "コピーできない";
         });
 
-        // Zenzai (llama-server と HttpClient で話す) と GitHub の Issue の題名の候補 (HTTPS) が使う部品。どちらも既定は OFF で、ほかの機能では読み込まれない。
-        // 配布用にランタイムを削るとき、ここで読み込まないと「読み込まれなかった大きなアセンブリ」として消え、
-        // ON にしたとたん、打つたびに例外になって日本語を打てなくなった (#973)。
-        Check("Zenzai (llama-server と HTTP)", () =>
-        {
-            // 本物と同じ ZenzaiConverter で、loopback の偽の llama-server に 1 回変換を頼む (POST・JSON の道を通す。外へはつながない)
-            using var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
-            listener.Start();
-            var port = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
-            var server = Task.Run(() => AnswerOnce(listener, """{"content":"今日は"}"""));
-            using var zenzai = new ZenzaiConverter(new Uri($"http://127.0.0.1:{port}/"), timeoutMs: 10000);
-            var text = zenzai.Convert(new ConversionRequest("きょうは", null)) is [var clause] ? clause.Text : null;
-            // 偽のサーバーの側で例外になったときは、その例外を出す (Wait が投げる)
-            server.Wait(TimeSpan.FromSeconds(10));
-            return text ?? throw new InvalidOperationException("偽の llama-server から答えを受け取れない");
-        });
-        Check("GitHub の題名 (HTTPS)", () =>
-            // TLS (SslStream) と証明書の確かめ (X509Chain) の型に触って読み込むだけ。外へはつながないので、TLS の接続そのものは確かめていない
-            $"{typeof(System.Net.Security.SslStream).Name}, {typeof(System.Security.Cryptography.X509Certificates.X509Chain).Name}");
-
         report.AppendLine(failed == 0 ? "すべて OK" : $"{failed} 件失敗");
         // 配布用パッケージの作成で、使わない部品を削るのに使う (Build-Package.ps1)。
         report.AppendLine("LOADED: " + string.Join(" ", AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetName().Name).Order()));
         if (reportPath is not null) File.WriteAllText(reportPath, report.ToString(), new UTF8Encoding(true));
         else MessageBox.Show(report.ToString(), "Meltype 自己診断", MessageBoxButtons.OK, failed == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
         return failed == 0 ? 0 : 1;
-    }
-
-    /// <summary>HTTP の要求を 1 つ受け取り (見出しと Content-Length の本文を読み切る)、JSON の本文で答える。</summary>
-    private static void AnswerOnce(System.Net.Sockets.TcpListener listener, string json)
-    {
-        using var client = listener.AcceptTcpClient();
-        using var stream = client.GetStream();
-        var received = new List<byte>();
-        var buffer = new byte[4096];
-        int read;
-        int headerEnd;
-        while ((headerEnd = Encoding.ASCII.GetString([.. received]).IndexOf("\r\n\r\n", StringComparison.Ordinal)) < 0 && (read = stream.Read(buffer)) > 0) received.AddRange(buffer[..read]);
-        if (headerEnd < 0) return;
-        var header = Encoding.ASCII.GetString([.. received], 0, headerEnd);
-        var length = header.Split("\r\n").Select(l => l.Split(':', 2)).FirstOrDefault(p => p.Length == 2 && p[0].Trim().Equals("Content-Length", StringComparison.OrdinalIgnoreCase)) is { } p ? int.Parse(p[1].Trim(), CultureInfo.InvariantCulture) : 0;
-        while (received.Count < headerEnd + 4 + length && (read = stream.Read(buffer)) > 0) received.AddRange(buffer[..read]);
-        var body = Encoding.UTF8.GetBytes(json);
-        stream.Write(Encoding.ASCII.GetBytes($"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {body.Length}\r\nConnection: close\r\n\r\n"));
-        stream.Write(body);
     }
 
     /// <summary>設定・学習データを置く一時フォルダー (自己診断で、使っている人のデータに書かないように)。</summary>

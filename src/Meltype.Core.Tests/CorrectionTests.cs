@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
 
-using Meltype.Composition;
+using Meltype.Diagnostics;
 using Meltype.Input;
 
 namespace Meltype.Tests;
@@ -42,11 +42,10 @@ internal static class CorrectionTests
     }
 
     [Test]
-    public static void ReportUrl_OpensTheBugTemplateWithEnvironment()
+    public static void GitHubReportUrl_OpensTheTemplateWithEnvironment()
     {
         // ひな形を選ぶ画面 (issues/new/choose) では、選んだあとに値が引き継がれない (issue #877)
-        var url = Config.ProjectInfo.ReportUrl("Windows 11", "1.2.2", "Meltype: 1.2.2\nOS: Windows 11");
-        if (Config.ProjectInfo.HasReportForm) return;
+        var url = Config.ProjectInfo.GitHubReportUrl("1-bug.yml", "Windows 11", "1.2.2", "Meltype: 1.2.2\nOS: Windows 11");
         Assert.True(!url.Contains("/issues/new/choose"), url);
         foreach (var part in new[] { "/issues/new?template=1-bug.yml", $"os={Uri.EscapeDataString("Windows 11")}", "version=1.2.2", $"environment={Uri.EscapeDataString("Meltype: 1.2.2\nOS: Windows 11")}" })
             Assert.True(url.Contains(part), part + ": " + url);
