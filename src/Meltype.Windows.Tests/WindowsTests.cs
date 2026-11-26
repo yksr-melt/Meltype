@@ -213,6 +213,18 @@ internal static class WindowsTests
     }
 
     [Test]
+    public static void ModifierState_UsesTheLatestPendingTransitionForThatSide()
+    {
+        var left = new KeyEvent(VirtualKeys.LShift, 0x2A, false, false, false, 0);
+        var right = new KeyEvent(VirtualKeys.RShift, 0x36, false, false, false, 0);
+        var leftUp = left with { IsUp = true };
+        Assert.True(!Keyboard.KeyboardFront.ModifierAfterPendingKeys(left.Vk, true, [leftUp]), "OS が押下中でも、保留した解放を優先する");
+        Assert.True(Keyboard.KeyboardFront.ModifierAfterPendingKeys(left.Vk, false, [left]), "OS に見えない保留中の押下も使う");
+        Assert.True(Keyboard.KeyboardFront.ModifierAfterPendingKeys(right.Vk, true, [left, leftUp]), "左を離しても押したままの右を保持する");
+        Assert.True(Keyboard.KeyboardFront.ModifierAfterPendingKeys(left.Vk, true, [leftUp, right, left]), "再押下が解放より後なら押下中");
+    }
+
+    [Test]
     public static void AltTap_ReleaseIsSentAfterMaskKey()
     {
         // 右 Alt (拡張キー) の単独押しの解放: 0xE8 の押下・解放のあとに、解放をそのまま送り直す (先に解放が届くとメニューバーに移る)
