@@ -212,9 +212,10 @@ internal sealed partial class CompositionDetector
                 if (!edge.Particle && from.Edge.English && from.Edge.End == edge.Start && DoubledAt(edge.Start - 1) && char.IsAsciiLetterLower(text[edge.Start]) &&
                     text[edge.Start] is not ('n' or 'l' or 'x') &&
                     _romaji.AnalyzeFragment(text[from.Edge.Start..(edge.Start - 1)].ToLowerInvariant()) is { IsValid: true, Partial: "" }) counts[(int)LinkFeature.DanglingSokuon]++;
-                // 語の終わりの っ (ぶっ・まっ) の後ろに、和語では っ の後ろに来ない音 (濁音・な行・あ行など) で始まる語が続く (ぶっ|が):
-                // 英単語の最後の子音を重ねて読んだ切り間違い (bug|が)
-                if (from.Edge is { English: false, Neutral: false, Kana: [_, .., 'っ'] } && from.Edge.End == edge.Start && edge.Kana is [var after, ..] &&
+                // 語の終わりの っ (ぶっ・まっ) の後ろに、和語では っ の後ろに来ない音 (濁音・な行・あ行など) で始まる付属語が続く (ぶっ|が):
+                // 英単語の最後の子音を重ねて読んだ切り間違い (bug|が)。付属語でない語 (せっ|ど・ぶっ|ぢずむ) は、読みが辞書に無い外来語の
+                // 途中のことがあるので数えない。付属語の だ が続く外来語 (ぶっだ) は、読みを辞書に入れて 1 語にする
+                if (edge.Particle && from.Edge is { English: false, Neutral: false, Kana: [_, .., 'っ'] } && from.Edge.End == edge.Start && edge.Kana is [var after, ..] &&
                     NoSokuonBefore.Contains(after)) counts[(int)LinkFeature.DanglingSokuon]++;
             }
             else if (state.Sokuon) counts[(int)LinkFeature.DanglingSokuon]++;
@@ -441,15 +442,15 @@ internal sealed partial class CompositionDetector
     private static bool NeedsInflection(string kana) => kana.Length >= 2 && (kana.EndsWith("させ", StringComparison.Ordinal) || kana.EndsWith("られ", StringComparison.Ordinal) ||
         kana.EndsWith("てい", StringComparison.Ordinal) || kana.EndsWith("でい", StringComparison.Ordinal));
 
+    /// <summary>和語で っ の後ろに来ない音 (濁音・な行・あ行など)。</summary>
+    private const string NoSokuonBefore = "あいうえおがぎぐげござじずぜぞだぢづでどなにぬねのばびぶべぼまみむめもやゆよらりるれろわをん";
+
     private static readonly HashSet<string> NounParticles = ["が", "を", "に", "で", "と", "の", "は", "も", "へ", "や", "から", "まで", "より", "って", "だ", "です"];
 
     /// <summary>
     /// 動詞・形容詞の活用形の後ろにしか付かない、1 文字の付属語 (名詞や英単語の後ろには付かない)。
     /// 2 文字以上の付属語 (ます・ません) は、英単語を切り出した残りにはまずならず、なっても日本語の根拠として十分なので入れない。
     /// </summary>
-    /// <summary>和語で っ の後ろに来ない音。外来語 (ベッド・バッグ) は っ を含む 1 語として読むので、語の境目の っ の後ろだけを見る。</summary>
-    private const string NoSokuonBefore = "あいうえおがぎぐげござじずぜぞだぢづでどなにぬねのばびぶべぼまみむめもやゆよらりるれろわをん";
-
     private static readonly HashSet<string> VerbAuxiliaries = ["う", "た", "て", "ば", "れ"];
 
     /// <summary>

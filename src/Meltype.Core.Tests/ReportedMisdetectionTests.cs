@@ -65,7 +65,9 @@ internal static class ReportedMisdetectionTests
         // 語の境目の っ の後ろに濁音は来ないので、bug + が (ぶっ + が にしない: issue #1791)。1 語の外来語 (ばっぐ) は今までどおり
         Check(("bugga", "bugが"), ("bugwo", "bugを"), ("baggu", "ばっぐ"),
             // 逆向き: っ の後ろが清音なら日本語の語 (ぶっかける)、1 語の外来語の濁音 (べっど) も日本語
-            ("bukkakeru", "ぶっかける"), ("buttobasu", "ぶっとばす"), ("beddode", "べっどで"), ("jobga", "jobが"));
+            ("bukkakeru", "ぶっかける"), ("buttobasu", "ぶっとばす"), ("beddode", "べっどで"), ("jobga", "jobが"),
+            // 読みが辞書に無い外来語の途中の っ + 付属語でない語 (せっど・ぶっぢずむ) と、辞書の外来語 (ぶっだ) は日本語
+            ("seddo", "せっど"), ("buddizumu", "ぶっぢずむ"), ("budda", "ぶっだ"));
     }
 
     [Test]
@@ -98,7 +100,7 @@ internal static class ReportedMisdetectionTests
     {
         // 数字を含む 16 進の色は英字のまま (issue #2383)。英字だけ (#cafe) は今までどおり
         Check(("#30b0e8", "#30b0e8"), ("#cafe", "#cafe"), ("#abc1", "#abc1"),
-            // 数字だけは Issue の番号
-            ("#1234", "#1234"));
+            // 数字だけ・数字の後ろに英字だけが続くものは Issue の番号 (+ 日本語)
+            ("#1234", "#1234"), ("#2392de", "#2392で"), ("#12de", "#12で"));
     }
 }

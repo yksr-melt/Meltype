@@ -170,11 +170,11 @@ internal sealed partial class CompositionDetector
         (token.Contains('@') && token.Any(char.IsAsciiLetter) || token.Contains('_') || token.Contains("://", StringComparison.Ordinal) || IsStylizedName(token) || IsHexColor(token));
 
     /// <summary>
-    /// 16 進の色 (#30b0e8・#fff0)。数字と英字の両方を含むものだけ: 英字だけ (#cafe) はハッシュタグの日本語 (#かふぇ)、
-    /// 数字だけ (#1234) は Issue の番号と区別できない。
+    /// 16 進の色 (#30b0e8・#fff0)。英字の後ろに数字が続くものだけ: 英字だけ (#cafe) はハッシュタグの日本語 (#かふぇ)、
+    /// 数字の後ろに英字だけが続くもの (#2392de) は Issue の番号 + 日本語 (#2392で) と区別できない。
     /// </summary>
     private static bool IsHexColor(string token) => token.Length is 4 or 5 or 7 or 9 && token[0] == '#' && token.Skip(1).All(char.IsAsciiHexDigit) &&
-        token.Any(char.IsAsciiDigit) && token.Any(char.IsAsciiLetter);
+        token.Skip(1).SkipWhile(char.IsAsciiDigit).Any(char.IsAsciiDigit);
 
     /// <summary>
     /// 英語の候補を軽くして区切り直した結果 (変換の候補に、日本語にした語の英語を含む区切り midika → midiか を出すのに使う)。
