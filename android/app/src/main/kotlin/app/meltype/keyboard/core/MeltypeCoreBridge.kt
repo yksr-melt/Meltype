@@ -27,6 +27,8 @@ internal object NativeApi {
     external fun handle(host: Long, eventUtf8: ByteArray): ByteArray?
     /** meltype_typed_reading: the reading typed on the user dictionary screen (romaji allowed) as hiragana, or null. */
     external fun typedReading(directoryUtf8: ByteArray, inputUtf8: ByteArray): ByteArray?
+    /** meltype_user_dictionary: one user dictionary request JSON in, the words and an error JSON out, or null. */
+    external fun userDictionary(directoryUtf8: ByteArray, requestUtf8: ByteArray): ByteArray?
 }
 
 /** One ImeHost for the whole keyboard. All Android editors share its single instance ("android"). */

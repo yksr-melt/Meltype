@@ -28,10 +28,9 @@ import android.widget.ScrollView
 import android.widget.Switch
 import android.widget.TextView
 import app.meltype.keyboard.dictionary.TypedReading
-import app.meltype.keyboard.dictionary.UserDictionaryFile
+import app.meltype.keyboard.dictionary.CoreUserDictionary
 import app.meltype.keyboard.dictionary.UserWord
 import app.meltype.keyboard.layout.LayoutId
-import java.io.IOException
 
 /**
  * Settings screens inspired by the Android keyboard settings information
@@ -43,8 +42,6 @@ class MainActivity : Activity() {
     private fun dp(n: Int) = (n * density + .5f).toInt()
     private enum class Page { HOME, LANGUAGES, GENERAL, CORRECTION, EMOJI, DICTIONARY, WORD_EDIT }
     private var page = Page.HOME
-    private val userWords by lazy { UserDictionaryFile(this) }
-
     /** 単語の画面で直している語。null なら新しく登録する。 */
     private var editingWord: UserWord? = null
 
@@ -473,14 +470,6 @@ class MainActivity : Activity() {
         }
     }
 
-    /** 読めなければ null (一覧の代わりに理由を出す)。 */
-    private fun readWords(): List<UserWord>? = try {
-        userWords.list()
-    } catch (error: IOException) {
-        android.util.Log.w("Meltype", "userdict.txt: " + error.javaClass.simpleName)
-        null
-    }
-
     private fun dictionary(content: LinearLayout) {
         title(content, "ユーザー辞書")
         card(content) {
@@ -489,10 +478,12 @@ class MainActivity : Activity() {
                 navigate(Page.WORD_EDIT)
             }
         }
-        val words = readWords()
+        // 読めなければ words が null で、一覧の代わりに理由を出す
+        val listed = CoreUserDictionary.list(this)
+        val words = listed.words
         card(content, "登録した単語") {
             val empty = when {
-                words == null -> "ユーザー辞書を読み込めませんでした"
+                words == null -> listed.error ?: "ユーザー辞書を読み込めませんでした"
                 words.isEmpty() -> "登録した単語はありません"
                 else -> null
             }
@@ -566,15 +557,12 @@ class MainActivity : Activity() {
             error.visibility = View.VISIBLE
         }
         button(content, "保存") {
-            try {
-                val kana = TypedReading.toHiragana(this@MainActivity, reading.text.toString())
-                val saved = if (original == null) userWords.add(kana, word.text.toString())
-                    else userWords.edit(original, kana, word.text.toString())
-                if (saved) navigate(Page.DICTIONARY)
-                else failed("読みと単語を入力してください。同じ読みと単語は 2 つ登録できません。")
-            } catch (_: IOException) {
-                failed("ユーザー辞書に保存できませんでした。")
-            }
+            val kana = TypedReading.toHiragana(this@MainActivity, reading.text.toString())
+            // 登録できない理由 (読みの先頭の # など) は Core が返す。設定アプリと同じ文
+            val result = if (original == null) CoreUserDictionary.add(this@MainActivity, kana, word.text.toString())
+                else CoreUserDictionary.edit(this@MainActivity, original, kana, word.text.toString())
+            val problem = result.error
+            if (problem == null) navigate(Page.DICTIONARY) else failed(problem)
         }
         if (original != null) {
             // 確かめの画面を出さず、2 回目のタップで消す。
@@ -583,16 +571,13 @@ class MainActivity : Activity() {
                 if (!confirming) {
                     confirming = true
                     label.text = "もう一度タップして削除"
-                } else try {
-                    userWords.delete(original)
-                    navigate(Page.DICTIONARY)
-                } catch (_: IOException) {
-                    failed("ユーザー辞書に保存できませんでした。")
+                } else {
+                    val problem = CoreUserDictionary.remove(this@MainActivity, original).error
+                    if (problem == null) navigate(Page.DICTIONARY) else failed(problem)
                 }
             }
         }
         button(content, "キャンセル") { navigate(Page.DICTIONARY) }
     }
-
 
 }

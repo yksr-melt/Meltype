@@ -229,6 +229,26 @@ public static unsafe class Exports
 
     private static (string Directory, TypedReading Reading)? s_typedReading;
 
+    /// <summary>
+    /// Android の設定画面のユーザー辞書 (dataDirectory の userdict.txt) の一覧・登録・編集・削除。
+    /// 頼みと答えは JSON (<see cref="UserDictionaryRequests"/>)。meltype_free で解放する。失敗なら NULL。
+    /// </summary>
+    [UnmanagedCallersOnly(EntryPoint = "meltype_user_dictionary")]
+    public static byte* HandleUserDictionary(byte* dataDirectory, byte* request)
+    {
+        try
+        {
+            var directory = FromUtf8(dataDirectory);
+            if (string.IsNullOrEmpty(directory)) throw new ArgumentException("dataDirectory が空です");
+            return ToUtf8(UserDictionaryRequests.Handle(directory, FromUtf8(request) ?? ""));
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Error($"ユーザー辞書を読み書きできませんでした: {ex}");
+            return null;
+        }
+    }
+
     [UnmanagedCallersOnly(EntryPoint = "meltype_free")]
     public static void Free(byte* text) => NativeMemory.Free(text);
 
