@@ -60,10 +60,15 @@ else
         "$plist" -c "Set :$key $value" "$installer_info"
     done
     min_os="$("$plist" -c 'Print :LSMinimumSystemVersion' "$installer_info")"
-    arch="$(lipo -archs "$apps/Meltype.app/Contents/MacOS/Meltype")"
     sips -s format icns "$here/Resources/Settings/icon.png" --out "$installer/Contents/Resources/Installer.icns" >/dev/null
-    xcrun swiftc -parse-as-library -swift-version 5 -target "$arch-apple-macos$min_os" \
-        "$here/Installer/main.swift" -o "$installer/Contents/MacOS/MeltypeInstaller"
+    # Meltype.app と同じアーキテクチャで作る。universal なら lipo -archs が複数返すので、1 つずつ作ってまとめる。
+    slices=()
+    for arch in $(lipo -archs "$apps/Meltype.app/Contents/MacOS/Meltype"); do
+        xcrun swiftc -parse-as-library -swift-version 5 -target "$arch-apple-macos$min_os" \
+            "$here/Installer/main.swift" -o "$stage/MeltypeInstaller-$arch"
+        slices+=("$stage/MeltypeInstaller-$arch")
+    done
+    lipo -create "${slices[@]}" -output "$installer/Contents/MacOS/MeltypeInstaller"
 
     # Developer ID の署名・公証はしないので、インストーラーはアドホック署名にし、DMG は署名しない。
     codesign --force --sign - "$installer"
