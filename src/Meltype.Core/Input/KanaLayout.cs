@@ -33,7 +33,6 @@ public enum RomajiLayout
     [System.ComponentModel.Description("Eucalyn 配列")] Eucalyn,
 }
 
-
 /// <summary>SKY 配列: QWERTY の位置のキーを、ローマ字の綴りにする (issue #1415)。</summary>
 internal static class SkyLayout
 {
