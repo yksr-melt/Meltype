@@ -6852,9 +6852,18 @@ internal static class CompositionTests
         var thanksBiz = KeigoConverter.Convert([new("かくにんしてくれてありがとう", false, ["確認してくれてありがとう"])]);
         Assert.Equal("ご確認いただきありがとうございます", thanksBiz[0].Text, "〜してくれてありがとう → ご〜いただきありがとうございます");
 
-        // 客 → お客様、客室誤爆防止、来るのでの自他判別
+        // 客 → お客様、客室誤爆防止、来るのでの自他判別 (読点が別文節・確定済み文脈のときも主語を引きずらない)
         var kyakuKuru = KeigoConverter.Convert([new("きゃくが", false, ["客が"]), new("くるので、", false, ["来るので、"]), new("じゅんびする", false, ["準備する"])]);
         Assert.Equal("お客様がお越しになりますので、準備いたします", string.Concat(kyakuKuru.Select(c => c.Text)), "客→お客様 & 相手主語の来るので→お越しになりますので");
+
+        var kyakuKuruSplitComma = KeigoConverter.Convert([new("きゃくが", false, ["客が"]), new("くるので", false, ["来るので"]), new("、", false, ["、"]), new("じゅんびする", false, ["準備する"])]);
+        Assert.Equal("お客様がお越しになりますので、準備いたします", string.Concat(kyakuKuruSplitComma.Select(c => c.Text)), "読点が別文節でも『準備なさいます』にしない");
+
+        var kyakuKuruAfterBefore = KeigoConverter.Convert([new("じゅんびする", false, ["準備する"])], before: "お客様がお越しになりますので、");
+        Assert.Equal("準備いたします", kyakuKuruAfterBefore[0].Text, "読点まで確定済みでも前の節の主語を引きずらない");
+
+        var subjectWithComma = KeigoConverter.Convert([new("おきゃくさまは", false, ["お客様は"]), new("、", false, ["、"]), new("みます", false, ["見ます"])]);
+        Assert.Equal("お客様は、ご覧になります", string.Concat(subjectWithComma.Select(c => c.Text)), "主語直後の読点では尊敬語を維持する");
 
         var selfKuru = KeigoConverter.Convert([new("くるので、", false, ["来るので、"]), new("まって", false, ["待って"])]);
         Assert.Equal("参りますので、少々お待ちください", string.Concat(selfKuru.Select(c => c.Text)), "自分主語の来るので→参りますので");

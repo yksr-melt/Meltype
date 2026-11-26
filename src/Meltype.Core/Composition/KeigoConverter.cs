@@ -225,7 +225,8 @@ internal static class KeigoConverter
 
             if (IsPunctuationOnly(clauseText) && IsPunctuationOnly(clauseReading))
             {
-                if (HasSentenceBreak(clauseText)) currentSentence.Clear();
+                if (HasSentenceBreak(clauseText) || (HasClauseComma(clauseText) && (i == 0 || !EndsWithSubjectToken(result[i - 1].Text))))
+                    currentSentence.Clear();
                 continue;
             }
 
@@ -304,9 +305,9 @@ internal static class KeigoConverter
     private static bool HasClauseComma(string text) =>
         text.Length > 0 && text[^1] is '、' or '，' or ',';
 
-    private static bool EndsWithSubjectToken(string text)
+    private static bool EndsWithSubjectToken(ReadOnlySpan<char> text)
     {
-        var core = text.TrimEnd('、', '，', ',');
+        var core = text.TrimEnd(['、', '，', ',']);
         foreach (var token in OtherSubjectTokens)
             if (core.EndsWith(token, StringComparison.Ordinal)) return true;
         foreach (var token in SelfSubjectTokens)
@@ -318,7 +319,12 @@ internal static class KeigoConverter
     {
         if (string.IsNullOrEmpty(before)) return [];
         var lastBreak = before.LastIndexOfAny(['\r', '\n', '。', '！', '？', '!', '?']);
-        return lastBreak >= 0 ? before.AsSpan(lastBreak + 1) : before.AsSpan();
+        var sentence = lastBreak >= 0 ? before.AsSpan(lastBreak + 1) : before.AsSpan();
+        // 「お客様がお越しになりますので、」のように読点で節が切れている場合は主語を引き継がない (「お客様は、」のような主語直後は保持)
+        var lastComma = sentence.LastIndexOfAny(['、', '，', ',']);
+        if (lastComma >= 0 && !EndsWithSubjectToken(sentence[..lastComma]))
+            return sentence[(lastComma + 1)..];
+        return sentence;
     }
 
     private static bool HasSentenceBreak(string text) =>
