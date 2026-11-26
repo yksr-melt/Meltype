@@ -27,5 +27,5 @@ esac
 # File replacement restores the old session itself if it fails.
 bash "$here/build-cli.sh" --test --install
 "$app/Contents/MacOS/Meltype" --check-inputs "$here/Resources/InputChecks.tsv"
-swift "$here/select-input-source.swift"
+"$app/Contents/MacOS/MeltypeInstallSupport" --select "$app"
 echo "Meltype update and input checks completed."

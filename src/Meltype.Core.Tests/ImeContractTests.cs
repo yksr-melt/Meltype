@@ -849,10 +849,8 @@ internal static class ImeContractTests
     private sealed class LearningConverter : TestConverter
     {
         private readonly CompositionTests.FakeConverter _converter = new();
-        public ConcurrentQueue<(string? Context, IReadOnlyList<ConversionClause> Clauses)> Learned { get; } = new();
         public override string? Convert(string hiragana, string? before) => _converter.Convert(hiragana, before);
         public override IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) => _converter.ConvertClauses(hiragana, before);
-        public override void Learn(string? context, IReadOnlyList<ConversionClause> clauses) => Learned.Enqueue((context, clauses));
     }
 
     [Test]
@@ -895,7 +893,8 @@ internal static class ImeContractTests
         {
             Converter = converter, Services = new CompositionServices
             {
-                Languages = languages, History = history, Predictor = new Predictor(phrases, null, history),
+                // 学習 OFF でも出る候補 (ユーザー辞書の語) を確定しても覚えないことを見る
+                Languages = languages, History = history, Predictor = new Predictor(phrases, () => [("にほんごでにゅうりょく", "日本語で入力")], history),
                 Translations = TranslationDictionary.Parse("川\tn\triver"), TranslationHistory = translationHistory,
                 MoreCandidates = (reading, _) => reading == "にほんご" ? ["日本語", "日本語文"] : [],
             }
@@ -930,10 +929,11 @@ internal static class ImeContractTests
         SetField(beforeCommit: false);
         // 最初の Private 通知は打鍵より先に届く。
         front.Event("CaretMoved", extra: Entered);
-        front.Key('n');
-        front.Type("ihongo");
+        // 後の nihongo を英字にしないように、F10 で直す語は別にする
+        front.Key('t');
+        front.Type("ao");
         front.Key(VirtualKeys.F10);
-        Commit("nihongo");
+        Commit("tao");
 
         Select(front.Type("nihongo ")[^1], "日本語文");
         Commit("日本語文");
@@ -945,26 +945,24 @@ internal static class ImeContractTests
 
         var learns = mode == "通常";
         LearningSaves.FlushAll();
-        Assert.Equal(learns, languages.Get("nihongo") == true, mode);
+        Assert.Equal(learns, languages.Get("tao") == true, mode);
         Assert.Equal(learns ? "日本語文" : null, history.Get("にほんご"), mode);
         Assert.Equal(learns ? 1 : 0, translationHistory.Get("かわ").Count, mode);
         Assert.Equal(learns ? 2 : 1, phrases.Count, mode);
         Assert.Equal(learns, originalPhrases != File.ReadAllText(phrasePath), mode);
         Assert.Equal(learns ? 4 : 1, Directory.GetFiles(directory).Length, mode);
-        Assert.Equal(languages.Get("nihongo"), new LanguageMemory(languagePath).Get("nihongo"), mode);
+        Assert.Equal(languages.Get("tao"), new LanguageMemory(languagePath).Get("tao"), mode);
         Assert.Equal(history.Get("にほんご"), new ConversionHistory(historyPath).Get("にほんご"), mode);
         Assert.Equal(phrases.Count, new PhraseHistory(phrasePath).Count, mode);
         Assert.Equal(translationHistory.Get("かわ").Count, new TranslationHistory(translationPath).Get("かわ").Count, mode);
-        Assert.Equal(learns, SpinWait.SpinUntil(() => !converter.Learned.IsEmpty, learns ? 5000 : 100), mode);
-        Assert.Equal(learns, converter.Learned.Any(request => request.Clauses.Any(clause => clause.Text == "日本語文")), mode);
         if (mode == "Privateから通常欄へ移動")
         {
             // Private で始めた入力が終わったあと、同じ instance で始め直した通常入力は学習する。
             front.Traits.Clear();
-            front.Type("nihongo");
+            front.Type("tao");
             front.Key(VirtualKeys.F10);
             front.Key('\n');
-            Assert.Equal(true, languages.Get("nihongo"), front.Trace);
+            Assert.Equal(true, languages.Get("tao"), front.Trace);
             LearningSaves.FlushAll();
         }
     }
@@ -972,8 +970,10 @@ internal static class ImeContractTests
     [Test]
     public static void Private_StillSuppressesLearningAfterPartialCommit()
     {
+        var phrases = new PhraseHistory(null);
         var converter = new LearningConverter();
-        var front = new Front { Converter = converter };
+        var front = new Front { Converter = converter, Services = new CompositionServices { Predictor = new Predictor(phrases, null, null) } };
+        front.Settings.PredictiveCandidates = true;
         front.Settings.PartialCommit = true;
         front.Traits.Add("Private");
         front.Type("tanniwotoru ");
@@ -987,14 +987,16 @@ internal static class ImeContractTests
         Assert.True(View(front.Event("StateRequested")).GetProperty("converting").GetBoolean(), front.Trace);
         front.Key('\n');
         Assert.True(front.Document.Length > "単位を".Length, front.Trace);
-        Assert.True(!SpinWait.SpinUntil(() => !converter.Learned.IsEmpty, 100), front.Trace);
+        Assert.Equal(0, phrases.Count, "Private で始めた入力は、途中で通常欄へ移っても学習しない\n" + front.Trace);
     }
 
     [Test]
     public static void Private_ReportedBeforeResumingDoesNotLearnOnLaterCommit()
     {
+        var phrases = new PhraseHistory(null);
         var converter = new LearningConverter();
-        var front = new Front { Converter = converter };
+        var front = new Front { Converter = converter, Services = new CompositionServices { Predictor = new Predictor(phrases, null, null) } };
+        front.Settings.PredictiveCandidates = true;
         front.Type("nihongo");
 
         // TSF はアプリが表示済みの文字を確定した時点で Private を読み、再開を保留する前に知らせる。
@@ -1005,11 +1007,10 @@ internal static class ImeContractTests
         Assert.Equal("日本語", front.Composition["t1"], front.Trace);
         front.Key('\n');
         Assert.Equal("日本語", front.Document, front.Trace);
-        Assert.True(!SpinWait.SpinUntil(() => !converter.Learned.IsEmpty, 100), front.Trace);
+        Assert.Equal(0, phrases.Count, "途中で Private と分かった入力も学習しない\n" + front.Trace);
 
         front.Type("kyou \n");
-        Assert.True(SpinWait.SpinUntil(() => !converter.Learned.IsEmpty, 5000), front.Trace);
-        Assert.Equal("今日", converter.Learned.Single().Clauses.Single().Text, front.Trace);
+        Assert.Equal(1, phrases.Count, "次に始めた通常入力は学習する\n" + front.Trace);
     }
 
     [Test]
@@ -1049,28 +1050,7 @@ internal static class ImeContractTests
         }
     }
 
-    [Test]
-    public static void Learning_UsesSurroundingTextInAnOrdinaryFieldAfterPrivateInput()
-    {
-        var converter = new LearningConverter();
-        var front = new Front { Converter = converter };
-        front.Traits.Add("Private");
-        front.Type("nihongo \n");
-        Assert.Equal("日本語", front.Document, front.Trace);
-        front.Traits.Clear();
-        front.Document = "前置き";
-        front.Event("CaretMoved", extra: Entered);
-        front.Type("kyou \n");
-        AssertLearned(converter, "今日", "前置き", front.Trace);
-    }
 
-    private static void AssertLearned(LearningConverter converter, string text, string? context, string trace)
-    {
-        Assert.True(SpinWait.SpinUntil(() => !converter.Learned.IsEmpty, 5000), trace);
-        Assert.True(converter.Learned.TryDequeue(out var request), trace);
-        Assert.Equal(text, request.Clauses.Single().Text, trace);
-        Assert.Equal(context, request.Context, trace);
-    }
 
     [Test]
     public static void EventsThatDoNotChangeTheInput_KeepTheView()

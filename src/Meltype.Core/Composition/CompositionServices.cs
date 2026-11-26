@@ -54,4 +54,7 @@ internal sealed record CompositionServices
 
     /// <summary>予測変換の候補を出す元 (null なら出さない)。</summary>
     public Predictor? Predictor { get; init; }
+
+    /// <summary>学習データを除いたもの (設定「ユーザー学習を使う」が OFF のとき)。学習データを足したら、ここでも除く。</summary>
+    public CompositionServices WithoutLearning() => this with { History = null, TranslationHistory = null, Languages = null, Predictor = Predictor?.WithoutLearning() };
 }

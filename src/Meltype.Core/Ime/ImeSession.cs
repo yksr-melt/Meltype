@@ -33,9 +33,6 @@ internal static class ImeSession
         return state;
     }
 
-    /// <summary>コードの入力欄でないときに、判定の文脈として使うキャレットの前の文字数。</summary>
-    private const int ContextLength = 20;
-
     public static void Close(ImeSessionState state, ImeEnv env, ImeField? field = null)
     {
         field ??= state.Field;
@@ -215,7 +212,7 @@ internal static class ImeSession
     private static List<int> SnippetKeys(ImeSessionState state, ImeEnv env, ImeEvent e, SessionResult result, Settings settings)
     {
         if (IsComposing(state)) return [];
-        var before = Before(state, e.Field);
+        var before = e.Field?.Before;
         if (e is ImeEvent.KeyPressed { Key: { Ch: > 0 and < 0x10000 } key } && !result.Consumed) before += (char)key.Ch;
         var keys = new List<int>();
         if (SnippetUsable(state, env, before, settings) && SnippetTrigger.TypedBefore(settings.SnippetMark, before) is { } typed && env.Environment.Snippets.Get(typed[1..]) is not null)
@@ -302,9 +299,6 @@ internal static class ImeSession
         return LineContext.ClassifyFocus(app, field.Element);
     }
 
-    private static string? Before(ImeSessionState state, ImeField? field) =>
-        field?.Before is { Length: > ContextLength } before && !CodeInput(state) ? before[^ContextLength..] : field?.Before;
-
     // ==== ワークアラウンド: ターミナルがキャレットの前の文字を渡さないことへの対処 (#1687) ====
     // 本体は判断を事実だけでするのが原則で、打ったキーから入力欄の中身を推測するのはこの 1 か所だけの例外。
     // 渡さないのはターミナル側の事情 (Windows Terminal の TSF は文書を持たないので空、iTerm2 は日本語を出したあと読めない)。
@@ -314,10 +308,10 @@ internal static class ImeSession
 
     /// <summary>
     /// コードの行の判断と変換の文脈に使うキャレットの前。コードの入力欄でキャレットの前が届かない (ターミナルで空のときも) ときだけ、
-    /// <see cref="ImeSessionState.Line"/> を使う (ワークアラウンド)。定型文・確定し直しは本物の文字が要るので、<see cref="Before"/> を使う。
+    /// <see cref="ImeSessionState.Line"/> を使う (ワークアラウンド)。定型文・確定し直しは本物の文字が要るので、入力欄の文字 (ImeField.Before) を使う。
     /// </summary>
     private static string? LineBefore(ImeSessionState state, ImeField? field) =>
-        CodeInput(state) && field is { } f && (f.Before is null || f.Before.Length == 0 && CodeTerminal(state)) ? state.Line.ToString() : Before(state, field);
+        CodeInput(state) && field is { } f && (f.Before is null || f.Before.Length == 0 && CodeTerminal(state)) ? state.Line.ToString() : field?.Before;
 
     private static void TrackLine(ImeSessionState state, ImeEvent e, SessionResult result)
     {
@@ -385,7 +379,7 @@ internal static class ImeSession
                 return key.Repeat ? Consumed : Switch(state, env, vk != VirtualKeys.NonConvert, before, toggle: false);
             }
         }
-        if (!composing && !key.Ctrl && !key.Alt && !key.Command && Snippet(state, env, vk, key, Before(state, field), settings, lastSnippet) is { } snippet) return snippet;
+        if (!composing && !key.Ctrl && !key.Alt && !key.Command && Snippet(state, env, vk, key, field?.Before, settings, lastSnippet) is { } snippet) return snippet;
         // 複数のスカラーの文字 (アプリが元のイベントで入れる): 先頭が結合文字なら直前の文字につなげて確定する
         if (key.Text is { Length: > 0 } text && Rune.DecodeFromUtf16(text, out var first, out _) == System.Buffers.OperationStatus.Done)
         {
@@ -579,7 +573,7 @@ internal static class ImeSession
         var lateResults = env.Parts.LateResults();
         var before = LineBefore(state, state.Field);
         CompositionEnv composition = null!;
-        composition = new(env.Parts.Detector, env.Parts.Converter, env.Parts.Services, settings)
+        composition = new(env.Parts.Detector, env.Parts.Converter, settings.LearningEnabled ? env.Parts.Services : env.Parts.Services.WithoutLearning(), settings)
         {
             ReadingOf = env.Parts.ReadingOf,
             ClassifyDirect = env.Parts.ClassifyDirect is { } classify ? (letters, final) => classify(letters, final, settings) : null,
@@ -592,7 +586,7 @@ internal static class ImeSession
             Corrected = env.Parts.Corrected,
             Before = before,
             After = state.Field?.After,
-            CodeString = CodeInput(state) && CodeLineKind(before) == LineKind.String,
+            CodeString = CodeInput(state) && CodeLineKind(state, before) == LineKind.String,
             LateResults = lateResults,
             Deadline = lateResults ? 0 : long.MaxValue,
             LiveCache = state.Composition.LiveCache,
@@ -641,7 +635,7 @@ internal static class ImeSession
             Diagnostics.Log.Info("コードの行: 英数に戻す");
             return true;
         }
-        if (state.CodeJapanese || CodeLineKind(before) != LineKind.Code) return false;
+        if (state.CodeJapanese || CodeLineKind(state, before) != LineKind.Code) return false;
         state.CodeJapanese = true;
         Diagnostics.Log.Info("コードの行: 日本語で入力 (改行しても続ける。キャレットが別の場所に移るか、もう一度押すまで)");
         return true;
@@ -654,7 +648,7 @@ internal static class ImeSession
     public static bool CodeEnglishAt(ImeSessionState state, string? before)
     {
         if (!CodeInput(state) || Direct(state) || CompositionController.IsComposing(state.Composition)) return false;
-        return !state.CodeJapanese && CodeLineKind(before) == LineKind.Code;
+        return !state.CodeJapanese && CodeLineKind(state, before) == LineKind.Code;
     }
 
     /// <summary>
@@ -678,7 +672,7 @@ internal static class ImeSession
     }
 
     /// <summary>キャレットの位置の種類。キャレットの前が分からない入力欄 (周辺文字列を返さないターミナル) はコードの行とする (日本語にするには SetCodeLine)。</summary>
-    private static LineKind CodeLineKind(string? before) => before is null ? LineKind.Code : LineContext.ClassifyText(before);
+    private static LineKind CodeLineKind(ImeSessionState state, string? before) => before is null ? LineKind.Code : LineContext.ClassifyText(before, CodeTerminal(state));
 
     /// <summary>入力欄が確定済みの文字の削除に対応しているか (Linux の IBus では、対応していないアプリがある)。false なら確定し直さない。</summary>
     public static bool CanDeleteSurrounding(ImeSessionState state) => state.Field?.CanRemove ?? true;
@@ -704,8 +698,8 @@ internal static class ImeSession
         // 変換中の before は、変換中の文字より前 (フロントが渡す)
         if (CodeInput(state) && !Direct(state) && !control && !alt && !command &&
             ch is '"' or '\'' or '`' && before is { } line &&
-            LineContext.ClassifyText(line) == LineKind.String &&
-            LineContext.ClassifyText(line + ch) == LineKind.Code)
+            CodeLineKind(state, line) == LineKind.String &&
+            CodeLineKind(state, line + ch) == LineKind.Code)
         {
             var committed = CompositionController.IsComposing(state.Composition) ? CommitPending(state, env) : new SessionResult(false, [], null);
             return committed with { Consumed = false };
@@ -724,13 +718,22 @@ internal static class ImeSession
         }
         // 先頭か空白の直後の /command・$skill・@ファイル名 は、変換せずにそのままアプリへ渡す (#193)。
         // 文章の入力欄の / は、変換ボックスに ・ として入れる。Space で / にすると、続く名前はそのまま渡す。
-        var slashAtStart = !modifier && !CompositionController.IsComposing(state.Composition) && ch is '/' && !PassesSlash(state, before) && !SigilWord.InNameAfter(before) && settings.SigilWordsDirect &&
-            SigilWord.PassesAfter(before, '/');
-        if (!slashAtStart && !modifier && !CompositionController.IsComposing(state.Composition) && ch is { } c && settings.SigilWordsDirect && SigilWord.PassesAfter(before, c))
+        var lineKind = CodeInput(state) && !CompositionController.IsComposing(state.Composition) ? CodeLineKind(state, before) : (LineKind?)null;
+        var slashComment = lineKind == LineKind.Comment;
+        // ドキュメントコメントの /// や //! の記号は本文ではないので、日本語の記号 (・ ！) にしない。
+        if (slashComment && !modifier && before is { } commentLine && ch is { } mark && LineContext.ContinuesSlashCommentMarker(commentLine, mark, settings.InputStyle == InputStyle.Kana))
         {
             return CompositionController.Pass(state.Composition, Env(state, env), now);
         }
-        if (CodeInput(state) && !state.CodeJapanese && !CompositionController.IsComposing(state.Composition) && CodeLineKind(before) == LineKind.Code)
+        // コードの中とターミナルの AI の入力行では /command を使うので、打ち始めの / を ・ にしない。
+        var passesSlash = !state.CodeJapanese && lineKind is LineKind.Code or LineKind.Prompt;
+        var slashAtStart = !modifier && !CompositionController.IsComposing(state.Composition) && ch is '/' && !passesSlash && !SigilWord.InNameAfter(before, slashComment) && settings.SigilWordsDirect &&
+            SigilWord.PassesAfter(before, '/', slashComment);
+        if (!slashAtStart && !modifier && !CompositionController.IsComposing(state.Composition) && ch is { } c && settings.SigilWordsDirect && SigilWord.PassesAfter(before, c, slashComment))
+        {
+            return CompositionController.Pass(state.Composition, Env(state, env), now);
+        }
+        if (!state.CodeJapanese && lineKind == LineKind.Code)
         {
             return CompositionController.Pass(state.Composition, Env(state, env), now);
         }
@@ -766,14 +769,6 @@ internal static class ImeSession
         if (!CompositionController.IsComposing(state.Composition) || Direct(state)) return null;
         return ComposeKey(state, env, vk, null, false, false, false, false);
     }
-
-    /// <summary>
-    /// 打ち始めの / を、・ にせずそのままアプリへ渡すか。コードの入力欄で、キャレットがコードの中か、
-    /// ターミナルの AI の入力行 (Claude Code・Codex の /command を打つ所) にあるとき。
-    /// コメント・文字列の中は ・ にする (Meltype キーボードと同じ)。
-    /// </summary>
-    private static bool PassesSlash(ImeSessionState state, string? before) =>
-        CodeInput(state) && !state.CodeJapanese && CodeLineKind(before) is LineKind.Code or LineKind.Prompt;
 
     /// <summary>
     /// このセッションの外でキャレットが動いた (OS の IME がアプリに通したキー・クリック・別の入力欄に移った) とき。

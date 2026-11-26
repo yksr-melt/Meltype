@@ -45,7 +45,7 @@ internal static class TypedMarks
     {
         MarkRole.Number or MarkRole.Name or MarkRole.Enclosed => raw,
         MarkRole.Ellipsis => ".",
-        // 読みでは設定によらず 、 。 (設定の句読点は CompositionOutput が当てる)
+        // 読みでは設定によらず 、 。 (設定の句読点は文字列にするときに当てる)
         MarkRole.Punctuation => raw == "," ? "、" : "。",
         _ => throw new InvalidOperationException($"不明な MarkRole: {role}"),
     };
@@ -61,8 +61,9 @@ internal static class TypedMarks
         var next = NextChar(state, i);
         if (i > 0 && units[i - 1].Raw is [var previous] && char.IsAsciiDigit(previous))
         {
-            // 数字の後の , は、次も数字なら桁区切り (1,000)、ほかの文字が続くなら読点 (x64、arm64)。まだ何も続いていなければ桁区切りにしておく
-            return units[i].Raw == "," && next is { } after && !char.IsAsciiDigit(after) ? MarkRole.Punctuation : MarkRole.Number;
+            // 数字の後の , は、次も数字なら桁区切り (1,000)、ほかの文字が続くか末尾なら読点 (x64、arm64・100、)。英文の続きの末尾は半角のまま (In 2020,)
+            var number = units[i].Raw == "." || (next is { } after ? char.IsAsciiDigit(after) : env.Context().EndsWithEnglishAndSpace);
+            return number ? MarkRole.Number : MarkRole.Punctuation;
         }
         return units[i].Raw == "." && next is { } c && char.IsAsciiLetterOrDigit(c) && JoinsName(units, i, env) ? MarkRole.Name : MarkRole.Punctuation;
     }
@@ -85,7 +86,7 @@ internal static class TypedMarks
         var lower = word.ToLowerInvariant();
         var acronym = word.Any(char.IsAsciiLetterUpper) && word.All(c => char.IsAsciiLetterUpper(c) || char.IsAsciiDigit(c));
         var readable = env.Detector.Romaji.AnalyzeFragment(lower).IsValid;
-        var knownUnambiguous = word.Length >= 3 && env.Detector.IsKnownEnglishWord(CompositionText.LearningContext(env), word) && !readable;
+        var knownUnambiguous = word.Length >= 3 && env.Detector.IsKnownEnglishWord(CompositionText.LearnedLanguages(env), word) && !readable;
         var properNoun = env.Detector.ProperNouns.Contains(lower) && (units[i].Raw != "-" || word.Any(char.IsAsciiLetterUpper) || !readable);
         return acronym || knownUnambiguous || properNoun;
     }

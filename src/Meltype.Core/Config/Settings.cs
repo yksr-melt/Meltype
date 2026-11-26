@@ -390,7 +390,7 @@ public sealed class Settings
     public PunctuationStyle Punctuation { get; set; } = PunctuationStyle.Japanese;
 
     [Category("7. 記号・スペース"), DisplayName("英字の後ろの , . も句読点にする"),
-     Description("英字のすぐ後ろで打った , . も、日本語の句読点 (設定「句読点」の形) にします (IME, → IME、)。OFF だと、変換ボックスの中が英字だけなら半角の , . のままです (英文を打つとき)。ON でも、キャレットの前が英語 (Hello + world.) のときと、英単語の中の . (tetr.io) は半角のままです。")]
+     Description("英字のすぐ後ろで打った , . も、日本語の句読点 (設定「句読点」の形) にします (IME, → IME、)。OFF だと、変換ボックスの中が英字だけなら半角の , . のままです (英文を打つとき)。ON でも、キャレットの前が空白で終わる英語 (Hello + world.) のときと、英単語の中の . (tetr.io) は半角のままです。")]
     public bool JapanesePunctuationAfterEnglish { get; set; }
 
     [Category("5. 変換"), DisplayName("ライブ変換"),
@@ -799,7 +799,7 @@ public sealed class Settings
     public const int CurrentVersion = 13;
 
     [Category("10. 学習"), DisplayName("ユーザー学習を使う"),
-     Description("OFF にすると、選び直した変換・英字 / かなに直した語・予測変換の語句・選んだ英訳を新しく覚えません (今まで覚えた分は使います)。今まで覚えた分を消すときは、トレイの「学習データを消す」を使います。")]
+     Description("OFF にすると、選び直した変換・英字 / かなに直した語・予測変換の語句・選んだ英訳を新しく覚えず、今まで覚えた分も使いません。今まで覚えた分は消えず、ON に戻すとまた使います。消すときは、設定の「学習データ」を使います。")]
     public bool LearningEnabled { get; set; } = true;
 
     /// <summary>このアプリの確定した文字の入れ方 (<see cref="AppRule.Commit"/>)。アプリ別設定に無ければ自動。</summary>
@@ -837,7 +837,7 @@ public sealed class Settings
      Description("キーごと・日ごと・時間帯ごとの打鍵数を数えて、この PC の中に保存します (打った文字の並びは保存しません)。Windows 以外では、Meltype で入力しているときの打鍵だけを数えます (Shift などの修飾キーは数えません)。端末版と Android では数えません。パスワード欄では数えませんが、macOS ではアプリによってパスワード欄の打鍵も数えることがあります。「Discord に表示する」を選ぶと、今日と合計の打鍵数・1 分あたりの打鍵数・Meltype を起動してからの時間を、この PC の Discord のアプリに送ります。既定は「数えない」です。")]
     public KeyCountMode KeyCount { get; set; }
 
-    [Category("12. ログ"), DisplayName("ファイルにログを書く"), Description("%LOCALAPPDATA%\\Meltype\\meltype.log にログを書きます (OFF でも、トレイの「ログ / 判定理由」で見られるログは Meltype が動いている間だけメモリに残ります)。/・$・@ で始まる語を検知したときの先頭の記号 1 文字・アプリ名・入力欄の名前が含まれます。確定した文字列などは「ログに入力した文字を残す」が ON のときだけ残ります。")]
+    [Category("12. ログ"), DisplayName("ファイルにログを書く"), Description("%LOCALAPPDATA%\\Meltype\\meltype.log にログを書きます (OFF でも、トレイの「ログ / 判定理由」で見られるログは Meltype が動いている間だけメモリに残ります)。アプリ名・入力欄の名前が含まれます。確定した文字列などは「ログに入力した文字を残す」が ON のときだけ残ります。")]
     public bool FileLog { get; set; }
 
     [Category("12. ログ"), DisplayName("ログに入力した文字を残す"), Description("確定した文字列・打った英字・読み・直した語をログに残します (不具合を調べるとき用)。OFF なら文字数だけを残します。パスワード欄では入力を扱わないので残りません。")]
