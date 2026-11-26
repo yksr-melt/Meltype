@@ -39,13 +39,13 @@ internal static class LineContext
     /// キャレットより前の文字列 (前の行も含んでよい) から、キャレットの位置の種類を調べる。
     /// 前の行から続く複数行の文字列・コメント (Python の """ … """、/* … */、&lt;!-- … --&gt;) の中なら、その種類。
     /// それ以外は、今の行 (最後の改行より後ろ) だけで調べる。
-    /// terminal はターミナルか (<see cref="IsSlashComment"/>)。
+    /// terminal はターミナルか (<see cref="IsTerminalComment"/>)。
     /// </summary>
     public static LineKind ClassifyText(string text, bool terminal = false)
     {
         var lastNewline = text.LastIndexOfAny(['\r', '\n']);
         var line = lastNewline >= 0 ? text[(lastNewline + 1)..] : text;
-        if (lastNewline >= 0 && OpenBlock(text) is { } block) return block;
+        if (lastNewline >= 0 && OpenBlock(text, terminal) is { } block) return block;
         return Classify(line, terminal);
     }
 
@@ -53,7 +53,7 @@ internal static class LineContext
     /// 前の行から始まって、まだ閉じていない複数行の文字列・コメントがあれば、その種類 (無ければ null)。
     /// 1 行のコメント (# //) と 1 行の文字列 ("…" '…') の中の """ /* は数えない。
     /// </summary>
-    private static LineKind? OpenBlock(string text)
+    private static LineKind? OpenBlock(string text, bool terminal)
     {
         string? close = null; // 閉じる記号 (""" ''' */ -->)
         var kind = LineKind.Code;
@@ -87,7 +87,7 @@ internal static class LineContext
             string? open = null;
             if (StartsWith(text, i, "\"\"\"")) (open, kind) = ("\"\"\"", LineKind.String);
             else if (StartsWith(text, i, "'''")) (open, kind) = ("'''", LineKind.String);
-            else if (StartsWith(text, i, "/*")) (open, kind) = ("*/", LineKind.Comment);
+            else if (IsBlockComment(text, i, terminal)) (open, kind) = ("*/", LineKind.Comment);
             else if (StartsWith(text, i, "<!--")) (open, kind) = ("-->", LineKind.Comment);
             if (open is not null)
             {
@@ -148,7 +148,7 @@ internal static class LineContext
                 continue;
             }
             if (IsSlashComment(line, i, terminal)) return LineKind.Comment;
-            if (StartsWith(line, i, "/*"))
+            if (IsBlockComment(line, i, terminal))
             {
                 var close = line.IndexOf("*/", i + 2, StringComparison.Ordinal);
                 if (close < 0) return LineKind.Comment;
@@ -173,10 +173,11 @@ internal static class LineContext
     }
 
     // ターミナルのシェルでは、コメントの記号は語の先頭 (行頭か空白の後) にあるときだけコメント。語の途中の # は $#・${#name}・${path#*/}・16#ff・.#pkg。
-    // 語の先頭でも、直後に ASCII が続く // -- はコマンドの引数 (Bazel の //src/main:app、bash --kyouha) なので、直後が空白か ASCII 以外 (確定した日本語) のときだけコメントにする。
+    // 語の先頭でも、直後に ASCII が続く // -- /* はコマンドの引数 (Bazel の //src/main:app、bash --kyouha、ls /*.c) なので、直後が空白か ASCII 以外 (確定した日本語) のときだけコメントにする。
     // 打ったばかりの記号も、続く引数を直接入力するためにコードとする。中で動くエディター (Vim など) のコメントも、記号の後に空白を打てば日本語で書ける。
+    // 改行は本文の始まりにしない。ls /* を実行した後の行を、閉じていない /* コメントの中にしない。
     private static bool IsTerminalComment(string text, int index, int length) =>
-        IsWordStart(text, index) && index + length < text.Length && StartsCommentBody(text[index + length]);
+        IsWordStart(text, index) && index + length < text.Length && text[index + length] is not ('\r' or '\n') && StartsCommentBody(text[index + length]);
 
     private static bool IsWordStart(string text, int index) => index == 0 || char.IsWhiteSpace(text[index - 1]);
 
@@ -185,6 +186,10 @@ internal static class LineContext
 
     private static bool IsSlashComment(string text, int index, bool terminal) =>
         StartsWith(text, index, "//") && (!terminal || IsTerminalComment(text, index, 2));
+
+    // ターミナルの /* は、ls src/*.c・ls /* のようなワイルドカードのほうが多い。
+    private static bool IsBlockComment(string text, int index, bool terminal) =>
+        StartsWith(text, index, "/*") && (!terminal || IsTerminalComment(text, index, 2));
 
     // #1623: # の直後に日本語を確定してもコメントのままにする。## (区切り) もコメント。
     // # の直後が ASCII の文字なら、#include・#region・r#type のような指令や名前なのでコードのまま。
