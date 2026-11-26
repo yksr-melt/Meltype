@@ -36,6 +36,9 @@ internal static class ReportedMisdetectionTests
         // readings-extra.txt (とぐる・びるど・まーじ・ありゃ・ばんえつ・らぷらた・いぬがみけ)。と + guru・びる + doha・ar + や にしない
         Check(("toguru", "とぐる"), ("birudoha", "びるどは"), ("datte.ma-ji", "だって。まーじ"), ("arya", "ありゃ"), ("bannetu", "ばんえつ"),
             ("rapuratagawa", "らぷらたがわ"), ("inugamikenoitizoku", "いぬがみけのいちぞく"));
+        // どっとえ (ドット絵) を 1 語にする: dot + とえ にしない (issue #2390)。辞書の語でない同じ形 (cut + として・bot + とえ) は今までどおり
+        Check(("dottoe", "どっとえ"), ("dottoha", "どっとは"), ("cuttosite", "cutとして"), ("cuttosuru", "cutとする"), ("bottoe", "botとえ"),
+            ("bottomo", "botとも"), ("dottonet", "dotとnet"));
     }
 
     [Test]
@@ -68,15 +71,6 @@ internal static class ReportedMisdetectionTests
             ("bukkakeru", "ぶっかける"), ("buttobasu", "ぶっとばす"), ("beddode", "べっどで"), ("jobga", "jobが"),
             // 読みが辞書に無い外来語の途中の っ + 付属語でない語 (せっど・ぶっぢずむ) と、辞書の外来語 (ぶっだ) は日本語
             ("seddo", "せっど"), ("buddizumu", "ぶっぢずむ"), ("budda", "ぶっだ"));
-    }
-
-    [Test]
-    public static void DoubledConsonant_IsSokuonOfJapaneseWord()
-    {
-        // 重ねた子音のあいだで英語と日本語に切らない: dot|とえ でなく どっと + え (issue #2390)。
-        // 逆向き: 英語の後ろの付属語 (bot|とも・dot|と|net)、読めない英語 (help|ぺーじ) は今までどおり
-        Check(("dottoe", "どっとえ"), ("dottoha", "どっとは"), ("dot", "dot"), ("bottomo", "botとも"), ("dottonet", "dotとnet"),
-            ("atohahelppe-jitoka", "あとはhelpぺーじとか"));
     }
 
     [Test]
