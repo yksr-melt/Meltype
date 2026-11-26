@@ -6857,5 +6857,46 @@ internal static class CompositionTests
         Assert.Equal("確認してよろしいでしょうか？", string.Concat(KeigoConverter.Convert([new("かくにんして", false, ["確認して"]), new("いいですか？", false, ["いいですか？"])]).Select(c => c.Text)));
         Assert.Equal("これでよろしいでしょうか？", KeigoConverter.Convert([new("これでいいですか？", false, ["これでいいですか？"])])[0].Text);
         Assert.Equal("明日がよろしいでしょうか？", KeigoConverter.Convert([new("あしたがいいですか？", false, ["明日がいいですか？"])])[0].Text);
+
+        // 変換後に Space を押すと元の常体候補が出て戻せること
+        var revertLive = new Keyboard(live: true) { KeigoMode = true };
+        revertLive.Type("ryoukai");
+        Assert.Equal("承知いたしました", revertLive.Showing);
+        revertLive.Press(VirtualKeys.Space);
+        Assert.True(revertLive.Host.View!.Candidates.Contains("了解"), "Space で元の表現 (了解) が候補に出る: " + string.Join(",", revertLive.Host.View.Candidates));
+        var originalIndex = revertLive.Host.View.Candidates.ToList().IndexOf("了解");
+        revertLive.SelectCandidate(originalIndex);
+        revertLive.Press(VirtualKeys.Return);
+        Assert.Equal("了解", revertLive.Host.Document, "Space から元の表現を選んで確定できる");
+
+        var revertManual = new Keyboard(live: false) { KeigoMode = true };
+        revertManual.Type("ryoukai ");
+        Assert.Equal("承知いたしました", revertManual.Showing);
+        Assert.True(revertManual.Host.View!.Candidates.Contains("了解"), "変換候補に元の表現 (了解) が含まれる: " + string.Join(",", revertManual.Host.View.Candidates));
+        while (revertManual.Showing != "了解")
+            revertManual.Press(VirtualKeys.Space);
+        revertManual.Press(VirtualKeys.Return);
+        Assert.Equal("了解", revertManual.Host.Document, "Space で候補を送って元の常体 (了解) に戻せる");
+
+        // 逆向きの例: ON でも変えてはいけない入力 (引用・固有名詞・客観・後でを含む熟語・英字混在)
+        Assert.Equal("「了解」", string.Concat(KeigoConverter.Convert([new("「", false, ["「"]), new("りょうかい", false, ["了解"]), new("」", false, ["」"])]).Select(c => c.Text)), "カギ括弧で囲まれた引用は変えない");
+        Assert.Equal("「了解」", KeigoConverter.Convert([new("「りょうかい」", false, ["「了解」"])])[0].Text, "単一文節の引用は変えない");
+        Assert.Equal("「後で」と申し上げました", string.Concat(KeigoConverter.Convert([new("「あとで」と", false, ["「後で」と"]), new("いった", false, ["言った"])]).Select(c => c.Text)), "引用内の語は変えず、外の地の文だけ敬語にする");
+        Assert.Equal("株式会社山田", KeigoConverter.Convert([new("かぶしきがいしゃやまだ", false, ["株式会社山田"])])[0].Text, "固有名詞は変えない");
+        Assert.Equal("東日本", KeigoConverter.Convert([new("ひがしにほん", false, ["東日本"])])[0].Text, "固有名詞の途中を変えない");
+        Assert.Equal("客観", KeigoConverter.Convert([new("きゃっかん", false, ["客観"])])[0].Text, "客観の「客」をお客様にしない");
+        Assert.Equal("客室", KeigoConverter.Convert([new("きゃくしつ", false, ["客室"])])[0].Text, "客室の「客」をお客様にしない");
+        Assert.Equal("観客", KeigoConverter.Convert([new("かんきゃく", false, ["観客"])])[0].Text, "観客の「客」をお客様にしない");
+        Assert.Equal("客観的に拝見いたします", string.Concat(KeigoConverter.Convert([new("きゃっかんてきに", false, ["客観的に"]), new("みる", false, ["見る"])]).Select(c => c.Text)), "客観の「客」で尊敬語 (ご覧になります) に誤爆しない");
+        Assert.Equal("前後で確認", KeigoConverter.Convert([new("ぜんごでかくにん", false, ["前後で確認"])])[0].Text, "「前後で」の途中を後ほどにしない");
+        Assert.Equal("午後で調整", KeigoConverter.Convert([new("ごごでちょうせい", false, ["午後で調整"])])[0].Text, "「午後で」の途中を後ほどにしない");
+        Assert.Equal("食後で構いません", KeigoConverter.Convert([new("しょくごでかまいません", false, ["食後で構いません"])])[0].Text, "「食後で」の途中を後ほどにしない");
+        Assert.Equal("githubに上げた", string.Concat(KeigoConverter.Convert([new("github", true, ["github"]), new("に", false, ["に"]), new("あげた", false, ["上げた"])]).Select(c => c.Text)), "英字混在の「上げた」を「差し上げました」に誤爆しない");
+
+        var mixedEnglish = new Keyboard(live: true) { KeigoMode = true };
+        mixedEnglish.Type("githubniageta");
+        var mixedShowing = mixedEnglish.Showing ?? "";
+        Assert.True(mixedShowing.StartsWith("github", StringComparison.OrdinalIgnoreCase), "英字混在入力の英字部分を壊さない: " + mixedShowing);
+        Assert.True(!mixedShowing.Contains("差し上げ", StringComparison.Ordinal), "githubniageta を差し上げに誤爆しない: " + mixedShowing);
     }
 }

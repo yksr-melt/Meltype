@@ -215,7 +215,9 @@ internal static class KeigoConverter
         }
 
         // 直前の確定済みテキストからは「最後の文」だけを引き継ぐ (前の文の主語が改行や句点をまたいで残らないようにする)
-        var currentSentence = new StringBuilder().Append(LastSentenceOf(before));
+        var lastBefore = LastSentenceOf(before);
+        var currentSentence = new StringBuilder().Append(lastBefore);
+        var quoteDepth = UpdateQuoteDepth(0, lastBefore);
 
         for (var i = 0; i < result.Count; i++)
         {
@@ -223,12 +225,20 @@ internal static class KeigoConverter
             var clauseReading = result[i].Reading;
             currentSentence.Append(clauseText);
 
+            var startsInQuote = quoteDepth > 0;
+            quoteDepth = UpdateQuoteDepth(quoteDepth, clauseText);
+
+            if (result[i].IsEnglish) continue;
+
             if (IsPunctuationOnly(clauseText) && IsPunctuationOnly(clauseReading))
             {
                 if (HasSentenceBreak(clauseText) || (HasClauseComma(clauseText) && (i == 0 || !EndsWithSubjectToken(result[i - 1].Text))))
                     currentSentence.Clear();
                 continue;
             }
+
+            // 引用 (「...」/『...』) の内側にある語句は地の文としてそのまま残す
+            if ((startsInQuote && quoteDepth > 0) || IsFullyQuoted(clauseText)) continue;
 
             var hasSentenceBreak = HasSentenceBreak(clauseText) || HasSentenceBreak(clauseReading);
             var nextIsPunct = i + 1 < result.Count && IsPunctuationOnly(result[i + 1].Text);
@@ -434,7 +444,7 @@ internal static class KeigoConverter
         // 1. 単体の定型句・単語・接頭辞の完全一致
         if (ReadingWords.TryGetValue(readingCore, out var word))
             return word + punct;
-        if (isSentenceEnd && TailReadingMap.TryGetValue(readingCore, out var tailWord))
+        if (isSentenceEnd && TailReadingMap.TryGetValue(readingCore, out var tailWord) && !IsAmbiguousKanjiTailReading(readingCore, textCore))
             return tailWord + punct;
 
         // 3. 語頭接頭辞 (+ 助詞) の一致と、残りの部分の再帰変換 (きょうはいく → 本日は + 伺います)
@@ -755,7 +765,7 @@ internal static class KeigoConverter
             {
                 var idx = rewritten.IndexOf(from, searchFrom, StringComparison.Ordinal);
                 if (idx < 0) break;
-                if (IsReplacementBoundary(rewritten, idx) && (!requireEndBoundary || IsReplacementEndBoundary(rewritten, idx + from.Length)))
+                if (!IsInsideQuotes(rewritten, idx) && IsReplacementBoundary(rewritten, idx) && (!requireEndBoundary || IsReplacementEndBoundary(rewritten, idx + from.Length)))
                 {
                     // 「問題ないかも」「問題ないかと存じます」「問題ないでしょう」等を「問題ございません〜」に再置換しない
                     if (from is "問題ない" or "大丈夫" && idx + from.Length < rewritten.Length &&
@@ -776,12 +786,45 @@ internal static class KeigoConverter
         return rewritten;
     }
 
+    /// <summary>「上げた」「言った」「着た」など、同音異義の漢字動詞を読みだけで誤変換しない。</summary>
+    private static bool IsAmbiguousKanjiTailReading(string readingCore, string textCore) =>
+        (readingCore is "あげる" or "あげます" or "あげた" or "あげました" && !IsKanaOnly(textCore)) ||
+        (readingCore is "いった" && textCore.Contains('言')) ||
+        (readingCore is "きた" or "きます" or "きました" && !IsKanaOnly(textCore) && !textCore.Contains('来'));
+
+    private static int UpdateQuoteDepth(int depth, ReadOnlySpan<char> text)
+    {
+        foreach (var c in text)
+        {
+            if (c is '「' or '『') depth++;
+            else if (c is '」' or '』' && depth > 0) depth--;
+        }
+        return depth;
+    }
+
+    private static bool IsFullyQuoted(string text)
+    {
+        var (core, _) = SplitTrailingPunctuation(text);
+        return core.Length >= 2 && ((core[0] == '「' && core[^1] == '」') || (core[0] == '『' && core[^1] == '』'));
+    }
+
+    private static bool IsInsideQuotes(string text, int index)
+    {
+        var depth = 0;
+        for (var i = 0; i < index; i++)
+        {
+            if (text[i] is '「' or '『') depth++;
+            else if (text[i] is '」' or '』' && depth > 0) depth--;
+        }
+        return depth > 0;
+    }
+
     /// <summary>「午後で」「早急に」「只今から」のように別の漢字熟語の途中へ部分一致する誤爆を防ぐ。</summary>
     private static bool IsReplacementBoundary(string text, int index)
     {
         if (index == 0) return true;
         var prev = text[index - 1];
-        return prev is '、' or '。' or '，' or '．' or ',' or '.' or '！' or '？' or '!' or '?' or ' ' or '　' or '「' or '（' or '('
+        return prev is '、' or '。' or '，' or '．' or ',' or '.' or '！' or '？' or '!' or '?' or ' ' or '　' or '（' or '('
             or 'は' or 'が' or 'を' or 'に' or 'で' or 'と' or 'も' or 'の' or 'へ' or 'か' or 'て';
     }
 
