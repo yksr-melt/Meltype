@@ -251,17 +251,17 @@ internal static class CompositionConversion
     }
 
     /// <summary>
-    /// 文全体の文節 (<see cref="Clause.Alternatives"/>) を、選んでいる案の文節に分ける。文節ごとに候補を選び直す・区切りを動かす・確定する前に呼ぶ。
-    /// 文節が 1 つの案の候補を選んでいれば、その文節でその候補を選ぶ。
-    /// 文全体の文節でなければ何もしない。どの案にも無い文 (打ち始めの ・ を Space で / にした文) を選んでいれば、分けずに学習しない文節にする。
-    /// 分けたら、後から届いた変換エンジンの答えで文全体の文節に戻さない (<see cref="Conversion.Edited"/>)。
-    /// </summary>
-    /// <summary>
     /// 文脈の手がかり (ContextRules) を探すキャレットの前: 近くの 20 文字だけ。手がかりは同じ話題の近くの語 (気温 → 暑い) で、
     /// 入力欄の前のほうにある語まで見ると、別の話題の語でも当たる。
     /// </summary>
     private static string CueBefore(CompositionEnv env) => env.Context().PrecedingText is { } before ? before[^Math.Min(20, before.Length)..] : "";
 
+    /// <summary>
+    /// 文全体の文節 (<see cref="Clause.Alternatives"/>) を、選んでいる案の文節に分ける。文節ごとに候補を選び直す・区切りを動かす・確定する前に呼ぶ。
+    /// 文節が 1 つの案の候補を選んでいれば、その文節でその候補を選ぶ。
+    /// 文全体の文節でなければ何もしない。どの案にも無い文 (打ち始めの ・ を Space で / にした文) を選んでいれば、分けずに学習しない文節にする。
+    /// 分けたら、後から届いた変換エンジンの答えで文全体の文節に戻さない (<see cref="Conversion.Edited"/>)。
+    /// </summary>
     internal static void SplitWholeSentence(Conversion conversion)
     {
         if (conversion.Clauses is not [{ Alternatives: { } alternatives } whole]) return;
