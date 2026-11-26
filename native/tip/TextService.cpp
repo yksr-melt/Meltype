@@ -1171,6 +1171,8 @@ bool TextService::WouldEat(ITfContext* context, UINT vk, LPARAM lParam, wchar_t&
     if (InMenuMode()) return pass(L"メニューを開いている");
     if (KeyDown(VK_CONTROL) || KeyDown(VK_MENU) || KeyDown(VK_LWIN) || KeyDown(VK_RWIN)) return pass(L"Ctrl・Alt・Windows キーを押している");
     if (ContextDisabled(context)) return pass(L"この入力欄では使わない");
+    // テンキーは ImeCapture の契約で受け取らない (受け取ってから入れ直すと、ファイル保存ダイアログのファイル名欄で数字が消える: issue #2388)
+    if (vk >= VK_NUMPAD0 && vk <= VK_DIVIDE) return pass(L"テンキー");
     ch = CharOf(vk, 0);
     // 受け取る文字は Meltype.exe が決める (英数では打っている英語の語の続きを通すなど)
     if (!state_.text || ch < L'!' || ch > L'~' || state_.except.find(ch) != std::wstring::npos) return pass(L"受け取らない文字");

@@ -46,8 +46,10 @@ class MozcEngine private constructor(profile: File) {
             try {
                 val dir = File(context.noBackupFilesDir, "mozc")
                 val data = installDictionary(dir, versionKey(context)) { context.assets.open(DATA_FILE) }
-                val profile = File(dir, "profile")
-                if (!profile.isDirectory && !profile.mkdirs()) return null
+                // Mozc には学習させないので、前の版が覚えさせた文節の区切りと候補 (boundary.db・segment.db など) は開くたびに捨てる。
+                // 読みを誤った位置で区切る変換を固定してしまう (issue #2014)。
+                val profile = File(dir, "profile").apply { deleteRecursively() }
+                if (!profile.mkdirs()) return null
                 if (!MozcJni.initialize()) return null
                 if (!MozcJni.onPostLoad(profile.path, data.path)) return null
                 // 辞書を読めなかったとき、onPostLoad は true のまま、辞書なしの Mozc で動き出す。

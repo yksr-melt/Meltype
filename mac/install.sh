@@ -2,8 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Yukishiro
 #
-# テスト版の Meltype.app を ~/Library/Input Methods に入れる。zip を展開したフォルダーで実行する:
-#   bash install.sh
+# Meltype.app を ~/Library/Input Methods に入れる。DMG のインストーラーと ZIP の両方から使う。
 # 設定アプリ (Meltype Settings.app) は ~/Applications に入れる (install-settings-app.sh)。
 # Homebrew の cask からは --homebrew を付けて動かす。付けたときは:
 #   - 設定アプリは入れない (cask の app が /Applications に入れる)
@@ -23,47 +22,48 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ ! -d Meltype.app ]]; then
-    echo "Meltype.app が見つかりません。zip を展開したフォルダーで実行してください。" >&2
+    echo "Meltype.app が見つかりません。配布ファイルをダウンロードし直してください。" >&2
     exit 1
 fi
-for helper in install-app.sh install-settings-app.sh start-input-method.sh select-input-source.swift; do
-    [[ -f "$helper" ]] || { echo "必要なファイルがありません: ${helper}。zip 全体を展開してください。" >&2; exit 1; }
+for helper in install-app.sh install-settings-app.sh start-input-method.sh; do
+    [[ -f "$helper" ]] || { echo "必要なファイルがありません: ${helper}。配布ファイルをダウンロードし直してください。" >&2; exit 1; }
 done
 
 TARGET="$HOME/Library/Input Methods"
+app="$TARGET/Meltype.app"
 # 既存 Cask の契約を維持し、手動版があれば上書きしない。
-if [[ $from_homebrew -eq 1 && -e "$TARGET/Meltype.app" ]]; then
-    echo "手動で入れた Meltype があります: $TARGET/Meltype.app" >&2
+if [[ $from_homebrew -eq 1 && -e "$app" ]]; then
+    echo "手動で入れた Meltype があります: $app" >&2
     echo "Homebrew で入れるときは、先にこれを消してから、もう一度実行してください。" >&2
     exit 1
 fi
 if [[ $from_homebrew -eq 1 ]]; then
-    exec bash ./install-app.sh Meltype.app "$TARGET/Meltype.app" homebrew
+    exec bash ./install-app.sh Meltype.app "$app" homebrew
 fi
 receipt="$(mktemp "${TMPDIR:-/tmp}/meltype-install-result.XXXXXX")"
 trap 'rm -f "$receipt"' EXIT
-bash ./install-app.sh Meltype.app "$TARGET/Meltype.app" manual "$receipt"
+bash ./install-app.sh Meltype.app "$app" manual "$receipt"
 IFS= read -r installation_phase < "$receipt"
 case "$installation_phase" in
     initial) updating=0 ;;
     update) updating=1 ;;
     *) echo "インストール結果を確認できませんでした。" >&2; exit 1 ;;
 esac
-echo "インストールしました: $TARGET/Meltype.app"
+echo "インストールしました: $app"
 bash ./install-settings-app.sh "Meltype Settings.app"
 if [[ $updating -eq 1 ]]; then
     echo "Meltype を更新しました。"
     exit 0
 fi
-# swift はコマンドライン・デベロッパ・ツールが無い Mac では使えない。選べなくてもインストールは終わっている。
-# macOS 27 では、入力ソースの有効化がアプリから通らず、ここで選べないことがある。その場合も、
-# システム設定の入力ソースに追加すれば、ログアウトしなくても入力メニューから選べるようになる。
-if swift ./select-input-source.swift; then
+# 開発ツールを入れていない Mac でも選択できるよう、同梱の補助ツールを使う。
+if "$app/Contents/MacOS/MeltypeInstallSupport" --select "$app"; then
     echo
     echo "Meltype を起動し、入力ソースとして選択しました。"
 else
     echo
-    echo "Meltype を起動しました。入力メニューに Meltype が無いときは、"
+    echo "Meltype を起動しました。有効化の確認が表示されたら「許可」を押してください。"
+    echo "メニューバーの入力メニューから Meltype を選んでください。"
+    echo "入力メニューに Meltype が無いときは、"
     echo "システム設定 → キーボード →（テキスト入力の）入力ソース →「編集…」→「+」→ 日本語 → Meltype"
     echo "から追加してください。それでも出てこなければ、ログアウトしてログインし直してください。"
 fi

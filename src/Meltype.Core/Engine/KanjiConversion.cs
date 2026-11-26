@@ -58,9 +58,6 @@ internal interface IKanjiConverter
     /// <summary>文節に区切って変換する。変換できなければ (変換エンジンが使えない・Deadline までに答えが無い) null。</summary>
     IReadOnlyList<ConversionClause>? Convert(ConversionRequest request);
 
-    /// <summary>ユーザーが確定した文節 (読みと文字列、区切りも確定したとおり) を覚えさせる。before はキャレットの前の確定済みの文字列そのまま。覚えない変換エンジンは何もしない。</summary>
-    void Learn(string? before, IReadOnlyList<ConversionClause> clauses) { }
-
     /// <summary>
     /// Deadline の後に変換エンジンのキャッシュに結果が入った (または変換エンジンが使えるようになった)。ワーカーのスレッドで呼ぶ。
     /// 受け取った側は入力スレッドに移して RefreshConversion を呼ぶ。結果を渡さないので、古い読みの結果は表示に使われない。

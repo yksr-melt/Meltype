@@ -17,15 +17,10 @@ internal static class UtilityConversionTests
     private sealed class SplitConverter(Dictionary<string, ConversionClause[]> clauses) : TestConverter
     {
         private readonly FakeConverter _inner = new();
-        public List<string> Learned { get; } = [];
         public override string? Convert(string hiragana, string? before) => ConvertClauses(hiragana, before) is { } parts ? string.Concat(parts.Select(c => c.Text)) : _inner.Convert(hiragana, before);
         public override IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) =>
             clauses.TryGetValue(hiragana, out var result) ? result : _inner.ConvertClauses(hiragana, before);
 
-        public override void Learn(string? context, IReadOnlyList<ConversionClause> learned)
-        {
-            lock (Learned) Learned.Add(string.Join("|", learned.Select(c => $"{c.Reading}={c.Text}")));
-        }
     }
 
     /// <summary>変換して、候補の一覧を広げてから text を選んで確定する。</summary>
@@ -127,18 +122,6 @@ internal static class UtilityConversionTests
         Assert.Equal("火曜日", history.Get("かようび"), "読みに ようび がある 火曜日 は覚える");
     }
 
-    [Test]
-    public static void DigitsNotInTheReading_AreLeftToTheEngineToLearn()
-    {
-        // いちばん → 1番 は Meltype の変換履歴には覚えないが、Mozc には覚えさせる (Mozc は日時の候補を自分で学習しない)
-        var history = new ConversionHistory(null);
-        var converter = new SplitConverter([]);
-        var k = new Keyboard(converter: converter, history: history, moreCandidates: reading => reading == "いちばん" ? ["一番", "1番"] : []);
-        Choose(k, "itiban", "1番");
-        Assert.True(history.Get("いちばん") is null, "Meltype の変換履歴には覚えない");
-        for (var i = 0; i < 100 && converter.Learned.Count == 0; i++) Thread.Sleep(10);
-        lock (converter.Learned) Assert.Equal("いちばん=1番", converter.Learned.SingleOrDefault() ?? "(なし)");
-    }
 
     [Test]
     public static void KanjiNumbers_AreOfferedForDigitsOnly()
@@ -151,7 +134,10 @@ internal static class UtilityConversionTests
         Assert.True(candidates.Contains("二〇二六") && candidates.Contains("二千二十六") && candidates.Contains("弐千弐拾六"), string.Join(",", candidates));
         Choose(new Keyboard(history: history), "12345", "一万二千三百四十五");
         Assert.Equal("一万二千三百四十五", history.Get("12345"), "選んだ漢数字は覚える (issue #672)");
-        Assert.Equal("〇〇一", string.Join("|", KanjiNumberConversion.Candidates("001")), "先頭が 0 の数字は位取りしない");
+        Assert.Equal("〇〇一|(001)|（001）", string.Join("|", KanjiNumberConversion.Candidates("001")), "先頭が 0 の数字は位取りしない");
+        var numbered = new Keyboard();
+        numbered.Type("1 ");
+        Assert.True(numbered.Host.View!.Candidates.Contains("(1)") && numbered.Host.View!.Candidates.Contains("（1）"), "箇条書きの番号 (issue #2256)");
         Assert.Equal(0, KanjiNumberConversion.Candidates("12a").Count, "数字だけでなければ出さない");
         var sentence = new Keyboard();
         sentence.Type("2026nen ");

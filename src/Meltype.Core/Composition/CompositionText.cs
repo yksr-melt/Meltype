@@ -5,6 +5,7 @@ using System.Text;
 using Meltype.Detection;
 using Meltype.Dictionary;
 using Meltype.Libraries.Chars;
+using Meltype.Notation;
 
 namespace Meltype.Composition;
 
@@ -23,17 +24,22 @@ internal static partial class CompositionText
 {
     /// <summary>
     /// 英語 / 日本語の学習を引く文脈: 前が英語か (true)・日本語か (false)。設定「英語 / 日本語の学習を前の文脈ごとに分ける」が OFF なら null。
-    /// 打った英字を読み直す断片は、読み直す元の入力の文脈を使う。
     /// </summary>
-    public static bool? LearningContext(TextEnv env) =>
-        env.Fragment is { } origin ? origin.LearningContext : env.Settings.ContextualLearning ? env.Context().PrecedingEnglish : null;
+    public static bool? LearningContext(TextEnv env) => LearnedLanguages(env).Context;
+
+    /// <summary>判定に使う英語 / 日本語の学習。打った英字を読み直す断片は、読み直す元の入力のものを使う。</summary>
+    public static LanguageLearning LearnedLanguages(TextEnv env) =>
+        env.Fragment is { } origin ? origin.Languages : new(env.Languages, env.Settings.ContextualLearning ? env.Context().PrecedingEnglish : null);
+
+    /// <summary><see cref="LearnedLanguages"/> の学習だけ。文脈 (<see cref="TextEnv.Context"/>) を計算しない。</summary>
+    private static LanguageMemory? LearnedMemory(TextEnv env) => env.Fragment is { } origin ? origin.Languages.Memory : env.Languages;
 
     /// <summary>
     /// 打った英字の一部を読み直すために作る断片に渡すもの。env は読み直す元の入力のもの。
-    /// 断片は設定によらず既定の設定 (自動判定・z の記号・/ のまま) で読み、打ち間違いを直さない。学習の文脈は元の入力のもの。
+    /// 断片は設定によらず既定の設定 (自動判定・z の記号・/ のまま) で読み、打ち間違いを直さない。英語 / 日本語の学習は元の入力のもの。
     /// </summary>
     public static TextEnv FragmentEnv(TextEnv env) =>
-        new(env.Detector, FragmentSettings, null) { Fragment = new FragmentOrigin(LearningContext(env)), Context = () => TextContext.None };
+        new(env.Detector, FragmentSettings, null) { Fragment = new FragmentOrigin(LearnedLanguages(env)), Context = () => TextContext.None };
 
     private static readonly Config.Settings FragmentSettings = new();
 
@@ -336,7 +342,7 @@ internal static partial class CompositionText
         }
     }
 
-    /// <summary>数字だけ (と . , : - /) の入力か。数字は半角のまま、Space で確定して空白を入れる (英語と同じ扱い)。</summary>
+    /// <summary>数字だけ (と . , : - /) の入力か。数字は半角のまま、読点で終わらなければ Space で確定して空白を入れる (英語と同じ扱い)。</summary>
     public static bool IsNumeric(CompositionTextState state) =>
         !state.KanaInput && state.Pending.Length == 0 && state.Units.Count > 0 && state.Units.Any(u => u.Raw.Any(char.IsAsciiDigit)) &&
         state.Units.All(u => u.Raw.All(c => char.IsAsciiDigit(c) || c is '.' or ',' or ':' or '-' or '/'));
@@ -348,7 +354,7 @@ internal static partial class CompositionText
     public static bool IsAlphanumericAt(CompositionTextState state, TextEnv env, bool final) => state.Mode switch
     {
         DisplayMode.HalfWidthAlphanumeric or DisplayMode.FullWidthAlphanumeric => true,
-        DisplayMode.Auto => CompositionText.IsNumeric(state) || CompositionText.Segments(state, env).All(s => s.IsEnglish),
+        DisplayMode.Auto => CompositionText.IsNumeric(state) ? CompositionText.Numeric(state, env).Spans[^1].Kind == SpanKind.English : CompositionText.Segments(state, env).All(s => s.IsEnglish),
         _ => false,
     };
 
@@ -360,11 +366,11 @@ internal static partial class CompositionText
     /// <summary>水平線・front matter の区切り (3 個以上の -) だけの入力か。打った半角のまま表示・確定する。</summary>
     public static bool IsHorizontalRule(CompositionTextState state) => !state.KanaInput && CompositionText.Raw(state).Length >= 3 && CompositionText.Raw(state).All(c => c == '-');
 
-    /// <summary>変換区間に * が 2 個以上あるときだけ、表示の ＊ を打った半角の * にする (強調 **bold**・*italic*)。</summary>
-    private static string HalfWidthStars(CompositionTextState state, string text) => !state.KanaInput && CompositionText.Raw(state).Count(c => c == '*') >= 2 ? text.Replace('＊', '*') : text;
+    /// <summary>表記の規則が見る打った文字。かな入力では、打ったキーの英字・記号は入力した文字でないので空。</summary>
+    private static string TypedForNotation(CompositionTextState state) => state.KanaInput ? "" : CompositionText.Raw(state);
 
     /// <summary>変換の最初の候補を、入力中の表示と同じ半角にする (* が 2 個以上・---)。当てはまらなければそのまま返す。</summary>
     public static string AsDisplayedHalfWidth(CompositionTextState state, string candidate, string? clauseRaw) =>
-        CompositionText.IsHorizontalRule(state) ? clauseRaw ?? candidate : CompositionText.HalfWidthStars(state, candidate);
+        CompositionText.IsHorizontalRule(state) ? clauseRaw ?? candidate : NotationRules.Show(ComposedText.Of(SpanKind.Japanese, candidate), TypedForNotation(state)).Text;
 
 }

@@ -54,8 +54,6 @@ internal static class DetectionTests
             "hyprland", "wayland", "cachyos", "nixos", "devin", "mergify", "sideload", "assignee");
 
         var settings = DefaultSettings();
-        Assert.Equal(Verdict.Undecided, MeltypeRuntime.ClassifyDirect(Engine, "shit", final: false, settings));
-        Assert.Equal(Verdict.English, MeltypeRuntime.ClassifyDirect(Engine, "shit", final: true, settings));
         Assert.Equal(Verdict.Japanese, MeltypeRuntime.ClassifyDirect(Engine, "shita", final: true, settings));
     }
 

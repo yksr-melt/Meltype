@@ -24,7 +24,7 @@ Visa Mastercard JCB Amex
 
 # OS・開発ツール
 Hyprland Wayland CachyOS NixOS Manjaro Gentoo Ghostty WezTerm Alacritty Kitty Tailscale WireGuard
-DeepSeek Codex Devin Mistral Llama Zenzai Mergify Antigravity Zed Helix Lazygit
+DeepSeek Codex Devin Mistral Llama Zenzai Zed Helix Lazygit
 PipeWire systemd Btrfs Playwright Prisma Drizzle Lucide Biome Ruff
 
 # 企業・ブランド
@@ -98,3 +98,5 @@ picco nqrse
 
 # Issue #469 (VTuber グループ)
 holoX
+# Issue #2389 (まとめ) のサービス名・アプリ名
+Mergify Antigravity Obsidian KonomiTV

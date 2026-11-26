@@ -39,17 +39,19 @@ const offensive = new Set([
   ...[1, 2].flatMap(level => readWords(path.join(dir, '..', 'misc', `offensive.${level}`))),
   'wetback', 'wetbacks',
 ]);
+// 「し」に続く t は「た・て・と」や「っ」を打つ途中にもなる。
+const romajiPartialCollisions = new Set(['shit']);
 const words = new Set(common);
 for (const word of [40, 50].flatMap(wordsAt)) {
   // 頻度の低い語が日本語の読みや打ちかけと重なると、入力の途中を英字に分けてしまう (anode → あので)。
-  if (offensive.has(word) || kana.test(word) || commonTails.has(word)) continue;
+  if (offensive.has(word) || romajiPartialCollisions.has(word) || kana.test(word) || commonTails.has(word)) continue;
   // 短い語は余計な子音を 1 文字打ったローマ字とも重なる (shims → し + ms)。
   if (word.length <= 5 && [...word].some((letter, i) => !'aiueo'.includes(letter) && kana.test(word.slice(0, i) + word.slice(i + 1)))) continue;
   words.add(word);
 }
 for (const level of [1, 3]) {
   for (const word of readWords(path.join(dir, '..', 'misc', `profane.${level}`))) {
-    if (!offensive.has(word)) words.add(word);
+    if (!offensive.has(word) && !romajiPartialCollisions.has(word)) words.add(word);
   }
 }
 

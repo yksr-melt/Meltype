@@ -72,7 +72,7 @@ copy paste cut undo redo save open close exit quit new edit view help about home
 submit cancel confirm delete remove add create update upload download share send receive reply forward
 select deselect enable disable enabled disabled toggle check uncheck on off yes no ok okay
 ping pong
-archlinux sideload sideloading assignee assignees worktree worktrees dotfiles chezmoi
+archlinux worktree worktrees dotfiles chezmoi
 hyprctl wlroots xdg flatpak appimage makepkg paru shadcn
 gguf ggml lora qlora vllm safetensors onnx cuda vulkan
 
@@ -275,3 +275,7 @@ inotify
 # Issue #1390: stat・stats (statsuruno → statするの のように英字のまま打つ語)
 stat
 stats
+# Issue #2389 (まとめ) の技術用語
+assignee assignees sideload sideloading linpeas ver
+# 三角関数 (cos・tan はローマ字として読める)
+cos sin tan

@@ -60,6 +60,39 @@ internal static class RuntimeTests
     }
 
     [Test]
+    public static void Issue2014_MozcLearningOfOlderVersions_IsDiscarded()
+    {
+        // 前の版が Mozc に覚えさせた区切り (boundary.db・segment.db) は、読みを誤った位置で区切る変換 (しょうひ → ショウ日) を固定する。変換エンジンを作るときに捨てる
+        WithRuntime((runtime, directory) =>
+        {
+            var profile = Path.Combine(directory, "mozc");
+            Directory.CreateDirectory(profile);
+            File.WriteAllText(Path.Combine(profile, "boundary.db"), "");
+            File.WriteAllText(Path.Combine(profile, "segment.db"), "");
+            var helper = Path.Combine(profile, "meltype_mozc_helper");
+            File.WriteAllText(helper, "installed helper");
+            runtime.CreateConverter(directory);
+            Assert.True(!File.Exists(Path.Combine(profile, "boundary.db")), "前の版の区切りの学習を捨てる");
+            Assert.True(!File.Exists(Path.Combine(profile, "segment.db")), "前の版の候補の学習を捨てる");
+            Assert.Equal("installed helper", File.ReadAllText(helper), "アプリの配置先と同じデータフォルダーでも、ヘルパーを残す");
+        });
+    }
+
+    [Test]
+    public static void Issue2014_UnremovableMozcLearningDoesNotPreventStartup()
+    {
+        WithRuntime((runtime, directory) =>
+        {
+            // 学習ファイルの名前にフォルダーがある場合も、消せないユーザーデータとして扱って起動を続ける。
+            // File.Delete は Windows・Linux とも UnauthorizedAccessException を投げる。
+            var blocked = Path.Combine(directory, "mozc", "boundary.db");
+            Directory.CreateDirectory(blocked);
+            runtime.CreateConverter(directory);
+            Assert.True(Directory.Exists(blocked), "消せなくても変換エンジンを作れる");
+        });
+    }
+
+    [Test]
     public static void DirectModeDetection_ReturnsRomajiToJapanese()
     {
         // 英数状態で打ち始めた語がローマ字なら日本語に戻す (設定「英数状態で自動判定」)。Mac・Linux ではまだ判定しない (#1724)

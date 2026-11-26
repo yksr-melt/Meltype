@@ -3,6 +3,7 @@
 
 using System.Text;
 using Meltype.Config;
+using Meltype.Libraries.Lexicon;
 
 namespace Meltype.Learning;
 
@@ -241,9 +242,11 @@ internal sealed class Predictor
     private readonly PhraseHistory? _phrases;
     private readonly Func<IEnumerable<(string Reading, string Word)>>? _userWords;
     private readonly ConversionHistory? _history;
-    private readonly Lazy<(string[] Common, string[] All)> _english;
-    private readonly Lazy<EnglishName[]> _englishNames = new(LoadEnglishNames);
-    private readonly Lazy<(string Reading, string Phrase, string Start)[]> _greetings = new(LoadGreetings);
+
+    // 同梱辞書は入力ホストによらないので、最初に使うときだけ索引を作り、プロセス内で共有する。
+    private static readonly Lazy<PackedWordSet> CommonEnglish = new(() => PackedWordSet.FromWords(DictionarySource.Load("english.txt", null)));
+    private static readonly Lazy<EnglishName[]> EnglishNames = new(LoadEnglishNames);
+    private static readonly Lazy<(string Reading, string Phrase, string Start)[]> Greetings = new(LoadGreetings);
 
     /// <summary>英字の名前の読みと語。Brand は社名・サービス名の辞書 (brands.txt) のもの、Order は辞書に書いた順。</summary>
     private readonly record struct EnglishName(string Reading, string Word, bool Brand, int Order);
@@ -254,15 +257,10 @@ internal sealed class Predictor
         _phrases = phrases;
         _userWords = userWords;
         _history = history;
-        _english = new(() =>
-        {
-            static string[] Sorted(IEnumerable<string> words) =>
-                words.Select(w => w.Trim()).Where(w => w.Length > 0 && w.All(char.IsAsciiLetterLower)).Distinct().Order(StringComparer.Ordinal).ToArray();
-            var common = Sorted(Libraries.Lexicon.DictionarySource.Load("english.txt", null));
-            var all = Sorted(Libraries.Lexicon.DictionarySource.ReadEmbedded("english-words.txt").Split('\n').Where(l => !l.StartsWith('#')));
-            return (common, all);
-        });
     }
+
+    /// <summary>学習データを使わない予測 (ユーザー辞書・同梱の辞書だけ)。</summary>
+    internal Predictor WithoutLearning() => new(null, _userWords, null);
 
     internal PhraseHistory? Phrases => _phrases;
 
@@ -300,25 +298,27 @@ internal sealed class Predictor
             Add(_history.TextsStartingWith(kana));
         // 学習がなくても出す定型句 (おはよ → おはようございます)。出し始める読みまで打ったら出す (ほかの語の打ち始めでは出さない)。
         // 打ち終えた読みと同じ語句 (こんにちは) は、続きではないので出さない
-        Add(_greetings.Value.Where(g => g.Reading.Length > kana.Length && g.Reading.StartsWith(kana, StringComparison.Ordinal)
+        if (result.Count < MaxPredictions) Add(Greetings.Value.Where(g => g.Reading.Length > kana.Length && g.Reading.StartsWith(kana, StringComparison.Ordinal)
             && kana.StartsWith(g.Start, StringComparison.Ordinal)).Select(g => g.Phrase));
         return result;
     }
 
     /// <summary>打ちかけの英単語の続きの候補 (decis → decision, decisions …)。打った大文字 (先頭・すべて) に合わせる。</summary>
-    public IReadOnlyList<string> PredictEnglish(string raw)
+    public static IReadOnlyList<string> PredictEnglish(string raw)
     {
         if (raw.Length < MinEnglishLength || !raw.All(char.IsAsciiLetter)) return [];
-        var lower = raw.ToLowerInvariant();
-        var (common, all) = _english.Value;
-        var words = StartingWith(common, lower).Concat(StartingWith(all, lower))
-            .Where(w => w.Length > lower.Length).Distinct()
-            // よく使う英単語の一覧のものを先に、それぞれ短い順
-            .Select((w, i) => (Word: w, Common: Array.BinarySearch(common, w, StringComparer.Ordinal) >= 0, Index: i))
-            .OrderByDescending(w => w.Common).ThenBy(w => w.Word.Length).ThenBy(w => w.Index)
-            .Take(MaxPredictions)
-            .Select(w => MatchCase(w.Word, raw));
-        return words.ToList();
+        // 綴り順の一覧を小文字どうしで二分探索するので、打ったものの小文字を先に作る (候補は小文字だけ)
+        Span<char> buffer = raw.Length <= 64 ? stackalloc char[64] : new char[raw.Length];
+        var lower = buffer[..raw.Length];
+        for (var i = 0; i < raw.Length; i++) lower[i] = char.ToLowerInvariant(raw[i]);
+        var common = CommonEnglish.Value;
+        // よく使う英単語の一覧のものを先に、それぞれ短い順 (同じ長さは一覧の順)。全部を並べ替えずに上位だけを取る
+        var result = new List<string>(MaxPredictions);
+        TakeMatching(result, common, lower, MaxPredictions, skip: null);
+        if (result.Count < MaxPredictions)
+            TakeMatching(result, DictionarySource.EnglishWords, lower, MaxPredictions - result.Count, skip: common);
+        for (var i = 0; i < result.Count; i++) result[i] = MatchCase(result[i], raw);
+        return result;
     }
 
     /// <summary>
@@ -326,10 +326,10 @@ internal sealed class Predictor
     /// 社名・サービス名を先に、それぞれ読みの短い順。読みと同じ長さ (読みを打ち終わったもの) も出す。
     /// 読みで並べた一覧を二分探索するので、打つたびに全部を見ることはしない。
     /// </summary>
-    public IReadOnlyList<string> PredictEnglishNames(string kana)
+    public static IReadOnlyList<string> PredictEnglishNames(string kana)
     {
         if (kana.Length < MinEnglishNameKanaLength) return [];
-        var names = _englishNames.Value;
+        var names = EnglishNames.Value;
         var matches = new List<EnglishName>();
         for (var i = FirstReadingAtOrAfter(names, kana); i < names.Length && names[i].Reading.StartsWith(kana, StringComparison.Ordinal); i++) matches.Add(names[i]);
         return matches.OrderByDescending(n => n.Brand).ThenBy(n => n.Reading.Length).ThenBy(n => n.Order)
@@ -377,11 +377,28 @@ internal sealed class Predictor
             .Where(parts => parts.Length == 3 && parts.All(p => p.Length > 0))
             .Select(parts => (parts[0], parts[1], parts[2])).ToArray();
 
-    private static IEnumerable<string> StartingWith(string[] sorted, string prefix)
+    /// <summary>prefix より長い一致を短い順 (同じ長さは一覧の順) に足す。skip の語は足さない。</summary>
+    private static void TakeMatching(List<string> result, PackedWordSet sorted, ReadOnlySpan<char> prefix, int max, PackedWordSet? skip)
     {
-        var index = Array.BinarySearch(sorted, prefix, StringComparer.Ordinal);
-        if (index < 0) index = ~index;
-        for (var i = index; i < sorted.Length && sorted[i].StartsWith(prefix, StringComparison.Ordinal); i++) yield return sorted[i];
+        // 候補に残らなかった語を文字列にしないよう、索引の番号だけで並べる。
+        Span<int> best = stackalloc int[MaxPredictions];
+        var count = 0;
+        for (var i = sorted.LowerBound(prefix); i < sorted.Count; i++)
+        {
+            var word = sorted.Word(i);
+            if (!word.StartsWith(prefix, StringComparison.Ordinal)) break;
+            if (word.Length <= prefix.Length || (count == max && word.Length >= sorted.Word(best[count - 1]).Length) ||
+                word.ContainsAnyExceptInRange('a', 'z') || skip?.Contains(word) == true) continue;
+            var at = Math.Min(count, max - 1);
+            while (at > 0 && word.Length < sorted.Word(best[at - 1]).Length)
+            {
+                best[at] = best[at - 1];
+                at--;
+            }
+            best[at] = i;
+            count = Math.Min(count + 1, max);
+        }
+        foreach (var index in best[..count]) result.Add(sorted.Word(index).ToString());
     }
 
     private static string MatchCase(string word, string typed)

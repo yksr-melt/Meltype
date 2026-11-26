@@ -20,7 +20,7 @@ internal sealed class PackedWordSet
         for (var k = 0; k < Count; k++) _index.Add(HashIndex.Of(Word(k)), k + 1);
     }
 
-    private ReadOnlySpan<char> Word(int k) => _chars.AsSpan(_starts[k], _starts[k + 1] - _starts[k]);
+    internal ReadOnlySpan<char> Word(int k) => _chars.AsSpan(_starts[k], _starts[k + 1] - _starts[k]);
 
     /// <summary>
     /// 1 行に 1 語の辞書の本文から作る。空行と # で始まる行は飛ばす。語ごとの文字列は作らない。
@@ -114,6 +114,13 @@ internal sealed class PackedWordSet
     /// <summary>prefix で始まる語があるか (prefix 自体が語の場合も true)。語は並べた順なので、prefix 以上の最初の語を見る。</summary>
     public bool HasPrefix(ReadOnlySpan<char> prefix)
     {
+        var first = LowerBound(prefix);
+        return first < Count && Word(first).StartsWith(prefix);
+    }
+
+    /// <summary>語が prefix 以上になる最初の位置。予測はここから一致する語を順に読む。</summary>
+    internal int LowerBound(ReadOnlySpan<char> prefix)
+    {
         var (low, high) = (0, Count);
         while (low < high)
         {
@@ -121,6 +128,6 @@ internal sealed class PackedWordSet
             if (Word(middle).SequenceCompareTo(prefix) < 0) low = middle + 1;
             else high = middle;
         }
-        return low < Count && Word(low).StartsWith(prefix);
+        return low;
     }
 }
