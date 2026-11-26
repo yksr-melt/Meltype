@@ -256,6 +256,7 @@ function keigoSection() {
     self_subjects: 1,
     gratitude_following: 1,
     polite_adjectives: 1,
+    non_request_te: 1,
     reading_words: 2,
     respectful_readings: 2,
     respectful_suffixes: 2,

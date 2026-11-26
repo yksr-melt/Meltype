@@ -245,8 +245,14 @@ internal static class CompositionPresentation
     /// </summary>
     internal static ComposedText CommittedDisplay(CompositionInput input, CompositionEnv env) => env.LateResults
         ? CompositionText.AsCommitted(input.Text, env, committed => CompositionText.Compose(committed, env, final: true, env.Settings.LiveConversion
-            ? (kana, afterEnglish, shown) => CompositionConversion.CountsAsLive(kana) ? Composed(CompositionConversion.ConvertJapaneseSegment(input, env, kana, afterEnglish, CompositionConversion.SegmentBefore(env, shown), zenzai: true)) : ComposedText.Kana(kana)
-            : null))
+            ? (kana, afterEnglish, shown) =>
+            {
+                if (!CompositionConversion.CountsAsLive(kana)) return ComposedText.Kana(kana);
+                var before = CompositionConversion.SegmentBefore(env, shown);
+                return Composed(CompositionConversion.PostProcessJapaneseClauses(
+                    CompositionConversion.ConvertJapaneseSegment(input, env, kana, afterEnglish, before, zenzai: true), env, before));
+            }
+        : null))
         : CurrentComposed(input, env, final: true);
 
     /// <summary>文節の文字。</summary>

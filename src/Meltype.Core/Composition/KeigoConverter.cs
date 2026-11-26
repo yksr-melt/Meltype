@@ -37,6 +37,7 @@ internal static class KeigoConverter
     private static Dictionary<char, (string Suffix, string Replacement)[]> TailTextSuffixBuckets => LoadedRules.TailTextSuffixBuckets;
     private static (string Suffix, string SuruReplacement, string? GodanSaReplacement)[] SuruOrGodanSuffixes => LoadedRules.SuruOrGodanSuffixes;
     private static string[] PoliteAdjectiveEndings => LoadedRules.PoliteAdjectiveEndings;
+    private static string[] NonRequestTeEndings => LoadedRules.NonRequestTeEndings;
 
     private sealed class Rules
     {
@@ -62,6 +63,7 @@ internal static class KeigoConverter
         public required Dictionary<char, (string Suffix, string Replacement)[]> TailTextSuffixBuckets { get; init; }
         public required (string Suffix, string SuruReplacement, string? GodanSaReplacement)[] SuruOrGodanSuffixes { get; init; }
         public required string[] PoliteAdjectiveEndings { get; init; }
+        public required string[] NonRequestTeEndings { get; init; }
     }
 
     private static Rules LoadRules()
@@ -86,6 +88,7 @@ internal static class KeigoConverter
         var tailTextSuffixes = new List<(string Suffix, string Replacement)>();
         var suruOrGodanSuffixes = new List<(string Suffix, string SuruReplacement, string? GodanSaReplacement)>();
         var politeAdjectives = new List<string>();
+        var nonRequestTe = new List<string>();
 
         var section = "";
         foreach (var raw in DictionarySource.ReadEmbedded("keigo.txt").Split('\n'))
@@ -110,6 +113,7 @@ internal static class KeigoConverter
                 case "self_subjects": selfSubjectMarkers.Add(fields[0]); break;
                 case "gratitude_following": gratitudeFollowing.Add(fields[0]); break;
                 case "polite_adjectives": politeAdjectives.Add(fields[0]); break;
+                case "non_request_te": nonRequestTe.Add(fields[0]); break;
                 case "reading_words": readingWords[fields[0]] = fields[1]; break;
                 case "respectful_readings": respectfulReadings[fields[0]] = fields[1]; break;
                 case "respectful_suffixes": respectfulSuffixes.Add((fields[0], fields[1])); break;
@@ -155,6 +159,7 @@ internal static class KeigoConverter
             TailTextSuffixBuckets = BuildSuffixBuckets([.. tailTextSuffixes]),
             SuruOrGodanSuffixes = [.. suruOrGodanSuffixes],
             PoliteAdjectiveEndings = BuildAdjectiveEndings([.. politeAdjectives]),
+            NonRequestTeEndings = [.. nonRequestTe],
         };
     }
 
@@ -481,9 +486,8 @@ internal static class KeigoConverter
                 {
                     rewritten = politeAdj;
                 }
-                // 文末の「〜て」依頼形 (教えて → 教えてください、確認して → 確認してください)。後ろに実質の文節があるときは付けない
-                else if (!hasNextContent && rewritten.Length >= 2 &&
-                    (rewritten.EndsWith("して", StringComparison.Ordinal) || (!IsKanaOnly(rewritten) && (rewritten.EndsWith('て') || rewritten.EndsWith('で')))))
+                // 文末の「〜て」依頼形 (教えて → 教えてください、確認して → 確認してください)。後ろに実質の文節があるときや、名詞+助詞「で」・副詞/接続の「〜て」には付けない
+                else if (!hasNextContent && IsRequestTeForm(rewritten))
                 {
                     rewritten += "ください";
                 }
@@ -491,6 +495,21 @@ internal static class KeigoConverter
         }
 
         return rewritten != textCore ? rewritten + punct : null;
+    }
+
+    private static bool IsRequestTeForm(string text)
+    {
+        if (text.Length < 2) return false;
+        foreach (var nonRequest in NonRequestTeEndings)
+        {
+            if (text.EndsWith(nonRequest, StringComparison.Ordinal)) return false;
+        }
+        if (text.EndsWith("して", StringComparison.Ordinal)) return true;
+        if (IsKanaOnly(text)) return false;
+        // 「会議で」「予定で」のような名詞+助詞「で」の誤爆を防ぐため、「で」は五段撥音便・イ音便 (んで/いで) のみ対象にする
+        if (text.EndsWith('で'))
+            return text.EndsWith("んで", StringComparison.Ordinal) || text.EndsWith("いで", StringComparison.Ordinal);
+        return text.EndsWith('て');
     }
 
     private static string ApplyMidClausePolite(string text, SubjectRole subjectRole, string prevReading)

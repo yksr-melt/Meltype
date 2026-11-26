@@ -6972,5 +6972,36 @@ internal static class CompositionTests
         var toggledOff = toggleSession.HandleKey(0x4B, null, false, true, true, false);
         Assert.True(toggledOff.Consumed && !settings.KeigoMode && toggledOff.View?.ContextHint is null,
             "もう一度 Ctrl+Alt+K で敬語モード OFF に戻る");
+
+        // LateResults = true (実アプリ相当) のライブ変換→確定 (CommittedDisplay) でも敬語が適用されること
+        var lateSettings = new Settings { LiveConversion = true, KeigoMode = true };
+        var lateSession = new TestSession(() => lateSettings, lateResults: true);
+        foreach (var ch in "ryoukai") lateSession.HandleKey(0, ch, false, false, false, false);
+        var lateCommit = lateSession.HandleKey(VirtualKeys.Return, null, false, false, false, false);
+        Assert.Equal("承知いたしました", lateCommit.Commits.Single().Text, "LateResults=true の確定でも敬語が消えない");
+
+        // 名詞+助詞「で」や副詞・接続の「〜て」に「ください」を誤爆しないこと
+        foreach (var (reading, text) in new[]
+        {
+            ("かいぎで", "会議で"),
+            ("めーるで", "メールで"),
+            ("すべて", "全て"),
+            ("はじめて", "初めて"),
+            ("あらためて", "改めて"),
+            ("にかんして", "に関して"),
+            ("として", "として"),
+        })
+        {
+            var kept = KeigoConverter.Convert([new(reading, false, [text])]);
+            Assert.Equal(text, kept[0].Text, $"非依頼の『{text}』に『ください』を誤爆しない");
+        }
+        Assert.Equal("結んでください", KeigoConverter.Convert([new("むすんで", false, ["結んで"])])[0].Text, "動詞の『結んで』には『ください』が付く");
+        Assert.Equal("繋いでください", KeigoConverter.Convert([new("つないで", false, ["繋いで"])])[0].Text, "動詞の『繋いで』には『ください』が付く");
+
+        // 追加語彙の確認 (〜しとく / 〜してみる / 対応できない / 〜してもらえる？)
+        Assert.Equal("確認しておきます", KeigoConverter.Convert([new("かくにんしとく", false, ["確認しとく"])])[0].Text);
+        Assert.Equal("調べてみます", KeigoConverter.Convert([new("しらべてみる", false, ["調べてみる"])])[0].Text);
+        Assert.Equal("対応いたしかねます", KeigoConverter.Convert([new("たいおうできない", false, ["対応できない"])])[0].Text);
+        Assert.Equal("ご確認いただけますでしょうか？", KeigoConverter.Convert([new("かくにんしてもらえる？", false, ["確認してもらえる？"])])[0].Text);
     }
 }

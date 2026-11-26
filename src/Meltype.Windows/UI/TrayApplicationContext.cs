@@ -423,6 +423,13 @@ internal sealed class TrayApplicationContext : ApplicationContext
             {
                 _engine.OnSettingsChanged(previous, next);
                 UpdateStatus();
+                if (previous.KeigoMode != next.KeigoMode)
+                {
+                    var message = next.KeigoMode ? "リアルタイム敬語変換 ON" : "リアルタイム敬語変換 OFF";
+                    _composition.ShowNotice(message, 1200);
+                    if (next.ShowNotifications)
+                        ShowBalloonTip(1500, "Meltype", next.KeigoMode ? "リアルタイム敬語変換を ON にしました" : "リアルタイム敬語変換を OFF にしました");
+                }
                 // 設定アプリで動作モードを Meltype IME にしたが、Windows に登録されていない (Meltype キーボードで動く)
                 if (previous.Mode != InputMode.Tsf && next.Mode == InputMode.Tsf && CanRegisterTsf && !Tip.TipServer.IsUsable)
                     EnableTsf("Meltype IME を Windows に登録しますか？\n\n" +
@@ -508,15 +515,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         UpdateStatus();
     }
 
-    private void ToggleKeigoMode()
-    {
-        var keigoMode = _engine.Runtime.ToggleKeigoMode();
-        UpdateStatus();
-        var message = keigoMode ? "リアルタイム敬語変換 ON" : "リアルタイム敬語変換 OFF";
-        _composition.ShowNotice(message, 1200);
-        if (_engine.Settings.ShowNotifications)
-            ShowBalloonTip(1500, "Meltype", keigoMode ? "リアルタイム敬語変換を ON にしました" : "リアルタイム敬語変換を OFF にしました");
-    }
+    private void ToggleKeigoMode() => _engine.Runtime.ToggleKeigoMode();
 
     private void SetMode(InputMode mode)
     {
