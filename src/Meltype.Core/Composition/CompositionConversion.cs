@@ -484,7 +484,8 @@ internal static class CompositionConversion
         // 読み全体が補助辞書・絵文字の辞書の語 (かんがえるかお → 🤔) なら、文節に分けずに 1 つの文節にして候補を出す。
         if (parts.Count > 1 && env.Services.Candidates?.Contains(kana) == true)
         {
-            parts = [new ConversionClause(kana, string.Concat(parts.Select(p => p.Text)))];
+            // 注記は候補全体の出典を示すので、すべての文節が Zenzai の答えのときに引き継ぐ。
+            parts = [new ConversionClause(kana, string.Concat(parts.Select(p => p.Text)), Zenzai: parts.All(p => p.Zenzai))];
         }
         parts = JoinSmallKana(env, parts, before, zenzai);
         var clauses = parts.Select(p =>
