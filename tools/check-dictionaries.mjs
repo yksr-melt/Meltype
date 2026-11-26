@@ -105,6 +105,15 @@ const dictionaries = {
       ];
     },
   },
+  // 配列<Tab>打つキー<Tab>かな (かな配列の表)。打つキーは刻印の 1 文字・L・R を空白 (並び) か + (同時) でつなぐ
+  'kana-layouts.txt': {
+    format: tabbed(3, 3, ([layout, keys, kana]) => [
+      /^[A-Z][A-Za-z]+$/.test(layout) ? null : `配列「${layout}」が KanaLayout の名前でない`,
+      /^([1-90\-^\\a-z@[;:\],./_LR])([ +][1-90\-^\\a-z@[;:\],./_LR])*$/.test(keys) ? null : `打つキー「${keys}」の書き方が違う`,
+      kana.length > 0 ? null : 'かなが空',
+    ]),
+    keysOf: line => { const [layout, keys] = line.split('\t'); return [[`${layout}\t${keys}`, line]]; },
+  },
   // 読み<Tab>語句[<Tab>品詞]。Mozc のヘルパーは知らない品詞名を名詞にするので、品詞名は Mozc の user_pos.def の名前に限る
   'phrases.txt': {
     format: tabbed(2, 3, ([reading, , pos]) => [

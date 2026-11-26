@@ -122,7 +122,7 @@ func runChecks(inputPath: String?) -> Int32 {
     }
     for (input, expected) in [("kyouhagoogledekensaku \n", "今日はgoogleで検索"),
                                ("I want to go to the park\n", "I want to go to the park"),
-                               ("google github hello\n", "google github hello"),
+                               ("google github hello\n", "google GitHub hello"),
                                ("seeyouagain\n", "seeyouagain")] {
         let document = Document()
         _ = type(input, into: document)

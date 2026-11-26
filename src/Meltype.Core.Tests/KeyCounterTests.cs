@@ -152,4 +152,52 @@ internal static class KeyCounterTests
         Assert.Equal(4L, counter.OnDay(day));
         Assert.Equal("A=2,Space=1", string.Join(",", counter.TopKeys().Select(p => $"{p.Key}={p.Value}")));
     }
+
+    // typect の保存ファイルの形 (KeyCounter.TryReadTypect のコメント) を作る
+    private static byte[] Typect(uint[] hours, Dictionary<int, uint>? vks)
+    {
+        var words = new uint[vks is null ? 29 : 285 + 8];
+        (words[0], words[1], words[2], words[3]) = (203, 2026, 11, 23);
+        words[4] = (uint)hours.Sum(h => (long)h);
+        hours.CopyTo(words, 5);
+        foreach (var (vk, n) in vks ?? []) words[29 + vk] = n;
+        var bytes = new byte[words.Length * 4];
+        Buffer.BlockCopy(words, 0, bytes, 0, bytes.Length);
+        return bytes;
+    }
+
+    [Test]
+    public static void ImportFile_ReadsTypectBinary()
+    {
+        var hours = new uint[24];
+        (hours[0], hours[23]) = (100, 60);
+        var counter = new KeyCounter(null);
+        var result = counter.ImportFile(Typect(hours, new() { [0x41] = 120, [VirtualKeys.LShift] = 25, [VirtualKeys.RShift] = 5, [0] = 10 }));
+        Assert.Equal(160L, result.Total);
+        Assert.Equal(160L, counter.Total);
+        var keys = counter.TopKeys().ToDictionary(p => p.Key, p => p.Value);
+        Assert.Equal(120L, keys["A"]);
+        Assert.Equal(30L, keys["Shift"]);
+        Assert.Equal(2, keys.Count);
+        Assert.Equal(0, counter.Analyze(new DateTime(2026, 11, 23)).PeakHour);
+        Assert.True(counter.ImportFile(Typect(hours, new() { [0x41] = 120, [VirtualKeys.LShift] = 25, [VirtualKeys.RShift] = 5, [0] = 10 })).Duplicate, "同じファイルは二重に足さない");
+    }
+
+    [Test]
+    public static void ImportFile_TypectWithoutKeyTableCountsTotalOnly()
+    {
+        // キーごとに数えない版はキーの表が無い・和が合わない
+        var hours = new uint[24];
+        hours[12] = 50;
+        var counter = new KeyCounter(null);
+        Assert.Equal(50L, counter.ImportFile(Typect(hours, null)).Total);
+        Assert.Equal(0, counter.TopKeys().Count);
+    }
+
+    [Test]
+    public static void ImportFile_ReadsTextOtherwise()
+    {
+        var counter = new KeyCounter(null);
+        Assert.Equal(12L, counter.ImportFile(System.Text.Encoding.UTF8.GetBytes("a=5\nb=7\n")).Total);
+    }
 }

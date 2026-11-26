@@ -273,3 +273,7 @@ stat
 stats
 # Issue #2017: 鉱物・天然石の名前 (Fluorite が Flu + おりて に割れる。english-words.txt に無く、頭の英単語 + 日本語の語に割れていた)
 fluorite hematite calcite magnetite rhodochrosite rhodonite sodalite amazonite moonstone sunstone tourmaline morganite tanzanite selenite kryptonite bloodstone fluoride
+# Issue #2389 (まとめ) の技術用語
+assignee assignees sideload sideloading linpeas ver
+# 三角関数 (cos・tan はローマ字として読める)
+cos sin tan
