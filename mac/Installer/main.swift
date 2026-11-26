@@ -6,7 +6,8 @@ import AppKit
 @MainActor
 private final class Installer: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let window = NSWindow(
-        contentRect: NSRect(x: 0, y: 0, width: 480, height: 176),
+        // 完了画面では許可・切り替え・手動追加の案内を折り返して表示する。
+        contentRect: NSRect(x: 0, y: 0, width: 480, height: 204),
         styleMask: [.titled, .closable], backing: .buffered, defer: false
     )
     private let status = NSTextField(wrappingLabelWithString: "この Mac のアカウントに入力ソースと設定アプリを追加します。")
@@ -14,6 +15,11 @@ private final class Installer: NSObject, NSApplicationDelegate, NSWindowDelegate
     private let keyboard = NSButton(title: "キーボード設定…", target: nil, action: nil)
     private let primary = NSButton(title: "インストール", target: nil, action: nil)
     private let close = NSButton(title: "閉じる", target: nil, action: nil)
+    private let selectionInstructions = """
+        有効化の確認が表示されたら、先に「許可」を押してください。
+        「Meltype を使う」を押すと入力ソースを切り替えます。
+        入力メニューに無い場合は、「キーボード設定…」の入力ソース「編集…」→「+」→ 日本語 → Meltype から追加してください。
+        """
     private var isWorking = false
     private let installedApp = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Input Methods/Meltype.app", isDirectory: true)
@@ -83,10 +89,10 @@ private final class Installer: NSObject, NSApplicationDelegate, NSWindowDelegate
         // アプリのバンドルには必ず Resources があり、無ければ壊れた DMG なので止める。
         let script = Bundle.main.resourceURL!.appendingPathComponent("Meltype-mac/install.sh")
         status.stringValue = "Meltype を配置して入力ソースに登録しています…"
-        run(URL(fileURLWithPath: "/bin/bash"), arguments: [script.path]) { success, details in
-            if success {
-                // 初回は install.sh が Meltype を選び、更新では元の入力ソースに戻している。
-                self.status.stringValue = "インストールが完了しました。入力ソースが Meltype になっていなければ「Meltype を使う」を押してください。"
+        run(URL(fileURLWithPath: "/bin/bash"), arguments: [script.path]) { exitCode, details in
+            if exitCode == 0 {
+                // 初回は install.sh が選択を試み、許可のあとでもボタンから選び直せる。
+                self.status.stringValue = "インストールが完了しました。\n\(self.selectionInstructions)"
                 self.keyboard.isHidden = false
                 self.primary.title = "Meltype を使う"
                 self.primary.action = #selector(self.selectSource)
@@ -100,19 +106,20 @@ private final class Installer: NSObject, NSApplicationDelegate, NSWindowDelegate
     @objc private func selectSource() {
         let helper = installedApp.appendingPathComponent("Contents/MacOS/MeltypeInstallSupport")
         status.stringValue = "入力ソースを切り替えています…"
-        run(helper, arguments: ["--select", installedApp.path]) { success, details in
-            if success {
+        run(helper, arguments: ["--select", installedApp.path]) { exitCode, details in
+            if exitCode == 0 {
                 self.status.stringValue = "入力ソースに Meltype を選びました。入力メニューに出ない場合は、キーボード設定で Meltype を追加し直してください。"
                 self.primary.isHidden = true
                 self.close.keyEquivalent = "\r"
             } else {
-                self.status.stringValue = "入力メニューから Meltype を選んでください。表示されないときは、システム設定の「キーボード」で追加してください。"
-                self.showDetails(details)
+                self.status.stringValue = "Meltype に切り替えられませんでした。\n\(self.selectionInstructions)"
+                // 終了コード 2 は選択できないときの案内で対処できるため、再試行ボタンをすぐに使えるようにする。
+                if exitCode != 2 { self.showDetails(details) }
             }
         }
     }
 
-    private func run(_ executable: URL, arguments: [String], completion: @escaping (Bool, String) -> Void) {
+    private func run(_ executable: URL, arguments: [String], completion: @escaping (Int32?, String) -> Void) {
         isWorking = true
         primary.isEnabled = false
         close.isEnabled = false
@@ -125,14 +132,14 @@ private final class Installer: NSObject, NSApplicationDelegate, NSWindowDelegate
             process.arguments = arguments
             process.standardOutput = output
             process.standardError = output
-            let result: (Bool, String)
+            let result: (Int32?, String)
             do {
                 try process.run()
                 let data = output.fileHandleForReading.readDataToEndOfFile()
                 process.waitUntilExit()
-                result = (process.terminationStatus == 0, String(decoding: data, as: UTF8.self))
+                result = (process.terminationStatus, String(decoding: data, as: UTF8.self))
             } catch {
-                result = (false, error.localizedDescription)
+                result = (nil, error.localizedDescription)
             }
             DispatchQueue.main.async {
                 self.isWorking = false
