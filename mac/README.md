@@ -105,7 +105,7 @@ log stream --predicate 'process == "Meltype"' --level debug
 
 ## 配布ファイルを作る
 
-ビルドした後に次を実行すると、`dist/` に DMG ができます。開いた DMG の「Meltype をインストール」から試せます。
+ビルドした後に次を実行すると、`dist/` に DMG ができます。開いた DMG の「Install Meltype」から試せます。
 
 ```bash
 bash mac/package.sh Meltype-mac-test.dmg

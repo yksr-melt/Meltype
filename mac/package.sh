@@ -19,7 +19,7 @@ apps="$package"
 installer=
 volume="$stage/volume"
 if [[ "$name" == *.dmg ]]; then
-    installer="$volume/Meltype をインストール.app"
+    installer="$volume/Install Meltype.app"
     package="$installer/Contents/Resources/Meltype-mac"
     apps="$installer/Contents/Helpers"
 fi

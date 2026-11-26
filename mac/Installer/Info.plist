@@ -11,7 +11,7 @@
     <key>CFBundleIdentifier</key>
     <string>io.github.yksr-melt.Meltype.Installer</string>
     <key>CFBundleName</key>
-    <string>Meltype をインストール</string>
+    <string>Install Meltype</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
