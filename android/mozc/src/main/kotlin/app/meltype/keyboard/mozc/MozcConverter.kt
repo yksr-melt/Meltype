@@ -45,29 +45,6 @@ class MozcConverter internal constructor(
             }
         }
 
-    override fun learn(clauses: List<MozcClause>, context: String?): Boolean {
-        if (clauses.isEmpty()) return false
-        val reading = clauses.joinToString("") { it.reading }
-        return withSession(reading, context) { session ->
-            session.compose()
-            var output = session.startConversion()
-            if (clauseReadings(output, reading) != clauses.map { it.reading }) return@withSession false
-            clauses.forEachIndexed { index, clause ->
-                if (index > 0) output = session.focusNextClause()
-                val chosen = output.allCandidateWords.candidatesList.firstOrNull { it.hasId() && it.value == clause.text }
-                    ?: return@withSession false
-                output = session.highlight(chosen.id)
-            }
-            // 選んだ結果が頼まれた表記と違うなら、違うものを覚えさせないよう、確定しない。
-            if (output.preedit.segmentList.joinToString("") { it.value } != clauses.joinToString("") { it.text }) {
-                return@withSession false
-            }
-            session.submit()
-            session.save()
-            true
-        } ?: false
-    }
-
     /**
      * 半角の数字は 1 字ずつ読む (2026年 → にぜろにろくねん) ので、全角にして渡し (２０２６年 → ２０２６ねん)、読みの数字は半角に戻す
      * (デスクトップの meltype_mozc_helper と同じ)。
@@ -185,25 +162,12 @@ class MozcConverter internal constructor(
         /** 次の文節に移る。返るものに、その文節の候補が入っている。 */
         fun focusNextClause() = key(KeyEvent.SpecialKey.RIGHT, withContext = false)
 
-        fun highlight(candidateId: Int) = command(withContext = false) {
-            setType(SessionCommand.CommandType.HIGHLIGHT_CANDIDATE).setId(candidateId)
-        }
-
-        fun submit() = command(withContext = false, commits = true) { setType(SessionCommand.CommandType.SUBMIT) }
-
-        /** 学習したことをファイルに書く。 */
-        fun save() = send(commits = false) { setType(Input.CommandType.SYNC_DATA) }
-
-        private fun command(
-            withContext: Boolean,
-            commits: Boolean = false,
-            build: SessionCommand.Builder.() -> Unit,
-        ) = send(commits) {
+        private fun command(withContext: Boolean, build: SessionCommand.Builder.() -> Unit) = send {
             setType(Input.CommandType.SEND_COMMAND).setCommand(SessionCommand.newBuilder().apply(build))
             if (withContext) addContext()
         }
 
-        private fun key(key: KeyEvent.SpecialKey, withContext: Boolean) = send(commits = false) {
+        private fun key(key: KeyEvent.SpecialKey, withContext: Boolean) = send {
             setType(Input.CommandType.SEND_KEY).setKey(KeyEvent.newBuilder().setSpecialKey(key))
             if (withContext) addContext()
         }
@@ -212,11 +176,11 @@ class MozcConverter internal constructor(
             if (!precedingText.isNullOrEmpty()) setContext(Context.newBuilder().setPrecedingText(precedingText))
         }
 
-        private fun send(commits: Boolean, build: Input.Builder.() -> Unit): Output {
+        private fun send(build: Input.Builder.() -> Unit): Output {
             if (now() > deadline) throw TimedOut()
             val output = eval(Input.newBuilder().setId(id).apply(build).build()) ?: throw Failed()
-            // 確定を頼んでいないのに確定された文字が返ったら、手順がずれている。
-            if (output.hasResult() != commits) throw Failed()
+            // 確定を頼んでいないのに確定された文字が返ったら、手順がずれている (Mozc に学習させない)。
+            if (output.hasResult()) throw Failed()
             return output
         }
     }
