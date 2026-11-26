@@ -595,6 +595,7 @@ internal static class ImeContractTests
         front.Traits.Add("Password");
         Assert.True(!Active(front.Key('a')) && front.Document == "a", "パスワード欄では受け持たない\n" + front.Trace);
         front = new Front { InputMethod = InputMode.Keyboard };
+        front.Settings.Mode = InputMode.Keyboard;
         front.Traits.Add("Game");
         Assert.True(!Active(front.Key('a')), "Meltype キーボードはゲームでは受け持たない (チャットは Windows の IME で打つ)\n" + front.Trace);
     }
@@ -628,6 +629,64 @@ internal static class ImeContractTests
         // ゲームでない入力欄は、OS の開閉のまま
         var general = new Front { InputMethod = InputMode.Tsf };
         Assert.True(general.Event("CaretMoved", extra: Entered).GetProperty("state").GetProperty("imeOpen").GetBoolean(), general.Trace);
+    }
+
+    [Test]
+    public static void Keyboard_GameChatCanBeEnabledWithoutCapturingMovementInAlphanumericMode()
+    {
+        const string app = "VRChat.exe";
+        var front = new Front { App = app, InputMethod = InputMode.Keyboard, SendsImeOpen = false, Sends = null };
+        front.Settings.Mode = InputMode.Keyboard;
+        front.Traits.AddRange(["Game", "NonText"]);
+        var rule = new AppRule { Process = app, Profile = AppProfile.Game };
+        front.Settings.AppRules.Add(rule);
+        Assert.True(!Active(front.Event("StateRequested")), "ゲームでは既定どおり Windows の IME に任せる\n" + front.Trace);
+
+        rule.TextInput = true;
+        front.Settings.DirectModeAutoDetect = true;
+        var entered = front.Event("StateRequested");
+        Assert.True(Active(entered) && !front.Open, "明示的に入力欄とみなしたゲームでは英数で使い始める\n" + front.Trace);
+        Assert.True(!Capture(entered).GetProperty("printableAscii").GetBoolean(), "英数では移動キーをそのまま通す\n" + front.Trace);
+        Assert.True(front.Type("wasd").All(key => !Consumed(key)), front.Trace);
+
+        Assert.True(Consumed(front.Key(ToggleShortcut.Hankaku)) && front.Open, front.Trace);
+        front.Type("ka");
+        Assert.True(Consumed(front.Key('\n')) && front.Open, "変換の確定後も続けて打てる\n" + front.Trace);
+        Assert.True(!Consumed(front.Key('\n')) && front.Open, "送信の Enter はゲームに通し、日本語のままにする\n" + front.Trace);
+        front.Type("ki");
+        Assert.True(Consumed(front.Key('\u001b')) && front.Open, "打ちかけを取り消す Esc はチャットを閉じない\n" + front.Trace);
+        var closed = front.Event("CaretMoved", extra: $",\"caret\":{{\"moved\":true,\"passedKey\":{VirtualKeys.Escape}}}");
+        Assert.True(!front.Open && !Capture(closed).GetProperty("printableAscii").GetBoolean(), "ゲームに通した Esc で英数に戻す\n" + front.Trace);
+        Assert.True(!Consumed(front.Key('w')), front.Trace);
+        front.Key(ToggleShortcut.Hankaku);
+        Assert.True(!Consumed(front.Key('\u001b')) && !front.Open, "前のキーが処理中で Esc が本体に届いたときも、ゲームに通して英数に戻す\n" + front.Trace);
+        Assert.Equal("wasdか\nw", front.Document, front.Trace);
+
+        rule.Enabled = false;
+        Assert.True(!Active(front.Event("StateRequested")), "アプリ別設定の無効が優先される\n" + front.Trace);
+
+        rule.Enabled = true;
+        front.Key(ToggleShortcut.Hankaku);
+        front.Settings.AppRules.Add(new AppRule { Process = "other-game.exe", Profile = AppProfile.Game, TextInput = true });
+        front.App = "other-game.exe";
+        Assert.True(Active(front.Event("StateRequested")) && !front.Open, "別のゲームでは英数で始める\n" + front.Trace);
+    }
+
+    [Test]
+    public static void Keyboard_GameDoesNotAutoDetectBufferedMovementKeys()
+    {
+        var front = new Front
+        {
+            App = "game.exe",
+            InputMethod = InputMode.Keyboard,
+            SendsImeOpen = false,
+            ClassifyDirect = (letters, _, _) => letters == "ka" ? Verdict.Japanese : Verdict.Undecided,
+        };
+        front.Settings.Mode = InputMode.Keyboard;
+        front.Settings.AppRules.Add(new AppRule { Process = "game.exe", Profile = AppProfile.Game, TextInput = true });
+        front.Settings.DirectModeAutoDetect = true;
+        Assert.True(front.Type("ka").All(key => Active(key) && !Consumed(key) && !Japanese(key)), "英数のキーが本体に届いても日本語を判定しない\n" + front.Trace);
+        Assert.Equal("ka", front.Document, front.Trace);
     }
 
     [Test]

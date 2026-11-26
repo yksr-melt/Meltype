@@ -522,7 +522,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
     /// <summary>
     /// Meltype キーボードを使っている間は、Windows の IME (Microsoft IME・Google 日本語入力など) を OFF に保つ。
     /// Win+Space などで IME を切り替えると、新しい IME が ON の状態で始まることがあり、そのままだと
-    /// Meltype が通したキーを IME が変換してしまう。アプリ別設定で OFF にしたアプリ・ゲームでは、Windows の IME をそのまま使ってもらう。
+    /// Meltype が通したキーを IME が変換してしまう。Meltype が入力を受け持たないアプリでは、Windows の IME をそのまま使ってもらう。
     /// </summary>
     private void PollSystemIme()
     {

@@ -182,7 +182,7 @@ public sealed class AppRule
     [DisplayName("確定した文字の入れ方"), Description("確定した文字を 1 文字ずつ送ると取り違えるアプリ (DaVinci Resolve で「あいうえお」→「あああああ」) は「貼り付け」にします。Qt アプリ (LINE・OBS など) は「自動」でも貼り付けになるので、Ctrl+V が貼り付けではないアプリは「1 文字ずつ送る」にします。")]
     public CommitMethod Commit { get; set; } = CommitMethod.Auto;
 
-    [DisplayName("入力欄とみなす"), Description("画面を自分で描くため、文字を打つ所なのに入力欄と判定されず変換ボックスが出ないアプリ (Premiere Pro など) で ON にします。1 文字のショートカット (V・C など) も変換ボックスに入るようになるので、ショートカットを使うときは Ctrl + 半角/全角 で一時停止してください。")]
+    [DisplayName("入力欄とみなす"), Description("画面を自分で描くため、文字を打つ所なのに入力欄と判定されず変換ボックスが出ないアプリ (Premiere Pro など) で ON にします。1 文字のショートカット (V・C など) も変換ボックスに入るようになるので、ショートカットを使うときは Ctrl + 半角/全角 で一時停止してください。種類が「ゲーム」なら、Meltype キーボードが英数で始まり、半角/全角 で日本語に切り替えられます。")]
     public bool TextInput { get; set; }
 
     public AppRule Clone() => (AppRule)MemberwiseClone();
@@ -225,7 +225,7 @@ public enum AppProfile
     [Description("一般")] General,
     /// <summary>コードエディター・ターミナル。英数が基本で、コメントと文字列 ("…") の中だけ日本語を判定する。</summary>
     [Description("コード")] Code,
-    /// <summary>ゲーム。Meltype キーボードは何もしない (キーを横取りせず、Windows の IME の ON/OFF にも触らない。ゲームのチャットは Windows の IME で打つ)。Meltype IME は英数で始め、英数ではキーを横取りしない (ImeSession.IsGame)。</summary>
+    /// <summary>ゲーム。英数で始め、英数ではキーを横取りしない。Meltype キーボードでチャットを打つには「入力欄とみなす」を ON にする。</summary>
     [Description("ゲーム")] Game,
 }
 
@@ -823,7 +823,7 @@ public sealed class Settings
     public bool ExcludeFullscreen { get; set; } = true;
 
     [Category("11. アプリ"), DisplayName("ゲームでは止める"), Platforms(Platform.Windows),
-     Description("Steam・Epic Games・Riot Games・EA・Ubisoft・Battle.net・Xbox のゲームのフォルダーにあるアプリ (ウィンドウ表示のゲームも) では、Meltype キーボードは何もしません (キーを横取りせず、Windows の IME にも触らないので、ゲームのチャットは Windows の IME で打てます)。Meltype IME は英数で始め、英数ではキーを横取りしません (チャットでは 半角/全角 で日本語にできます)。ほかのゲームは、アプリ別設定で種類を「ゲーム」にしてください。")]
+     Description("Steam・Epic Games・Riot Games・EA・Ubisoft・Battle.net・Xbox のゲームのフォルダーにあるアプリ (ウィンドウ表示のゲームも) では、Meltype キーボードはチャットを Windows の IME に任せます。Meltype キーボードで打つには、アプリ別設定で種類を「ゲーム」にして「入力欄とみなす」を ON にします。Meltype IME は英数で始め、英数ではキーを横取りしません (チャットでは 半角/全角 で日本語にできます)。ほかのゲームは、アプリ別設定で種類を「ゲーム」にしてください。")]
     public bool StopInGames { get; set; } = true;
 
     [Category("11. アプリ"), DisplayName("アプリ別設定"), Description("アプリ (Windows はプロセス名、macOS は bundle ID、Linux はプログラム名) ごとに、ON/OFF・種類・確定した文字の入れ方・入力欄とみなすかを指定します。種類「コード」(コードエディター・ターミナル) では基本は英数のままで、コメント (// # -- など) と文字列 (\"…\" など) の中だけ日本語を判定します。コードの行で 半角/全角 を押すと、その行だけ日本語で入力できます。README.md などの文章ファイルを開いているときは一般として扱います。")]
@@ -893,7 +893,7 @@ public sealed class Settings
     public bool IsAppEnabled(string? processName) => FindRule(processName)?.Enabled ?? true;
 
     /// <summary>
-    /// ゲームか (Meltype キーボードは止める。Meltype IME は英数で始める): アプリ別設定の種類が「ゲーム」か、アプリ別設定が無く、ゲームのフォルダーにあるアプリ (looksLikeGame) で「ゲームでは止める」が ON。
+    /// ゲームか。アプリ別設定の種類が「ゲーム」か、アプリ別設定が無く、ゲームのフォルダーにあるアプリ (looksLikeGame) で「ゲームでは止める」が ON。
     /// </summary>
     public bool IsGame(string? processName, bool looksLikeGame) =>
         ProfileFor(processName) == AppProfile.Game || (StopInGames && looksLikeGame && FindRule(processName) is null);
