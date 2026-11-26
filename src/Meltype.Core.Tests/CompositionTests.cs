@@ -6987,6 +6987,35 @@ internal static class CompositionTests
         KeigoConverter.Apply(kaiteAttara);
         Assert.Equal("書いてあったら", string.Concat(kaiteAttara.Select(c => c.Text)), "補助動詞の『書いてあったら』は『書いてございましたら』に誤爆しない");
 
+        // 推量表現 (はずだ/みたいだ/らしい/そうだ/に違いない/じゃないか/大丈夫+推量)
+        var hazuda = new List<Clause> { new("とどくはずだ", false, ["届くはずだ"]) };
+        KeigoConverter.Apply(hazuda);
+        Assert.Equal("届くはずです", hazuda[0].Text, "届くはずだ → 届くはずです");
+
+        var mitaida = new List<Clause> { new("おわるみたいだ", false, ["終わるみたいだ"]) };
+        KeigoConverter.Apply(mitaida);
+        Assert.Equal("終わるみたいです", mitaida[0].Text, "終わるみたいだ → 終わるみたいです");
+
+        var daijoubuKamo = new List<Clause> { new("だいじょうぶかも", false, ["大丈夫かも"]) };
+        KeigoConverter.Apply(daijoubuKamo);
+        Assert.Equal("問題ないかもしれません", daijoubuKamo[0].Text, "大丈夫かも → 問題ないかもしれません (問題ございませんかもしれませんにしない)");
+
+        var daijoubuToOmou = new List<Clause> { new("だいじょうぶだとおもう", false, ["大丈夫だと思う"]) };
+        KeigoConverter.Apply(daijoubuToOmou);
+        Assert.Equal("問題ないかと存じます", daijoubuToOmou[0].Text, "大丈夫だと思う → 問題ないかと存じます");
+
+        var chigainai = new List<Clause> { new("まちがいに", false, ["間違いに"]), new("ちがいない", false, ["違いない"]) };
+        KeigoConverter.Apply(chigainai);
+        Assert.Equal("間違いに違いありません", string.Concat(chigainai.Select(c => c.Text)), "〜に違いない → 〜に違いありません");
+
+        var janaika = new List<Clause> { new("まにあうんじゃないか", false, ["間に合うんじゃないか"]) };
+        KeigoConverter.Apply(janaika);
+        Assert.Equal("間に合うのではないでしょうか", janaika[0].Text, "〜んじゃないか → 〜のではないでしょうか");
+
+        var kamoMid = new List<Clause> { new("おくれるかもだけど、", false, ["遅れるかもだけど、"]), new("いく", false, ["行く"]) };
+        KeigoConverter.Apply(kamoMid);
+        Assert.Equal("遅れるかもしれませんが、伺います", string.Concat(kamoMid.Select(c => c.Text)), "〜かもだけど、 → 〜かもしれませんが、");
+
         // OFF (既定) なら通常のまま
         var off = new Keyboard(live: true);
         off.Type("ryoukai");
