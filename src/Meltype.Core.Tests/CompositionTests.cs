@@ -6689,7 +6689,7 @@ internal static class CompositionTests
             var k = new Keyboard(live: true) { KeigoMode = true };
             k.Type(typed);
             Assert.Equal(expected, k.Showing, $"ライブ変換: {typed}");
-            Assert.True(k.Host.View?.ContextHint?.StartsWith("敬語モード ON", StringComparison.Ordinal) == true, "入力中に敬語モード ON を表示");
+            Assert.True(k.Host.View?.ContextHint?.StartsWith("リアルタイム敬語変換 ON", StringComparison.Ordinal) == true, "入力中にリアルタイム敬語変換 ON を表示");
             k.Type("\n");
             Assert.Equal(expected, k.Host.Document, $"確定: {typed}");
         }

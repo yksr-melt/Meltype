@@ -67,11 +67,11 @@ internal static class CompositionPresentation
         // 出している文節に Zenzai の答えがあれば、説明の頭に「Zenzai」と出す (学習・選び直しで変わった文節は数えない。issue #1152)
         var zenzai = conversion.Clauses.Any(c => c.ZenzaiText is { } z && c.Text == z);
         var keigo = env.Settings.KeigoMode;
-        var prefix = (keigo ? "敬語モード ON · " : "") + (zenzai ? "Zenzai · " : "");
+        var prefix = (keigo ? "リアルタイム敬語変換 ON · " : "") + (zenzai ? "Zenzai · " : "");
         var contextHint = (keigo, zenzai) switch
         {
-            (true, true) => "敬語モード ON · Zenzai",
-            (true, false) => "敬語モード ON",
+            (true, true) => "リアルタイム敬語変換 ON · Zenzai",
+            (true, false) => "リアルタイム敬語変換 ON",
             (false, true) => "Zenzai",
             _ => null,
         };
@@ -111,8 +111,8 @@ internal static class CompositionPresentation
         }
         if (env.Settings.KeigoMode)
         {
-            contextHint = contextHint is null ? "敬語モード ON" : $"敬語モード ON · {contextHint}";
-            hint = "敬語モード ON · " + hint;
+            contextHint = contextHint is null ? "リアルタイム敬語変換 ON" : $"リアルタイム敬語変換 ON · {contextHint}";
+            hint = "リアルタイム敬語変換 ON · " + hint;
         }
         var selected = predictionIndex >= 0 ? PredictionText(predictions[predictionIndex]) : null;
         var display = selected ?? CurrentComposed(input, env, final: false);

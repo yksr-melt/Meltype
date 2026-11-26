@@ -459,12 +459,12 @@ public sealed class Settings
      Description("Space・Enter で変換・確定するときに、ローマ字の打ち間違いを直します。読めない子音が残ったとき、隣のキーの押し間違い・入れ替わり・抜けを 1 文字だけ直します (onegaishimsu → お願いします、sumimasne → すみません。よく使う語の読みになるときだけ)。")]
     public bool CorrectTypos { get; set; } = true;
 
-    [Category("5. 変換"), DisplayName("敬語モード"),
+    [Category("5. 変換"), DisplayName("リアルタイム敬語変換"),
      Description("入力中の文や変換候補を、リアルタイムで丁寧語・謙譲語・ビジネス敬語に変換します (りょうかい → 承知いたしました、きょうはいく → 本日は伺います、かくにんした → 確認いたしました)。Space で元の表現にも戻せます。")]
     public bool KeigoMode { get; set; }
 
-    [Category("5. 変換"), DisplayName("敬語モードの ON / OFF のホットキー"), Platforms(Platform.Windows),
-     Description("敬語モードの ON / OFF に使うキーの組み合わせ (例: Ctrl+Alt+K)。空のときは Ctrl+Alt+K (使えなければ Ctrl+Shift+Alt+K など)。変更は Meltype を起動し直すと効きます。")]
+    [Category("5. 変換"), DisplayName("リアルタイム敬語変換の ON / OFF のホットキー"), Platforms(Platform.Windows),
+     Description("リアルタイム敬語変換の ON / OFF に使うキーの組み合わせ (例: Ctrl+Alt+K)。空のときは Ctrl+Alt+K (使えなければ Ctrl+Shift+Alt+K など)。変更は Meltype を起動し直すと効きます。")]
     public string KeigoHotkey { get; set; } = "";
 
     [Category("7. 記号・スペース"), DisplayName("かなの後ろの /"),

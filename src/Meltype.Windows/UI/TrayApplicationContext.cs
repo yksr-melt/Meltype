@@ -95,7 +95,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         // 英語 / 日本語の自動判定 (OFF なら提案だけ出し、Tab で英字にする)
         _autoDetectionItem = new ToolStripMenuItem("英語 / 日本語を自動で判定する", null, (_, _) => ToggleAutoDetection());
         menu.Items.Add(_autoDetectionItem);
-        _keigoModeItem = new ToolStripMenuItem("敬語モード", null, (_, _) => ToggleKeigoMode());
+        _keigoModeItem = new ToolStripMenuItem("リアルタイム敬語変換", null, (_, _) => ToggleKeigoMode());
         menu.Items.Add(_keigoModeItem);
         // プロファイル (仕事用・趣味用・SNS 用など)。一覧は開くたびに作る (設定画面で足したもの・名前を変えたものを出す)
         _profileItem = new ToolStripMenuItem("プロファイル");
@@ -143,11 +143,11 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _tray = new NotifyIcon { ContextMenuStrip = menu, Visible = true };
         _tray.DoubleClick += (_, _) => ToggleEnabled();
         _hotkey = new HotkeyWindow(ToggleEnabled, HotkeyWindow.WithCustom(_engine.Settings.PauseHotkey, HotkeyWindow.ToggleKeys));
-        _keigoHotkey = new HotkeyWindow(ToggleKeigoMode, HotkeyWindow.WithCustom(_engine.Settings.KeigoHotkey, HotkeyWindow.KeigoToggleKeys), "敬語モードの ON/OFF");
+        _keigoHotkey = new HotkeyWindow(ToggleKeigoMode, HotkeyWindow.WithCustom(_engine.Settings.KeigoHotkey, HotkeyWindow.KeigoToggleKeys), "リアルタイム敬語変換の ON/OFF");
         _registerHotkey = new HotkeyWindow(RegisterSelectedWord, HotkeyWindow.RegisterWordKeys, "単語の登録");
         _engine.ToggleRequested += OnToggleRequested;
         _enabledItem.Text = _hotkey.Name is { } hotkey ? $"Meltype を有効にする (Ctrl+半角/全角, {hotkey})" : "Meltype を有効にする (Ctrl+半角/全角)";
-        if (_keigoHotkey.Name is { } keigoHotkey) _keigoModeItem.Text = $"敬語モード ({keigoHotkey})";
+        if (_keigoHotkey.Name is { } keigoHotkey) _keigoModeItem.Text = $"リアルタイム敬語変換 ({keigoHotkey})";
         _updater = new Updater(() => !AppPaths.IsPortable && _engine.Settings.AutoUpdate, () => Prerelease);
         _updater.Ready += OnUpdateReady;
         ShowUpdateItem();
@@ -515,10 +515,10 @@ internal sealed class TrayApplicationContext : ApplicationContext
     {
         _engine.EditSettings(settings => settings.KeigoMode = !settings.KeigoMode);
         UpdateStatus();
-        var message = _engine.Settings.KeigoMode ? "敬語モード ON" : "敬語モード OFF";
+        var message = _engine.Settings.KeigoMode ? "リアルタイム敬語変換 ON" : "リアルタイム敬語変換 OFF";
         _composition.ShowNotice(message, 1200);
         if (_engine.Settings.ShowNotifications)
-            ShowBalloonTip(1500, "Meltype", _engine.Settings.KeigoMode ? "敬語モードを ON にしました" : "敬語モードを OFF にしました");
+            ShowBalloonTip(1500, "Meltype", _engine.Settings.KeigoMode ? "リアルタイム敬語変換を ON にしました" : "リアルタイム敬語変換を OFF にしました");
     }
 
     private void SetMode(InputMode mode)
@@ -561,13 +561,13 @@ internal sealed class TrayApplicationContext : ApplicationContext
         {
             _tray.Icon = settings.KeigoMode ? _keigoIcon : _onIcon;
             status = registered
-                ? (settings.KeigoMode ? "Meltype IME (敬語モード ON)" : "Meltype IME (Win + Space で Meltype を選んで入力)")
+                ? (settings.KeigoMode ? "Meltype IME (リアルタイム敬語変換 ON)" : "Meltype IME (Win + Space で Meltype を選んで入力)")
                 : "Meltype IME が登録されていません (トレイの「Meltype IME」を選ぶと登録できます)";
         }
         else
         {
             _tray.Icon = _keyboard.Japanese ? (settings.KeigoMode ? _keigoIcon : _onIcon) : _directIcon;
-            status = _keyboard.Japanese ? (settings.KeigoMode ? "キーボード: 日本語 (敬語モード ON)" : "キーボード: 日本語") : "キーボード: 直接入力 (半角/全角 で日本語)";
+            status = _keyboard.Japanese ? (settings.KeigoMode ? "キーボード: 日本語 (リアルタイム敬語変換 ON)" : "キーボード: 日本語") : "キーボード: 直接入力 (半角/全角 で日本語)";
         }
         _statusItem.Text = status;
         var zenzai = _composition.Runtime.ZenzaiStatus();
