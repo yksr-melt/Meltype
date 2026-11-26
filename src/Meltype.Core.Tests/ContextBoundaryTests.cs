@@ -12,7 +12,6 @@ internal static class ContextBoundaryTests
     private static (CompositionTextState Text, CompositionEnv Env) Create(string before = "", bool manual = false, LanguageMemory? memory = null)
     {
         var detector = CompositionDetector.CreateDefault();
-        detector.Memory = memory;
         detector.IsCommonJapanese = RomajiTypoCorrector.Load(detector.Romaji).IsCommonJapanese;
         var context = TextContext.None with
         {
@@ -20,7 +19,7 @@ internal static class ContextBoundaryTests
             PrecedingEnglishSentence = before.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length >= 2,
             PrecedingEnglishName = CompositionContext.IsEnglishNameContext(before),
         };
-        return (new CompositionTextState(), TestSupport.Env(detector, new Settings { AutoDetection = !manual }) with { Context = () => context });
+        return (new CompositionTextState(), TestSupport.Env(detector, new Settings { AutoDetection = !manual }) with { Context = () => context, Languages = memory });
     }
 
     [Test]

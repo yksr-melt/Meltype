@@ -17,79 +17,73 @@ internal static class CompositionDirectInput
     /// <summary>英数状態で判定中の語が、無入力のまま一定時間たったら英語とみなす。</summary>
     internal static void Tick(CompositionState state, CompositionEnv env, long nowMs)
     {
-        if (state.HeldLetters.Length == 0 || nowMs - state.HeldLastKeyTime < DirectHoldIdleMs) return;
-        DecideHeld(state, env, final: true);
+        if (state.Scene is not CompositionScene.Judging judging || nowMs - judging.LastKeyTime < DirectHoldIdleMs) return;
+        Decide(state, judging, env, final: true);
     }
 
     // - を付けて使う英語の接頭辞 (e-mail、re-do、co-op、x-ray)
 
-    internal static void Hold(CompositionState state, CompositionEnv env, KeyEvent e)
+    internal static void Hold(CompositionState state, CompositionScene.Judging judging, CompositionEnv env, KeyEvent e)
     {
-        if (state.HeldLetters.Length == 0) state.PrivateComposition = CompositionLifecycle.Private(state);
-        state.HeldLetters.Append(VirtualKeys.ToLetter(e.Vk));
-        state.HeldLastKeyTime = e.TimeMs;
-        SendHeld(state, e);
-        DecideHeld(state, env, final: false);
+        judging.Letters.Append(VirtualKeys.ToLetter(e.Vk));
+        judging.LastKeyTime = e.TimeMs;
+        Send(state, judging, e);
+        Decide(state, judging, env, final: false);
     }
 
     /// <summary>
     /// 判定中の語の打鍵を、判定を待たずにアプリへ送る。前は判定できるまで保留していたので、英単語 (can・game・today) は
     /// Space を押すまで画面に出ず、英数状態の入力が遅れて見えた。ローマ字と分かったら、送った分を BackSpace で消す。
     /// </summary>
-    internal static void SendHeld(CompositionState state, KeyEvent e)
+    internal static void Send(CompositionState state, CompositionScene.Judging judging, KeyEvent e)
     {
         CompositionOutput.PassCurrent(state.Out);
-        state.HeldSent.Append(e.Scan is > 0 and < 0x10000 ? (char)e.Scan : '\0');
+        judging.Sent.Append(e.Scan is > 0 and < 0x10000 ? (char)e.Scan : '\0');
     }
 
     /// <summary>判定中の英字の、最後の - より後ろ (e-ma → ma)。- が無ければ全体。</summary>
-    internal static string LastHyphenPart(CompositionState state)
+    internal static string LastHyphenPart(CompositionScene.Judging judging)
     {
-        var letters = state.HeldLetters.ToString();
+        var letters = judging.Letters.ToString();
         return letters[(letters.LastIndexOf('-') + 1)..];
     }
 
-    private static void DecideHeld(CompositionState state, CompositionEnv env, bool final)
+    private static void Decide(CompositionState state, CompositionScene.Judging judging, CompositionEnv env, bool final)
     {
         // 英語の接頭辞の後の - (e-、co-) の後ろだけで判定する。e-mail・co-op のような - の入った英単語なら英語。
-        var part = LastHyphenPart(state);
-        var verdict = env.Detector.IsHyphenatedEnglishWord(CompositionText.LearningContext(state.Text, env), state.HeldLetters.ToString()) ? Verdict.English
+        var part = LastHyphenPart(judging);
+        var verdict = env.Detector.IsHyphenatedEnglishWord(CompositionText.LearnedLanguages(env), judging.Letters.ToString()) ? Verdict.English
             : part.Length == 0 ? Verdict.Undecided
             : env.ClassifyDirect!(part, final);
         // 2 文字の英単語 (up、my) でも、ローマ字の打ちかけとして読める (う + p) なら、続きを見てから決める
         // (upa- → うぱー、my → みゃ)。Space などで打ち終われば英語。
-        if (verdict == Verdict.English && !final && part.Length <= 2 && state.HeldLetters.Length <= 2 &&
+        if (verdict == Verdict.English && !final && part.Length <= 2 && judging.Letters.Length <= 2 &&
             env.Detector.Romaji.AnalyzeFragment(part.ToLowerInvariant()) is { IsValid: true, Partial.Length: > 0 })
         {
             verdict = Verdict.Undecided;
         }
-        Diagnostics.Log.Info($"英数状態の判定: {Diagnostics.Log.Text(state.HeldLetters.ToString())}→ {verdict}{(final ? " (打ち終わり)" : "")}");
-        if (verdict == Verdict.Japanese) SwitchHeldToJapanese(state, env);
-        else if (verdict != Verdict.Undecided || final) ReleaseHeldAsEnglish(state, env);
+        Diagnostics.Log.Info($"英数状態の判定: {Diagnostics.Log.Text(judging.Letters.ToString())}→ {verdict}{(final ? " (打ち終わり)" : "")}");
+        if (verdict == Verdict.Japanese) SwitchToJapanese(state, judging, env);
+        else if (verdict != Verdict.Undecided || final) ReleaseAsEnglish(state);
     }
 
     /// <summary>ローマ字だった: 日本語入力に戻し、判定中の英字を変換ボックスに入れる。</summary>
-    internal static void SwitchHeldToJapanese(CompositionState state, CompositionEnv env)
+    internal static void SwitchToJapanese(CompositionState state, CompositionScene.Judging judging, CompositionEnv env)
     {
-        var letters = state.HeldLetters.ToString();
-        var sent = state.HeldSent.ToString();
         // 判定を待たずに送っていた英字を消して、変換ボックスに入れ直す。
-        CompositionOutput.DeleteHeld(state.Out, sent);
-        CompositionLifecycle.ClearHeld(state);
-        CompositionLifecycle.DirectDecided(state, true);
-        CompositionLifecycle.BeginComposition(state, env, state.PrivateComposition);
-        foreach (var c in letters)
+        CompositionOutput.DeleteHeld(state.Out, judging.Sent.ToString());
+        var input = CompositionLifecycle.BeginFromJudging(state, judging, env);
+        foreach (var c in judging.Letters.ToString())
         {
-            if (state.Text.KanaInput && Detection.KanaDetector.KanaForKey(char.ToUpperInvariant(c), char.IsAsciiLetterUpper(c)) is { } kana) CompositionText.AppendKana(state.Text, c, kana);
-            else CompositionText.Append(state.Text, env, c);
+            if (input.Text.KanaInput && Detection.KanaDetector.KanaForKey(char.ToUpperInvariant(c), char.IsAsciiLetterUpper(c)) is { } kana) CompositionText.AppendKana(input.Text, c, kana);
+            else CompositionText.Append(input.Text, env, c);
         }
     }
 
     /// <summary>英語だった: 打鍵はもう送ってあるので、判定をやめるだけ。</summary>
-    internal static void ReleaseHeldAsEnglish(CompositionState state, CompositionEnv env)
+    internal static void ReleaseAsEnglish(CompositionState state)
     {
-        CompositionLifecycle.ClearHeld(state);
         state.Correctable.Clear();
-        CompositionLifecycle.DirectDecided(state, false);
+        CompositionLifecycle.StartEnglishWord(state);
     }
 }

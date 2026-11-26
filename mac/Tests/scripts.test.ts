@@ -192,13 +192,13 @@ function update(work: Work): void {
   fakeTool(work, 'build-cli.sh', 'echo "build:$*" >> "$MELTYPE_TEST_LOG"');
   fakeTool(work, 'uname', 'echo Darwin');
   fakeTool(work, 'start-input-method.sh', 'echo UNEXPECTED_START >> "$MELTYPE_TEST_LOG"; exit 99');
-  fakeTool(work, 'swift', 'echo select >> "$MELTYPE_TEST_LOG"');
+  fakeTool(work, 'Meltype.app/Contents/MacOS/MeltypeInstallSupport', 'echo "select:$*" >> "$MELTYPE_TEST_LOG"');
   fakeTool(work, 'open', 'echo UNEXPECTED_OPEN >> "$MELTYPE_TEST_LOG"; exit 1');
   runScript(work, 'update.sh');
   const lines = calls(work);
   assert.equal(lines[0], 'build:--test --install');
   assert.ok(lines[1]?.startsWith('app:--check-inputs '));
-  assert.ok(lines.includes('select'));
+  assert.equal(lines[2], `select:--select ${path.join(work, 'Meltype.app')}`);
   assert.ok(!lines.includes('UNEXPECTED_START'));
   assert.ok(!lines.includes('UNEXPECTED_OPEN'));
 }
@@ -283,6 +283,7 @@ function installSupportTool(work: Work, prefix = 'source.app'): void {
       '--stop) if [[ -f "$MELTYPE_START_LOG_DIR/running" ]]; then [[ "$4" == - ]] || echo 1 > "$4"; rm "$MELTYPE_START_LOG_DIR/running"; echo stopped >> "$MELTYPE_TEST_LOG"; else [[ "$4" == - ]] || echo 0 > "$4"; fi; exit 0 ;;',
       '--restore) if [[ $(cat "$3") == 1 ]]; then touch "$MELTYPE_START_LOG_DIR/running"; echo restarted >> "$MELTYPE_TEST_LOG"; fi; exit 0 ;;',
       '--start) echo started >> "$MELTYPE_TEST_LOG"; exit 0 ;;',
+      '--select) [[ -x "$2/Contents/MacOS/Meltype" ]] || exit 23; echo selected >> "$MELTYPE_TEST_LOG"; exit 0 ;;',
       'esac',
       `exec ${JSON.stringify(installTool)} "$@"`,
     ].join('\n'));
@@ -306,8 +307,8 @@ function distributedInstall(work: Work): void {
   fakeTool(work, 'ditto', 'cp -R "$1" "$2"');
   fakeTool(work, 'codesign', 'exit 0');
   fakeTool(work, 'install-settings-app.sh', 'echo settings >> "$MELTYPE_TEST_LOG"');
-  writeFile(path.join(work, 'select-input-source.swift'), '// fake selector');
-  fakeTool(work, 'swift', 'echo selected >> "$MELTYPE_TEST_LOG"');
+  // 配布先に Swift の開発ツールがなくても、初回は自動で入力ソースを選べる。
+  fakeTool(work, 'swift', 'echo UNEXPECTED_SWIFT >> "$MELTYPE_TEST_LOG"; exit 99');
   for (const name of ['pkill', 'xattr', 'lsregister']) fakeTool(work, name, 'exit 0');
   fakeTool(work, 'killall', 'echo UNEXPECTED_MENU_REFRESH >> "$MELTYPE_TEST_LOG"');
   fakeTool(work, 'open', 'echo UNEXPECTED_OPEN >> "$MELTYPE_TEST_LOG"; exit 1');
@@ -327,6 +328,16 @@ scenario('起動に失敗したら、入力ソースを選ばない', work => {
 
 scenario('配布用の install.sh', distributedInstall);
 
+scenario('初回のインストールで入力ソースを選べなくても、アプリを残して入力メニューから選ぶよう案内する', work => {
+  distributedInstall(work);
+  removeInstalled(work);
+  fakeTool(work, 'Meltype.app/Contents/MacOS/MeltypeInstallSupport',
+    `[[ "$1" == --select ]] && exit 2\nexec ${fixtureSupport(work)} "$@"`);
+  const message = runScript(work, 'install.sh');
+  assert.ok(message.includes('入力メニューから Meltype を選んでください'), message);
+  assert.ok(fs.existsSync(path.join(work, 'installed/Meltype.app/Contents/MacOS/Meltype')));
+});
+
 scenario('更新では入力メニューを起動し直さず、初回のインストールでは起動し直す', work => {
   distributedInstall(work);
   fakeTool(work, 'Meltype.app/Contents/MacOS/MeltypeRegisterInputSource', 'echo helper:${2:-initial} >> "$MELTYPE_TEST_LOG"');
@@ -338,6 +349,7 @@ scenario('更新では入力メニューを起動し直さず、初回のイン�
     const lines = calls(work);
     assert.ok(lines.includes(isUpdate ? 'app:--register-input-source --keep-input-menu' : 'app:--register-input-source'));
     assert.ok(lines.includes(isUpdate ? 'helper:--keep-input-menu' : 'helper:initial'));
+    assert.equal(lines.includes('selected'), !isUpdate);
   }
 });
 

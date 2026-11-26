@@ -116,6 +116,7 @@ int main() {
         };
         check(takesKey('U'), "ordinary input receives U");
         check(takesKey(VK_SPACE), "ordinary input captures Space as an input-mode shortcut");
+        check(!takesKey(VK_NUMPAD5), "a numpad digit goes to the application while nothing is typed");
         // Win+X のメニューと Windows 10 のアドレス ツールバーの代わり。クラス名はテストのプロセスの中だけで使われる
         WNDCLASSW taskbarClass = {};
         taskbarClass.lpfnWndProc = DefWindowProcW;
