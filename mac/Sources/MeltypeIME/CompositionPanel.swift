@@ -3,6 +3,232 @@
 
 import Cocoa
 
+struct ColorSwatchRgba: Equatable {
+    let r: UInt8
+    let g: UInt8
+    let b: UInt8
+    let a: UInt8
+}
+
+enum ColorSwatchParser {
+    static func parseRgba(_ text: String) -> ColorSwatchRgba? {
+        guard !text.isEmpty else { return nil }
+        let scalars = Array(text.unicodeScalars)
+        if scalars[0] == "#" {
+            return parseHex(scalars)
+        }
+        if let rgb = parseRgb(scalars) {
+            return rgb
+        }
+        return parseHsl(scalars)
+    }
+
+    private static func parseHex(_ scalars: [UnicodeScalar]) -> ColorSwatchRgba? {
+        let len = scalars.count - 1
+        guard len == 3 || len == 4 || len == 6 || len == 8 else { return nil }
+        var digits = [UInt8]()
+        digits.reserveCapacity(len)
+        for i in 1..<scalars.count {
+            guard let d = hexDigit(scalars[i]) else { return nil }
+            digits.append(d)
+        }
+        if len == 3 || len == 4 {
+            return ColorSwatchRgba(
+                r: (digits[0] << 4) | digits[0],
+                g: (digits[1] << 4) | digits[1],
+                b: (digits[2] << 4) | digits[2],
+                a: len == 4 ? (digits[3] << 4) | digits[3] : 255
+            )
+        }
+        return ColorSwatchRgba(
+            r: (digits[0] << 4) | digits[1],
+            g: (digits[2] << 4) | digits[3],
+            b: (digits[4] << 4) | digits[5],
+            a: len == 8 ? (digits[6] << 4) | digits[7] : 255
+        )
+    }
+
+    private static func parseRgb(_ scalars: [UnicodeScalar]) -> ColorSwatchRgba? {
+        var i = 0
+        guard matchPrefix(scalars, &i, "rgba(") || matchPrefix(scalars, &i, "rgb(") else { return nil }
+        skipSpaces(scalars, &i)
+        guard let r = parseByteComponent(scalars, &i),
+              parseSeparator(scalars, &i),
+              let g = parseByteComponent(scalars, &i),
+              parseSeparator(scalars, &i),
+              let b = parseByteComponent(scalars, &i),
+              let a = parseAlphaSuffix(scalars, &i) else { return nil }
+        return ColorSwatchRgba(r: r, g: g, b: b, a: a)
+    }
+
+    private static func parseHsl(_ scalars: [UnicodeScalar]) -> ColorSwatchRgba? {
+        var i = 0
+        guard matchPrefix(scalars, &i, "hsla(") || matchPrefix(scalars, &i, "hsl(") else { return nil }
+        skipSpaces(scalars, &i)
+        guard let hDeg = parseDouble(scalars, &i, allowNegative: true),
+              parseSeparator(scalars, &i),
+              let sPct = parseDouble(scalars, &i, allowNegative: false),
+              i < scalars.count, scalars[i] == "%", sPct >= 0, sPct <= 100 else { return nil }
+        i += 1
+        guard parseSeparator(scalars, &i),
+              let lPct = parseDouble(scalars, &i, allowNegative: false),
+              i < scalars.count, scalars[i] == "%", lPct >= 0, lPct <= 100 else { return nil }
+        i += 1
+        guard let a = parseAlphaSuffix(scalars, &i) else { return nil }
+
+        let h = ((hDeg.truncatingRemainder(dividingBy: 360.0)) + 360.0).truncatingRemainder(dividingBy: 360.0) / 360.0
+        let s = sPct / 100.0
+        let l = lPct / 100.0
+        if s == 0 {
+            let gray = UInt8(clamping: Int(round(l * 255.0)))
+            return ColorSwatchRgba(r: gray, g: gray, b: gray, a: a)
+        }
+        let q = l < 0.5 ? l * (1.0 + s) : l + s - l * s
+        let p = 2.0 * l - q
+        let r = UInt8(clamping: Int(round(hueToRgb(p, q, h + 1.0 / 3.0) * 255.0)))
+        let g = UInt8(clamping: Int(round(hueToRgb(p, q, h) * 255.0)))
+        let b = UInt8(clamping: Int(round(hueToRgb(p, q, h - 1.0 / 3.0) * 255.0)))
+        return ColorSwatchRgba(r: r, g: g, b: b, a: a)
+    }
+
+    private static func hueToRgb(_ p: Double, _ q: Double, _ tInput: Double) -> Double {
+        var t = tInput
+        if t < 0 { t += 1.0 }
+        if t > 1 { t -= 1.0 }
+        if t < 1.0 / 6.0 { return p + (q - p) * 6.0 * t }
+        if t < 0.5 { return q }
+        if t < 2.0 / 3.0 { return p + (q - p) * (2.0 / 3.0 - t) * 6.0 }
+        return p
+    }
+
+    private static func hexDigit(_ scalar: UnicodeScalar) -> UInt8? {
+        switch scalar.value {
+        case 48...57: return UInt8(scalar.value - 48)
+        case 65...70: return UInt8(scalar.value - 55)
+        case 97...102: return UInt8(scalar.value - 87)
+        default: return nil
+        }
+    }
+
+    private static func skipSpaces(_ scalars: [UnicodeScalar], _ i: inout Int) {
+        while i < scalars.count && (scalars[i] == " " || scalars[i] == "\t") { i += 1 }
+    }
+
+    private static func matchPrefix(_ scalars: [UnicodeScalar], _ i: inout Int, _ word: String) -> Bool {
+        let target = Array(word.unicodeScalars)
+        guard i + target.count <= scalars.count else { return false }
+        for offset in 0..<target.count {
+            let v = scalars[i + offset].value
+            let lower = (v >= 65 && v <= 90) ? v + 32 : v
+            if lower != target[offset].value { return false }
+        }
+        i += target.count
+        return true
+    }
+
+    private static func parseByteComponent(_ scalars: [UnicodeScalar], _ i: inout Int) -> UInt8? {
+        let start = i
+        var value = 0
+        while i < scalars.count && scalars[i].value >= 48 && scalars[i].value <= 57 {
+            value = value * 10 + Int(scalars[i].value - 48)
+            if value > 255 { return nil }
+            i += 1
+        }
+        return i > start ? UInt8(value) : nil
+    }
+
+    private static func parseDouble(_ scalars: [UnicodeScalar], _ i: inout Int, allowNegative: Bool) -> Double? {
+        let start = i
+        if allowNegative && i < scalars.count && scalars[i] == "-" { i += 1 }
+        var hasDigit = false
+        while i < scalars.count && scalars[i].value >= 48 && scalars[i].value <= 57 {
+            hasDigit = true
+            i += 1
+        }
+        if i < scalars.count && scalars[i] == "." {
+            i += 1
+            while i < scalars.count && scalars[i].value >= 48 && scalars[i].value <= 57 {
+                hasDigit = true
+                i += 1
+            }
+        }
+        guard hasDigit else {
+            i = start
+            return nil
+        }
+        let token = String(String.UnicodeScalarView(scalars[start..<i]))
+        return Double(token)
+    }
+
+    private static func parseSeparator(_ scalars: [UnicodeScalar], _ i: inout Int) -> Bool {
+        let before = i
+        skipSpaces(scalars, &i)
+        if i < scalars.count && scalars[i] == "," {
+            i += 1
+            skipSpaces(scalars, &i)
+            return true
+        }
+        return i > before
+    }
+
+    private static func parseAlphaSuffix(_ scalars: [UnicodeScalar], _ i: inout Int) -> UInt8? {
+        skipSpaces(scalars, &i)
+        if i < scalars.count && scalars[i] == ")" {
+            i += 1
+            return i == scalars.count ? 255 : nil
+        }
+        guard i < scalars.count && (scalars[i] == "," || scalars[i] == "/") else { return nil }
+        i += 1
+        skipSpaces(scalars, &i)
+        guard var val = parseDouble(scalars, &i, allowNegative: false) else { return nil }
+        if i < scalars.count && scalars[i] == "%" {
+            i += 1
+            guard val >= 0 && val <= 100 else { return nil }
+            val /= 100.0
+        } else if val < 0 || val > 1 {
+            return nil
+        }
+        skipSpaces(scalars, &i)
+        guard i < scalars.count && scalars[i] == ")" else { return nil }
+        i += 1
+        return i == scalars.count ? UInt8(clamping: Int(round(val * 255.0))) : nil
+    }
+}
+
+private final class ColorSwatchView: NSView {
+    private let rgba: ColorSwatchRgba
+
+    init(rgba: ColorSwatchRgba) {
+        self.rgba = rgba
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override func draw(_ dirtyRect: NSRect) {
+        if rgba.a < 255 {
+            let midX = bounds.midX
+            let midY = bounds.midY
+            NSColor.white.setFill()
+            NSBezierPath.fill(NSRect(x: bounds.minX, y: midY, width: midX - bounds.minX, height: bounds.maxY - midY))
+            NSBezierPath.fill(NSRect(x: midX, y: bounds.minY, width: bounds.maxX - midX, height: midY - bounds.minY))
+            NSColor.lightGray.setFill()
+            NSBezierPath.fill(NSRect(x: midX, y: midY, width: bounds.maxX - midX, height: bounds.maxY - midY))
+            NSBezierPath.fill(NSRect(x: bounds.minX, y: bounds.minY, width: midX - bounds.minX, height: midY - bounds.minY))
+        }
+        NSColor(srgbRed: CGFloat(rgba.r) / 255.0,
+                green: CGFloat(rgba.g) / 255.0,
+                blue: CGFloat(rgba.b) / 255.0,
+                alpha: CGFloat(rgba.a) / 255.0).setFill()
+        NSBezierPath.fill(bounds)
+        NSColor.secondaryLabelColor.withAlphaComponent(0.6).setStroke()
+        let border = NSBezierPath(rect: bounds.insetBy(dx: 0.5, dy: 0.5))
+        border.lineWidth = 1
+        border.stroke()
+    }
+}
+
 /// 未確定文字列の行全体を避け、案内を入力行に近い側へ置く。
 struct CompositionPanelPlacement {
     private static let gap: CGFloat = 6
@@ -97,6 +323,8 @@ final class CompositionPanel: NSObject, NSTableViewDataSource, NSTableViewDelega
     private static let guideFont = NSFont.systemFont(ofSize: 12)
     private static let meaningFont = NSFont.systemFont(ofSize: 13)
     private static let candidateRowHeight: CGFloat = 32
+    private static let swatchSize: CGFloat = 14
+    private static let swatchGap: CGFloat = 8
     // Windows IME の候補窓 (kMaxWidth) と同じ上限。長い案内や候補でパネルが広がりすぎないようにする。
     private static let maxWidth: CGFloat = 520
     // Core の数字キー選択は、選択中の候補が属する 9 件のページ内で行う。
@@ -132,6 +360,7 @@ final class CompositionPanel: NSObject, NSTableViewDataSource, NSTableViewDelega
         let title: NSAttributedString
         let note: NSAttributedString?
         let noteWidth: CGFloat
+        let swatch: ColorSwatchRgba?
         let height: CGFloat
     }
 
@@ -152,6 +381,7 @@ final class CompositionPanel: NSObject, NSTableViewDataSource, NSTableViewDelega
         let titleWidth: CGFloat
         let note: NSAttributedString?
         let noteWidth: CGFloat
+        let swatch: ColorSwatchRgba?
     }
 
     private struct RowsKey: Equatable {
@@ -277,7 +507,11 @@ final class CompositionPanel: NSObject, NSTableViewDataSource, NSTableViewDelega
         let rowInset = 2 * Self.candidatePadding
         let scrollerWidth = NSScroller.scrollerWidth(for: .regular, scrollerStyle: .legacy)
         // セル自身を測り、描画時に引かれる文字欄の左右の余白も幅に含める。
-        let longestRow = candidates.map { $0.titleWidth + ($0.note == nil ? 0 : Self.noteGap + $0.noteWidth) }.max() ?? 0
+        let longestRow = candidates.map {
+            $0.titleWidth
+                + ($0.swatch == nil ? 0 : Self.swatchGap + Self.swatchSize)
+                + ($0.note == nil ? 0 : Self.noteGap + $0.noteWidth)
+        }.max() ?? 0
         let listWidth = items.isEmpty ? 0 : longestRow + numberWidth + rowInset + scrollerWidth
         let width = min(max(listWidth, naturalWidth(of: guideLabel), naturalWidth(of: meaningLabel), naturalWidth(of: positionLabel), 44),
                         floor(min(content.placement.visible.width, Self.maxWidth)) - 2 * padding)
@@ -378,18 +612,20 @@ final class CompositionPanel: NSObject, NSTableViewDataSource, NSTableViewDelega
         let title = styled(item, font: Self.candidateFont, color: .labelColor)
         measuringLabel.attributedStringValue = title
         let titleWidth = naturalWidth(of: measuringLabel)
+        let swatch = ColorSwatchParser.parseRgba(item)
         guard let note, !note.isEmpty else {
-            return CandidateText(title: title, titleWidth: titleWidth, note: nil, noteWidth: 0)
+            return CandidateText(title: title, titleWidth: titleWidth, note: nil, noteWidth: 0, swatch: swatch)
         }
         let detail = styled(note, font: Self.guideFont, color: .secondaryLabelColor, alignment: .right)
         measuringLabel.attributedStringValue = detail
-        return CandidateText(title: title, titleWidth: titleWidth, note: detail, noteWidth: naturalWidth(of: measuringLabel))
+        return CandidateText(title: title, titleWidth: titleWidth, note: detail, noteWidth: naturalWidth(of: measuringLabel), swatch: swatch)
     }
 
     private func makeRow(_ text: CandidateText, index: Int, number: Int?, availableWidth: CGFloat) -> Row {
         let spacing = min(Self.noteGap, floor(availableWidth / 4))
-        let noteWidth = min(text.noteWidth, max(floor(availableWidth / 2) - spacing, availableWidth - spacing - text.titleWidth))
-        let reserved = noteWidth > 0 ? noteWidth + spacing : 0
+        let swatchSpace = text.swatch == nil ? 0 : Self.swatchSize + Self.swatchGap
+        let noteWidth = min(text.noteWidth, max(floor(availableWidth / 2) - spacing, availableWidth - spacing - text.titleWidth - swatchSpace))
+        let reserved = (noteWidth > 0 ? noteWidth + spacing : 0) + swatchSpace
         measuringLabel.attributedStringValue = text.title
         let titleHeight = height(of: measuringLabel, width: availableWidth - reserved)
         var noteHeight: CGFloat = 0
@@ -398,7 +634,7 @@ final class CompositionPanel: NSObject, NSTableViewDataSource, NSTableViewDelega
             noteHeight = height(of: measuringLabel, width: noteWidth)
         }
         let rowHeight = max(Self.candidateRowHeight, max(titleHeight, noteHeight) + 2 * Self.candidatePadding)
-        return Row(index: index, number: number, title: text.title, note: text.note, noteWidth: noteWidth, height: rowHeight)
+        return Row(index: index, number: number, title: text.title, note: text.note, noteWidth: noteWidth, swatch: text.swatch, height: rowHeight)
     }
 
     private func updateRows(_ newRows: [Row], key: RowsKey, selected: Int, viewportHeight: CGFloat,
@@ -461,18 +697,35 @@ final class CompositionPanel: NSObject, NSTableViewDataSource, NSTableViewDelega
         let title = addLabel(item.title, to: cell)
         cell.textField = title
         title.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: padding + numberWidth).isActive = true
+
+        var trailingTarget: NSLayoutXAxisAnchor = cell.trailingAnchor
+        var trailingConstant: CGFloat = -padding
         if let note = item.note, item.noteWidth > 0 {
             let detail = addLabel(note, to: cell)
             detail.alignment = .right
             let availableWidth = column.width - 2 * padding - numberWidth
             let spacing = min(Self.noteGap, floor(availableWidth / 4))
             NSLayoutConstraint.activate([
-                title.trailingAnchor.constraint(equalTo: detail.leadingAnchor, constant: -spacing),
                 detail.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -padding),
                 detail.widthAnchor.constraint(equalToConstant: item.noteWidth)
             ])
+            trailingTarget = detail.leadingAnchor
+            trailingConstant = -spacing
+        }
+        if let swatch = item.swatch {
+            let swatchView = ColorSwatchView(rgba: swatch)
+            cell.addSubview(swatchView)
+            title.setContentHuggingPriority(.defaultHigh, for: .horizontal)
+            title.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            NSLayoutConstraint.activate([
+                swatchView.leadingAnchor.constraint(equalTo: title.trailingAnchor, constant: Self.swatchGap),
+                swatchView.trailingAnchor.constraint(lessThanOrEqualTo: trailingTarget, constant: trailingConstant),
+                swatchView.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
+                swatchView.widthAnchor.constraint(equalToConstant: Self.swatchSize),
+                swatchView.heightAnchor.constraint(equalToConstant: Self.swatchSize)
+            ])
         } else {
-            title.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -padding).isActive = true
+            title.trailingAnchor.constraint(equalTo: trailingTarget, constant: trailingConstant).isActive = true
         }
         return cell
     }
