@@ -29,7 +29,7 @@ internal static class UserDictionaryPage
         preview.VerticalAlignment = VerticalAlignment.Center;
         var word = new TextBox { PlaceholderText = "単語", Width = 220, Text = newWord?.Word };
         // 分類: 登録・取り込み・「分類を変える」で語に付ける名前 (Google 日本語入力の辞書を分ける使い方の代わり)
-        var category = new AutoCompleteBox { Watermark = "分類 (なくてもよい)", Width = 220, FilterMode = AutoCompleteFilterMode.Contains };
+        var category = new AutoCompleteBox { PlaceholderText = "分類 (なくてもよい)", Width = 220, FilterMode = AutoCompleteFilterMode.Contains };
         const string AllCategories = "すべての分類";
         const string NoCategory = "分類なし";
         var categoryFilter = new ComboBox { MinWidth = 160 };
