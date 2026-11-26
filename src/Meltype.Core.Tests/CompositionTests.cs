@@ -1846,6 +1846,31 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void CandidateDictionary_MergedClausesKeepZenzaiAttribution()
+    {
+        var candidates = new CandidateDictionary();
+        candidates.Add("つるまきまき", ["弦巻マキ"]);
+        foreach (var zenzai in new[] { true, false })
+        {
+            var converter = new SplitConverter(new()
+            {
+                ["つるまきまき"] = [new("つるまき", "ツルマキ", zenzai), new("まき", "マキ", zenzai)],
+            });
+            var session = new TestSession(() => new Settings { LiveConversion = false }, converter,
+                new CompositionServices { Candidates = candidates });
+            var view = SessionFacadeTests.Type(session, "tsurumakimaki ")[^1].View!;
+
+            Assert.Equal("ツルマキマキ", view.Candidates[view.SelectedIndex]);
+            Assert.Equal(zenzai ? "Zenzai" : null, view.ContextHint);
+            Assert.Equal(zenzai ? CandidateNote.Zenzai : CandidateNote.None, view.Notes?[view.SelectedIndex] ?? CandidateNote.None);
+
+            var dictionaryIndex = view.Candidates.ToList().IndexOf("弦巻マキ");
+            Assert.True(dictionaryIndex >= 0, "補助辞書の候補が出る");
+            Assert.True(view.Notes?[dictionaryIndex] is not CandidateNote.Zenzai, "補助辞書の候補に Zenzai の注記は付けない");
+        }
+    }
+
+    [Test]
     public static void CorpusContextRules_PreferChatFormsWhenCued()
     {
         var rules = ContextRules.Load(null);
