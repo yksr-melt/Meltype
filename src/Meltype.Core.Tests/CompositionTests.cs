@@ -6402,6 +6402,37 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void Issue1945_DirectModeLogHidesTypedKeyUnlessRecordTextIsOn()
+    {
+        // 英数状態の判定を数字で打ち切ったログに、打った数字のキーコード (kana1 の 1 で 0x31) が設定に関係なく残っていた。
+        var recordText = Meltype.Diagnostics.Log.RecordText;
+        try
+        {
+            // 数字のほか、記号 (, は 0xBC)  で打ち切ったときも同じ。
+            // 逆向き: OFF でもログ自体は残し (判定を打ち切ったことは調べるときに要る)、ON ならキーを残す。
+            foreach (var (keys, code) in new[] { ("kana1", "0x31"), ("kana,", "0xBC") })
+            {
+                foreach (var withText in new[] { false, true })
+                {
+                    Meltype.Diagnostics.Log.RecordText = withText;
+                    var version = Meltype.Diagnostics.Log.Version;
+                    new Keyboard(direct: true).Type(keys);
+                    var logged = Meltype.Diagnostics.Log.Snapshot().TakeLast((int)Math.Min(Meltype.Diagnostics.Log.Version - version, 1000)).Select(e => e.Message).ToList();
+                    var entry = logged.LastOrDefault(m => m.StartsWith("英数状態の判定を打ち切り", StringComparison.Ordinal));
+                    Assert.True(entry is not null, $"{keys}: 設定に関係なく打ち切りのログは残す");
+                    Assert.Equal(withText, entry!.Contains(code), $"{keys}: 打ったキーは設定どおり: " + entry);
+                    // OFF なら、この打鍵で出たどのログにも打った英字が出ない
+                    if (!withText) Assert.True(!logged.Any(m => m.Contains("kana")), $"{keys}: 打った英字を残さない: " + string.Join(" / ", logged));
+                }
+            }
+        }
+        finally
+        {
+            Meltype.Diagnostics.Log.RecordText = recordText;
+        }
+    }
+
+    [Test]
     public static void Issue1644_CommitLogsSegmentReason()
     {
         // 確定のたびに、区切りの重みと次点をログに残す。既定では打った文字を出さず、区間の言語と文字数だけ
