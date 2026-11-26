@@ -469,4 +469,25 @@ internal static class WindowsTests
         Assert.True(!off.Contains("サインイン"), "OFF はサインイン時に更新しない");
         Assert.True(off.Contains("「Meltype 1.2.3 に更新して再起動」"), "OFF はトレイのメニューの項目名で案内する");
     }
+
+    [Test]
+    public static void ColorSwatch_IsDrawnForColorCandidates()
+    {
+        using var window = new CompositionWindow();
+        var view = new CompositionView("#3b82f6", [], -1, false, "Tab 予測の候補を選ぶ",
+            Predictions: ["rgb(59, 130, 246)", "hsl(217, 91%, 60%)"]);
+        window.ShowView(view, new Point(-5000, -5000));
+        using var bmp = new Bitmap(window.Width, window.Height);
+        window.DrawToBitmap(bmp, new Rectangle(0, 0, window.Width, window.Height));
+        var hasBlue = false;
+        for (var x = 0; x < bmp.Width && !hasBlue; x++)
+        {
+            for (var y = 0; y < bmp.Height; y++)
+            {
+                var p = bmp.GetPixel(x, y);
+                if (p.R == 59 && p.G == 130 && p.B == 246) { hasBlue = true; break; }
+            }
+        }
+        Assert.True(hasBlue, $"色見本 (59, 130, 246) が描画されている ({bmp.Width}x{bmp.Height})");
+    }
 }

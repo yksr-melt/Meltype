@@ -401,24 +401,25 @@ internal sealed class CompositionWindow : PopupForm
                     using var highlight = new SolidBrush(Color.FromArgb(60, Accent));
                     g.FillRectangle(highlight, 4, y - 2, Width - 8, rowHeight);
                 }
-                DrawText(g, $"{(numbered ? $"{i - first + 1}" : " ")}  {items[i]}", _candidateFont, new Point(12, y),
+                var rowText = $"{(numbered ? $"{i - first + 1}" : " ")}  {items[i]}";
+                DrawText(g, rowText, _candidateFont, new Point(12, y),
                     i == selectedItem ? _palette.Text : _palette.Candidate,
                     i == selectedItem ? Blend(Background, Color.FromArgb(60, Accent)) : Background, TextFormatFlags.NoPrefix);
-                var hasSwatch = Utility.ColorConversion.TryParseRgba(items[i], out var rgba);
                 var rightEdge = Width - 10;
-                if (hasSwatch)
-                {
-                    var swatchSize = SwatchSize(rowHeight);
-                    var swatchX = rightEdge - swatchSize;
-                    var swatchY = y + (_candidateFont.Height - swatchSize) / 2;
-                    DrawColorSwatch(g, swatchX, swatchY, swatchSize, rgba);
-                    rightEdge = swatchX - 8;
-                }
                 if (view.Notes?[i].ToDisplayText() is { } note)
                 {
                     // 候補の注記を右端に小さく出す
                     var noteWidth = TextRenderer.MeasureText(g, note, _hintFont).Width;
                     TextRenderer.DrawText(g, note, _hintFont, new Point(rightEdge - noteWidth, y + (_candidateFont.Height - _hintFont.Height) / 2), Accent, TextFormatFlags.NoPrefix);
+                    rightEdge -= noteWidth + 8;
+                }
+                if (Utility.ColorConversion.TryParseRgba(items[i], out var rgba))
+                {
+                    var swatchSize = SwatchSize(rowHeight);
+                    var textWidth = TextRenderer.MeasureText(g, rowText, _candidateFont).Width;
+                    var swatchX = Math.Min(12 + textWidth + 6, rightEdge - swatchSize);
+                    var swatchY = y + (_candidateFont.Height - swatchSize) / 2;
+                    DrawColorSwatch(g, swatchX, swatchY, swatchSize, rgba);
                 }
                 y += rowHeight;
             }
@@ -437,9 +438,9 @@ internal sealed class CompositionWindow : PopupForm
     }
 
     private int SwatchSize(int rowHeight) =>
-        Math.Max(10, Math.Min(rowHeight - 4, (int)Math.Round(12 * _monitorScale)));
+        Math.Max(12, Math.Min(rowHeight - 2, (int)Math.Round(14 * _monitorScale)));
 
-    private int SwatchWidth() => SwatchSize(_candidateFont.Height + 4) + 10;
+    private int SwatchWidth() => SwatchSize(_candidateFont.Height + 4) + 14;
 
     private void DrawColorSwatch(Graphics g, int x, int y, int size, (byte R, byte G, byte B, byte A) rgba)
     {
