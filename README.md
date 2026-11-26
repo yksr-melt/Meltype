@@ -87,7 +87,7 @@ VS Code やターミナルでは英数が基本で、コメントと文字列の
 
 Windows は、[Releases](https://github.com/yksr-melt/Meltype/releases/latest) から `Meltype-<version>-setup.exe` をダウンロードして、案内どおりに進めるだけ！
 Android は [Android の案内](docs/ANDROID.md)、GUI のない Linux 端末では [TTY の案内](docs/TTY.md) を参照してください。文書の一覧は [docs/README.md](docs/README.md) にあります。
-Windows のコード署名の方針は [コード署名](docs/CODE-SIGNING.md) にあります。
+Windows のコード署名の方針は [Code signing policy](docs/CODE-SIGNING.md) にあります。
 あとは、いつもどおりローマ字で打つだけです。キー操作と機能は [docs/USAGE.md](docs/USAGE.md) にあります。
 
 <br><br>
@@ -103,7 +103,7 @@ Windows のコード署名の方針は [コード署名](docs/CODE-SIGNING.md) �
 | 任意の連携 | 設定した GitHub のリポジトリ・番号の照会、ON にした Discord の打鍵数表示 (Windows・Mac・Linux) など |
 | 保存先 | Windows は `%LOCALAPPDATA%\Meltype`、ポータブル版・Mac・Linux・TTY・Android は [データと学習](docs/USAGE.md#データと学習) を参照 |
 
-入力した文章を変換サービスへ送りません。ログと保存データ、各 OS のパスワード欄の対応、脆弱性の連絡先は [SECURITY.md](SECURITY.md) にあります。
+打った文字は、利用者が自分で送信する不具合の報告と、設定した連携を除いて外部に送りません。ログと保存データ、各 OS のパスワード欄の対応、脆弱性の連絡先は [SECURITY.md](SECURITY.md) にあります。
 
 <br><br>
 

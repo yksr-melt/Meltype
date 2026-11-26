@@ -1,6 +1,6 @@
 <a name="code-signing-policy"></a>
 
-# コード署名の方針
+# Code signing policy
 
 Free code signing provided by [SignPath.io](https://signpath.io), certificate by [SignPath Foundation](https://signpath.org).
 

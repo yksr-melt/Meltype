@@ -1,6 +1,6 @@
 # SignPath のテスト署名の設定
 
-[コード署名の方針](CODE-SIGNING.md) に沿って、Windows 版を SignPath でテスト署名するための設定手順です。
+[Code signing policy](CODE-SIGNING.md) に沿って、Windows 版を SignPath でテスト署名するための設定手順です。
 テスト署名の成果物は GitHub Releases に添付せず、正式版として配布しません。既存の配布経路 (`release.yml` から呼ぶ `windows.yml` の `package`) は変えません。
 
 Organization ID、Project の表示名と slug、既存 Artifact Configuration の slug は別の値です。
