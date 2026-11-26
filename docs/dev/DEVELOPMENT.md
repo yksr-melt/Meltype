@@ -20,7 +20,9 @@
 | `native/` | Meltype IME (Windows の TSF の DLL)・Mozc ヘルパー・Zenzai の取得とビルド ([native/mozc/README.md](../../native/mozc/README.md)。Mozc-UT の辞書は [MOZC-UT.md](MOZC-UT.md)) |
 | `src/Meltype.Core.Tests/` | 共通部分のテスト (判定・変換ボックス・学習・品質テスト)。Mac・Linux でも動く |
 | `src/Meltype.Windows.Tests/` | Windows 版のテストと調査用の道具 (共通部分のテストもまとめて流す) |
+| `src/Meltype.Benchmark/` | 打鍵の処理の計測 ([README](../../src/Meltype.Benchmark/README.md)) |
 | `dictionaries/` | 組み込みの辞書 |
+| `tools/` | 辞書の生成と検査 |
 | `packaging/` | 配布用のファイル (インストーラー・自動更新・Meltype IME の登録) |
 | `web/` | 公式サイトと報告フォーム (Cloudflare Workers) |
 | `docs/` | 利用者向けの文書 (使い方・OS ごとの説明)。`docs/release-notes/` はリリースノート |
@@ -119,7 +121,7 @@ Windows のアプリ本体は GUI アプリ (WinExe) なので、cmd では版�
 
 `--mixed-bench` は `MELTYPE_BENCH_OFFSET=31` などで調べる語を変えられます。
 
-機能を足す前と後で変換エンジンの速さ・精度を比べるときは、両方の版で `--perf` を動かして `--perf-compare 前.json 後.json` で比べます。測る項目と比べ方は [tools/performance](../../tools/performance/README.md) にあります。
+機能を足す前と後で変換エンジンの速さ・精度を比べるときは、両方の版で `--perf` を動かして `--perf-compare 前.json 後.json` で比べます。測る項目と比べ方は [src/Meltype.Benchmark](../../src/Meltype.Benchmark/README.md) にあります。
 
 ### 品質テスト
 
@@ -187,11 +189,11 @@ GitHub Actions の配布ジョブは、公開する前に Microsoft Defender の
 手元で配布するときも、管理者の PowerShell で次を実行してください。
 
 ```powershell
-tools/Scan-WindowsPackage.ps1 -Path @('dist/Meltype', 'dist/Meltype-<version>-setup.exe')
+packaging/Scan-WindowsPackage.ps1 -Path @('dist/Meltype', 'dist/Meltype-<version>-setup.exe')
 ```
 
 検査は駆除せずに行い、検出した内容をコマンドの出力に残します。検出されたら、対象のファイル・版・ハッシュ・Defender の定義の版を確かめ、誤検知が疑われるときは [Microsoft の審査窓口](https://www.microsoft.com/en-us/wdsi/filesubmission) に出してください。
-検査に通ったことは、その時点の判定で、安全や将来の判定を保証するものではありません。検査に失敗したときの動きは `powershell -NoProfile -File tools/Test-WindowsPackageScan.ps1` で確かめられます。
+検査に通ったことは、その時点の判定で、安全や将来の判定を保証するものではありません。検査に失敗したときの動きは `powershell -NoProfile -File packaging/Test-WindowsPackageScan.ps1` で確かめられます。
 
 ## 動作の仕組み
 

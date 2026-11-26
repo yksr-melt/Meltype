@@ -93,7 +93,7 @@ Windows のキーボードフック・TSF・IMK・IBus とのやり取りと、�
 変換エンジンを外して、1 キーごとの処理 (判定・ローマ字・表示の組み立て) だけを NativeAOT で測ります。
 
 ```sh
-python3 tools/benchmark-composition.py /path/to/baseline-checkout \
+python3 src/Meltype.Benchmark/benchmark-composition.py /path/to/baseline-checkout \
   --output /path/to/results
 ```
 
@@ -103,7 +103,7 @@ python3 tools/benchmark-composition.py /path/to/baseline-checkout \
 git worktree add --detach /path/to/baseline-checkout v1.7.1
 ```
 
-baseline も今の `tools/performance/Program.cs` でビルドするので、baseline はこのプログラムが使う `Meltype.Core` の API (`ImeHost`・`IKanjiConverter.Convert(ConversionRequest)`・`Meltype.Dictionary` などの namespace) を持つ版でなければなりません。v1.7.0 以前の版はビルドできません。`Program.cs` を今の API に合わせて直したときは、baseline もビルドできる版に上げてください。
+baseline も今の `src/Meltype.Benchmark/Program.cs` でビルドするので、baseline はこのプログラムが使う `Meltype.Core` の API (`ImeHost`・`IKanjiConverter.Convert(ConversionRequest)`・`Meltype.Dictionary` などの namespace) を持つ版でなければなりません。v1.7.0 以前の版はビルドできません。`Program.cs` を今の API に合わせて直したときは、baseline もビルドできる版に上げてください。
 
 コマンドは、両方の版を同じ C# の計測用プログラム・同じ SDK・同じ NativeAOT の設定でビルドし、場面ごとにどちらの版を先に動かすかを入れ替えます。
 場面ごとに 64・128・256 キーを打ち、3 回の慣らしの後に 15 回測ります。ほかに重い処理が動いていない PC で測ってください。

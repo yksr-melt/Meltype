@@ -11,19 +11,15 @@ namespace Meltype.Tests;
 internal static class UserDictionaryEngineTests
 {
     [Test]
-    public static void UserWords_AreNotSplitByCore()
-    {
-        var dictionary = new UserDictionary(null, builtIn: false);
-        dictionary.Add("しの", "紫乃");
-        Assert.True(dictionary.Split("わたしの") is null, "ユーザーの語は Mozc のコストで決める");
-        Assert.Equal("紫乃", dictionary.Lookup("しの").Single());
-    }
-
-    [Test]
-    public static void BuiltInPhrases_AreStillSplit()
+    public static void BuiltInPhrases_AreGivenToTheEngine()
     {
         var dictionary = new UserDictionary(null);
-        Assert.True(dictionary.Split("いちがっき") is not null, "同梱の語句は、今までどおり Core が当てはめる");
+        dictionary.Add("ほんあか", "本垢");
+        var words = dictionary.EngineWords().Words;
+        Assert.True(words.Contains(new UserWord("あげあしとる", "揚げ足取る", "動詞ラ行五段")), "同梱の語句を品詞と一緒に Mozc に渡す");
+        Assert.Equal(1, words.Count(w => w is { Reading: "ほんあか", Word: "本垢" }), "ユーザーの語と同じ語句は 1 つだけ渡す");
+        Assert.Equal("ほんあか", string.Join(" ", dictionary.Words.Select(w => w.Reading)), "同梱の語句はユーザー辞書の一覧に出さない");
+        Assert.Equal(0, new UserDictionary(null, builtIn: false).EngineWords().Words.Count);
     }
 
     [Test]
@@ -31,8 +27,9 @@ internal static class UserDictionaryEngineTests
     {
         // いちがっき → 壱学期 を登録すると、同梱の語句 いち|がっき → 一|学期 で上書きしていた
         var dictionary = new UserDictionary(null);
+        Assert.True(dictionary.EngineWords().Words.Any(w => w.Word == "一学期"), "同梱の語句も渡す");
         dictionary.Add("いちがっき", "壱学期");
-        Assert.True(dictionary.Split("いちがっき") is null, "同じ読みの語句は当てはめない");
+        Assert.True(dictionary.EngineWords().Words.Where(w => w.Reading == "いちがっき").Select(w => w.Word).SequenceEqual(["壱学期"]), "同じ読みの語句は渡さない");
         var k = new CompositionTests.Keyboard(converter: new Engine(new() { ["いちがっき"] = [new("いちがっき", "壱学期")] }), userDictionary: dictionary);
         k.Type("ichigakki ");
         Assert.Equal("壱学期", string.Concat(k.Host.View!.Clauses!));

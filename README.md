@@ -100,7 +100,7 @@ Windows のコード署名の方針は [コード署名](docs/CODE-SIGNING.md) �
 | 日英判定・かな漢字変換・学習 | 端末内で処理。デスクトップ・TTY は Mozc と Zenzai、Android は Mozc |
 | 自動更新 | Windows のインストール版が GitHub へ確認。設定で停止可能 |
 | 不具合の報告 | 自分で開き、内容を確認して送信 |
-| 任意の連携 | 設定した GitHub のリポジトリ・番号の照会、ON にした Discord の打鍵数表示など |
+| 任意の連携 | 設定した GitHub のリポジトリ・番号の照会、ON にした Discord の打鍵数表示 (Windows・Mac・Linux) など |
 | 保存先 | Windows は `%LOCALAPPDATA%\Meltype`、ポータブル版・Mac・Linux・TTY・Android は [データと学習](docs/USAGE.md#データと学習) を参照 |
 
 入力した文章を変換サービスへ送りません。ログと保存データ、各 OS のパスワード欄の対応、脆弱性の連絡先は [SECURITY.md](SECURITY.md) にあります。
