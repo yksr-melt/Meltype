@@ -6383,12 +6383,22 @@ internal static class CompositionTests
         var recordText = Meltype.Diagnostics.Log.RecordText;
         try
         {
-            foreach (var withText in new[] { false, true })
+            // 数字のほか、記号 (, は 0xBC)  で打ち切ったときも同じ。
+            // 逆向き: OFF でもログ自体は残し (判定を打ち切ったことは調べるときに要る)、ON ならキーを残す。
+            foreach (var (keys, code) in new[] { ("kana1", "0x31"), ("kana,", "0xBC") })
             {
-                Meltype.Diagnostics.Log.RecordText = withText;
-                new Keyboard(direct: true).Type("kana1");
-                var entry = Meltype.Diagnostics.Log.Snapshot().Last(e => e.Message.StartsWith("英数状態の判定を打ち切り", StringComparison.Ordinal)).Message;
-                Assert.Equal(withText, entry.Contains("0x31"), "打ったキーは設定どおり: " + entry);
+                foreach (var withText in new[] { false, true })
+                {
+                    Meltype.Diagnostics.Log.RecordText = withText;
+                    var version = Meltype.Diagnostics.Log.Version;
+                    new Keyboard(direct: true).Type(keys);
+                    var logged = Meltype.Diagnostics.Log.Snapshot().TakeLast((int)Math.Min(Meltype.Diagnostics.Log.Version - version, 1000)).Select(e => e.Message).ToList();
+                    var entry = logged.LastOrDefault(m => m.StartsWith("英数状態の判定を打ち切り", StringComparison.Ordinal));
+                    Assert.True(entry is not null, $"{keys}: 設定に関係なく打ち切りのログは残す");
+                    Assert.Equal(withText, entry!.Contains(code), $"{keys}: 打ったキーは設定どおり: " + entry);
+                    // OFF なら、この打鍵で出たどのログにも打った英字が出ない
+                    if (!withText) Assert.True(!logged.Any(m => m.Contains("kana")), $"{keys}: 打った英字を残さない: " + string.Join(" / ", logged));
+                }
             }
         }
         finally
