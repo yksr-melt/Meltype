@@ -65,7 +65,7 @@ mac/build-cli.sh --build     # ビルドだけ
 mac/build-cli.sh --install   # ビルドしてインストール
 ```
 
-初めて入れたときに入力メニューに Meltype が出てこなければ、**システム設定 → キーボード →（テキスト入力の）入力ソース →「編集…」→「+」→ 日本語 → Meltype** で追加します (macOS 27 では、アプリからの有効化が通らず、この手順が必要になることがあります)。追加すると、同じログインセッションのまま入力メニューから選べます。それでも出てこなければ、ログアウトしてログインし直します。
+macOS から Meltype の有効化を求められたら「許可」を押します。入力メニューに Meltype が出てこなければ、**システム設定 → キーボード →（テキスト入力の）入力ソース →「編集…」→「+」→ 日本語 → Meltype** で追加します (macOS 27 では、この手順が必要になることがあります)。追加すると、同じログインセッションのまま入力メニューから選べます。それでも出てこなければ、ログアウトしてログインし直します。
 
 ## 1 つのコマンドで更新する
 
@@ -119,7 +119,7 @@ bash mac/package.sh Meltype-mac-test.dmg
 "$HOME/Library/Input Methods/Meltype.app/Contents/MacOS/Meltype" --register-input-source
 ```
 
-OS の登録 API で登録・有効化した後、`com.apple.HIToolbox` の `AppleEnabledInputSources` と `com.apple.inputsources` の `AppleEnabledThirdPartyInputSources` を読み、Meltype がある各一覧の中で親と日本語モードの重複を除きます。最初の項目の位置と付随情報、ほかの入力ソースを保持します。OS の版番号で保存先を作ったり、保存先をまたいで登録を移したりはしません。両方に Meltype がある場合は、それぞれの登録を残します。
+OS の API で登録し、有効化を要求した後、`com.apple.HIToolbox` の `AppleEnabledInputSources` と `com.apple.inputsources` の `AppleEnabledThirdPartyInputSources` を読みます。それぞれの一覧で Meltype の親と日本語モードの重複を除き、日本語モードを伴わない親の項目を取り除きます。残す項目は最初の位置と付随情報を保持し、ほかの入力ソースも保持します。OS の版番号で保存先を作ったり、保存先をまたいで登録を移したりはしません。
 
 変更前の一覧は、変更する設定領域ごとに `MeltypeInputSourcesBeforeRepair` に保存します。有効な日本語モードが一件になるまで最大約 2 秒待ち、一件なら入力メニューを更新します。反映待ちの場合は件数と対処方法を表示して終了コード 0 で終了し、入力メニューを再起動しません。設定の形式・保存・登録 API の失敗は終了コード 1 にします。同じコマンドを繰り返しても一覧内の重複は増えません。保存先をまたぐ登録の統合は行わないため、実メニューが必ず一件になるとは限りません。
 

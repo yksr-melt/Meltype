@@ -232,7 +232,9 @@ elif [[ $restore_status -ne 0 ]]; then
     install_step_failed "$restore_status" "入力状態の復元に失敗しました。"
 fi
 if [[ $registration_status -eq 2 && $after_install_failed -eq 0 ]]; then
-    echo "Meltype は配置・起動しましたが、入力ソースの有効化は保留中です。アプリはそのまま残します。システム設定 → キーボード → テキスト入力「編集…」→「+」→ 日本語 → Meltype から追加してください。表示されなければログアウトしてログインし直してください。" >&2
+    echo "Meltype は配置・起動しました。入力ソースの有効化は保留中です。" >&2
+    echo "有効化の確認が表示されたら「許可」を押し、入力メニューから Meltype を選んでください。" >&2
+    echo "入力メニューに無い場合は、システム設定 → キーボード → テキスト入力「編集…」→「+」→ 日本語 → Meltype から追加してください。それでも出てこなければログアウトしてログインし直してください。" >&2
 fi
 if [[ "$policy" == homebrew ]]; then
     if [[ $after_install_failed -eq 1 ]]; then
