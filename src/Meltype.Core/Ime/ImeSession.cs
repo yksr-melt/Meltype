@@ -317,7 +317,14 @@ internal static class ImeSession
     /// <see cref="ImeSessionState.Line"/> を使う (ワークアラウンド)。定型文・確定し直しは本物の文字が要るので、<see cref="Before"/> を使う。
     /// </summary>
     private static string? LineBefore(ImeSessionState state, ImeField? field) =>
-        CodeInput(state) && field is { } f && (f.Before is null || f.Before.Length == 0 && CodeTerminal(state)) ? state.Line.ToString() : Before(state, field);
+        WholeLineBefore(state, field) is { Length: > ContextLength } before && !CodeInput(state) ? before[^ContextLength..] : WholeLineBefore(state, field);
+
+    /// <summary>
+    /// <see cref="LineBefore"/> を文脈の長さで切らないもの。/command・$skill・@ファイル名 は語が空白の直後から始まるかで決めるので、
+    /// 途中で切った文字列では、切った所が語の始まりに見える (長い URL の後ろの /Meltype/issues/2199 が /command になる。#2199)。
+    /// </summary>
+    private static string? WholeLineBefore(ImeSessionState state, ImeField? field) =>
+        CodeInput(state) && field is { } f && (f.Before is null || f.Before.Length == 0 && CodeTerminal(state)) ? state.Line.ToString() : field?.Before;
 
     private static void TrackLine(ImeSessionState state, ImeEvent e, SessionResult result)
     {
@@ -722,9 +729,10 @@ internal static class ImeSession
         }
         // 先頭か空白の直後の /command・$skill・@ファイル名 は、変換せずにそのままアプリへ渡す (#193)。
         // 文章の入力欄の / は、変換ボックスに ・ として入れる。Space で / にすると、続く名前はそのまま渡す。
-        var slashAtStart = !modifier && !CompositionController.IsComposing(state.Composition) && ch is '/' && !PassesSlash(state, before) && !SigilWord.InNameAfter(before) && settings.SigilWordsDirect &&
-            SigilWord.PassesAfter(before, '/');
-        if (!slashAtStart && !modifier && !CompositionController.IsComposing(state.Composition) && ch is { } c && settings.SigilWordsDirect && SigilWord.PassesAfter(before, c))
+        var sigilBefore = WholeLineBefore(state, state.Field);
+        var slashAtStart = !modifier && !CompositionController.IsComposing(state.Composition) && ch is '/' && !PassesSlash(state, before) && !SigilWord.InNameAfter(sigilBefore) && settings.SigilWordsDirect &&
+            SigilWord.PassesAfter(sigilBefore, '/');
+        if (!slashAtStart && !modifier && !CompositionController.IsComposing(state.Composition) && ch is { } c && settings.SigilWordsDirect && SigilWord.PassesAfter(sigilBefore, c))
         {
             return CompositionController.Pass(state.Composition, Env(state, env), now);
         }
