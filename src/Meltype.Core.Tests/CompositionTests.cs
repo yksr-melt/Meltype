@@ -565,6 +565,21 @@ internal static class CompositionTests
         Assert.Equal("きょう", off.Showing, "OFF は自動判定");
     }
 
+    private static readonly string[] HyphenatedEnglish = ["well-known", "self-hosted", "real-time", "built-in", "make-up", "open-source", "end-to-end", "check-in", "follow-up", "co-op", "re-run", "sign-in", "log-in", "kebab-case", "x-ray", "e-mail", "pre-release", "J-core", "Pro-Q3"];
+
+    [Test]
+    public static void Issue2038_HyphenAfterLettersIsLongMarkUnlessLettersFollow()
+    {
+        // 英数字のすぐ後ろの語の終わりの - は、前の区間の言語に従う (hello- は英語の記号、he- は長音)。- は区間の言語の根拠にしない (ROMpura は - があっても無くても英語)
+        AssertCommitted(("ROMpura-", "ROMpura-"), ("he-", "へー"), ("karenda-", "かれんだー"), ("hello-", "hello-"), ("IME-", "IME-"), ("GitHub-", "GitHub-"), ("are-?", "あれー？"));
+        // 英語の語の間の - は英語の記号のまま。英文の記号の後ろ (Hello + ,-) の - も半角
+        AssertCommitted([.. HyphenatedEnglish.Select(w => (w, w))]);
+        var k = new Keyboard();
+        k.Host.PrecedingText = "Hello ";
+        k.Type(",-\n");
+        Assert.Equal(",-", k.Host.Document, "英文の記号の後ろの -");
+    }
+
     [Test]
     public static void Issue674_ExtendedYoonSpellings()
     {

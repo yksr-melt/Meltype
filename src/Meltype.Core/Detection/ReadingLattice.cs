@@ -265,7 +265,8 @@ internal sealed partial class CompositionDetector
             // 付属語の軽い重み (0.8) のままだと、ローマ字の途中で英単語を切り出した残り (get|う・hit|う・れ|pro) が、語にならないかな 2 音 (げ|つ) より軽くなる。
             // 付属語だけを打った入力 (re) は、前に確定した語の続きなので付属語のまま
             if (!edge.English && !edge.Neutral && (state.IsEnglish || state.Side == Side.None && edge.End < length) && VerbAuxiliaries.Contains(edge.Kana)) cost = UnknownKanaCost;
-            if (edge.English) cost += EnglishTieBreak + englishBias;
+            // - の辺は区間の言語の根拠にしないので、英語寄りの重みも足さない
+            if (edge.English && !(edge.End == edge.Start + 1 && text[edge.Start] == '-')) cost += EnglishTieBreak + englishBias;
             Span<int> counts = stackalloc int[LinkWeights.Count];
             CountLinks(from, state, edge, counts);
             Offer(edge.End, Next(state, edge), new LatticeNode(from.Cost + cost + LinkCost(counts), from, edge));
@@ -331,6 +332,12 @@ internal sealed partial class CompositionDetector
                 if (domain > unit)
                     OfferEdge(node, state, new LatticeEdge(p, domain == units.Count ? length : prepared.RawOffsets[domain], true, "", false, false),
                         KnownEnglishCost + ReadableDomainLetterCost * (text.IndexOf('.', p) - p));
+                // 英数字のすぐ後ろの語の終わりの - は、前の区間の言語に従う (hello- の - は英語の記号、he- の - は長音)。重みを足さず、区間の言語の根拠にしない
+                if (unit >= 0 && !kanaInput && state.Side != Side.None && IsWordEndHyphen(units, unit, pending))
+                {
+                    OfferEdge(node, state, state.IsEnglish ? new LatticeEdge(p, p + 1, true, "", false, false) : new LatticeEdge(p, p + 1, false, "ー", false, false), 0);
+                    continue;
+                }
                 // 英文の中の記号 (, . ! ? -) は半角のまま
                 if (unit >= 0 && !kanaInput && IsAsciiSymbol(units[unit]) && state.PreviousEnglish && state.AllEnglish &&
                     KeepsPunctuationAfterEnglish(units, unit, pending, punctuateAfterEnglish))
@@ -480,6 +487,18 @@ internal sealed partial class CompositionDetector
     /// <summary>かなを、語にならないかなとして読むときの重み (1 音 3、っ・ー は 0.5。小書きのかな ゃ・ぃ は前のかなと 1 音)。</summary>
     private static double UnknownKana(string kana) =>
         kana.Select((c, i) => c is 'っ' or 'ー' ? LightKanaCost : i > 0 && KanaChars.IsSmallKana(c) ? 0 : UnknownKanaCost).Sum();
+
+    /// <summary>英数字のすぐ後ろに打った、後ろに英数字が続かない - か (hello-・are-?。make-up・J-core の - は違う)。</summary>
+    /// <remarks>
+    /// 既知の欠点: 英文を語ごとに Space で区切って打つと、Space を押した時点の入力は anti- だけで、後ろの英語 ( and pro-war) は区間分けから見えない。
+    /// ローマ字で読める語 (anti・make・site) の後の - は、語だけを打ったときと同じく日本語の長音になる (anti- and pro-war → あんちーand pro-war)。
+    /// </remarks>
+    private static bool IsWordEndHyphen(IReadOnlyList<CompositionUnit> units, int unit, string pending)
+    {
+        if (unit == 0 || units[unit].Raw != "-" || units[unit - 1].Raw is not [.., var before] || !char.IsAsciiLetterOrDigit(before)) return false;
+        var next = unit + 1 < units.Count ? units[unit + 1].Raw : pending;
+        return next is not [var after, ..] || !char.IsAsciiLetterOrDigit(after);
+    }
 
     /// <summary>単位の読みがかな (ひらがな・ー) か。</summary>
     private static bool IsKanaUnit(CompositionUnit unit) => unit.Kana.Length > 0 && unit.Kana.All(KanaChars.IsHiraganaOrLongMark);
