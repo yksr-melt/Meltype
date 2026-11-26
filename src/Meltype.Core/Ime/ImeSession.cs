@@ -33,9 +33,6 @@ internal static class ImeSession
         return state;
     }
 
-    /// <summary>コードの入力欄でないときに、判定の文脈として使うキャレットの前の文字数。</summary>
-    private const int ContextLength = 20;
-
     public static void Close(ImeSessionState state, ImeEnv env, ImeField? field = null)
     {
         field ??= state.Field;
@@ -161,7 +158,7 @@ internal static class ImeSession
             ImeOpen = !Direct(state),
             LanguageMode = active && japanese ? ImeLanguageMode.Japanese : ImeLanguageMode.Alphanumeric,
             ModeIndicatorMs = active && indicate && result.View is null ? ModeIndicatorMs : 0,
-            Capture = Capture(active, Direct(state), DirectEnglishWord(state), settings, game, ComposingControlKeys(state, env), snippetKeys),
+            Capture = Capture(active, Direct(state), japanese, DirectEnglishWord(state), settings, game, ComposingControlKeys(state, env), snippetKeys),
             Revision = rev,
         }, result);
     }
@@ -215,7 +212,7 @@ internal static class ImeSession
     private static List<int> SnippetKeys(ImeSessionState state, ImeEnv env, ImeEvent e, SessionResult result, Settings settings)
     {
         if (IsComposing(state)) return [];
-        var before = Before(state, e.Field);
+        var before = e.Field?.Before;
         if (e is ImeEvent.KeyPressed { Key: { Ch: > 0 and < 0x10000 } key } && !result.Consumed) before += (char)key.Ch;
         var keys = new List<int>();
         if (SnippetUsable(state, env, before, settings) && SnippetTrigger.TypedBefore(settings.SnippetMark, before) is { } typed && env.Environment.Snippets.Get(typed[1..]) is not null)
@@ -247,7 +244,7 @@ internal static class ImeSession
             ImeOpen = open,
             LanguageMode = active && open ? ImeLanguageMode.Japanese : ImeLanguageMode.Alphanumeric,
             ModeIndicatorMs = active && entered && settings.EffectiveModeIndicator == ModeIndicatorTiming.OnSwitchAndFocus ? ModeIndicatorMs : 0,
-            Capture = Capture(active, !open, false, settings, game, [], []),
+            Capture = Capture(active, !open, open, false, settings, game, [], []),
             Revision = rev,
         };
     }
@@ -302,9 +299,6 @@ internal static class ImeSession
         return LineContext.ClassifyFocus(app, field.Element);
     }
 
-    private static string? Before(ImeSessionState state, ImeField? field) =>
-        field?.Before is { Length: > ContextLength } before && !CodeInput(state) ? before[^ContextLength..] : field?.Before;
-
     // ==== ワークアラウンド: ターミナルがキャレットの前の文字を渡さないことへの対処 (#1687) ====
     // 本体は判断を事実だけでするのが原則で、打ったキーから入力欄の中身を推測するのはこの 1 か所だけの例外。
     // 渡さないのはターミナル側の事情 (Windows Terminal の TSF は文書を持たないので空、iTerm2 は日本語を出したあと読めない)。
@@ -314,10 +308,10 @@ internal static class ImeSession
 
     /// <summary>
     /// コードの行の判断と変換の文脈に使うキャレットの前。コードの入力欄でキャレットの前が届かない (ターミナルで空のときも) ときだけ、
-    /// <see cref="ImeSessionState.Line"/> を使う (ワークアラウンド)。定型文・確定し直しは本物の文字が要るので、<see cref="Before"/> を使う。
+    /// <see cref="ImeSessionState.Line"/> を使う (ワークアラウンド)。定型文・確定し直しは本物の文字が要るので、入力欄の文字 (ImeField.Before) を使う。
     /// </summary>
     private static string? LineBefore(ImeSessionState state, ImeField? field) =>
-        CodeInput(state) && field is { } f && (f.Before is null || f.Before.Length == 0 && CodeTerminal(state)) ? state.Line.ToString() : Before(state, field);
+        CodeInput(state) && field is { } f && (f.Before is null || f.Before.Length == 0 && CodeTerminal(state)) ? state.Line.ToString() : field?.Before;
 
     private static void TrackLine(ImeSessionState state, ImeEvent e, SessionResult result)
     {
@@ -366,17 +360,6 @@ internal static class ImeSession
             return PassThrough(state, env);
         }
         var toggle = settings.EffectiveToggleShortcuts.Any(shortcut => shortcut.Matches(vk, modifiers));
-        // 固定のショートカット Ctrl+Alt+K: どの OS でも Core でリアルタイム敬語変換の ON / OFF を切り替える
-        if (vk == KeigoToggleKey && modifiers == KeigoToggleModifiers)
-        {
-            if (key.Repeat) return Consumed;
-            if (env.Parts.ToggleKeigoMode is not { } toggleKeigo) return PassThrough(state, env);
-            var next = toggleKeigo();
-            var nextSettings = env.Settings.Clone();
-            nextSettings.KeigoMode = next;
-            var updatedEnv = ForField(state, env with { Settings = nextSettings });
-            return CompositionController.RefreshView(state.Composition, Env(state, updatedEnv));
-        }
         // 押しっぱなしで、入力モードを何度も切り替えない
         if (key.Repeat && (toggle || plain && vk is ToggleShortcut.Hankaku or VirtualKeys.OemAttn or VirtualKeys.Kana)) return Consumed;
         if (toggle && !composing) return Switch(state, env, !ShowsJapanese(state, before), before, toggle: true);
@@ -396,7 +379,7 @@ internal static class ImeSession
                 return key.Repeat ? Consumed : Switch(state, env, vk != VirtualKeys.NonConvert, before, toggle: false);
             }
         }
-        if (!composing && !key.Ctrl && !key.Alt && !key.Command && Snippet(state, env, vk, key, Before(state, field), settings, lastSnippet) is { } snippet) return snippet;
+        if (!composing && !key.Ctrl && !key.Alt && !key.Command && Snippet(state, env, vk, key, field?.Before, settings, lastSnippet) is { } snippet) return snippet;
         // 複数のスカラーの文字 (アプリが元のイベントで入れる): 先頭が結合文字なら直前の文字につなげて確定する
         if (key.Text is { Length: > 0 } text && Rune.DecodeFromUtf16(text, out var first, out _) == System.Buffers.OperationStatus.Done)
         {
@@ -533,21 +516,25 @@ internal static class ImeSession
         (key.Shift ? ShortcutModifiers.Shift : 0) | (key.Ctrl ? ShortcutModifiers.Control : 0) |
         (key.Alt ? ShortcutModifiers.Alt : 0) | (key.Command ? ShortcutModifiers.Win : 0);
 
-    private static ImeCapture Capture(bool active, bool direct, bool directEnglishWord, Settings settings, bool game, IEnumerable<int> composingControlKeys,
-        IReadOnlyList<int> snippetKeys)
+    private static ImeCapture Capture(bool active, bool direct, bool japanese, bool directEnglishWord, Settings settings, bool game,
+        IEnumerable<int> composingControlKeys, IReadOnlyList<int> snippetKeys)
     {
         if (!active) return new ImeCapture();
         // 修飾キー単独の割り当ては使えない (設定の読み込みで外す)。左右の Alt の単独押しは AltKeys
         var keys = settings.EffectiveToggleShortcuts.Where(shortcut => !ToggleShortcut.IsModifier(shortcut.Key))
             .Select(shortcut => new ImeShortcut(shortcut.Key, (int)shortcut.Modifiers))
             .Concat(ModeKeys.Select(key => new ImeShortcut(key, 0)))
-            .Append(new ImeShortcut(KeigoToggleKey, (int)KeigoToggleModifiers))
             .ToList();
         // 英数でもローマ字を見分ける (英語の語を打っている途中は、続きの英字をそのまま通す)
         // ゲームの英数では判定しない: 英字を受け取って送り直すと、移動のキーが一回目に反応しない・離しても押したままになる (#1447)
         var detects = settings.DirectModeAutoDetect && settings.AutoDetection && !game;
-        if (!direct || detects) keys.Add(new ImeShortcut(VirtualKeys.Space, (int)ShortcutModifiers.Shift));
-        if (!direct && settings.SpaceWidth == SpaceWidth.FullWidth) keys.Add(new ImeShortcut(VirtualKeys.Space, 0));
+        // 使わない Shift+Space を受け取ると、TSF では送り直しも PreserveKey で受け取り、アプリに届かない (#1883)。
+        // 英数でも、コードの行でも、全角スペースにしないので受け取らない
+        if (japanese)
+        {
+            keys.Add(new ImeShortcut(VirtualKeys.Space, (int)ShortcutModifiers.Shift));
+            if (settings.SpaceWidth == SpaceWidth.FullWidth) keys.Add(new ImeShortcut(VirtualKeys.Space, 0));
+        }
         keys.AddRange(snippetKeys.Select(key => new ImeShortcut(key, 0)));
         return new ImeCapture
         {
@@ -566,9 +553,6 @@ internal static class ImeSession
     /// <summary>設定によらず受け取る、モードを切り替えるキー (半角/全角 の 3 つのキーコード・英数・かな・変換・無変換)。</summary>
     private static readonly int[] ModeKeys =
         [ToggleShortcut.Hankaku, VirtualKeys.OemAuto, VirtualKeys.OemEnlw, VirtualKeys.OemAttn, VirtualKeys.Kana, VirtualKeys.Convert, VirtualKeys.NonConvert];
-
-    private const int KeigoToggleKey = 0x4B; // K
-    private const ShortcutModifiers KeigoToggleModifiers = ShortcutModifiers.Control | ShortcutModifiers.Alt;
 
     private static SessionResult Pass => new(false, [], null);
 

@@ -26,13 +26,12 @@ _lib.meltype_init.argtypes = [ctypes.c_char_p]
 _lib.meltype_init.restype = ctypes.c_int
 _lib.meltype_set_conversion_ready.argtypes = [ctypes.CFUNCTYPE(None)]
 _lib.meltype_set_conversion_ready.restype = None
+_lib.meltype_start_key_count.restype = None
 _lib.meltype_ime_create.restype = ctypes.c_void_p
 _lib.meltype_ime_handle.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
 _lib.meltype_ime_handle.restype = ctypes.c_void_p
 _lib.meltype_ime_destroy.argtypes = [ctypes.c_void_p]
 _lib.meltype_shutdown.restype = None
-_lib.meltype_keigo_mode.restype = ctypes.c_int
-_lib.meltype_toggle_keigo_mode.restype = ctypes.c_int
 
 # 本体のプロトコルの版 (ImeHost.Version)
 IME_VERSION = 1
@@ -184,15 +183,11 @@ class MeltypeEngine(IBus.Engine):
         self._alt_keys = False
         self._alt_down = 0
         self._alt_interrupted = False
+        # 押しているキーの keycode。IBus は自動の繰り返しかを知らせない
+        self._held_keycodes = set()
         self._mode_property = IBus.Property(key="InputMode", prop_type=IBus.PropType.NORMAL, label=IBus.Text.new_from_string("あ"),
                                             symbol=IBus.Text.new_from_string("あ"), sensitive=False, visible=True)
         self._properties.append(self._mode_property)
-        self._keigo_state = bool(_lib.meltype_keigo_mode())
-        self._keigo_property = IBus.Property.new(
-            "keigo_mode", IBus.PropType.TOGGLE, IBus.Text.new_from_string("リアルタイム敬語変換 (Ctrl+Alt+K)"),
-            "", IBus.Text.new_from_string(""), True, True,
-            IBus.PropState.CHECKED if self._keigo_state else IBus.PropState.UNCHECKED, IBus.PropList())
-        self._properties.append(self._keigo_property)
         self._properties.append(IBus.Property.new(
             "report", IBus.PropType.NORMAL, IBus.Text.new_from_string("不具合の報告・提案… (Linux 版はプレビュー版です)"),
             "", IBus.Text.new_from_string(""), True, True, IBus.PropState.UNCHECKED, IBus.PropList()))
@@ -224,15 +219,7 @@ class MeltypeEngine(IBus.Engine):
                 self._pending_mode = mode
             else:
                 self._show_mode(*mode)
-        self._sync_keigo_property(_lib.meltype_keigo_mode())
         return output
-
-    def _sync_keigo_property(self, enabled):
-        enabled = bool(enabled)
-        if enabled != self._keigo_state:
-            self._keigo_state = enabled
-            self._keigo_property.set_state(IBus.PropState.CHECKED if enabled else IBus.PropState.UNCHECKED)
-            self.update_property(self._keigo_property)
 
     def do_set_cursor_location(self, x, y, w, h):
         if self._pending_mode:
@@ -258,12 +245,17 @@ class MeltypeEngine(IBus.Engine):
         if vk in ALT_KEYS:
             return self._alt_key(vk, keyval, keycode, state, released)
         if released:
+            self._held_keycodes.discard(keycode)
             return False
+        repeat = keycode in self._held_keycodes
+        # keycode の無い (0) キーは、ソフトが送ったもの
+        if keycode:
+            self._held_keycodes.add(keycode)
         if self._alt_down:
             self._alt_interrupted = True
         if vk is None:
             return False
-        output = self.send("KeyPressed", key=self._key(vk, character, state))
+        output = self.send("KeyPressed", key={**self._key(vk, character, state), "repeat": repeat})
         return bool(output and output["result"]["consumed"])
 
     @staticmethod
@@ -305,7 +297,8 @@ class MeltypeEngine(IBus.Engine):
         表示中の preedit は IBus がそのまま確定する (COMMIT モード)。エンジンがここで送る文字はフォーカスが外れたあとで
         届かないうえ、届いても順序が壊れるので、本体には「表示のまま確定された」と伝える。
         """
-        # Alt + Tab などでフォーカスが移ると、Alt を離したことはこのエンジンに届かない。本体には、割り込まれて離したと伝える
+        # Alt + Tab などでフォーカスが移ると、キーを離したことはこのエンジンに届かない。本体には、Alt を割り込まれて離したと伝える
+        self._held_keycodes.clear()
         if self._alt_down:
             vk, self._alt_down, self._alt_interrupted = self._alt_down, 0, False
             self.send("KeyReleased", key={"vk": vk, "interrupted": True})
@@ -326,7 +319,6 @@ class MeltypeEngine(IBus.Engine):
     def do_focus_in(self):
         global _focused
         _focused = self
-        self._sync_keigo_property(_lib.meltype_keigo_mode())
         self.register_properties(self._properties)
         self._defer_mode = True
         try:
@@ -364,9 +356,7 @@ class MeltypeEngine(IBus.Engine):
         self.send("CandidateClicked", index=page * self._lookup.get_page_size() + index)
 
     def do_property_activate(self, prop_name, state):
-        if prop_name == "keigo_mode":
-            self._sync_keigo_property(_lib.meltype_toggle_keigo_mode())
-        elif prop_name == "report":
+        if prop_name == "report":
             try:
                 subprocess.Popen(["xdg-open", _report_url()])
             except OSError as error:
@@ -576,8 +566,9 @@ def main():
         component = IBus.Component.new("org.freedesktop.IBus.Meltype", "Meltype", "1.2.2-pre.2", "GPL-3.0-or-later", "Yukishiro", "https://github.com/yksr-melt/Meltype", "", "")
         component.add_engine(IBus.EngineDesc.new("meltype", "Meltype", "Meltype", "ja", "GPL-3.0-or-later", "Yukishiro", "", "default"))
         bus.register_component(component)
+    _lib.meltype_start_key_count()
     loop.run()
-    # Zenzai の llama-server を終わらせ、Mozc の学習を保存する (呼ばずに終わると、次に起動した Meltype が終わらせるまで llama-server が残る)
+    # Zenzai の llama-server を含む変換エンジンを止める (呼ばずに終わると、次に起動した Meltype が終わらせるまで llama-server が残る)
     _lib.meltype_shutdown()
 
 

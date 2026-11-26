@@ -28,7 +28,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly Icon _offIcon = CreateIcon("A", Color.FromArgb(120, 120, 120));
     private readonly ToolStripMenuItem _keyboardModeItem;
     private readonly ToolStripMenuItem _autoDetectionItem;
-    private readonly ToolStripMenuItem _keigoModeItem;
     private readonly ToolStripMenuItem _profileItem;
     private readonly Composition.CompositionService _composition;
     private readonly Tip.TipServer _tipServer;
@@ -94,8 +93,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
         // 英語 / 日本語の自動判定 (OFF なら提案だけ出し、Tab で英字にする)
         _autoDetectionItem = new ToolStripMenuItem("英語 / 日本語を自動で判定する", null, (_, _) => ToggleAutoDetection());
         menu.Items.Add(_autoDetectionItem);
-        _keigoModeItem = new ToolStripMenuItem("リアルタイム敬語変換 (Ctrl+Alt+K)", null, (_, _) => ToggleKeigoMode());
-        menu.Items.Add(_keigoModeItem);
         // プロファイル (仕事用・趣味用・SNS 用など)。一覧は開くたびに作る (設定画面で足したもの・名前を変えたものを出す)
         _profileItem = new ToolStripMenuItem("プロファイル");
         _profileItem.DropDownItems.Add("(読み込み中)");
@@ -515,8 +512,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
         UpdateStatus();
     }
 
-    private void ToggleKeigoMode() => _engine.Runtime.ToggleKeigoMode();
-
     private void SetMode(InputMode mode)
     {
         if (AppPaths.IsPortable && mode != InputMode.Keyboard) return;
@@ -544,7 +539,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
         var registered = Tip.TipServer.IsRegistered;
         _tsfModeItem.Enabled = tsf || Tip.TipServer.IsUsable || CanRegisterTsf;
         _autoDetectionItem.Checked = settings.AutoDetection;
-        _keigoModeItem.Checked = settings.KeigoMode;
         _profileItem.Text = $"プロファイル: {settings.ActiveProfile}";
 
         string status;
@@ -580,7 +574,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             _keyCountForm.Activate();
             return;
         }
-        _keyCountForm = new KeyCountForm(_engine.KeyCounter);
+        _keyCountForm = new KeyCountForm(_engine);
         _keyCountForm.Show();
     }
 

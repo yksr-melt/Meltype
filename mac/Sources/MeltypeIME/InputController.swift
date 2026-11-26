@@ -188,10 +188,6 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
             item.state = (mode == .japanese) == japanese ? .on : .off
         }
         menu.addItem(.separator())
-        let keigoItem = menu.addItem(withTitle: "リアルタイム敬語変換 (Ctrl+Alt+K)", action: #selector(toggleKeigoMode(_:)), keyEquivalent: "")
-        keigoItem.target = self
-        keigoItem.state = NativeCore.shared.keigoMode ? .on : .off
-        menu.addItem(.separator())
         let importItem = menu.addItem(withTitle: "macOSのユーザー辞書を取り込む…", action: #selector(importUserDictionary(_:)), keyEquivalent: "")
         importItem.target = self
         let settingsItem = menu.addItem(withTitle: "Meltype の設定…", action: #selector(openSettings(_:)), keyEquivalent: "")
@@ -203,7 +199,6 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
 
     @objc private func selectJapanese(_ sender: Any?) { send("JapaneseModeSelected", client: client()) }
     @objc private func selectDirect(_ sender: Any?) { send("AlphanumericModeSelected", client: client()) }
-    @objc private func toggleKeigoMode(_ sender: Any?) { _ = NativeCore.shared.toggleKeigoMode() }
 
     func selectModeFromService(_ action: ModeShortcutAction) -> Bool {
         guard let client = client() else { return false }

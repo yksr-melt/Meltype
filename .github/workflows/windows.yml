@@ -53,7 +53,7 @@ jobs:
 
       - name: Test package scan failure handling
         shell: powershell
-        run: .\tools\Test-WindowsPackageScan.ps1
+        run: .\packaging\Test-WindowsPackageScan.ps1
 
       - name: Test
         run: dotnet run --project src/Meltype.Windows.Tests/Meltype.Windows.Tests.csproj -c Release --no-build
@@ -67,7 +67,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Test setup IME registration launcher
         shell: powershell
-        run: .\tools\Test-SetupIme.ps1
+        run: .\packaging\Test-SetupIme.ps1
       - name: Compile installer script
         run: |
           $iscc = .\packaging\Find-InnoSetup.ps1
@@ -83,7 +83,7 @@ jobs:
           Set-Content -LiteralPath (Join-Path $stage 'app\tip\Register-Tip.ps1') -Value '# dummy'
           & $iscc /Q "/DAppVersion=0.0.0-check-ime" "/DSourceDir=$stage" "/DOutputDir=$env:RUNNER_TEMP" packaging\Meltype.iss
 
-  # インストーラー (packaging/Meltype.iss) を、ダミーの Meltype.exe でインストール → 更新 → アンインストールの順に通す (tools/Test-InstallLifecycle.ps1)。
+  # インストーラー (packaging/Meltype.iss) を、ダミーの Meltype.exe でインストール → 更新 → アンインストールの順に通す (packaging/Test-InstallLifecycle.ps1)。
   #   Meltype IME の登録 (管理者権限が要る) は通さない。
   #   update.ps1 のダウンロードは、ここでは確かめていない (API の URL が固定で、偽のサーバーに向けられない)。別途、CI での検証が要る。
   lifecycle:
@@ -96,7 +96,7 @@ jobs:
           persist-credentials: false
       - name: Test install, update and uninstall
         shell: powershell
-        run: .\tools\Test-InstallLifecycle.ps1
+        run: .\packaging\Test-InstallLifecycle.ps1
 
   # Mozc の変換ヘルパー (native/mozc) をビルドする。初回は 30〜40 分かかるので、配布用の zip を作るとき
   # (タグ・手動実行) と、ヘルパーのソースを変えて main に push したときだけ。Bazel の結果はキャッシュして次から速くする。
@@ -226,7 +226,7 @@ jobs:
           if ($packages.Count -ne 2) { throw 'Expected regular and portable Meltype zip files but found ' + $packages.Count }
           $setups = @(Get-ChildItem -LiteralPath dist -Filter 'Meltype-*-setup.exe' -File)
           if ($setups.Count -ne 1) { throw 'Expected one Meltype-*-setup.exe file but found ' + $setups.Count }
-          .\tools\Scan-WindowsPackage.ps1 -Path @('.\dist\Meltype', '.\dist\Meltype-portable', $packages[0].FullName, $packages[1].FullName, $setups[0].FullName)
+          .\packaging\Scan-WindowsPackage.ps1 -Path @('.\dist\Meltype', '.\dist\Meltype-portable', $packages[0].FullName, $packages[1].FullName, $setups[0].FullName)
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: meltype-package
