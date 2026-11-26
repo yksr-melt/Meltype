@@ -161,7 +161,7 @@ internal static class ImeSession
             ImeOpen = !Direct(state),
             LanguageMode = active && japanese ? ImeLanguageMode.Japanese : ImeLanguageMode.Alphanumeric,
             ModeIndicatorMs = active && indicate && result.View is null ? ModeIndicatorMs : 0,
-            Capture = Capture(active, Direct(state), DirectEnglishWord(state), settings, game, ComposingControlKeys(state, env), snippetKeys),
+            Capture = Capture(active, Direct(state), japanese, DirectEnglishWord(state), settings, game, ComposingControlKeys(state, env), snippetKeys),
             Revision = rev,
         }, result);
     }
@@ -247,7 +247,7 @@ internal static class ImeSession
             ImeOpen = open,
             LanguageMode = active && open ? ImeLanguageMode.Japanese : ImeLanguageMode.Alphanumeric,
             ModeIndicatorMs = active && entered && settings.EffectiveModeIndicator == ModeIndicatorTiming.OnSwitchAndFocus ? ModeIndicatorMs : 0,
-            Capture = Capture(active, !open, false, settings, game, [], []),
+            Capture = Capture(active, !open, open, false, settings, game, [], []),
             Revision = rev,
         };
     }
@@ -522,8 +522,8 @@ internal static class ImeSession
         (key.Shift ? ShortcutModifiers.Shift : 0) | (key.Ctrl ? ShortcutModifiers.Control : 0) |
         (key.Alt ? ShortcutModifiers.Alt : 0) | (key.Command ? ShortcutModifiers.Win : 0);
 
-    private static ImeCapture Capture(bool active, bool direct, bool directEnglishWord, Settings settings, bool game, IEnumerable<int> composingControlKeys,
-        IReadOnlyList<int> snippetKeys)
+    private static ImeCapture Capture(bool active, bool direct, bool japanese, bool directEnglishWord, Settings settings, bool game,
+        IEnumerable<int> composingControlKeys, IReadOnlyList<int> snippetKeys)
     {
         if (!active) return new ImeCapture();
         // 修飾キー単独の割り当ては使えない (設定の読み込みで外す)。左右の Alt の単独押しは AltKeys
@@ -534,10 +534,15 @@ internal static class ImeSession
         // 英数でもローマ字を見分ける (英語の語を打っている途中は、続きの英字をそのまま通す)
         // ゲームの英数では判定しない: 英字を受け取って送り直すと、移動のキーが一回目に反応しない・離しても押したままになる (#1447)
         var detects = settings.DirectModeAutoDetect && settings.AutoDetection && !game;
-        if (!direct || detects) keys.Add(new ImeShortcut(VirtualKeys.Space, (int)ShortcutModifiers.Shift));
-        // Space をシフトに使うかな配列 (薙刀式): 文頭の Space + 文字キーもシフトにするので、Space を受け取る
-        if (!direct && (settings.SpaceWidth == SpaceWidth.FullWidth ||
-                        settings.InputStyle == InputStyle.Kana && KanaLayoutEngine.UsesSpace(settings.KanaLayout))) keys.Add(new ImeShortcut(VirtualKeys.Space, 0));
+        // 使わない Shift+Space を受け取ると、TSF では送り直しも PreserveKey で受け取り、アプリに届かない (#1883)。
+        // 英数でも、コードの行でも、全角スペースにしないので受け取らない
+        if (japanese)
+        {
+            keys.Add(new ImeShortcut(VirtualKeys.Space, (int)ShortcutModifiers.Shift));
+            // Space をシフトに使うかな配列 (薙刀式): 文頭の Space + 文字キーもシフトにするので、Space を受け取る
+            if (settings.SpaceWidth == SpaceWidth.FullWidth || settings.InputStyle == InputStyle.Kana && KanaLayoutEngine.UsesSpace(settings.KanaLayout))
+                keys.Add(new ImeShortcut(VirtualKeys.Space, 0));
+        }
         keys.AddRange(snippetKeys.Select(key => new ImeShortcut(key, 0)));
         return new ImeCapture
         {
