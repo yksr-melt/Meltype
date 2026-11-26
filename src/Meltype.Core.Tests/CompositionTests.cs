@@ -7003,5 +7003,18 @@ internal static class CompositionTests
         Assert.Equal("調べてみます", KeigoConverter.Convert([new("しらべてみる", false, ["調べてみる"])])[0].Text);
         Assert.Equal("対応いたしかねます", KeigoConverter.Convert([new("たいおうできない", false, ["対応できない"])])[0].Text);
         Assert.Equal("ご確認いただけますでしょうか？", KeigoConverter.Convert([new("かくにんしてもらえる？", false, ["確認してもらえる？"])])[0].Text);
+
+        // 動詞の尊敬語・謙譲語の言い換え網羅確認
+        Assert.Equal("召し上がります", KeigoConverter.Convert([new("しゃちょうが", false, ["社長が"]), new("たべる", false, ["食べる"])])[1].Text);
+        Assert.Equal("お亡くなりになりました", KeigoConverter.Convert([new("せんせいが", false, ["先生が"]), new("しんだ", false, ["死んだ"])])[1].Text);
+        Assert.Equal("お話しになります", KeigoConverter.Convert([new("ぶちょうが", false, ["部長が"]), new("はなす", false, ["話す"])])[1].Text);
+        Assert.Equal("お預かりになります", KeigoConverter.Convert([new("おきゃくさまが", false, ["お客様が"]), new("あずかる", false, ["預かる"])])[1].Text);
+        Assert.Equal("差し上げます", KeigoConverter.Convert([new("あげる", false, ["あげる"])])[0].Text);
+        Assert.Equal("おります", KeigoConverter.Convert([new("いる", false, ["いる"])])[0].Text);
+        Assert.Equal("拝見しております", KeigoConverter.Convert([new("みている", false, ["見ている"])])[0].Text);
+        Assert.Equal("拝読いたしました", KeigoConverter.Convert([new("よみました", false, ["読みました"])])[0].Text);
+        Assert.Equal("申し上げております", KeigoConverter.Convert([new("いっている", false, ["言っている"])])[0].Text);
+        Assert.Equal("お預かりいたします", KeigoConverter.Convert([new("あずかる", false, ["預かる"])])[0].Text);
+        Assert.Equal("お届けいたしました", KeigoConverter.Convert([new("とどけた", false, ["届けた"])])[0].Text);
     }
 }
