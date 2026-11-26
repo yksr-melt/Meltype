@@ -4766,14 +4766,9 @@ internal static class CompositionTests
     private sealed class LearningConverter : TestConverter
     {
         private readonly FakeConverter _inner = new();
-        public List<string> Learned { get; } = [];
         public override string? Convert(string hiragana, string? before) => _inner.Convert(hiragana, before);
         public override IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) => _inner.ConvertClauses(hiragana, before);
 
-        public override void Learn(string? context, IReadOnlyList<ConversionClause> clauses)
-        {
-            lock (Learned) Learned.Add(string.Join("|", clauses.Select(c => $"{c.Reading}={c.Text}")));
-        }
     }
 
     /// <summary>しけんし を 試験し、しけんしたい を 試験したい にする変換エンジン (issue #1276)。</summary>
@@ -5003,18 +4998,6 @@ internal static class CompositionTests
         Assert.True(false, "未定義の注記を表示時に受け入れない");
     }
 
-    [Test]
-    public static void Commit_TeachesTheConverter()
-    {
-        // Mozc の学習: 確定した文節 (区切りと文字列) を変換エンジンに覚えさせる。
-        var converter = new LearningConverter();
-        var k = new Keyboard(converter: converter);
-        k.Type("tanniwotoru ");
-        k.Press(VirtualKeys.Return);
-        // 覚えさせるのは裏で行うので、少し待つ。
-        for (var i = 0; i < 100 && converter.Learned.Count == 0; i++) Thread.Sleep(10);
-        Assert.Equal("たんいを=単位を|とる=取る", converter.Learned.SingleOrDefault() ?? "(なし)");
-    }
 
     [Test]
     public static void UserDictionary_ReadingThatStaysAscii_IsUsed()

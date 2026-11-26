@@ -163,7 +163,7 @@ internal static class CompositionCommit
     /// <summary>確定した文節を学習する。設定「ユーザー学習を使う」が OFF なら、新しく覚えない (issue #277)</summary>
     internal static void LearnClauses(CompositionState state, CompositionInput input, IReadOnlyList<Clause> clauses, CompositionEnv env)
     {
-        if (CompositionLifecycle.Learning(state, input, env)) env.Learning.Learn(clauses, env.Context().PrecedingText, CompositionText.LearningContext(env));
+        if (CompositionLifecycle.Learning(state, input, env)) env.Learning.Learn(clauses, CompositionText.LearningContext(env));
     }
 
     /// <summary>予測変換の候補を確定する。日本語なら覚え直して、次からより前に出す。</summary>
