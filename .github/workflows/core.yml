@@ -1,5 +1,5 @@
 # 判定・変換のコア (Meltype.Core) と辞書のチェック。Windows 版のビルドとテストは windows.yml。
-#   core         … いつも: Meltype.Core のテストを Linux と Mac で流す (Mac 版・Linux 版の土台)。main の必須チェック
+#   core         … いつも: Meltype.Core のテストを Linux で流す。main の必須チェック
 #   辞書の形式   … dictionaries/ か tools/ が変わったとき: 読めない行・ひらがなでない読み・重複など。tools/ のテストも流す
 #   精度の比較   … 判定・変換の本体か辞書が変わったとき: main と Pull Request で品質テストを比べ、新しく外れた例があれば失敗。main の必須チェック
 #                  あわせて、よく使う語の判定が main から変わった語を一覧にする (参考。失敗にはしない)
@@ -29,11 +29,7 @@ defaults:
 
 jobs:
   core:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

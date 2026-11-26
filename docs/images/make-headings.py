@@ -6,7 +6,7 @@
 # s と数字で始まるもの (s01.svg) は小見出し用の小さな画像にする。
 #   pip install fonttools
 #   curl -L -o mplus.ttf https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/mplusrounded1c/MPLUSRounded1c-ExtraBold.ttf
-#   python3 tools/make-headings.py README.md CODE_OF_CONDUCT.md CONTRIBUTING.md SECURITY.md docs/*.md
+#   python3 docs/images/make-headings.py README.md CODE_OF_CONDUCT.md CONTRIBUTING.md SECURITY.md docs/*.md
 # 文字は M PLUS Rounded 1c (SIL Open Font License 1.1) の字形を図形にして埋め込む (見る人の PC のフォントに左右されない)。
 import math, os, re, sys
 from fontTools.ttLib import TTFont
