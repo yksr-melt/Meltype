@@ -125,19 +125,14 @@ internal sealed partial class CompositionDetector
     /// <summary>調べる用 (--segments): 区間分けのたびに、最後の状態ごとの一番軽い道と、候補ごとの重み (+) を 1 行ずつ渡す。* が選んだ道。</summary>
     internal Action<string>? LatticeTrace { get; set; }
 
+    /// <summary>
+    /// 区切りの上位 count 案を、軽い順に返す。区間の並びが同じ道 (日本語の語の区切りだけが違う道) は 1 案にまとめる。
+    /// count が 2 以上なら、(位置, 状態) ごとに軽い道を <see cref="PathsPerState"/> 個ずつ残す (k-best Viterbi)。最も軽い案から <see cref="AlternativeMargin"/> より重い案は返さない。
+    /// </summary>
     /// <param name="reasons">渡したら、選んだ道と、言語の割り当てが違う一番軽い道 (次点) を書く関数を足す (確定のログ用。issue #1644)。
     /// キーを打つたびに呼ばれるので、次点を探して文字列にするのは、ログに書くときだけにする。</param>
-    private List<CompositionSegment> FindSpansByReading(Prepared prepared, bool? learning, IReadOnlyList<CompositionUnit> units, string pending, bool? precedingEnglish, bool? followingEnglish,
-        bool manual, bool englishSentence, bool kanaInput, double englishBias = 0, List<Func<string>>? reasons = null) =>
-        FindSpanAlternatives(prepared, learning, units, pending, precedingEnglish, followingEnglish, manual, englishSentence, kanaInput, englishBias, 1, reasons)[0];
-
-    /// <summary>
-    /// 区切りの上位 count 案を、軽い順に返す。先頭は <see cref="FindSpansByReading"/> と同じ。区間の並びが同じ道 (日本語の語の区切りだけが違う道) は 1 案にまとめる。
-    /// count が 2 以上なら、(位置, 状態) ごとに軽い道を <see cref="PathsPerState"/> 個ずつ残す (k-best Viterbi)。最も軽い案から <see cref="AlternativeMargin"/> より重い案は返さない。
-    /// reasons には、いちばん良い案を選んだ理由を足す。
-    /// </summary>
     private List<List<CompositionSegment>> FindSpanAlternatives(Prepared prepared, bool? learning, IReadOnlyList<CompositionUnit> units, string pending, bool? precedingEnglish, bool? followingEnglish,
-        bool manual, bool englishSentence, bool kanaInput, double englishBias, int count, List<Func<string>>? reasons = null)
+        bool manual, bool englishSentence, bool kanaInput, bool punctuateAfterEnglish, double englishBias, int count, List<Func<string>>? reasons = null)
     {
         var text = prepared.Raw + pending;
         var length = text.Length;
@@ -337,7 +332,7 @@ internal sealed partial class CompositionDetector
                         KnownEnglishCost + ReadableDomainLetterCost * (text.IndexOf('.', p) - p));
                 // 英文の中の記号 (, . ! ? -) は半角のまま
                 if (unit >= 0 && !kanaInput && IsAsciiSymbol(units[unit]) && state.PreviousEnglish && state.AllEnglish &&
-                    KeepsPunctuationAfterEnglish(units, unit, pending, precedingEnglish))
+                    KeepsPunctuationAfterEnglish(units, unit, pending, punctuateAfterEnglish))
                 {
                     OfferEdge(node, state, new LatticeEdge(p, p + 1, true, "", false, false), 0);
                     continue;

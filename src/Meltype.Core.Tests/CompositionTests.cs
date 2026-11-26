@@ -12,6 +12,7 @@ using Meltype.Ime;
 using Meltype.Input;
 using Meltype.Learning;
 using Meltype.Libraries.Chars;
+using Meltype.Notation;
 
 namespace Meltype.Tests;
 
@@ -3231,30 +3232,46 @@ internal static class CompositionTests
     public static void CommaAfterDigit_IsTouten_UnlessDigitFollows()
     {
         // x64,arm64 の , は読点 (x64、arm64)。1,000 の , は桁区切りのまま。
-        AssertCommitted(("x64,arm64", "x64、arm64"), ("1,000en", "1,000えん"));
+        AssertCommitted(("x64,arm64", "x64、arm64"), ("1,000en", "1,000えん"), ("10,000", "10,000"));
+    }
+
+    [Test]
+    public static void CommaAfterDigit_AtEnd_IsTouten()
+    {
+        // #1989: 100, は打ち終わっても , のままだった
+        AssertCommitted(("100,", "100、"), ("1,000,", "1,000、"), ("1.5,", "1.5、"), ("x64,", "x64、"), ("10:00,", "10:00、"), ("kyouha100,", "きょうは100、"));
+        // 小数点と、数字の間の記号は打ったまま
+        AssertCommitted(("100.", "100."), ("1.5", "1.5"), ("10:00", "10:00"), ("1/2,", "1/2、"), ("1,-", "1、-"));
+        var space = new Keyboard();
+        space.Type("100, \n");
+        Assert.Equal("100、", space.Host.Document, "Space");
+        var setting = new Keyboard { Punctuation = Meltype.Config.PunctuationStyle.FullWidthCommaPeriod };
+        setting.Type("100,\n");
+        Assert.Equal("100，", setting.Host.Document, "設定の句読点");
+        // 英文の続きと、確定した数字の続きは半角
+        foreach (var (before, keys, expected) in new[] { ("I want ", "2020,\n", "2020,"), ("I want ", "2020, ", "2020, "), ("I want ", "x64,\n", "x64,"), ("1", ",000\n", ",000") })
+        {
+            var k = new Keyboard();
+            k.Host.PrecedingText = before;
+            k.Type(keys);
+            Assert.Equal(expected, k.Host.Document, before + keys);
+        }
     }
 
     [Test]
     public static void Marks_AfterBackspace_AreReadAsIfRetyped()
     {
         // 後ろの文字を消したら、, . は残った文字を打ち直したのと同じになる
-        Detector.UseJapanesePunctuationAfterEnglish = () => true;
-        try
+        foreach (var (typed, retyped) in new[] { (",,,\b", ",,"), ("...\b", ".."), ("x64,ka\b", "x64,"), ("google.a\b", "google."), ("google.1\b", "google.") })
         {
-            foreach (var (typed, retyped) in new[] { (",,,\b", ",,"), ("...\b", ".."), ("x64,ka\b", "x64,"), ("google.a\b", "google."), ("google.1\b", "google.") })
-            {
-                var (erased, fresh) = (new Keyboard(), new Keyboard());
-                erased.Type(typed);
-                fresh.Type(retyped);
-                Assert.Equal(fresh.Showing, erased.Showing, typed + ": 表示");
-                erased.Type("\n");
-                fresh.Type("\n");
-                Assert.Equal(fresh.Host.Document, erased.Host.Document, typed + ": 確定");
-            }
-        }
-        finally
-        {
-            Detector.UseJapanesePunctuationAfterEnglish = null;
+            var (erased, fresh) = (new Keyboard(), new Keyboard());
+            erased.Settings.JapanesePunctuationAfterEnglish = fresh.Settings.JapanesePunctuationAfterEnglish = true;
+            erased.Type(typed);
+            fresh.Type(retyped);
+            Assert.Equal(fresh.Showing, erased.Showing, typed + ": 表示");
+            erased.Type("\n");
+            fresh.Type("\n");
+            Assert.Equal(fresh.Host.Document, erased.Host.Document, typed + ": 確定");
         }
     }
 
@@ -3498,18 +3515,11 @@ internal static class CompositionTests
         // #416: 英字のすぐ後ろの , . も句読点にする設定。OFF なら今までどおり半角
         string Type(string keys, bool on, string? before = null, Meltype.Config.PunctuationStyle style = default)
         {
-            Detector.UseJapanesePunctuationAfterEnglish = () => on;
-            try
-            {
-                var k = new Keyboard { Punctuation = style };
-                k.Host.PrecedingText = before;
-                k.Type(keys);
-                return k.Host.Document;
-            }
-            finally
-            {
-                Detector.UseJapanesePunctuationAfterEnglish = null;
-            }
+            var k = new Keyboard { Punctuation = style };
+            k.Settings.JapanesePunctuationAfterEnglish = on;
+            k.Host.PrecedingText = before;
+            k.Type(keys);
+            return k.Host.Document;
         }
         Assert.Equal("IME。", Type("IME.\n", on: true), "略語の後ろも句点");
         Assert.Equal("Google.", Type("Google.\n", on: false), "OFF は半角のまま");
@@ -3518,6 +3528,13 @@ internal static class CompositionTests
         Assert.Equal("Google．", Type("Google.\n", on: true, style: Meltype.Config.PunctuationStyle.FullWidthCommaPeriod), "設定「句読点」の形");
         Assert.Equal("world.", Type("world.\n", on: true, before: "Hello "), "キャレットの前が英語 (Hello ) なら英文の続き");
         Assert.Equal("tetr.io", Type("tetr.io\n", on: true), "英単語の中の . は半角");
+        // #1424: 英単語を確定したすぐ後
+        Assert.Equal("、", Type(",\n", on: true, before: "IME"), "確定した英単語のすぐ後");
+        Assert.Equal("IME、", Type("IME\n,\n", on: true), "入力欄の文字が読めないとき");
+        Assert.Equal("。", Type(".\n", on: true, before: "IME"), "確定した英単語のすぐ後の句点");
+        Assert.Equal(",", Type(",\n", on: false, before: "IME"), "OFF は半角のまま");
+        Assert.Equal(",", Type(",\n", on: true, before: "GitHub "), "空白の後は英文の続き");
+        Assert.Equal("google.com", Type("google.com\n", on: true, before: "IME"), "次が英数字の . は半角");
     }
 
     [Test]
@@ -6098,7 +6115,7 @@ internal static class CompositionTests
             ("I want to go", null, null, "I want to go"),          // 英文はそのまま
         })
         {
-            Assert.Equal(expected, CompositionCommit.AddSpacesAroundEnglish(text, before, after), text);
+            Assert.Equal(expected, EnglishSpacing.Spaced(text, before, after), text);
         }
     }
 
@@ -6121,7 +6138,7 @@ internal static class CompositionTests
             ("買う", null, "15Pro", false, "買う"),                     // キャレットの後ろの語も同じ
         })
         {
-            Assert.Equal(expected, CompositionCommit.AddSpacesAroundEnglish(text, before, after, english, numbers: true), text);
+            Assert.Equal(expected, EnglishSpacing.Spaced(text, before, after, english, numbers: true), text);
         }
     }
 
