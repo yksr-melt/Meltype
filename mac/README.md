@@ -103,9 +103,15 @@ sbcl --script tests/test_mac_scripts.lisp
 log stream --predicate 'process == "Meltype"' --level debug
 ```
 
-## 配布用の zip を作る
+## 配布ファイルを作る
 
-ビルドした後に `bash mac/package.sh` を実行すると、`dist/` に配布用の zip ができます。zip 全体を展開して、`Install Meltype.command` または `bash install.sh` で入れます。
+ビルドした後に次を実行すると、`dist/` に DMG ができます。開いた DMG の「Install Meltype」から試せます。
+
+```bash
+bash mac/package.sh Meltype-mac-test.dmg
+```
+
+`bash mac/package.sh` は ZIP を作ります。ZIP 全体を展開し、`Install Meltype.command` または `bash install.sh` で入れます。
 
 ## 入力ソースの重複を直す
 

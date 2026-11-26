@@ -369,7 +369,7 @@ internal static class CompositionConversion
         var typedEnv = CompositionText.FragmentEnv(env);
         foreach (var c in raw) CompositionText.Append(typed, typedEnv, c);
         if (CompositionText.Pending(typed).Length > 0) return null;
-        var segments = env.Detector.SegmentLeaningEnglish(CompositionText.LearningContext(env), TypedMarks.Read(typed, typedEnv), env.Settings.JapanesePunctuationAfterEnglish);
+        var segments = env.Detector.SegmentLeaningEnglish(CompositionText.LearnedLanguages(env), TypedMarks.Read(typed, typedEnv), env.Settings.JapanesePunctuationAfterEnglish);
         if (!segments.Any(s => s.IsEnglish) || segments.All(s => s.IsEnglish)) return null;
         return string.Concat(segments.Select(s => s.IsEnglish ? s.Raw : s.Kana));
     }

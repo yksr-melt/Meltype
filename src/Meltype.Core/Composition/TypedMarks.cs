@@ -86,7 +86,7 @@ internal static class TypedMarks
         var lower = word.ToLowerInvariant();
         var acronym = word.Any(char.IsAsciiLetterUpper) && word.All(c => char.IsAsciiLetterUpper(c) || char.IsAsciiDigit(c));
         var readable = env.Detector.Romaji.AnalyzeFragment(lower).IsValid;
-        var knownUnambiguous = word.Length >= 3 && env.Detector.IsKnownEnglishWord(CompositionText.LearningContext(env), word) && !readable;
+        var knownUnambiguous = word.Length >= 3 && env.Detector.IsKnownEnglishWord(CompositionText.LearnedLanguages(env), word) && !readable;
         var properNoun = env.Detector.ProperNouns.Contains(lower) && (units[i].Raw != "-" || word.Any(char.IsAsciiLetterUpper) || !readable);
         return acronym || knownUnambiguous || properNoun;
     }
