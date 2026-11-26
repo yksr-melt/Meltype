@@ -310,6 +310,10 @@ public sealed class Settings
      Description("日本語入力のときの Space (何も打っていないとき) と Shift + Space で入れるスペースです。標準は Microsoft IME と同じです。英数状態では、どちらも半角スペースです。")]
     public SpaceWidth SpaceWidth { get; set; } = SpaceWidth.Standard;
 
+    [Category("8. キー操作"), DisplayName("CapsLock で大文字を入力"),
+     Description("日本語入力中も、CapsLock が ON なら英字を大文字で入力します。OFF のときは CapsLock を見ずに、Shift だけで大文字・小文字を決めます (CapsLock を ON にしたままでも日本語に変換できます)。")]
+    public bool CapsLockTypesCapitals { get; set; }
+
     [Category("8. キー操作"), DisplayName("F9 / F10 の 1 回目は打ったまま"),
      Description("入力中の表示が英字でも、F10 (Ctrl+O) の 1 回目は常に打ったまま (小文字) の英字にして、2 回目以降で すべて大文字 → 先頭だけ大文字 と切り替えます (Microsoft IME・Google 日本語入力と同じ)。OFF のときは、英字で見えている語の 1 回目の F10 で すべて大文字になります。")]
     public bool AlphanumericKeyStartsAsTyped { get; set; }

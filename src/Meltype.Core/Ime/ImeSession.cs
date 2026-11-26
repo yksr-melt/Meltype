@@ -347,8 +347,20 @@ internal static class ImeSession
     private static bool TypesText(int? vk) =>
         vk is null or VirtualKeys.Back or VirtualKeys.Space or >= 0x30 and <= 0x5A or >= 0x60 and <= 0x6F or >= 0xBA and <= 0xE2;
 
+    /// <summary>
+    /// フロントは CapsLock を反映した文字を送る。設定が OFF なら、CapsLock が ON の英字の大小を Shift の側にそろえる
+    /// (CapsLock を ON のままでも日本語に変換したい人と、日本語入力中も CapsLock で大文字を打ちたい人がいる)。
+    /// </summary>
+    private static ImeKey CapsLockApplied(ImeKey key, Settings settings)
+    {
+        if (!key.CapsLock || settings.CapsLockTypesCapitals || key.Ch is not (>= 'A' and <= 'Z' or >= 'a' and <= 'z')) return key;
+        var c = (char)key.Ch;
+        return key with { Ch = key.Shift ? char.ToUpperInvariant(c) : char.ToLowerInvariant(c) };
+    }
+
     private static Handled HandleKey(ImeSessionState state, ImeEnv env, ImeKey key, ImeField? field, string? before, Settings settings, (string Text, string Typed)? lastSnippet)
     {
+        key = CapsLockApplied(key, settings);
         var composing = IsComposing(state);
         var modifiers = Modifiers(key);
         var plain = modifiers == ShortcutModifiers.None;

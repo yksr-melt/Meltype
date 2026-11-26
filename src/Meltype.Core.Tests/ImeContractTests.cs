@@ -137,9 +137,9 @@ internal static class ImeContractTests
             _ => throw new ArgumentException($"送れないキー: {key}"),
         };
 
-        public JsonElement Key(int vk, char ch = '\0', bool shift = false, bool ctrl = false, string instance = "t1", bool moved = false, bool omitField = false)
+        public JsonElement Key(int vk, char ch = '\0', bool shift = false, bool ctrl = false, string instance = "t1", bool moved = false, bool omitField = false, bool capsLock = false)
         {
-            var output = Event("KeyPressed", instance, $",\"key\":{{\"vk\":{vk},\"ch\":{(int)ch},\"shift\":{(shift ? "true" : "false")},\"ctrl\":{(ctrl ? "true" : "false")}}}", moved, omitField);
+            var output = Event("KeyPressed", instance, $",\"key\":{{\"vk\":{vk},\"ch\":{(int)ch},\"shift\":{(shift ? "true" : "false")},\"ctrl\":{(ctrl ? "true" : "false")},\"capsLock\":{(capsLock ? "true" : "false")}}}", moved, omitField);
             // 使わなかったキーは、アプリがそのまま入れる
             if (!Consumed(output) && (ch != '\0' || vk == VirtualKeys.Return)) Document += vk == VirtualKeys.Return ? '\n' : ch;
             return output;
@@ -1159,6 +1159,22 @@ internal static class ImeContractTests
             front.Key(0x75);
             front.Key('\n');
             Assert.Equal("ka か", front.Document, front.Trace);
+        }
+    }
+
+    [Test]
+    public static void CapsLock_TypesCapitalsOnlyWhenTheSettingIsOn()
+    {
+        // #837: 日本語入力中も CapsLock で大文字にしたい人と、CapsLock を ON のまま日本語にしたい人 (#736) がいる
+        foreach (var on in new[] { false, true })
+        {
+            var front = new Front();
+            front.Settings.CapsLockTypesCapitals = on;
+            foreach (var c in "KA") front.Key(c, c, capsLock: true);
+            // CapsLock 中の Shift は小文字
+            front.Key('N', 'n', shift: true, capsLock: true);
+            front.Key('\n');
+            Assert.Equal(on ? "KAn" : "かN", front.Document, front.Trace);
         }
     }
 

@@ -1312,6 +1312,7 @@ void TextService::HandleKey(ITfContext* context, UINT vk, wchar_t ch, bool repea
         const std::string key = std::string(",\"key\":{\"vk\":") + std::to_string(vk) + ",\"ch\":" + std::to_string(ch) +
                                 ",\"shift\":" + (shift ? "true" : "false") + ",\"ctrl\":" + (control ? "true" : "false") +
                                 ",\"alt\":" + (alt ? "true" : "false") + ",\"command\":" + (command ? "true" : "false") +
+                                ((GetKeyState(VK_CAPITAL) & 1) ? ",\"capsLock\":true" : "") +
                                 (repeat ? ",\"repeat\":true" : "") + "}";
         JsonValue reply;
         if (!Send("KeyPressed", field, key, reply, 800, false, listed ? &anchor : nullptr)) {
