@@ -14,8 +14,20 @@ namespace Meltype.SettingsApp;
 /// <summary>左に検索とページの一覧、右に選んだページと、その下に入力プレビュー。ページは設定の分類と、設定以外の操作 (<see cref="Pages"/>)。</summary>
 internal sealed class MainWindow : Window
 {
+    /// <summary>
+    /// 左の一覧の順。設定の分類 (Settings の Category) と設定以外のページ (<see cref="Pages"/>) を並べる。
+    /// 分類と同じ名前のページは、ページの上に分類の設定を並べる (設定と、それが使うデータを 1 か所で見せる)。
+    /// </summary>
+    private static readonly string[] PageOrder =
+    [
+        "全般", "入力方式", "英語 / 日本語の判定", "変換", "便利変換", "記号・スペース", "キー操作", "表示", "動作する場面",
+        UserDictionaryPage.Title, SnippetsPage.Title, LearningPage.Title, "打鍵数・ログ", "更新", "バックアップ",
+        // プロファイルは使う人が少ないので、一覧の下に置く
+        "プロファイル", "Meltype について",
+    ];
+
     private readonly SettingsStore _store = new();
-    private readonly IReadOnlyList<(string Category, IReadOnlyList<SettingItem> Items)> _catalog = SettingsCatalog.ForThisPlatform();
+    private readonly IReadOnlyList<(string Category, IReadOnlyList<SettingItem> Items)> _catalog = [.. SettingsCatalog.ForThisPlatform().OrderBy(g => PageIndex(g.Category))];
     private readonly IReadOnlyList<Page> _pages;
     private readonly TextBox _search = new() { PlaceholderText = "設定を検索" };
     private readonly ListBox _navigation = new();
@@ -28,9 +40,13 @@ internal sealed class MainWindow : Window
         Height = 720;
         MinWidth = 640;
         MinHeight = 400;
-        _pages = [.. _catalog.Select(g => new Page(g.Category, () => SettingsPage.Build([g], _store, this, search: false), ShowsSettings: true)), .. Pages.All(this, () => _addWord),
-            // プロファイルは使う人が少ないので、一覧のいちばん下に置く
+        // 設定以外のページは、分類の設定を出していても作り直さない (ShowsSettings が false)。作り直すと、打ちかけの定型文などが消える
+        Page[] others = [.. Pages.All(this, () => _addWord, title => SettingsPage.Cards(_catalog.FirstOrDefault(g => g.Category == title).Items ?? [], _store, this)),
             new Page("プロファイル", () => ProfilesPage.Build(_store, this), ShowsSettings: true)];
+        _pages = [.. _catalog.Where(g => others.All(p => p.Title != g.Category))
+            .Select(g => new Page(g.Category, () => SettingsPage.Build([g], _store, this, search: false), ShowsSettings: true))
+            .Concat(others)
+            .OrderBy(p => PageIndex(p.Title))];
         _navigation.ItemsSource = _pages.Select(p => p.Title).ToList();
         _navigation.SelectionChanged += (_, _) =>
         {
@@ -91,6 +107,9 @@ internal sealed class MainWindow : Window
         header.Children.Add(heading);
         return new Border { Classes = { "preview" }, Child = new StackPanel { Spacing = 8, Children = { header, text } } };
     }
+
+    private static int PageIndex(string title) => Array.IndexOf(PageOrder, title) is >= 0 and var index ? index
+        : throw new InvalidOperationException($"左の一覧のどこに並べるかを決めていないページ: 「{title}」 (MainWindow.PageOrder に足す)");
 
     private static Control Dock(Control control, Dock dock)
     {

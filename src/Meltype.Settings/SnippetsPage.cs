@@ -14,11 +14,13 @@ namespace Meltype.SettingsApp;
 /// <summary>定型文 (snippets.json) の登録・直す・消す・取り込み・書き出し。一覧で選ぶと下の欄に出るので、直して「登録」すれば上書きする。</summary>
 internal static class SnippetsPage
 {
+    public const string Title = "定型文";
+
     private sealed record Item(string Name, string Text);
 
     private static SnippetStore Open() => new(Path.Combine(AppPaths.DataDirectory, "snippets.json"));
 
-    public static Control Build(Window owner)
+    public static Control Build(Window owner, Control settings)
     {
         var mark = new SettingsFile(AppPaths.ConfigFile).Current.SnippetMark is { Length: > 0 } m ? m : ";";
         var name = new TextBox { PlaceholderText = "名前 (半角の英数字・記号。例: sig)", Width = 280, HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left };
@@ -105,7 +107,8 @@ internal static class SnippetsPage
         });
 
         Reload();
-        return Pages.Layout("定型文", $"行の先頭か空白の直後に {mark}名前 と打って Space / Tab を押すと、登録した文に置き換えます。直後に Esc で元に戻します。",
+        return Pages.Layout(Title, $"行の先頭か空白の直後に {mark}名前 と打って Space / Tab を押すと、登録した文に置き換えます。直後に Esc で元に戻します。",
+            settings,
             Pages.Card(name, text, Pages.Row(SettingEditors.Button("登録", Register)), message),
             list,
             Pages.Row(SettingEditors.Button("選んだ定型文を削除", RemoveSelected), import, export));

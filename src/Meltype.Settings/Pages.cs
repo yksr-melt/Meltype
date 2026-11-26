@@ -10,17 +10,18 @@ using Avalonia.Platform.Storage;
 namespace Meltype.SettingsApp;
 
 /// <summary>
-/// 設定以外のページ (左の一覧で、設定の分類の後ろに並ぶ)。
+/// 設定以外のページ (並びは MainWindow.PageOrder)。
 /// どのページも、開くたび・操作するたびにデータフォルダーのファイルを Meltype.Core で読み直す (入力している Meltype も同じファイルを書くので、覚えておかない)。
 /// </summary>
 internal static class Pages
 {
     /// <param name="newWord">ユーザー辞書の登録欄に入れておく語 (MainWindow の --add-word)。</param>
-    public static IEnumerable<Page> All(Window owner, Func<Dictionary.UserWord?> newWord) =>
+    /// <param name="settings">ページと同じ名前の分類の設定のカード。ページの上に並べる。</param>
+    public static IEnumerable<Page> All(Window owner, Func<Dictionary.UserWord?> newWord, Func<string, Control> settings) =>
     [
         new(UserDictionaryPage.Title, () => UserDictionaryPage.Build(owner, newWord())),
-        new("定型文", () => SnippetsPage.Build(owner)),
-        new("学習データ", () => LearningPage.Build(owner)),
+        new(SnippetsPage.Title, () => SnippetsPage.Build(owner, settings(SnippetsPage.Title))),
+        new(LearningPage.Title, () => LearningPage.Build(owner, settings(LearningPage.Title))),
         new("バックアップ", () => BackupPage.Build(owner)),
         new("Meltype について", () => AboutPage.Build(owner)),
     ];
