@@ -399,7 +399,11 @@ internal static class KeigoConverter
         var prevEndsWithTe = prevReading.EndsWith('て') || prevReading.EndsWith('で');
         var isQuestion = IsQuestion(punct) || nextIsQuestion;
 
-        // 0. 疑問文 (？ / ?) は主語に応じて切り替える (自分主語「私が送った？」→ お送りいたしましたでしょうか？ / それ以外 → 尊敬・相手への質問)
+        // 0. 前の文節が「〜て / 〜で」で、この文節が補助動詞のとき (調べて + みる → 調べてみます、書いて + みた？ → 書いてみましたでしょうか？)
+        if (isSentenceEnd && prevEndsWithTe && TryConvertTeAuxiliary(readingCore, punct, isQuestion) is { } teAux)
+            return teAux;
+
+        // 0.2 疑問文 (？ / ?) は主語に応じて切り替える (自分主語「私が送った？」→ お送りいたしましたでしょうか？ / それ以外 → 尊敬・相手への質問)
         if (isSentenceEnd && isQuestion)
             return ConvertQuestion(readingCore, textCore, punct, subjectRole);
 
@@ -427,21 +431,7 @@ internal static class KeigoConverter
                 return respWord + punct;
         }
 
-        // 1. 前の文節が「〜て / 〜で」で、この文節が補助動詞のとき (確認して + ほしい → いただけますでしょうか)
-        if (isSentenceEnd && prevEndsWithTe)
-        {
-            if (readingCore is "ほしい" or "くれ" or "ちょうだい") return "いただけますでしょうか" + punct;
-            if (readingCore is "いる" or "る") return "おります" + punct;
-            if (readingCore is "いた" or "た") return "おりました" + punct;
-            if (readingCore is "もらえる") return "いただけますでしょうか" + punct;
-            if (readingCore is "もらった") return "いただきました" + punct;
-            if (readingCore is "もらう") return "いただきます" + punct;
-            if (readingCore is "くれた") return "くださいました" + punct;
-            if (readingCore is "くれる") return "くださいます" + punct;
-            if (readingCore is "いい") return "よろしいでしょうか" + punct;
-        }
-
-        // 2. 単語・定型句の完全一致
+        // 1. 単体の定型句・単語・接頭辞の完全一致
         if (ReadingWords.TryGetValue(readingCore, out var word))
             return word + punct;
         if (isSentenceEnd && TailReadingMap.TryGetValue(readingCore, out var tailWord))
@@ -508,6 +498,57 @@ internal static class KeigoConverter
         }
 
         return rewritten != textCore ? rewritten + punct : null;
+    }
+
+    private static string? TryConvertTeAuxiliary(string readingCore, string punct, bool isQuestion)
+    {
+        if (isQuestion)
+        {
+            return readingCore switch
+            {
+                "ほしい" or "くれ" or "ちょうだい" or "もらえる" or "もらえます" or "もらえますか" or "くれます" or "くれますか" => "いただけますでしょうか" + punct,
+                "くれない" or "くれませんか" or "もらえない" or "もらえませんか" => "いただけませんでしょうか" + punct,
+                "いい" or "いいです" => "よろしいでしょうか" + punct,
+                "いる" or "います" or "るの" or "いるの" => "おりますでしょうか" + punct,
+                "いた" or "いました" or "たの" or "いたの" => "おりましたでしょうか" + punct,
+                "みる" or "みます" => "みますでしょうか" + punct,
+                "みた" or "みました" => "みましたでしょうか" + punct,
+                "ある" or "あります" or "あるの" => "ありますでしょうか" + punct,
+                "あった" or "ありました" or "あったの" => "ありましたでしょうか" + punct,
+                "おく" or "おきます" => "おきますでしょうか" + punct,
+                "おいた" or "おきました" => "おきましたでしょうか" + punct,
+                _ => null,
+            };
+        }
+
+        return readingCore switch
+        {
+            "ほしい" or "くれ" or "ちょうだい" or "もらえる" => "いただけますでしょうか" + punct,
+            "くれない" or "もらえない" => "いただけませんでしょうか" + punct,
+            "いい" => "よろしいでしょうか" + punct,
+            "いる" or "る" or "います" => "おります" + punct,
+            "いた" or "た" or "いました" => "おりました" + punct,
+            "いない" or "ない" or "いません" => "おりません" + punct,
+            "いなかった" or "なかった" or "いませんでした" => "おりませんでした" + punct,
+            "もらう" or "もらいます" => "いただきます" + punct,
+            "もらった" or "もらいました" => "いただきました" + punct,
+            "くれる" or "くれます" => "くださいます" + punct,
+            "くれた" or "くれました" => "くださいました" + punct,
+            "みる" or "みます" => "みます" + punct,
+            "みた" or "みました" => "みました" + punct,
+            "みて" => "みてください" + punct,
+            "ある" or "あります" => "あります" + punct,
+            "あった" or "ありました" => "ありました" + punct,
+            "おく" or "おきます" => "おきます" + punct,
+            "おいた" or "おきました" => "おきました" + punct,
+            "いく" or "いきます" => "まいります" + punct,
+            "いった" or "いきました" => "まいりました" + punct,
+            "くる" or "きます" => "まいります" + punct,
+            "きた" or "きました" => "まいりました" + punct,
+            "しまう" or "しまいます" => "しまいます" + punct,
+            "しまった" or "しまいました" => "しまいました" + punct,
+            _ => null,
+        };
     }
 
     private static bool IsRequestTeForm(string text)

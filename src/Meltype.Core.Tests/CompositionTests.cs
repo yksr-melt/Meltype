@@ -6828,5 +6828,26 @@ internal static class CompositionTests
         Assert.Equal("失礼いたします", string.Concat(KeigoConverter.Convert([new("しつれい", false, ["失礼"]), new("いたします", false, ["いたします"])]).Select(c => c.Text)));
         Assert.Equal("お待たせいたしました", string.Concat(KeigoConverter.Convert([new("おまたせ", false, ["お待たせ"]), new("いたしました", false, ["いたしました"])]).Select(c => c.Text)));
         Assert.Equal("お先に失礼いたします", string.Concat(KeigoConverter.Convert([new("おさきに", false, ["お先に"]), new("しつれいします", false, ["失礼します"])]).Select(c => c.Text)));
+
+        // 2 文節に分かれた「〜て / 〜で + 補助動詞」の精度確認 (みる/ない/ある/おく/いく/いい？)
+        Assert.Equal("調べてみます", string.Concat(KeigoConverter.Convert([new("しらべて", false, ["調べて"]), new("みる", false, ["見る"])]).Select(c => c.Text)));
+        Assert.Equal("書いてみましたでしょうか？", string.Concat(KeigoConverter.Convert([new("かいて", false, ["書いて"]), new("みた？", false, ["見た？"])]).Select(c => c.Text)));
+        Assert.Equal("確認しておりません", string.Concat(KeigoConverter.Convert([new("かくにんして", false, ["確認して"]), new("ない", false, ["ない"])]).Select(c => c.Text)));
+        Assert.Equal("届いておりませんでした", string.Concat(KeigoConverter.Convert([new("とどいて", false, ["届いて"]), new("いなかった", false, ["いなかった"])]).Select(c => c.Text)));
+        Assert.Equal("書いてあります", string.Concat(KeigoConverter.Convert([new("かいて", false, ["書いて"]), new("ある", false, ["ある"])]).Select(c => c.Text)));
+        Assert.Equal("確認しておきます", string.Concat(KeigoConverter.Convert([new("かくにんして", false, ["確認して"]), new("おく", false, ["おく"])]).Select(c => c.Text)));
+        Assert.Equal("進めてまいります", string.Concat(KeigoConverter.Convert([new("すすめて", false, ["進めて"]), new("いく", false, ["いく"])]).Select(c => c.Text)));
+        Assert.Equal("確認してよろしいでしょうか？", string.Concat(KeigoConverter.Convert([new("かくにんして", false, ["確認して"]), new("いい？", false, ["いい？"])]).Select(c => c.Text)));
+        Assert.Equal("確認していただけますでしょうか？", string.Concat(KeigoConverter.Convert([new("かくにんして", false, ["確認して"]), new("もらえますか？", false, ["もらえますか？"])]).Select(c => c.Text)));
+
+        // 常体敬語動詞の丁寧化・二重敬語防止・業務定番表現
+        Assert.Equal("おっしゃいました", KeigoConverter.Convert([new("おっしゃった", false, ["おっしゃった"])])[0].Text);
+        Assert.Equal("くださいました", KeigoConverter.Convert([new("くださった", false, ["くださった"])])[0].Text);
+        Assert.Equal("いただきました", KeigoConverter.Convert([new("いただいた", false, ["いただいた"])])[0].Text);
+        Assert.Equal("ご提出ください", KeigoConverter.Convert([new("ていしゅつして", false, ["提出して"])])[0].Text);
+        Assert.Equal("ご利用ください", KeigoConverter.Convert([new("りようして", false, ["利用して"])])[0].Text);
+        Assert.Equal("拝見できかねます", KeigoConverter.Convert([new("みられない", false, ["見られない"])])[0].Text);
+        Assert.Equal("チームがご覧になります", string.Concat(KeigoConverter.Convert([new("ちーむが", false, ["チームが"]), new("みます", false, ["見ます"])]).Select(c => c.Text)));
+        Assert.Equal("当方が拝見いたします", string.Concat(KeigoConverter.Convert([new("とうほうが", false, ["当方が"]), new("みます", false, ["見ます"])]).Select(c => c.Text)));
     }
 }
