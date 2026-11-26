@@ -181,4 +181,4 @@ fcitx5 では、ログアウト・ログイン後も動かなければ、fcitx5 
 
 ## アンインストール
 
-Ubuntu / Debian は `sudo apt remove meltype`、Fedora・RHEL 9 系は `sudo dnf remove meltype meltype-fcitx5` 、Arch Linux は `sudo pacman -Rns meltype-bin` で外します。dnf で fcitx5 のアドオンを入れていなければ `meltype` だけを指定します。設定と学習データ `~/.local/share/Meltype` は残るので、要らなければ消してください。
+Ubuntu / Debian は `sudo apt remove meltype`、Fedora・RHEL 9 系は `sudo dnf remove meltype meltype-fcitx5`、Arch Linux は `sudo pacman -Rns meltype-bin` で外します。dnf で fcitx5 のアドオンを入れていなければ `meltype` だけを指定します。設定と学習データ `~/.local/share/Meltype` は残るので、要らなければ消してください。
