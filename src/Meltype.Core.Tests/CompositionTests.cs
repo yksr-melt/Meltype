@@ -254,6 +254,9 @@ internal static class CompositionTests
         public bool NowPlayingCandidates { get => Settings.NowPlayingCandidates; set => Settings.NowPlayingCandidates = value; }
         public bool ContinueAfterConversion { get => Settings.ContinueAfterConversion; set => Settings.ContinueAfterConversion = value; }
         public bool Learning { get => Settings.LearningEnabled; set => Settings.LearningEnabled = value; }
+
+        /// <summary>覚えないように求める入力欄で打っているか (覚えたものは読む)。</summary>
+        public bool Private { get; set; }
         public bool SeparateKeyRoles { get => Settings.SeparateKeyRoles; set => Settings.SeparateKeyRoles = value; }
         public bool NonConvertCyclesKana { get => Settings.NonConvertCyclesKana; set => Settings.NonConvertCyclesKana = value; }
         public bool EnglishFirstInput { get => Settings.EnglishFirstInput; set => Settings.EnglishFirstInput = value; }
@@ -366,6 +369,7 @@ internal static class CompositionTests
                     Selection = Host.Selection?.Text,
                     Composing = _composing,
                     App = Code ? "Code.exe" : null,
+                    Traits = Private ? [ImeTrait.Private] : [],
                     CanRemove = Host.CanDeleteBackward,
                 },
             });
@@ -383,7 +387,7 @@ internal static class CompositionTests
             if (VirtualKeys.IsModifier(vk) || !_state.HandlesInput) return false;
             var mods = (shift ? 1 : 0) | (_ctrlHeld ? 2 : 0);
             if (_state.Capture.Shortcuts.Any(key => ToggleShortcut.NormalizeKey(key.Vk) == ToggleShortcut.NormalizeKey(vk) && key.Modifiers == mods)) return true;
-            return !_ctrlHeld && Host.CharFromKey(vk, shift) is { } c && c is > ' ' and <= '~' && _state.Capture.PrintableAscii && !_state.Capture.PrintableAsciiExcept.Contains(c);
+            return !_ctrlHeld && vk is not (>= 0x60 and <= 0x6F) && Host.CharFromKey(vk, shift) is { } c && c is > ' ' and <= '~' && _state.Capture.PrintableAscii && !_state.Capture.PrintableAsciiExcept.Contains(c);
         }
 
         /// <summary>キーを押す・離す。本体が受け取った (アプリに通さなかった) なら true。</summary>
@@ -4044,6 +4048,62 @@ internal static class CompositionTests
         k.Type("\n");
         Assert.Equal(0, history.Count, "変換を覚えない");
         Assert.Equal(0, languages.Entries().Count, "英字に直した語を覚えない");
+    }
+
+    [Test]
+    public static void LearningOff_DoesNotUseLearnedData()
+    {
+        // 設定「ユーザー学習を使う」が OFF なら、今まで覚えた分も使わない。消しはしないので、ON に戻すとまた使う
+        var history = new ConversionHistory(null);
+        history.Remember("はしを", "箸を");
+        var languages = new LanguageMemory(null);
+        languages.Remember("tao", english: true, explicitChoice: true);
+        languages.Remember("google", english: false, explicitChoice: true);
+        var phrases = new PhraseHistory(null);
+        phrases.Remember("にほんごでにゅうりょく", "日本語で入力");
+        var dictionary = TranslationDictionary.Parse("川\tn\triver,stream");
+        var translations = new TranslationHistory(null);
+        translations.Remember("かわ", "stream");
+        var predictor = new Predictor(phrases, () => [("にほんごかいわ", "日本語会話")], history);
+        Keyboard Create(bool learning) => new(history: history, languages: languages, predictor: predictor, translations: dictionary, translationHistory: translations) { Learning = learning };
+        string Typed(bool learning, string keys)
+        {
+            var k = Create(learning);
+            k.Type(keys);
+            return k.Showing ?? "";
+        }
+        List<string> Candidates(bool learning, string keys)
+        {
+            var k = Create(learning);
+            k.Type(keys);
+            return k.Host.View!.Candidates.ToList();
+        }
+        List<string> Predictions(bool learning, string keys)
+        {
+            var k = Create(learning);
+            k.Type(keys);
+            return k.Host.View!.Predictions?.ToList() ?? [];
+        }
+        Assert.Equal("箸を", Candidates(true, "hashiwo ")[0], "ON: 選び直した変換");
+        Assert.True(Candidates(false, "hashiwo ")[0] != "箸を", "OFF: 選び直した変換");
+        Assert.Equal("tao", Typed(true, "tao"), "ON: 英字に直した語");
+        Assert.Equal("たお", Typed(false, "tao"), "OFF: 英字に直した語");
+        Assert.True(Typed(true, "google") != "google", "ON: かなに直した語");
+        Assert.Equal("google", Typed(false, "google"), "OFF: かなに直した語");
+        Assert.True(Predictions(true, "nihongo").Contains("日本語で入力"), "ON: 予測変換の語句");
+        Assert.True(!Predictions(false, "nihongo").Contains("日本語で入力"), "OFF: 予測変換の語句");
+        Assert.True(Predictions(false, "nihongo").Contains("日本語会話"), "OFF でもユーザー辞書の語は予測する");
+        int Place(bool learning) => Candidates(learning, "kawa ").IndexOf("stream");
+        Assert.True(Place(true) < Place(false), $"選んだ英訳: ON {Place(true)} / OFF {Place(false)}");
+        Assert.Equal("箸を", history.Get("はしを"), "OFF で打っても消えない");
+        Assert.Equal(true, languages.Get("tao"), "OFF で打っても消えない");
+
+        // 同じ入力欄で ON に戻したら、次の入力から使う
+        var toggled = Create(learning: false);
+        toggled.Type("tao\n");
+        toggled.Learning = true;
+        toggled.Type("tao");
+        Assert.Equal("tao", toggled.Showing, "ON に戻すと使う");
     }
 
     [Test]

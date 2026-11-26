@@ -259,6 +259,9 @@ internal sealed class Predictor
         _history = history;
     }
 
+    /// <summary>学習データを使わない予測 (ユーザー辞書・同梱の辞書だけ)。</summary>
+    internal Predictor WithoutLearning() => new(null, _userWords, null);
+
     internal PhraseHistory? Phrases => _phrases;
 
     /// <summary>

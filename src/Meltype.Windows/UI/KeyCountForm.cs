@@ -131,27 +131,27 @@ internal sealed class KeyCountForm : Form
     {
         var choice = MessageBox.Show(this,
             "typect (タイプ数カウンター) で数えた打鍵数を、Meltype の打鍵数に足します。\n\n" +
-            "「はい」: ファイル (CSV・テキスト) から読む\n「いいえ」: クリップボードから読む (typect の一覧を選んでコピーしておく)\n\n" +
-            "1 行に「キー名, 回数」「日付, 回数」「合計, 回数」のどれかを書いた形を読みます。",
+            "「はい」: ファイル (typect の保存ファイル・CSV・テキスト) から読む\n「いいえ」: クリップボードから読む (typect の一覧を選んでコピーしておく)\n\n" +
+            "テキストは、1 行に「キー名, 回数」「日付, 回数」「合計, 回数」のどれかを書いた形を読みます。",
             "typect から引き継ぐ", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
-        string? text = null;
+        KeyCounter.ImportResult result;
         if (choice == DialogResult.Yes)
         {
-            using var dialog = new OpenFileDialog { Filter = "CSV・テキスト (*.csv;*.txt;*.tsv;*.log)|*.csv;*.txt;*.tsv;*.log|すべてのファイル (*.*)|*.*" };
+            using var dialog = new OpenFileDialog { Filter = "すべてのファイル (*.*)|*.*|CSV・テキスト (*.csv;*.txt;*.tsv;*.log)|*.csv;*.txt;*.tsv;*.log" };
             if (dialog.ShowDialog(this) != DialogResult.OK) return;
-            text = ReadText(dialog.FileName);
+            result = _counter.ImportFile(File.ReadAllBytes(dialog.FileName));
         }
         else if (choice == DialogResult.No)
         {
-            text = Clipboard.ContainsText() ? Clipboard.GetText() : null;
+            var text = Clipboard.ContainsText() ? Clipboard.GetText() : null;
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                MessageBox.Show(this, "読めるものがありませんでした。", "typect から引き継ぐ", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            result = _counter.Import(text);
         }
         else return;
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            MessageBox.Show(this, "読めるものがありませんでした。", "typect から引き継ぐ", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return;
-        }
-        var result = _counter.Import(text);
         _counter.Save();
         Reload();
         if (result.Duplicate)
@@ -162,18 +162,6 @@ internal sealed class KeyCountForm : Form
         MessageBox.Show(this,
             result.Total > 0 ? $"{result.Total:N0} 打を引き継ぎました (キー {result.Keys} 種類・{result.Days} 日分)。" : "打鍵数を読み取れませんでした。「キー名, 回数」の形か確かめてください。",
             "typect から引き継ぐ", MessageBoxButtons.OK, result.Total > 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
-    }
-
-    /// <summary>UTF-8 で読めなければ Shift_JIS で読む (古い Windows のソフトの書き出し)。</summary>
-    private static string ReadText(string path)
-    {
-        var bytes = File.ReadAllBytes(path);
-        try { return new System.Text.UTF8Encoding(false, true).GetString(bytes); }
-        catch (System.Text.DecoderFallbackException)
-        {
-            System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
-            return System.Text.Encoding.GetEncoding(932).GetString(bytes);
-        }
     }
 
     private void Reset()

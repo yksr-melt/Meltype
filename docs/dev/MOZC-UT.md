@@ -23,6 +23,8 @@ UT 辞書は CC BY-SA のバージョン (3.0 か 4.0 か) を明記しておら
 UT 辞書を入れたバイナリはあなた自身のビルドであり、Meltype の公式成果物でも、サポートや動作保証の対象でもありません。
 辞書ごとの詳しい条件は [THIRD-PARTY-NOTICES.md](../../THIRD-PARTY-NOTICES.md) の「Mozc-UT 辞書」にあります。
 
+上流の作成手順・取得サイズと性能の数値は、下の表に記録した版での確認結果です。別の上流版では既定値や容量が変わることがあります。Meltype への統合方法は、このリポジトリのビルドスクリプトを基準にしてください。
+
 ## UT 辞書を用意する
 
 ### merge-ut-dictionaries で作る (推奨)
@@ -61,11 +63,11 @@ ls -lh mozcdic-ut.txt
 | 地名辞書 | `98cf8e9d7731695a52e5bc72ed633933c71d1913` |
 | SudachiDict 辞書 | `13129ddebe1cb8eabb63feccbe157adec4e1de01` |
 | 作った mozcdic-ut.txt | 1,142,950 行、SHA-256 `0c16fa79ca6c4958bb5c4cc7378dadd17d382e987c586b90d82a50e452030c15` |
-| Mozc | `a069a88d4cb5c011de0f9aebb6c149a1c808d904` (`native/mozc/MOZC_COMMIT`) |
+| 計測に使った Mozc | `a069a88d4cb5c011de0f9aebb6c149a1c808d904` (現在の固定値は [MOZC_COMMIT](../../native/mozc/MOZC_COMMIT)) |
 
 ## Linux でビルドする
 
-必要なものは、これまでのビルドと同じです (`native/mozc/README.md`)。環境変数を付けるだけです。
+必要なものは、これまでのビルドと同じです ([native/mozc/README.md](../../native/mozc/README.md))。環境変数を付けるだけです。
 Mozc-UT の辞書を扱うときは Python 3.10 以降を使います (`PYTHON` で場所を指定できます)。
 
 ```bash
@@ -156,6 +158,17 @@ Linux x86_64 (6 コア、clang 21.1.8、Bazel 9.0.2、Mozc `a069a88d`) で、`pe
 - ビルドのキャッシュ: Bazel は入力の中身でキャッシュを分けるので、標準のビルドと Mozc-UT のビルドを取り違えません。実際に、Mozc-UT でビルドしたあとに標準でビルドし直すと、**最初に作った標準のバイナリと同じバイト列** (SHA-256 `84929176b0f5265c41e64690775398312ff9ed7cd8e41ca43937d70ea9e71c82`) に戻ることを確かめました。
 
 ## 仕組み
+
+```mermaid
+flowchart TD
+    scripts["ヘルパーのビルドスクリプト"] --> supplied{"UT 辞書を指定したか"}
+    supplied -->|指定あり| merge["検証・品詞 ID の対応・重複除去"]
+    supplied -->|指定なし| empty["dictionary_ut.txt を空にする"]
+    merge --> records["dictionary_ut.txt と MOZC-UT.json"]
+    records --> bazel["Bazel: ヘルパーを再ビルド"]
+    empty --> bazel
+```
+
 
 1. ビルドスクリプトが、Mozc の `src/data/dictionary_oss/BUILD.bazel` の辞書の一覧に `dictionary_ut.txt` を足し、`dictionary_ut.txt` を空にします。Mozc の辞書 (`dictionary00.txt`〜`dictionary09.txt`) は書き換えません。
 2. 環境変数を指定したときは、`native/mozc/merge-ut-dictionary.py` が指定された `mozcdic-ut.txt` を読み、Mozc の辞書に足せるか確かめます。

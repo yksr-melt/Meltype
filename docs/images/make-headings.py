@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Yukishiro
-# README と docs/ の見出しの画像 (ロゴに合わせたステッカー風の SVG) を作り直す。
+# README などの見出しの画像 (ロゴに合わせたステッカー風の SVG) を作り直す。
 # Markdown の中の <img src=".../images/headings/....svg" alt="見出し"> を探し、alt の文字で画像を作る
 # (見出しの文言は Markdown の alt を直せばよい)。ファイル名が title で始まるものは文書の題名用の大きな画像、
 # s と数字で始まるもの (s01.svg) は小見出し用の小さな画像にする。
 #   pip install fonttools
 #   curl -L -o mplus.ttf https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/mplusrounded1c/MPLUSRounded1c-ExtraBold.ttf
-#   python3 docs/images/make-headings.py README.md CODE_OF_CONDUCT.md CONTRIBUTING.md SECURITY.md docs/*.md
+#   python3 docs/images/make-headings.py README.md CODE_OF_CONDUCT.md CONTRIBUTING.md THIRD-PARTY-NOTICES.md
 # 文字は M PLUS Rounded 1c (SIL Open Font License 1.1) の字形を図形にして埋め込む (見る人の PC のフォントに左右されない)。
 import math, os, re, sys
 from fontTools.ttLib import TTFont

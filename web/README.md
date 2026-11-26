@@ -1,18 +1,19 @@
 # Meltype ホームページ
 
-Meltype の紹介用ウェブサイトと、「問題を報告する」フォーム・報告ダッシュボードです。Cloudflare Workerを使うなら動的サイトにしてもよかったのですが、雪代さんの返信を待っている間に静的で作り始めてしまったのでそのまま静的でいかせてもらいました。
+Meltype の紹介・使い方ガイド・タイピングと、「問題を報告する」フォーム・報告ダッシュボードです。静的ページと Cloudflare Workers・D1 を組み合わせています。
 
 ## テスト
 
 ```bash
+npm ci
 cp .dev.vars.example .dev.vars
-npm run dev
 npm test
+npm run dev
 ```
 
 → `http://localhost:8787`
 
-`npm test` は D1 の代わりに `node:sqlite` を使うので、Node 22.13 以降で動かしてください (CI は Node 24)。`.dev.vars.example` には手元用の値が入っています。TurnstilehaCloudflareのテスト用キーで、テスト用キーの hostname は `example.com` になるので `TURNSTILE_HOSTNAMES` は空にしてあります。`DASHBOARD_DEV_BYPASS=1` のときは、localhostからのダッシュボードだけアクセス確認を飛ばします。
+`npm test` は D1 の代わりに `node:sqlite` を使うので、Node 22.13 以降で動かしてください (CI は Node 24)。`.dev.vars.example` には手元用の値が入っています。Turnstile は Cloudflare のテスト用キーで、テスト用キーの hostname は `example.com` になるので `TURNSTILE_HOSTNAMES` は空にしてあります。`DASHBOARD_DEV_BYPASS=1` のときは、localhostからのダッシュボードだけアクセス確認を飛ばします。
 
 ## 使い方ガイド
 
@@ -22,7 +23,7 @@ npm test
 npm run guide
 ```
 
-`npm run dev`・`npm run deploy` も先に作り直します。ほかの文書へのリンクはガイドのページに、ガイドに無い文書・ソースへのリンクは GitHub に直します。
+`npm run dev`・`npm run deploy` も先に作り直します。ガイドの描画は Markdown の見出し・表・コードブロックに対応し、Mermaid の描画は組み込んでいません。使い方の比較は表で書き、Mermaid の構成図は開発文書で使います。ほかの文書へのリンクはガイドのページに、ガイドに無い文書・ソースへのリンクは GitHub に直します。
 
 ## 画像を作り直す
 
