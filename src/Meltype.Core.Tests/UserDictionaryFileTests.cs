@@ -50,6 +50,31 @@ internal static class UserDictionaryFileTests
     }
 
     [Test]
+    public static void Category_IsKeptInUserdictAndDoesNotChangeConversion()
+    {
+        // #856: 語を分類に分けて管理する。分類は変換に使わない
+        var directory = Path.Combine(Path.GetTempPath(), "meltype-userdict-category-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var path = Path.Combine(directory, "userdict.txt");
+            var dictionary = new UserDictionary(path, builtIn: false);
+            Assert.Equal(null, dictionary.Add("ほしの", "星野", "配信者"));
+            dictionary.Add("きごうとう", "記号等");
+            var lines = File.ReadAllLines(path);
+            Assert.True(lines.Contains("ほしの\t星野\t名詞\t配信者"), "分類は 4 列目");
+            Assert.True(lines.Contains("きごうとう\t記号等"), "分類の無い名詞は前の版と同じ 2 列");
+            var reloaded = new UserDictionary(path, builtIn: false);
+            Assert.Equal("配信者", reloaded.Words.Single(w => w.Word == "星野").Category, "読み直しても分類が残る");
+            Assert.Equal("星野", reloaded.Lookup("ほしの").Single());
+            reloaded.SetCategory(reloaded.Words.Where(w => w.Word == "記号等").ToList(), "記号");
+            var categories = new UserDictionary(path, builtIn: false).Categories;
+            Assert.True(categories.Count == 2 && categories.Contains("配信者") && categories.Contains("記号"), string.Join(",", categories));
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
+
+    [Test]
     public static void PartOfSpeech_IsKeptInUserdictAndExport()
     {
         var directory = Path.Combine(Path.GetTempPath(), "meltype-userdict-pos-" + Guid.NewGuid().ToString("N"));
