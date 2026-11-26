@@ -1,6 +1,6 @@
-# Mac 版 (mac/) をビルドしてテストし、テスター向けの zip (Meltype.app・Meltype Settings.app + install.sh + 説明) を Artifacts (meltype-mac) に置く。
+# Mac 版 (mac/) をビルドしてテストし、テスター向けの ZIP と DMG を Artifacts (meltype-mac) に置く。
 # Mac 版・共通部分を変えた main、手動実行、release.yml (タグ) から呼ばれたとき。
-# Mac 版のコードを変えた Pull Request では、ビルドとテストだけを流す (署名と zip は作らない)。
+# Mac 版のコードを変えた Pull Request では、ビルド・テストと ZIP・DMG の作成までを流す (署名はせず、Artifacts にも置かない)。
 # リリースへの添付と Homebrew の cask の更新は release.yml。
 name: mac
 
@@ -137,16 +137,19 @@ jobs:
             xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" --apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" --password "$NOTARY_PASSWORD" --wait
             xcrun stapler staple "mac/build/$app.app"
           done
+      # Pull Request でも作り、DMG のインストーラーのコンパイルと DMG の作成が通るかを確かめる
       - name: Package
-        if: github.event_name != 'pull_request'
         run: |
-          # タグ (v1.0.0) なら Meltype-1.0.0-mac.zip、それ以外はテスト版の名前
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then name="Meltype-${GITHUB_REF_NAME#v}-mac.zip"; else name="Meltype-mac-test-$(date +%Y%m%d-%H%M).zip"; fi
-          bash mac/package.sh "$name"
+          # タグ (v1.0.0) なら Meltype-1.0.0-mac、それ以外はテスト版の名前
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then name="Meltype-${GITHUB_REF_NAME#v}-mac"; else name="Meltype-mac-test-$(date +%Y%m%d-%H%M)"; fi
+          bash mac/package.sh "$name.zip"
+          bash mac/package.sh "$name.dmg"
           ls -la dist
       - if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: meltype-mac
-          path: dist/Meltype-*.zip
+          path: |
+            dist/Meltype-*.zip
+            dist/Meltype-*.dmg
           retention-days: 14
