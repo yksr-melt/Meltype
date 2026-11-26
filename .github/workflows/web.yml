@@ -35,19 +35,21 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
+          cache: pnpm
       - name: Install
-        run: npm ci
+        run: pnpm install --frozen-lockfile --filter .
       - name: Check syntax
-        run: npm run check
+        run: pnpm run check
       - name: Test
-        run: npm test
+        run: pnpm test
       - name: Build guide
-        run: npm run guide
+        run: pnpm run guide
       - name: Check wrangler config
-        run: npx wrangler deploy --dry-run --outdir dist
+        run: pnpm exec wrangler deploy --dry-run --outdir dist
 
   # main に入った web/ の変更を meltype.moe に出す (#1450)。
   # Cloudflare のトークンは環境 web-production の secrets に置く (無ければ失敗にする。本番に出ていないことに気づけるように。fork では動かさない)
@@ -79,10 +81,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
+          cache: pnpm
       - name: Install
-        run: npm ci
+        run: pnpm install --frozen-lockfile --filter .
       - name: Deploy
-        run: npm run deploy
+        run: pnpm run deploy

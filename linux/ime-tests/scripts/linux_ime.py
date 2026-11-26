@@ -154,7 +154,7 @@ def provenance(package, files, settings):
             "mozcCommit": (ROOT.parent.parent / "native/mozc/MOZC_COMMIT").read_text().strip(),
             "linuxPackages": {name: command(["dpkg-query", "-W", "-f=${Version}", name])
                               for name in ("ibus", "xdotool", "xvfb")},
-            "playwright": command(["node", str(ROOT / "node_modules/playwright/cli.js"), "--version"]),
+            "playwright": command(["node", str(ROOT / "node_modules/@playwright/test/cli.js"), "--version"]),
             "browser": command(["node", "--input-type=module", "-e",
                 "import { chromium } from 'playwright'; import { execFileSync } from 'node:child_process'; "
                 "process.stdout.write(execFileSync(chromium.executablePath(), ['--version'], {encoding:'utf8'}))"]),
@@ -287,7 +287,7 @@ def session(playwright_args):
             Path(os.environ["MELTYPE_IME_SESSION"]).write_text(json.dumps(runtime))
             manifest = provenance(package, files, settings)
             (artifacts / "session.json").write_text(json.dumps(manifest, indent=2))
-            tests = start("playwright", ["node", str(ROOT / "node_modules/playwright/cli.js"), "test",
+            tests = start("playwright", ["node", str(ROOT / "node_modules/@playwright/test/cli.js"), "test",
                                          "--config", str(ROOT / "playwright.ime.linux.config.ts"), *playwright_args])
 
             def pump():
