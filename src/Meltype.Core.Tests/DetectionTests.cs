@@ -377,8 +377,8 @@ internal static class DetectionTests
             var detector = Detection.CompositionDetector.CreateDefault(dir);
             var text = new Composition.CompositionTextState();
             var env = TestSupport.Env(detector);
-            foreach (var c in "kzji") Composition.CompositionText.Append(text, env, c);
-            Assert.Equal("かんじ", Composition.CompositionText.Display(text, env, final: true));
+            foreach (var c in "kzji") text = Composition.CompositionText.Append(text, c);
+            Assert.Equal("かんじ", Composition.CompositionText.Display(Composition.CompositionText.Read(text, env), env, final: true));
         }
         finally { Directory.Delete(dir, recursive: true); }
     }
