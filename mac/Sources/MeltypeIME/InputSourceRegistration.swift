@@ -170,7 +170,7 @@ enum InputSourceRegistration {
                     wait()
                 } else {
                     FileHandle.standardError.write(Data(
-                        "Input-source registration is pending (enabled selectable Japanese modes: \(count)). Choose Meltype in Keyboard settings or log out and back in.\n".utf8))
+                        "Input-source registration is pending (enabled selectable Japanese modes: \(count)). Allow Meltype if macOS asks. If Meltype is missing from the input menu, add it in Keyboard settings or log out and back in.\n".utf8))
                 }
             }
             return .pending

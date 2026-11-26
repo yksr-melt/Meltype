@@ -62,7 +62,8 @@ if "$app/Contents/MacOS/MeltypeInstallSupport" --select "$app"; then
     echo "Meltype を起動し、入力ソースとして選択しました。"
 else
     echo
-    echo "Meltype を起動しました。入力メニューから Meltype を選んでください。"
+    echo "Meltype を起動しました。有効化の確認が表示されたら「許可」を押してください。"
+    echo "メニューバーの入力メニューから Meltype を選んでください。"
     echo "入力メニューに Meltype が無いときは、"
     echo "システム設定 → キーボード →（テキスト入力の）入力ソース →「編集…」→「+」→ 日本語 → Meltype"
     echo "から追加してください。それでも出てこなければ、ログアウトしてログインし直してください。"
