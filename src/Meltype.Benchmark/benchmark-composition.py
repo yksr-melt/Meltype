@@ -39,7 +39,7 @@ def main():
     if args.samples < 3:
         parser.error('at least three samples are required')
     baseline = args.baseline.resolve(strict=True)
-    repo = Path(__file__).resolve().parent.parent
+    repo = Path(__file__).resolve().parents[2]
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     lengths = [int(n) for n in args.lengths.split(',')]
@@ -61,7 +61,7 @@ def main():
                 shutil.copytree(core.parent, copied, ignore=shutil.ignore_patterns('bin', 'obj'))
                 core = copied / core.name
                 core.write_text(core.read_text().replace('..\\..\\dictionaries\\*.txt', str(repo / 'dictionaries/*.txt')))
-            (directory / 'Program.cs').write_bytes((repo / 'tools/performance/Program.cs').read_bytes())
+            (directory / 'Program.cs').write_bytes((repo / 'src/Meltype.Benchmark/Program.cs').read_bytes())
             project = directory / 'Benchmark.csproj'
             project.write_text('''<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework>
 <OutputType>Exe</OutputType><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
@@ -103,7 +103,7 @@ def main():
                   dotnet=subprocess.check_output(['dotnet', '--version'], text=True).strip(), aot=not args.jit,
                   samples=args.samples, warmups=3, common_dictionaries=args.common_dictionaries,
                   scope='synthetic key/session/JSON loop, null converter; excludes startup and OS GUI',
-                  program_sha256=digest(repo / 'tools/performance/Program.cs'),
+                  program_sha256=digest(repo / 'src/Meltype.Benchmark/Program.cs'),
                   dictionaries={v: {p.name: digest(p) for p in (checkout / 'dictionaries').glob('*.txt')}
                                 for v, checkout in [('baseline', repo if args.common_dictionaries else baseline), ('current', repo)]},
                   comparisons=comparisons, rows=rows)

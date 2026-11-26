@@ -9,7 +9,7 @@ namespace Meltype.Composition;
 /// <summary>
 /// 出来事 1 つの間の、入力欄への書き込み (<see cref="TextEdit"/>)・変換ボックスの表示・キーをアプリに通すか。
 /// 書き込みと表示の文字は区間の並び (<see cref="ComposedText"/>) で受け取り、ここで文字列にする (<see cref="Render"/>)。
-/// 句読点は、読み・変換・学習では設定によらず 、。 で持ち (<see cref="CompositionText"/> の Symbol)、設定の句読点は文字列にするときに当てる。
+/// 句読点は、読み・変換・学習では設定によらず 、。 で持ち (<see cref="TypedMarks"/>)、設定の句読点は文字列にするときに当てる。
 /// 入力欄から読んだ文字 (<see cref="Before"/>・<see cref="After"/>) は、設定の句読点を 、。 に戻して渡す。
 /// 設定の句読点を当てるのは打った句読点の区間 (<see cref="SpanKind.Punctuation"/>) だけで、語の中の 、。 (モーニング娘。) は変えない。
 /// ここのほかに設定の句読点を扱うのは、再変換の読み (<see cref="FromSetting"/>) だけ。

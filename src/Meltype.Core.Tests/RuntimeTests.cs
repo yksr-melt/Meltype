@@ -6,6 +6,7 @@ using Meltype.Config;
 using Meltype.Dictionary;
 using Meltype.Engine;
 using Meltype.Ime;
+using Meltype.Input;
 
 namespace Meltype.Tests;
 
@@ -213,5 +214,76 @@ internal static class RuntimeTests
             Assert.Equal(PunctuationStyle.FullWidthCommaPeriod, Settings.Load(Path.Combine(directory, "config.json")).Punctuation, "config.json に保存する");
             Assert.Equal(PunctuationStyle.FullWidthCommaPeriod, runtime.Settings.Current.Punctuation);
         });
+    }
+
+    [Test]
+    public static void KeyCountMode_MovesFromKeyCountFile()
+    {
+        const string on = "{\"Total\":5,\"Enabled\":true,\"DiscordPresence\":true}";
+        foreach (var (config, keyCount, expected) in new[]
+        {
+            (null, "{\"Total\":5}", KeyCountMode.Off),
+            (null, "{\"Total\":5,\"Enabled\":false,\"DiscordPresence\":true}", KeyCountMode.Off),
+            (null, "{\"Total\":5,\"Enabled\":true,\"DiscordPresence\":false}", KeyCountMode.Count),
+            (null, on, KeyCountMode.CountAndDiscord),
+            (null, "{\"Enabled\":", KeyCountMode.Off),
+            ("{\"SettingsVersion\":12}", on, KeyCountMode.CountAndDiscord),
+            ("{\"SettingsVersion\":13}", on, KeyCountMode.CountAndDiscord),
+            // 選んだ値を、前の版の値で上書きしない
+            ("{\"SettingsVersion\":13,\"KeyCount\":\"Off\"}", on, KeyCountMode.Off),
+            ("{\"SettingsVersion\":13,\"KeyCount\":\"Count\"}", on, KeyCountMode.Count),
+        })
+        {
+            var directory = Path.Combine(Path.GetTempPath(), "meltype-runtime-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            try
+            {
+                var (configPath, keyCountPath) = (Path.Combine(directory, "config.json"), Path.Combine(directory, "keycount.json"));
+                if (config is not null) File.WriteAllText(configPath, config);
+                File.WriteAllText(keyCountPath, keyCount);
+                var label = $"{config} {keyCount}";
+                Assert.Equal(expected, Settings.Load(configPath).KeyCount, label);
+                // 前の版の値が消えても (打鍵数を保存した)、移した設定は残る
+                new KeyCounter(keyCountPath).Save();
+                if (keyCount == on)
+                {
+                    Assert.True(!File.ReadAllText(keyCountPath).Contains("Enabled", StringComparison.Ordinal), label);
+                    Assert.Equal(5L, new KeyCounter(keyCountPath).Total, label);
+                }
+                Assert.Equal(expected, Settings.Load(configPath).KeyCount, label);
+            }
+            finally { Directory.Delete(directory, recursive: true); }
+        }
+    }
+
+    [Test]
+    public static void KeyCount_CountsKeysTheHostHandles()
+    {
+        WithRuntime((runtime, directory) =>
+        {
+            runtime.StartConverter(directory);
+            var counter = runtime.StartKeyCount();
+            var host = runtime.CreateHost(new FakeEnvironment(runtime), () => runtime.Settings.Current, () => true, countKeys: true);
+            long Press(string key, string traits = "")
+            {
+                host.Handle($"{{\"version\":{ImeHost.Version},\"type\":\"KeyPressed\",\"instance\":\"t\",\"field\":{{\"traits\":[{traits}]}},\"key\":{{{key}}}}}");
+                return counter.Total;
+            }
+            Assert.Equal(0L, Press("\"ch\":97"), "既定では数えない");
+            runtime.Settings.Edit(settings => { var next = settings.Clone(); next.KeyCount = KeyCountMode.Count; return next; });
+            Assert.Equal(1L, Press("\"ch\":97"));
+            Assert.Equal(1L, Press("\"ch\":97,\"repeat\":true"), "押しっぱなし");
+            Assert.Equal(1L, Press("\"vk\":164"), "修飾キー");
+            Assert.Equal(1L, Press("\"ch\":97", "\"Password\""), "パスワード欄");
+            Assert.Equal(2L, Press("\"ch\":98"));
+        });
+    }
+
+    private sealed class FakeEnvironment(MeltypeRuntime runtime) : IImeEnvironment
+    {
+        public InputMode? InputMethod => null;
+        public SnippetStore Snippets => runtime.Snippets;
+        public string? ClipboardText => null;
+        public string? OtherTipVersion => null;
     }
 }

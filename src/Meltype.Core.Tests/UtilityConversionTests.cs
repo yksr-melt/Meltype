@@ -267,6 +267,6 @@ internal static class UtilityConversionTests
         Assert.Equal("fcitx5", VersionConversion.LinuxFrontOf(["/usr/bin/fcitx5", "-d"]));
         Assert.Equal("IBus", VersionConversion.LinuxFrontOf(["python3", "/opt/meltype/ibus-engine-meltype", "--ibus"]));
         Assert.Equal("端末", VersionConversion.LinuxFrontOf(["/usr/bin/python3", "/home/u/Meltype-tty/meltype-tty"]));
-        Assert.Equal(null, VersionConversion.LinuxFrontOf(["python3", "tools/test-native-boundaries.py", "libMeltypeNative.so"]));
+        Assert.Equal(null, VersionConversion.LinuxFrontOf(["python3", "src/Meltype.Core.CApi/tests/test-native-boundaries.py", "libMeltypeNative.so"]));
     }
 }

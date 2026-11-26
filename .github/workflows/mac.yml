@@ -13,9 +13,7 @@ on:
       - 'src/Meltype.Settings/**'
       - 'native/mozc/**'
       - 'native/zenzai/**'
-      - 'tools/test-native-boundaries.py'
-      - 'tools/test-mac-boundaries.*'
-      - 'tools/test-mac-events.*'
+      - 'tests/test_mac_scripts.lisp'
       - '.github/workflows/mac.yml'
   push:
     branches: [main]
@@ -27,9 +25,7 @@ on:
       - 'dictionaries/**'
       - 'native/mozc/**'
       - 'native/zenzai/**'
-      - 'tools/test-native-boundaries.py'
-      - 'tools/test-mac-boundaries.*'
-      - 'tools/test-mac-events.*'
+      - 'tests/test_mac_scripts.lisp'
       - '.github/workflows/mac.yml'
   workflow_dispatch:
   workflow_call:
@@ -47,6 +43,19 @@ defaults:
     shell: bash
 
 jobs:
+  # mac/ のスクリプトのテスト。Homebrew の sbcl は版を固定できないので、署名の証明書を読み込む app とは別の job で流す
+  scripts:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: SBCL
+        run: brew install sbcl
+      - name: Test
+        run: sbcl --script tests/test_mac_scripts.lisp
+
   app:
     runs-on: macos-15
     # Mozc のビルドは初回 30〜40 分かかる (2 回目からは Bazel のキャッシュを使う)
@@ -112,9 +121,9 @@ jobs:
         run: ./build.sh --no-install
       - name: NativeAOT and Swift boundary tests
         run: |
-          python3 tools/test-native-boundaries.py mac/build/Meltype.app/Contents/Frameworks/libMeltypeNative.dylib
-          python3 tools/test-mac-boundaries.py mac/build/Meltype.app/Contents/Frameworks/libMeltypeNative.dylib
-          python3 tools/test-mac-events.py mac/build/Meltype.app/Contents/Frameworks/libMeltypeNative.dylib
+          python3 src/Meltype.Core.CApi/tests/test-native-boundaries.py mac/build/Meltype.app/Contents/Frameworks/libMeltypeNative.dylib
+          python3 mac/Tests/test-mac-boundaries.py mac/build/Meltype.app/Contents/Frameworks/libMeltypeNative.dylib
+          python3 mac/Tests/test-mac-events.py mac/build/Meltype.app/Contents/Frameworks/libMeltypeNative.dylib
       # 公証 (notarization): 署名したときだけ。秘密 NOTARY_APPLE_ID・NOTARY_TEAM_ID・NOTARY_PASSWORD (App 用パスワード)
       - name: Notarize
         if: env.MELTYPE_MAC_IDENTITY != ''

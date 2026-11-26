@@ -90,7 +90,24 @@ public static unsafe class Exports
     }
 
     /// <summary>
-    /// 終了するときに 1 回呼ぶ。変換エンジンを止める (Zenzai の llama-server を含む変換エンジンを止める)。
+    /// 打鍵数を数え始める (数えるかは設定「打鍵数」で決まる)。meltype_init の後に 1 回呼ぶ。同時に 1 つしか動かないフロント (Mac・IBus・fcitx5) だけが呼ぶ
+    /// (<see cref="MeltypeRuntime.StartKeyCount"/>)。
+    /// </summary>
+    [UnmanagedCallersOnly(EntryPoint = "meltype_start_key_count")]
+    public static void StartKeyCount()
+    {
+        try
+        {
+            Runtime.StartKeyCount();
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Error($"打鍵数を数えられません: {ex}");
+        }
+    }
+
+    /// <summary>
+    /// 終了するときに 1 回呼ぶ。変換エンジンを止め (Zenzai の llama-server を含む)、打鍵数を保存する。
     /// 呼ばずに終わると llama-server が残り、次に起動した Meltype が終わらせるまで動き続ける。
     /// </summary>
     [UnmanagedCallersOnly(EntryPoint = "meltype_shutdown")]
@@ -116,7 +133,7 @@ public static unsafe class Exports
     {
         try
         {
-            return GCHandle.ToIntPtr(GCHandle.Alloc(Runtime.CreateHost(new NativeEnvironment(), () => Runtime.Settings.Current, () => s_lateResults)));
+            return GCHandle.ToIntPtr(GCHandle.Alloc(Runtime.CreateHost(new NativeEnvironment(), () => Runtime.Settings.Current, () => s_lateResults, countKeys: true)));
         }
         catch (Exception ex)
         {

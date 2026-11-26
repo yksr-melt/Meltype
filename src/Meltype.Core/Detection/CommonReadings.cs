@@ -64,9 +64,9 @@ internal static class CommonReadings
     public static PackedWordSet Brands => SharedBrands.Value;
 
     private static readonly Lazy<PackedWordSet> SharedPhrases = new(() => PackedWordSet.FromLines(
-        string.Join('\n', DictionarySource.DataLines(DictionarySource.ReadEmbedded("phrases.txt")).Select(line => line.Split('\t')[0].TrimStart('^')))));
+        string.Join('\n', DictionarySource.DataLines(DictionarySource.ReadEmbedded("phrases.txt")).Select(line => line.Split('\t')[0]))));
 
-    /// <summary>同梱の語句の読み (dictionaries/phrases.txt の どしたの。文節の頭の印 ^ は外す)。</summary>
+    /// <summary>同梱の語句の読み (dictionaries/phrases.txt の どしたの)。</summary>
     public static PackedWordSet Phrases => SharedPhrases.Value;
 
     private static readonly Lazy<PackedWordSet> SharedRare = new(() => PackedWordSet.FromLines(RareText(), firstField: true));

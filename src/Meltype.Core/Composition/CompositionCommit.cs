@@ -244,7 +244,6 @@ internal static class CompositionCommit
         Diagnostics.Log.Decision($"前後の文脈に合わせて確定し直しました: {Diagnostics.Log.Text(original)}→{Diagnostics.Log.Text(replacement.Text)}");
         // 消して入れ直すのは、続けて確定する文字と一緒に送る (CommitText)。別々に送ると、その間に入れ直した文字と
         // 続けて確定した文字の順番が入れ替わるアプリがある (Are yoよ人間う？: issue #258)
-        if (state.Last is { } last) state.Last = last with { Text = replacement.Text };
         state.Correctable.Clear();
         return (original.Length, replacement);
     }
@@ -252,7 +251,7 @@ internal static class CompositionCommit
     /// <summary>カッコの組 (設定「カッコを打ったら中にカーソルを移動」で、確定したら中に入る)。</summary>
     private static readonly HashSet<string> BracketPairs = ["「」", "『』", "（）", "()", "［］", "[]", "｛｝", "{}", "【】", "〈〉", "《》", "〔〕", "\"\"", "“”"];
 
-    /// <summary>確定して入力する。英語だったか日本語だったか・確定した文字列を、次の入力の文脈として覚えておく。</summary>
+    /// <summary>確定して入力する。確定した文字列を、次の入力の文脈として覚えておく。</summary>
     internal static void CommitText(CompositionState state, CompositionEnv env, ComposedText text, bool english, string raw = "", bool chosen = false, bool preserveText = false, string rule = "")
     {
         if (state.Scene is CompositionScene.WithInput scene) LogCommit(scene, env, text.Text, rule);
@@ -272,14 +271,16 @@ internal static class CompositionCommit
             if (state.Correctable.Count > MaxCorrectable) state.Correctable.RemoveAt(0);
         }
         else state.Correctable.Clear();
-        var joined = (state.Last?.Text ?? "") + text.Text;
-        state.Last = new LastCommit(joined.Length > 20 ? joined[^20..] : joined, english);
-        state.LastCommitTime = env.NowMs;
         if (corrected is var (count, replacement))
         {
+            CompositionContext.NoteCommit(state, env, count, replacement + text);
             CompositionOutput.ReplaceBackward(state.Out, env, count, replacement, text);
         }
-        else CompositionOutput.Commit(state.Out, env, text);
+        else
+        {
+            CompositionContext.NoteCommit(state, env, 0, text);
+            CompositionOutput.Commit(state.Out, env, text);
+        }
         // 設定「カッコを打ったら中にカーソルを移動」: カッコの組だけを確定したら、中に入る (issue #72)。
         // 確定に付けて返す (キーをアプリに通して動かすと、確定に使ったキーまでアプリに通ってしまう: #991・#1353・#1404・#1581)。
         if (env.Settings.CursorIntoBrackets && text.Length == 2 && BracketPairs.Contains(text.Text))
