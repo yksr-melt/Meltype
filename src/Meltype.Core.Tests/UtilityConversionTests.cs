@@ -285,10 +285,18 @@ internal static class UtilityConversionTests
         Assert.Equal(0, ColorConversion.Candidates("#12345").Count);
 
         var k = new Keyboard();
+        k.Settings.PredictiveCandidates = true;
         k.Type("#3b82f6");
-        k.Press(VirtualKeys.Convert);
-        Assert.Equal("#3b82f6", k.Host.View!.Candidates[0]);
-        Assert.True(k.Host.View.Candidates.Contains("rgb(59, 130, 246)") && k.Host.View.Candidates.Contains("hsl(217, 91%, 60%)"), string.Join(",", k.Host.View.Candidates));
+        Assert.Equal("rgb(59, 130, 246)|hsl(217, 91%, 60%)", string.Join("|", k.Host.View!.Predictions!));
+        k.Press(VirtualKeys.Tab);
+        k.Press(VirtualKeys.Return);
+        Assert.Equal("rgb(59, 130, 246)", k.Host.Document);
+
+        var convert = new Keyboard();
+        convert.Type("#3b82f6");
+        convert.Press(VirtualKeys.Convert);
+        Assert.Equal("#3b82f6", convert.Host.View!.Candidates[0]);
+        Assert.True(convert.Host.View.Candidates.Contains("rgb(59, 130, 246)") && convert.Host.View.Candidates.Contains("hsl(217, 91%, 60%)"), string.Join(",", convert.Host.View.Candidates));
 
         // Space は英数字の確定＋空白のまま邪魔しない
         var space = new Keyboard();

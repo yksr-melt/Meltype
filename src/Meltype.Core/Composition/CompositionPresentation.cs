@@ -142,8 +142,11 @@ internal static class CompositionPresentation
 
     private static List<Prediction> BuildPredictions(CompositionInput input, CompositionEnv env)
     {
-        if (env.Services.Predictor is not { } predictor || !env.Settings.PredictiveCandidates || input.Text.Mode != DisplayMode.Auto) return [];
+        if (!env.Settings.PredictiveCandidates || input.Text.Mode != DisplayMode.Auto) return [];
         var raw = CompositionText.Raw(input.Text);
+        if (!input.Text.KanaInput && Utility.ColorConversion.Candidates(raw) is { Count: > 1 } colorCandidates)
+            return colorCandidates.Skip(1).Select(c => new Prediction(c, "", raw)).ToList();
+        if (env.Services.Predictor is not { } predictor) return [];
         IEnumerable<string> PredictEnglish() => Predictor.PredictEnglish(raw).Select(w => NotationRules.Word(w, env.ProperNoun));
         if (CompositionText.IsAlphanumeric(input.Text, env))
         {
