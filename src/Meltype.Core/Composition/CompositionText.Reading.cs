@@ -127,8 +127,14 @@ internal static partial class CompositionText
         DisplayMode.Hiragana => ComposedText.Kana(CompositionText.AllKana(state, env, final)),
         DisplayMode.Katakana => ComposedText.Kana(ToKatakana(CompositionText.AllKana(state, env, final))),
         DisplayMode.HalfWidthKatakana => ComposedText.Kana(ToHalfWidthKatakana(ToKatakana(CompositionText.AllKana(state, env, final)))),
-        _ => CompositionText.IsNumeric(state) || CompositionText.IsHorizontalRule(state) ? ComposedText.English(CompositionText.Raw(state)) : CompositionText.RenderSegments(state, env, final, convert),
+        _ when CompositionText.IsNumeric(state) => CompositionText.Numeric(state, env),
+        _ => CompositionText.IsHorizontalRule(state) ? ComposedText.English(CompositionText.Raw(state)) : CompositionText.RenderSegments(state, env, final, convert),
     };
+
+    /// <summary>数字だけの入力 (<see cref="IsNumeric"/>) の表示。読点のほかは打った半角のまま (10:00、-)。英文の続きと、, から始まる入力 (1 を確定した後の ,000) は、すべて打ったまま。</summary>
+    internal static ComposedText Numeric(CompositionTextState state, TextEnv env) =>
+        env.Context().EndsWithEnglishAndSpace || state.Units[0].Raw == "," ? ComposedText.English(CompositionText.Raw(state))
+        : ComposedText.Concat(TypedMarks.Read(state, env).Select(unit => unit.Kana == "、" ? ComposedText.Kana(unit.Kana) : ComposedText.English(unit.Raw)));
 
     /// <summary>英字の大文字・小文字を変える (ai → AI / Ai)。</summary>
     public static string ApplyCase(string text, LetterCase letterCase) => letterCase switch

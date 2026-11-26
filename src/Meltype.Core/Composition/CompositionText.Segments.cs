@@ -72,7 +72,7 @@ internal static partial class CompositionText
         key.Append('\u0003').Append(state.Pending).Append('\u0003')
             .Append(env.Context().PrecedingEnglish switch { true => 'E', false => 'J', null => '-' })
             .Append(env.Context().FollowingEnglish switch { true => 'E', false => 'J', null => '-' })
-            .Append(env.Context().PrecedingEnglishSentence ? 'S' : '-').Append(state.KanaInput ? 'K' : '-')
+            .Append(env.Context().PrecedingEnglishSentence ? 'S' : '-').Append(env.Context().EndsWithEnglishAndSpace ? 'P' : '-').Append(state.KanaInput ? 'K' : '-')
             .Append(env.Context().PrecedingEnglishName ? 'N' : '-').Append(state.FullWidthParentheses ? 'W' : '-')
             .Append(CompositionText.EffectiveManual(state, env) ? 'M' : '-').Append(':').Append(env.Detector.Memory?.Version ?? -1).Append(':').Append(LearningContext(env) switch { true => 'e', false => 'j', null => '-' });
         return key.ToString();
@@ -110,12 +110,15 @@ internal static partial class CompositionText
         return alternatives;
     }
 
+    /// <summary>英単語のすぐ後ろの , . を句読点にするか (設定「英字の後ろの , . も句読点にする」)。キャレットの前が空白で終わる英語なら英文の続きなので半角のまま。</summary>
+    private static bool PunctuatesAfterEnglish(TextEnv env) => env.Settings.JapanesePunctuationAfterEnglish && !env.Context().EndsWithEnglishAndSpace;
+
     /// <summary>保護区間を英字のまま区切る。保護区間があれば別案は出さない (1 案だけ)。</summary>
     private static IReadOnlyList<IReadOnlyList<CompositionSegment>> SegmentWithProtection(CompositionTextState state, TextEnv env, IReadOnlyList<CompositionUnit> units, List<Func<string>> reasons, int count)
     {
         var spans = CompositionText.ProtectedSpans(state);
         if (spans.Count == 0)
-            return env.Detector.SegmentAlternatives(LearningContext(env), units, CompositionText.Pending(state), env.Context().PrecedingEnglish, env.Context().FollowingEnglish, CompositionText.EffectiveManual(state, env), env.Context().PrecedingEnglishSentence, state.KanaInput, count, reasons);
+            return env.Detector.SegmentAlternatives(LearningContext(env), units, CompositionText.Pending(state), env.Context().PrecedingEnglish, env.Context().FollowingEnglish, CompositionText.EffectiveManual(state, env), env.Context().PrecedingEnglishSentence, state.KanaInput, CompositionText.PunctuatesAfterEnglish(env), count, reasons);
         var raw = CompositionText.Raw(state);
         var result = new List<CompositionSegment>();
         var start = 0;
@@ -136,7 +139,7 @@ internal static partial class CompositionText
             var gapUnits = CompositionText.UnitsInRawRange(state, env, units, from, to, out var pending);
             var segments = env.Detector.Segment(LearningContext(env), gapUnits, pending, from == 0 ? env.Context().PrecedingEnglish : false,
                 to == raw.Length ? env.Context().FollowingEnglish : false, CompositionText.EffectiveManual(state, env),
-                from == 0 && env.Context().PrecedingEnglishSentence, state.KanaInput, reasons);
+                from == 0 && env.Context().PrecedingEnglishSentence, state.KanaInput, CompositionText.PunctuatesAfterEnglish(env), reasons);
             // 内部の区切りの子音は後の保護文字列とは結合しない。末尾の Pending は表示側が扱う。
             if (to < raw.Length && pending.Length > 0 && !segments[^1].IsEnglish)
                 segments = [.. segments.Take(segments.Count - 1), segments[^1] with
@@ -225,7 +228,7 @@ internal static partial class CompositionText
     public static string? Suggestion(CompositionTextState state, TextEnv env)
     {
         if (state.Mode != DisplayMode.Auto || !CompositionText.EffectiveManual(state, env) || CompositionText.IsNumeric(state)) return null;
-        var suggested = env.Detector.Segment(LearningContext(env), TypedMarks.Read(state, env), CompositionText.Pending(state), env.Context().PrecedingEnglish, env.Context().FollowingEnglish, false, env.Context().PrecedingEnglishSentence, state.KanaInput);
+        var suggested = env.Detector.Segment(LearningContext(env), TypedMarks.Read(state, env), CompositionText.Pending(state), env.Context().PrecedingEnglish, env.Context().FollowingEnglish, false, env.Context().PrecedingEnglishSentence, state.KanaInput, CompositionText.PunctuatesAfterEnglish(env));
         if (!suggested.Any(s => s.IsEnglish) || suggested.SequenceEqual(CompositionText.Segments(state, env))) return null;
         return string.Join(" ", TypedSpans(suggested, env).Where(s => s.Kind != SpanKind.Japanese).Select(s => s.Text));
     }

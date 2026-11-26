@@ -44,6 +44,9 @@ internal record TextEnv(CompositionDetector Detector, Config.Settings Settings, 
 internal sealed record TextContext(string? PrecedingText, bool? PrecedingEnglish, bool PrecedingEnglishSentence, bool PrecedingEnglishName, string? FollowingText, bool? FollowingEnglish)
 {
     public static readonly TextContext None = new(null, null, false, false, null, null);
+
+    /// <summary>キャレットの前が空白で終わる英語 ("Hello "・"GitHub ") か。英単語を確定したすぐ後 ("GitHub") は含まない。</summary>
+    public bool EndsWithEnglishAndSpace => PrecedingEnglish == true && PrecedingText is [.., ' '];
 }
 
 /// <summary>打った英字を読み直す断片が、読み直す元の入力から引き継ぐもの。LearningContext は元の入力の学習の文脈。</summary>

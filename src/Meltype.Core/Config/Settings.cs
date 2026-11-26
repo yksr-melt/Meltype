@@ -390,7 +390,7 @@ public sealed class Settings
     public PunctuationStyle Punctuation { get; set; } = PunctuationStyle.Japanese;
 
     [Category("7. 記号・スペース"), DisplayName("英字の後ろの , . も句読点にする"),
-     Description("英字のすぐ後ろで打った , . も、日本語の句読点 (設定「句読点」の形) にします (IME, → IME、)。OFF だと、変換ボックスの中が英字だけなら半角の , . のままです (英文を打つとき)。ON でも、キャレットの前が英語 (Hello + world.) のときと、英単語の中の . (tetr.io) は半角のままです。")]
+     Description("英字のすぐ後ろで打った , . も、日本語の句読点 (設定「句読点」の形) にします (IME, → IME、)。OFF だと、変換ボックスの中が英字だけなら半角の , . のままです (英文を打つとき)。ON でも、キャレットの前が空白で終わる英語 (Hello + world.) のときと、英単語の中の . (tetr.io) は半角のままです。")]
     public bool JapanesePunctuationAfterEnglish { get; set; }
 
     [Category("5. 変換"), DisplayName("ライブ変換"),
