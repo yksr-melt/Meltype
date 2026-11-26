@@ -134,7 +134,10 @@ internal static class UtilityConversionTests
         Assert.True(candidates.Contains("二〇二六") && candidates.Contains("二千二十六") && candidates.Contains("弐千弐拾六"), string.Join(",", candidates));
         Choose(new Keyboard(history: history), "12345", "一万二千三百四十五");
         Assert.Equal("一万二千三百四十五", history.Get("12345"), "選んだ漢数字は覚える (issue #672)");
-        Assert.Equal("〇〇一", string.Join("|", KanjiNumberConversion.Candidates("001")), "先頭が 0 の数字は位取りしない");
+        Assert.Equal("〇〇一|(001)|（001）", string.Join("|", KanjiNumberConversion.Candidates("001")), "先頭が 0 の数字は位取りしない");
+        var numbered = new Keyboard();
+        numbered.Type("1 ");
+        Assert.True(numbered.Host.View!.Candidates.Contains("(1)") && numbered.Host.View!.Candidates.Contains("（1）"), "箇条書きの番号 (issue #2256)");
         Assert.Equal(0, KanjiNumberConversion.Candidates("12a").Count, "数字だけでなければ出さない");
         var sentence = new Keyboard();
         sentence.Type("2026nen ");

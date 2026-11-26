@@ -104,7 +104,7 @@ internal static class CompositionDirectInput
     private static Verdict Classify(CompositionEnv env, string part, string held, bool final)
     {
         // 英語の接頭辞の後の - (e-、co-) の後ろだけで判定する。e-mail・co-op のような語全体の一致も見る。
-        if (env.Detector.IsHyphenatedEnglishWord(CompositionText.LearningContext(env), held)) return Verdict.English;
+        if (env.Detector.IsHyphenatedEnglishWord(CompositionText.LearnedLanguages(env), held)) return Verdict.English;
         var verdict = part.Length == 0 ? Verdict.Undecided : env.ClassifyDirect!(part, final);
         // up や my も、ローマ字の打ちかけなら続きを待つ。
         if (verdict == Verdict.English && !final && held.Length <= 2 &&
