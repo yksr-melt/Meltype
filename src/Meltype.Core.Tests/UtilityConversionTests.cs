@@ -278,6 +278,7 @@ internal static class UtilityConversionTests
     {
         Assert.Equal("#3b82f6|rgb(59, 130, 246)|hsl(217, 91%, 60%)", string.Join("|", ColorConversion.Candidates("#3b82f6")));
         Assert.Equal("#f00|#ff0000|rgb(255, 0, 0)|hsl(0, 100%, 50%)", string.Join("|", ColorConversion.Candidates("#f00")));
+        Assert.Equal("#f008|#ff000088|rgba(255, 0, 0, 0.533)|hsla(0, 100%, 50%, 0.533)", string.Join("|", ColorConversion.Candidates("#f008")));
         Assert.Equal("rgb(59, 130, 246)|#3b82f6|#3B82F6|hsl(217, 91%, 60%)", string.Join("|", ColorConversion.Candidates("rgb(59, 130, 246)")));
         Assert.Equal("hsl(217, 91%, 60%)|#3c83f6|#3C83F6|rgb(60, 131, 246)", string.Join("|", ColorConversion.Candidates("hsl(217, 91%, 60%)")));
         Assert.Equal("rgba(255, 0, 0, 0.5)|#ff000080|#FF000080|hsla(0, 100%, 50%, 0.5)", string.Join("|", ColorConversion.Candidates("rgba(255, 0, 0, 0.5)")));
@@ -308,5 +309,22 @@ internal static class UtilityConversionTests
         Assert.True(ColorConversion.TryParseRgba("rgba(255, 0, 0, 0.5)", out var alphaRgba) && alphaRgba == (255, 0, 0, 128), "RGBA をパースできる");
         Assert.True(ColorConversion.TryParseRgba("hsl(0, 100%, 50%)", out var hslRgba) && hslRgba == (255, 0, 0, 255), "HSL を RGBA にパースできる");
         Assert.True(!ColorConversion.TryParseRgba("#3b82f6 Issueタイトル", out _), "カラーコード以外の文字が混ざる候補はパースしない");
+
+        // #123456 は GitHubIssueConversion の後ろに共存し、学習には残らない
+        var issueHistory = new ConversionHistory(null);
+        var issuePhrases = new PhraseHistory(null);
+        var titles = new GitHubIssueTitles((repo, number) => Task.FromResult<string?>(repo == "yksr-melt/Meltype" && number == 123456 ? "テストIssue" : null));
+        var sixDigits = new Keyboard(history: issueHistory, predictor: new Predictor(issuePhrases, null, issueHistory)) { GitHubRepository = "yksr-melt/Meltype", GitHubTitles = titles };
+        sixDigits.Type("#123456");
+        sixDigits.Press(VirtualKeys.Convert);
+        Assert.Equal("#123456", sixDigits.Host.View!.Candidates[0], "#123456 の先頭は打ったまま");
+        Assert.True(sixDigits.Host.View.Candidates.Contains("#123456 テストIssue"), "GitHub Issue 候補を維持する");
+        Assert.True(sixDigits.Host.View.Candidates.Contains("rgb(18, 52, 86)"), "後ろに色変換も出す");
+        var learnCheck = new Keyboard(history: issueHistory, predictor: new Predictor(issuePhrases, null, issueHistory));
+        learnCheck.Type("#3b82f6");
+        learnCheck.Press(VirtualKeys.Convert);
+        learnCheck.Press(VirtualKeys.Return);
+        Assert.Equal("#3b82f6", learnCheck.Host.Document);
+        Assert.True(issueHistory.Get("#3b82f6") is null && !issuePhrases.StartingWith("#3b82f6").Any(), "カラーコード変換は学習しない");
     }
 }

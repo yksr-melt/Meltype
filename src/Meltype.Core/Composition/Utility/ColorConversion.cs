@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Yukishiro
+// Copyright (C) 2026 shiromenya
 
 using System.Globalization;
 using System.Text.RegularExpressions;
@@ -62,41 +62,20 @@ public sealed partial class ColorConversion : IUtilityConversion
         if (TryParseHex(raw, out var hexColor))
         {
             var results = new List<string> { raw };
-            if (hexColor.Alpha is { } a)
+            if (raw.Length is 4 or 5)
             {
-                results.Add(FormatRgba(hexColor.R, hexColor.G, hexColor.B, a));
-                var (h, s, l) = RgbToHsl(hexColor.R, hexColor.G, hexColor.B);
-                results.Add(FormatHsla(h, s, l, a));
+                results.Add(hexColor.Alpha is { } ha
+                    ? FormatHex(hexColor.R, hexColor.G, hexColor.B, ToAlphaByte(ha), lowercase: true)
+                    : FormatHex(hexColor.R, hexColor.G, hexColor.B, lowercase: true));
             }
-            else
-            {
-                if (raw.Length is 4)
-                    results.Add(FormatHex(hexColor.R, hexColor.G, hexColor.B, lowercase: true));
-                results.Add(FormatRgb(hexColor.R, hexColor.G, hexColor.B));
-                var (h, s, l) = RgbToHsl(hexColor.R, hexColor.G, hexColor.B);
-                results.Add(FormatHsl(h, s, l));
-            }
+            AddRgbAndHsl(results, hexColor.R, hexColor.G, hexColor.B, hexColor.Alpha, includeHex: false);
             return results.Distinct(StringComparer.Ordinal).ToList();
         }
 
         if (TryParseRgb(raw, out var rgbColor))
         {
             var results = new List<string> { raw };
-            if (rgbColor.Alpha is { } a)
-            {
-                var alphaByte = (byte)Math.Round(a * 255.0, MidpointRounding.AwayFromZero);
-                results.Add(FormatHex(rgbColor.R, rgbColor.G, rgbColor.B, alphaByte, lowercase: true));
-                results.Add(FormatHex(rgbColor.R, rgbColor.G, rgbColor.B, alphaByte, lowercase: false));
-                var (h, s, l) = RgbToHsl(rgbColor.R, rgbColor.G, rgbColor.B);
-                results.Add(FormatHsla(h, s, l, a));
-            }
-            else
-            {
-                results.Add(FormatHex(rgbColor.R, rgbColor.G, rgbColor.B, lowercase: true));
-                results.Add(FormatHex(rgbColor.R, rgbColor.G, rgbColor.B, lowercase: false));
-                var (h, s, l) = RgbToHsl(rgbColor.R, rgbColor.G, rgbColor.B);
-                results.Add(FormatHsl(h, s, l));
-            }
+            AddRgbAndHsl(results, rgbColor.R, rgbColor.G, rgbColor.B, rgbColor.Alpha, includeHex: true, includeRgb: false);
             return results.Distinct(StringComparer.Ordinal).ToList();
         }
 
@@ -104,23 +83,43 @@ public sealed partial class ColorConversion : IUtilityConversion
         {
             var (r, g, b) = HslToRgb(hslColor.H, hslColor.S, hslColor.L);
             var results = new List<string> { raw };
-            if (hslColor.Alpha is { } a)
-            {
-                var alphaByte = (byte)Math.Round(a * 255.0, MidpointRounding.AwayFromZero);
-                results.Add(FormatHex(r, g, b, alphaByte, lowercase: true));
-                results.Add(FormatHex(r, g, b, alphaByte, lowercase: false));
-                results.Add(FormatRgba(r, g, b, a));
-            }
-            else
-            {
-                results.Add(FormatHex(r, g, b, lowercase: true));
-                results.Add(FormatHex(r, g, b, lowercase: false));
-                results.Add(FormatRgb(r, g, b));
-            }
+            AddRgbAndHsl(results, r, g, b, hslColor.Alpha, includeHex: true, includeHsl: false);
             return results.Distinct(StringComparer.Ordinal).ToList();
         }
 
         return [];
+    }
+
+    private static void AddRgbAndHsl(List<string> results, byte r, byte g, byte b, double? alpha, bool includeHex, bool includeRgb = true, bool includeHsl = true)
+    {
+        if (alpha is { } a)
+        {
+            if (includeHex)
+            {
+                var alphaByte = ToAlphaByte(a);
+                results.Add(FormatHex(r, g, b, alphaByte, lowercase: true));
+                results.Add(FormatHex(r, g, b, alphaByte, lowercase: false));
+            }
+            if (includeRgb) results.Add(FormatRgba(r, g, b, a));
+            if (includeHsl)
+            {
+                var (h, s, l) = RgbToHsl(r, g, b);
+                results.Add(FormatHsla(h, s, l, a));
+            }
+            return;
+        }
+
+        if (includeHex)
+        {
+            results.Add(FormatHex(r, g, b, lowercase: true));
+            results.Add(FormatHex(r, g, b, lowercase: false));
+        }
+        if (includeRgb) results.Add(FormatRgb(r, g, b));
+        if (includeHsl)
+        {
+            var (h, s, l) = RgbToHsl(r, g, b);
+            results.Add(FormatHsl(h, s, l));
+        }
     }
 
     private static bool TryParseHex(string raw, out (byte R, byte G, byte B, double? Alpha) color)
