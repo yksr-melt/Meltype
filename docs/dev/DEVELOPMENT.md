@@ -81,7 +81,7 @@ Meltype IME の DLL と、それに要る Visual Studio Installer の「個別�
 
 - Mac 版: [mac/README.md](../../mac/README.md)
 - Linux 版 (WSL を含む): [linux/README.md](../../linux/README.md)
-- TTY 版: [TTY.md](../TTY.md#ソースからビルドする)
+- TTY 版: [tui/README.md](../../tui/README.md)
 - Android 版: [android/README.md](../../android/README.md#ビルド)
 
 ## テスト

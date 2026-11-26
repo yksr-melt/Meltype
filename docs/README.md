@@ -24,6 +24,7 @@ Mac・Linux・Android はプレビュー版です。Android の APK は、デス
 | Windows の TSF・プロセス・通信・DLL 更新 | [Meltype IME の設計](dev/TSF_DESIGN.md) |
 | macOS のビルド・入力ソースの登録 | [mac/README.md](../mac/README.md) |
 | Linux のビルド・パッケージ | [linux/README.md](../linux/README.md) |
+| TTY 版のビルド | [tui/README.md](../tui/README.md) |
 | Android の実装・ビルド | [android/README.md](../android/README.md) |
 | Android の署名・公開 | [Android の署名と配布](../android/docs/SIGNING-DISTRIBUTION.md) |
 | Mozc ヘルパー・辞書の組み込み | [native/mozc/README.md](../native/mozc/README.md) |

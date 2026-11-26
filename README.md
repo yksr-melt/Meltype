@@ -241,7 +241,7 @@ General Public License for more details.
 - 送り方 → [CONTRIBUTING.md](CONTRIBUTING.md)
 - ビルド・仕組み → [docs/dev/DEVELOPMENT.md](docs/dev/DEVELOPMENT.md)
 - Android 版のビルド → [android/README.md](android/README.md)
-- Mac 版のビルド → [mac/README.md](mac/README.md)、Linux 版 (WSL を含む) のビルド → [linux/README.md](linux/README.md)
+- Mac 版のビルド → [mac/README.md](mac/README.md)、Linux 版 (WSL を含む) のビルド → [linux/README.md](linux/README.md)、TTY 版のビルド → [tui/README.md](tui/README.md)
 
 <br><br>
 

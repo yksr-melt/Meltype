@@ -14,7 +14,7 @@
 
 ## インストール
 
-[Releases](https://github.com/yksr-melt/Meltype/releases/latest) から CPU に合う zip (x86_64 は `Meltype-<version>-tty-linux.zip`、ARM64 は `Meltype-<version>-tty-linux-arm64.zip`) をダウンロードして、好きな場所に展開します。apt・dnf のパッケージとは別の配布物です。
+[Releases](https://github.com/yksr-melt/Meltype/releases/latest) から CPU に合う zip (x86_64 は `Meltype-<version>-tty-linux.zip`、ARM64 は `Meltype-<version>-tty-linux-arm64.zip`) をダウンロードして、好きな場所に展開します。apt・dnf のパッケージとは別の配布物です。ソースからビルドする方法は [tui/README.md](../tui/README.md) にあります。
 
 ```sh
 mkdir -p ~/.local/share ~/.local/bin
@@ -45,19 +45,6 @@ meltype-tty -- vim     # コマンドを指定して起動
   "Punctuation": "FullWidthCommaPeriod"
 }
 ```
-
-## ソースからビルドする
-
-.NET 10 SDK・clang・zlib の開発用ファイルを用意し、リポジトリのルートから実行します。依存関係の準備は [Linux 版の開発](../linux/README.md#ビルドする) も参照してください。
-
-```bash
-native/mozc/build-mozc-helper.sh
-native/zenzai/build-llama-server.sh
-tui/build.sh
-python3 -m unittest discover -s tui -p 'test_*.py'
-```
-
-`tui/build/Meltype-tty/` に本体とエンジンが揃います。ビルドしたマシンより古い glibc へ配る場合は、[共通ビルドスクリプト](../native/build-core-linux.sh) の `MELTYPE_SYSROOT` の説明を参照してください。
 
 ## アンインストール
 
