@@ -76,6 +76,25 @@ struct EventTests {
   func equal(_ actual:String,_ expected:String) {
    precondition(Array(actual.unicodeScalars)==Array(expected.unicodeScalars),"expected \(expected.debugDescription), got \(actual.debugDescription)")
   }
+  check("secure event input and focused field hints") { _,_ in
+   let safari = "com.apple.Safari"
+   let appKit = "local.meltype.event-client"
+   let protects = MeltypeInputController.protectsInput
+   precondition(protects(safari, true, nil, true, false), "Safari works without AX")
+   precondition(!protects(safari, true, false, true, false), "AX regular field overrides global secure input")
+   precondition(!protects(safari, false, nil, true, false), "global secure input is not a background Safari signal")
+   precondition(!protects(appKit, true, nil, true, false), "global secure input alone does not identify an AppKit field")
+   precondition(protects(appKit, true, true, false, false), "AX identifies a secure AppKit field")
+   precondition(protects(appKit, true, nil, true, true), "ABC secure input bypasses a stale controller")
+   precondition(!protects(appKit, true, false, false, false), "regular input resumes after focus changes")
+  }
+  check("bracket commit consumes Return with caret movement enabled") { controller,client in
+   precondition(key(controller,client,"[",code:UInt16(kVK_ANSI_LeftBracket)))
+   precondition(key(controller,client,"]",code:UInt16(kVK_ANSI_RightBracket)))
+   precondition(key(controller,client,"\r",code:UInt16(kVK_Return)))
+   equal(client.document,"「」")
+   equal(client.marked,"")
+  }
   for (authApp, normalApp, firstKey, first, rest) in [
    ("com.apple.loginwindow", "local.meltype.event-client", kVK_ANSI_S, "s", "a12"),
    ("com.apple.SecurityAgent", "com.apple.finder", kVK_ANSI_A, "a", "iueo"),

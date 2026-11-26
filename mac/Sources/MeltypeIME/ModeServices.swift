@@ -50,9 +50,12 @@ final class ModeServices: NSObject {
     }
 
     private static func currentInputSourceIsMeltype() -> Bool {
+        currentInputSourceID() == InputSourceRegistration.identifier + ".Japanese"
+    }
+
+    static func currentInputSourceID() -> String? {
         guard let source = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue(),
-              let pointer = TISGetInputSourceProperty(source, kTISPropertyInputSourceID),
-              let identifier = unsafeBitCast(pointer, to: CFTypeRef.self) as? String else { return false }
-        return identifier == InputSourceRegistration.identifier + ".Japanese"
+              let pointer = TISGetInputSourceProperty(source, kTISPropertyInputSourceID) else { return nil }
+        return unsafeBitCast(pointer, to: CFTypeRef.self) as? String
     }
 }
