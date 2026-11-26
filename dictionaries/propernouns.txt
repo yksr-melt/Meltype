@@ -93,3 +93,5 @@ picco nqrse
 
 # Issue #469 (VTuber グループ)
 holoX
+# Issue #2389 (まとめ) のサービス名・アプリ名
+Mergify Antigravity Obsidian KonomiTV

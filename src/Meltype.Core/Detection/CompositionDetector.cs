@@ -172,7 +172,14 @@ internal sealed partial class CompositionDetector
     // Structured Latin tokens are opaque; their components are not Japanese readings.
     private static bool IsOpaqueToken(string token, bool kanaInput) =>
         !kanaInput && token.All(c => c is >= '!' and <= '~') &&
-        (token.Contains('@') && token.Any(char.IsAsciiLetter) || token.Contains('_') || token.Contains("://", StringComparison.Ordinal) || IsStylizedName(token));
+        (token.Contains('@') && token.Any(char.IsAsciiLetter) || token.Contains('_') || token.Contains("://", StringComparison.Ordinal) || IsStylizedName(token) || IsHexColor(token));
+
+    /// <summary>
+    /// 16 進の色 (#30b0e8・#fff0)。数字と英字の両方を含むものだけ: 英字だけ (#cafe) はハッシュタグの日本語 (#かふぇ)、
+    /// 数字だけ (#1234) は Issue の番号と区別できない。
+    /// </summary>
+    private static bool IsHexColor(string token) => token.Length is 4 or 5 or 7 or 9 && token[0] == '#' && token.Skip(1).All(char.IsAsciiHexDigit) &&
+        token.Any(char.IsAsciiDigit) && token.Any(char.IsAsciiLetter);
 
     /// <summary>
     /// 英語の候補を軽くして区切り直した結果 (変換の候補に、日本語にした語の英語を含む区切り midika → midiか を出すのに使う)。
@@ -302,7 +309,10 @@ internal sealed partial class CompositionDetector
         if (dash <= 0 || lower.IndexOf('-', dash + 1) >= 0) return false;
         var rest = lower[(dash + 1)..];
         // - の後ろの語は、区間分けと同じ基準で英単語か見る (re-torimitto を re-tori|みっと にしない。issue #705)
-        return HyphenPrefixes.Contains(lower[..dash]) && rest.Length >= 3 && rest.All(char.IsAsciiLetterLower) && IsLatticeEnglishWord(learning, rest);
+        if (!HyphenPrefixes.Contains(lower[..dash]) || rest.Length < 3 || !rest.All(char.IsAsciiLetterLower) || !IsLatticeEnglishWord(learning, rest)) return false;
+        // - の後ろがローマ字として最後まで読める語は、- が長音の日本語 (re-toga = れーとが) と区別できないので、
+        // よく使う英単語の一覧 (toga) にあるだけでは英語にしない。同梱の英単語の辞書・固有名詞・覚えた語 (re-make) なら英語
+        return _romaji.AnalyzeFragment(rest) is not { IsValid: true, Partial: "" } || IsListedEnglishWord(learning, rest);
     }
 
     /// <summary>
@@ -496,8 +506,12 @@ internal sealed partial class CompositionDetector
         // 母音 1 文字 (e2e・o2o の e・o) は、かなとして読めても略語のことが多いので、子音から始まる 2 文字以上のときだけ。
         var head = Raw(prepared, start, digitStart).ToLowerInvariant();
         var tail = (Raw(prepared, digitEnd, i) + pendingLetters).ToLowerInvariant();
+        // 母音 1 文字でも、すぐ前に英字が続いていれば、前の語の続き (mou|1|tu の u、dai|1|dan の i) で、数字を挟んだ日本語 (もう1つ・第1弾)。
+        var headContinuesWord = head.Length == 1 && start > 0 && Raw(prepared, start - 1, start) is [.., var before] && char.IsAsciiLetter(before);
         if (head.Length >= 2 && tail.Length >= 2 && _romaji.AnalyzeFragment(head) is { IsValid: true, Partial: "" } &&
             _romaji.AnalyzeFragment(tail) is { IsValid: true, Partial: "" }) return -1;
+        // 前の語の続きの母音なら、後ろが ん で終わる読み (dai|1|dan) も日本語
+        if (headContinuesWord && tail.Length >= 2 && _romaji.AnalyzeFragment(tail) is { IsValid: true, Partial: "" or "n" }) return -1;
         return i;
     }
 

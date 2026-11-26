@@ -211,6 +211,10 @@ internal sealed partial class CompositionDetector
                 if (!edge.Particle && from.Edge.Name && from.Edge.End == edge.Start && edge.Start < length && char.IsAsciiLetterLower(text[edge.Start])) counts[(int)LinkFeature.NameSplit]++;
                 counts[(int)LinkFeature.SpelledSokuon] += SpelledSokuons(edge.Start, edge.End);
                 if (edge.Kana == "っ" && DoubledAt(edge.Start) && state.Side != Side.Japanese) counts[(int)LinkFeature.DanglingSokuon]++;
+                // 語の終わりの っ (ぶっ・まっ) の後ろに、和語では っ の後ろに来ない音 (濁音・な行・あ行など) で始まる語が続く (ぶっ|が):
+                // 英単語の最後の子音を重ねて読んだ切り間違い (bug|が)
+                if (from.Edge is { English: false, Neutral: false, Kana: [_, .., 'っ'] } && from.Edge.End == edge.Start && edge.Kana is [var after, ..] &&
+                    NoSokuonBefore.Contains(after)) counts[(int)LinkFeature.DanglingSokuon]++;
             }
             else if (state.Sokuon) counts[(int)LinkFeature.DanglingSokuon]++;
 
@@ -255,7 +259,7 @@ internal sealed partial class CompositionDetector
                 // 英文の続きの強さは、最初の英語の語までで使い終わる (英文の中の記号では使い終わらない)
                 ? new LatticeState(state.Side == Side.Sentence && !char.IsAsciiLetter(text[edge.Start]) ? Side.Sentence : Side.English, false, state.AllEnglish, true, ContextSwitch: state.ContextSwitch)
                 : edge.Neutral ? state with { PreviousEnglish = false }
-                : new LatticeState(Side.Japanese, edge.Particle, state.AllEnglish && !edge.Letters, false);
+                : new LatticeState(Side.Japanese, edge.Particle && !NeedsInflection(edge.Kana), state.AllEnglish && !edge.Letters, false);
             return next with { Sokuon = japanese && edge.Kana.EndsWith('っ') && DoubledAt(edge.End - 1) };
         }
 
@@ -429,12 +433,22 @@ internal sealed partial class CompositionDetector
     /// <summary>名詞に付く付属語か (が・を・に・で・する …)。英単語との切り替えの重みを 0 にする。</summary>
     private static bool IsNounParticle(string kana) => NounParticles.Contains(kana) || IsSuruForm(kana) || kana is "し" or "さ" or "せ";
 
+    /// <summary>
+    /// 名詞に付く付属語のうち、後ろに活用の続き (る・た・て) が要る形か (させ・られ・してい)。名詞の後ろには付くが、
+    /// 後ろに英単語は来ないので、英語への切り替えを軽くしない (させ|taken・してい|run)。
+    /// </summary>
+    private static bool NeedsInflection(string kana) => kana.Length >= 2 && (kana.EndsWith("させ", StringComparison.Ordinal) || kana.EndsWith("られ", StringComparison.Ordinal) ||
+        kana.EndsWith("てい", StringComparison.Ordinal) || kana.EndsWith("でい", StringComparison.Ordinal));
+
     private static readonly HashSet<string> NounParticles = ["が", "を", "に", "で", "と", "の", "は", "も", "へ", "や", "から", "まで", "より", "って", "だ", "です"];
 
     /// <summary>
     /// 動詞・形容詞の活用形の後ろにしか付かない、1 文字の付属語 (名詞や英単語の後ろには付かない)。
     /// 2 文字以上の付属語 (ます・ません) は、英単語を切り出した残りにはまずならず、なっても日本語の根拠として十分なので入れない。
     /// </summary>
+    /// <summary>和語で っ の後ろに来ない音。外来語 (ベッド・バッグ) は っ を含む 1 語として読むので、語の境目の っ の後ろだけを見る。</summary>
+    private const string NoSokuonBefore = "あいうえおがぎぐげござじずぜぞだぢづでどなにぬねのばびぶべぼまみむめもやゆよらりるれろわをん";
+
     private static readonly HashSet<string> VerbAuxiliaries = ["う", "た", "て", "ば", "れ"];
 
     /// <summary>

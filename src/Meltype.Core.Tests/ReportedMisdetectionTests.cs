@@ -33,5 +33,53 @@ internal static class ReportedMisdetectionTests
     {
         // readings-extra.txt (ぱっち・ひとめぼれ)。pat + ち・ひとめ + bore にしない
         Check(("patti", "ぱっち"), ("hitomebore", "ひとめぼれ"));
+        // readings-extra.txt (とぐる・びるど・まーじ・ありゃ・ばんえつ・らぷらた・いぬがみけ)。と + guru・びる + doha・ar + や にしない
+        Check(("toguru", "とぐる"), ("birudoha", "びるどは"), ("datte.ma-ji", "だって。まーじ"), ("arya", "ありゃ"), ("bannetu", "ばんえつ"),
+            ("rapuratagawa", "らぷらたがわ"), ("inugamikenoitizoku", "いぬがみけのいちぞく"));
+    }
+
+    [Test]
+    public static void Dictionary_EnglishWordsOfIssue2389()
+    {
+        // english.txt (assignee・sideload・linpeas・ver)・propernouns.txt (Mergify・Antigravity・Obsidian・KonomiTV)
+        Check(("assignee", "assignee"), ("mergify", "mergify"), ("sideload", "sideload"), ("antigravity", "antigravity"), ("linpeas", "linpeas"),
+            ("obsidian", "obsidian"), ("konomitv", "KonomiTV"), ("verageru", "verあげる"));
+    }
+
+    [Test]
+    public static void Inflections_AreJapaneseBeforeEnglishLookalikes()
+    {
+        // 命令形 (みろ) と音便の て 形 (まって) は 1 語: miro・matte の英単語にしない (issue #2261・#1985)
+        Check(("nonbirimiroyo", "のんびりみろよ"), ("tunagarumademattekara", "つながるまでまってから"), ("tabero", "たべろ"), ("yondekara", "よんでから"));
+        // 後ろに活用の続きが要る形 (させ・してい) の後ろは英単語にしない (issue #2065・#2206)。英単語の後ろの させ は今までどおり
+        Check(("sasetaken", "させたけん"), ("setteisiteirundakedo", "せっていしているんだけど"), ("githubnipushsaseta", "GitHubにpushさせた"));
+    }
+
+    [Test]
+    public static void Sokuon_BeforeVoicedKanaIsEnglishConsonant()
+    {
+        // 語の境目の っ の後ろに濁音は来ないので、bug + が (ぶっ + が にしない: issue #1791)。1 語の外来語 (ばっぐ) は今までどおり
+        Check(("bugga", "bugが"), ("bugwo", "bugを"), ("baggu", "ばっぐ"));
+    }
+
+    [Test]
+    public static void Digits_InsideJapaneseAreNotNumeronyms()
+    {
+        // 前の語の続きの母音 + 数字 + かな (mou|1|tu・dai|1|dan) は日本語 (issue #1718・#2379)。略語 (i18n・e2e・k8s) は今までどおり
+        Check(("mou1tu", "もう1つ"), ("dai1dan", "だい1だん"), ("i18n", "i18n"), ("e2e", "e2e"), ("k8s", "k8s"));
+    }
+
+    [Test]
+    public static void Hyphen_IsLongVowelBeforeReadableWords()
+    {
+        // re- の後ろがローマ字として読めるよく使う英単語 (toga) だけなら、- は長音 (issue #1841)。辞書の英単語 (re-make・e-mail) は英字
+        Check(("re-toga", "れーとが"), ("re-make", "re-make"), ("e-mail", "e-mail"));
+    }
+
+    [Test]
+    public static void HexColor_StaysAsTyped()
+    {
+        // 数字を含む 16 進の色は英字のまま (issue #2383)。英字だけ (#cafe) は今までどおり
+        Check(("#30b0e8", "#30b0e8"), ("#cafe", "#cafe"));
     }
 }
