@@ -240,7 +240,8 @@ internal static class WindowsTests
     {
         // 設定アプリで動作モードを Meltype IME にしても、使えなければ Running は Meltype キーボードになる。
         // Running で比べていたので、登録を聞けなかった
-        using var engine = new MeltypeEngine(TestRuntime.Create());
+        // 動作モードの既定は Meltype IME なので、Meltype キーボードから選び直す
+        using var engine = new MeltypeEngine(TestRuntime.Create(new Settings { Mode = InputMode.Keyboard }));
         var reported = 0;
         engine.TsfUnavailable += () => reported++;
         engine.EditSettings(settings => settings.Mode = InputMode.Tsf);
