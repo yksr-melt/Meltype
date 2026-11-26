@@ -48,7 +48,6 @@ public sealed class MeltypeRuntime : IDisposable
         // ログの設定を、入力の前に入れる
         _ = Settings.Current;
         Detector = CompositionDetector.CreateDefault(_userDirectory);
-        Detector.UseJapanesePunctuationAfterEnglish = () => Settings.Current.JapanesePunctuationAfterEnglish;
         Learning = new LearningData(dataDirectory);
         Detector.Memory = Learning.LanguageMemory;
         _shared = new CompositionServices

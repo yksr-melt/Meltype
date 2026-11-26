@@ -6,6 +6,7 @@ using Meltype.Config;
 using Meltype.Dictionary;
 using Meltype.Learning;
 using Meltype.Libraries.Chars;
+using Meltype.Notation;
 
 namespace Meltype.Composition;
 
@@ -143,7 +144,7 @@ internal static class CompositionPresentation
     {
         if (env.Services.Predictor is not { } predictor || !env.Settings.PredictiveCandidates || input.Text.Mode != DisplayMode.Auto) return [];
         var raw = CompositionText.Raw(input.Text);
-        IEnumerable<string> PredictEnglish() => Predictor.PredictEnglish(raw).Select(w => CompositionText.AutoCanonical(env, w) ?? w);
+        IEnumerable<string> PredictEnglish() => Predictor.PredictEnglish(raw).Select(w => NotationRules.Word(w, env.ProperNoun));
         if (CompositionText.IsAlphanumeric(input.Text, env))
         {
             // 英単語 1 語の打ちかけ (decis → decisions)

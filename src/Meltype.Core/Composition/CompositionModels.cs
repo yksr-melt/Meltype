@@ -4,6 +4,7 @@
 // Copyright (C) 2026 yksr-melt
 
 using Meltype.Dictionary;
+using Meltype.Notation;
 
 namespace Meltype.Composition;
 
