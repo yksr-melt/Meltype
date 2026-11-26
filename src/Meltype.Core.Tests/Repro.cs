@@ -62,7 +62,7 @@ internal static class Repro
         var languages = new Meltype.Detection.LanguageMemory(null);
         // Mozc があればライブ変換付きキーボード、無ければ判定だけの偽物。手順のほかは覚えない (Henkan.Keyboard と同じ)
         CompositionTests.Keyboard Create(bool zenzai) => hasMozc ? Henkan.Keyboard(zenzai, history, languages)
-            : new(history: history, languages: languages) { Learning = false };
+            : new(history: history, languages: languages) { Private = true };
         var learned = Learn(() => Create(zenzai: false), lessons);
         var mozc = Run(() => Create(zenzai: false), typed, last, hasMozc);
         // Zenzai が起動しない・途中で答えなくなったときは、Mozc に任せた結果を Zenzai の結果として出さず、理由を出す
@@ -122,7 +122,7 @@ internal static class Repro
     }
 
     /// <summary>
-    /// 手順を 1 つずつ、学習を ON にした入力欄で打って確定する。手順ごとに確定したものを返す (手順が無ければ null)。
+    /// 手順を 1 つずつ、覚える入力欄で打って確定する。手順ごとに確定したものを返す (手順が無ければ null)。
     /// 確定したものが次に打つものの前の文にならないように、手順ごとに入力欄を分ける。
     /// </summary>
     internal static IReadOnlyList<string>? Learn(Func<CompositionTests.Keyboard> create, IReadOnlyList<Lesson> lessons)
@@ -131,7 +131,7 @@ internal static class Repro
         return lessons.Select(lesson =>
         {
             var k = create();
-            k.Learning = true;
+            k.Private = false;
             k.Type(lesson.Keys);
             if (lesson.Text is { } text && k.Showing != text)
             {
@@ -276,8 +276,17 @@ internal static class Henkan
 
     private static readonly Lazy<Engine.MozcConverter?> Mozc = new(() =>
         Environment.GetEnvironmentVariable("MELTYPE_MOZC") is { Length: > 0 } helper && File.Exists(helper)
-            ? new Engine.MozcConverter(new Engine.MozcHelperProcess(helper, ProfileDirectory))
+            ? WithBuiltInPhrases(new Engine.MozcConverter(new Engine.MozcHelperProcess(helper, ProfileDirectory)))
             : null);
+
+    /// <summary>アプリ (MeltypeRuntime) と同じく、同梱の語句を Mozc のユーザー辞書に渡す。</summary>
+    private static Engine.MozcConverter WithBuiltInPhrases(Engine.MozcConverter mozc)
+    {
+        if (!mozc.SetUserDictionary([.. new Meltype.Dictionary.UserDictionary(null).EngineWords().Words.Select(w => (w.Reading, w.Word, w.Pos))]))
+            throw new InvalidOperationException("Mozc の変換ヘルパーが同梱の語句を受け取りませんでした");
+        return mozc;
+    }
+
     private static readonly Lazy<Dictionary.TranslationDictionary> Translations = new(Dictionary.TranslationDictionary.Load);
 
     // bot の runner は CPU だけで計算するので、アプリより長く待つ (待ちきれなかった答えを ZenzaiConverter は捨てて、しばらく休む)
@@ -323,29 +332,19 @@ internal static class Henkan
 
     /// <summary>
     /// <see cref="Keyboard()"/> の、zenzai なら Zenzai の答えも使うもの。history・languages は学習データ (無ければ新しく作る)。
-    /// 確定しても Meltype に覚えさせない (学習の設定を OFF にする。覚えたものは読む)。覚えさせると、前の打ち方・前の文で確定した
+    /// 確定しても Meltype に覚えさせない (覚えないように求める入力欄で打つ。覚えたものは読む)。覚えさせると、前の打ち方・前の文で確定した
     /// 変換が次の打ち方の結果を変えてしまう (確かめたいのは、まだ何も覚えていない人か、--repro の --learn の手順だけを覚えた人の変換)。
     /// </summary>
     public static CompositionTests.Keyboard Keyboard(bool zenzai, Learning.ConversionHistory? history = null, Detection.LanguageMemory? languages = null)
     {
         // アプリと同じく Mozc と Zenzai を合わせた変換エンジンを使う。答えが届くまで待つ (LateResults にしない)
         var converter = Mozc.Value is { } engine ? new Engine.HybridConverter(engine, zenzai ? () => Zenzai.Value : null) : null;
-        return new(live: true, history: history, converter: converter is null ? null : new WithoutEngineLearning(converter),
+        return new(live: true, history: history, converter: converter is null ? null : converter,
             moreCandidates: converter is null ? null : reading => converter.Candidates(reading, long.MaxValue),
             userDictionary: new Meltype.Dictionary.UserDictionary(null), languages: languages, translations: Translations.Value)
-        { Learning = false };
+        { Private = true };
     }
 
-    /// <summary>
-    /// 変換エンジン (Mozc) には、--learn の手順でも覚えさせない。変換エンジンへの学習は確定した後に裏のスレッドで行われ、
-    /// 終わったことを知る方法が無いので、次を打つ前に覚え終わっている保証が無い (Meltype の学習は確定と同時に終わる)。
-    /// </summary>
-    private sealed class WithoutEngineLearning(Engine.IKanjiConverter inner) : Engine.IKanjiConverter
-    {
-        public IReadOnlyList<Engine.ConversionClause>? Convert(Engine.ConversionRequest request) => inner.Convert(request);
-
-        public event Action? ResultReady { add => inner.ResultReady += value; remove => inner.ResultReady -= value; }
-    }
 
     public static void Run(string keys)
     {

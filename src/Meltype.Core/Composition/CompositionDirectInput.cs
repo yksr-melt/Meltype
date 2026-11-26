@@ -52,7 +52,7 @@ internal static class CompositionDirectInput
     {
         // 英語の接頭辞の後の - (e-、co-) の後ろだけで判定する。e-mail・co-op のような - の入った英単語なら英語。
         var part = LastHyphenPart(judging);
-        var verdict = env.Detector.IsHyphenatedEnglishWord(CompositionText.LearningContext(env), judging.Letters.ToString()) ? Verdict.English
+        var verdict = env.Detector.IsHyphenatedEnglishWord(CompositionText.LearnedLanguages(env), judging.Letters.ToString()) ? Verdict.English
             : part.Length == 0 ? Verdict.Undecided
             : env.ClassifyDirect!(part, final);
         // 2 文字の英単語 (up、my) でも、ローマ字の打ちかけとして読める (う + p) なら、続きを見てから決める

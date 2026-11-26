@@ -8,15 +8,21 @@ Windows 版の Meltype を、Windows 正規の IME の仕組み (TSF, Text Servi
 
 ## 全体の形
 
-```
-アプリのプロセス (メモ帳・Chrome・VS Code …)            Meltype.exe (タスクトレイに常駐)
-┌──────────────────────────────┐            ┌───────────────────────────────┐
-│ MeltypeTip.dll (C++, TSF)       │  名前付き   │ TipServer                        │
-│  - キーを受け取る               │  パイプ     │  - つながり・入力欄ごとに        │
-│  - 未確定の文字を下線付きで置く  │ ◀───────▶ │    ImeHost                       │
-│  - 候補の一覧を描く              │ 1 メッセージ│  - 変換 (Mozc + Zenzai)           │
-│                                  │  = 1 JSON   │  - 学習データ・ユーザー辞書        │
-└──────────────────────────────┘            └───────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph app["入力先のアプリ"]
+        stub["MeltypeTip.dll"]
+        impl["MeltypeTipImpl.dll"]
+        stub --> impl
+    end
+    impl <-->|"名前付きパイプ / JSON"| server
+    subgraph resident["Meltype.exe"]
+        server["TipServer"]
+        host["接続ごとの ImeHost"]
+        runtime["共有の辞書・学習・エンジン"]
+        server --> host
+        host --> runtime
+    end
 ```
 
 | 場所 | 中身 |
@@ -25,7 +31,7 @@ Windows 版の Meltype を、Windows 正規の IME の仕組み (TSF, Text Servi
 | `src/Meltype.Windows/Tip/TipServer.cs` | Meltype.exe の中のパイプのサーバー。DLL が読めない入力欄の事実 (アプリ・ウィンドウのタイトル・UI Automation の要素・ゲームらしさ) を足して `ImeHost` に渡す |
 | `src/Meltype.Windows/Keyboard/KeyboardFront.cs` | もう 1 つのフロント (Meltype キーボード)。キーボードフックのキーを同じ `ImeHost` に渡し、確定を SendInput で入れ、変換ボックスを自分の窓に出す |
 | `packaging/meltype-ime.ps1`・`packaging/setup-ime.ps1` | IME を登録する / 外す。setup.exe (`packaging/Meltype.iss`)・アンインストーラー・Meltype.exe (トレイの「Meltype IME」) が setup-ime.ps1 を実行する |
-| `src/Meltype.Core/Ime/` | フロント (TSF・Meltype キーボード・Mac・IBus・fcitx5) と本体の境目 (`ImeEvent` / `ImeOutput`)。入力モードとモードを切り替えるキーの意味は `ImeSession` が決める |
+| `src/Meltype.Core/Ime/` | フロント (TSF・Meltype キーボード・Mac・IBus・fcitx5・TTY・Android) と本体の境目 (`ImeEvent` / `ImeOutput`)。入力モードとモードを切り替えるキーの意味は `ImeSession` が決める |
 | `src/Meltype.Core.Tests/ImeContractTests.cs` | 境目の契約テスト。判断を持たないフロントで出来事を送り、確定・表示・モード・受け取るキーを確かめる (どの OS でも流れる) |
 | `src/Meltype.Windows.Tests/TipHarness.cs` | `--tip-server` (サーバーだけ動かす)、`--tip-client <打鍵>` (パイプに打鍵を送って応答を出す) |
 | `src/Meltype.Windows.Tests/TipEndToEnd.cs` | `--tip-e2e [画像の保存先]` (登録した DLL を RichEdit の入力欄で動かす。数秒間ウィンドウが前面に出る。Meltype.exe は止めておく。`MELTYPE_E2E_EXTERNAL_SERVER=1` なら常駐している Meltype.exe につなぐ) |
@@ -108,7 +114,7 @@ stub が impl をロードし、Meltype の更新後は、アプリを再起動�
 ### キーの流れ
 
 1. `OnTestKeyDown`: 変換中ならキーを使う。変換していないときは、最後の応答の `state.capture` が受け取ると言ったキーだけを使う
-   (`keys` の入力モードのキー・切り替えキー、`word` の英字・数字・@・_、`symbol` の記号、`space`・`shiftSpace`)。Ctrl・Alt・Windows キー付き・ほかのソフトが送り込んだ文字 (VK_PACKET) は使わない
+   (`printableAscii` の文字から `printableAsciiExcept` を除いたもの、`shortcuts` の入力モードのキー・切り替えキー・Space・Shift+Space)。Ctrl・Alt・Windows キー付き・ほかのソフトが送り込んだ文字 (VK_PACKET) は使わない
    (変換中なら、その場で確定してからアプリに通す。その場で確定できないアプリでは受け取り、2. で確定してから送り直す)。
    まだ応答が無い・つながらないときは、日本語入力として文字と入力モードのキーを使う。
    パスワード欄か (入力欄の種類 InputScope) も、ここでキーごとに読み直す (読んだ結果は、続く同じキー・同じ入力欄の `OnKeyDown` で 1 回だけ使う)。
@@ -152,6 +158,27 @@ stub が impl をロードし、Meltype の更新後は、アプリを再起動�
   タスクバーで文字を入力する Windows 10 のアドレス ツールバー (`Edit`) は除く。
 
 ## 通信
+
+状態は応答ごとに置き換え、確定・表示などの結果はその応答の分だけ適用します。JSON の項目は [ImeProtocol.cs](../../src/Meltype.Core/Ime/ImeProtocol.cs)、外側の要求は [TipServer.cs の TipRequest](../../src/Meltype.Windows/Tip/TipServer.cs) が定義します。
+
+```mermaid
+sequenceDiagram
+    participant TSF as TSF の DLL
+    participant Server as TipServer
+    participant Core as ImeHost
+    TSF->>Server: KeyPressed と入力欄の事実
+    Server->>Core: ImeEvent
+    Core-->>Server: ImeOutput
+    Server-->>TSF: state と result
+    Note over TSF: state を置き換え、確定と表示を適用
+    opt 非同期の変換結果が届く
+        Server-->>TSF: 別接続の wait に世代を通知
+        TSF->>Server: ConversionFinished
+        Server->>Core: ImeEvent
+        Core-->>Server: 更新された ImeOutput
+        Server-->>TSF: state と result
+    end
+```
 
 - 名前付きパイプ `\\.\pipe\Meltype.Tip.<ユーザーの SID>`。メッセージ単位で、1 メッセージが 1 JSON。
   要求は `{"impl":impl の SHA-256,"thread":入力スレッド,"x":…,"y":…,"event":{ImeEvent}}` (`TipRequest`)。`thread`・`x`・`y` は Meltype.exe が入力モードの表示と、自分の UI スレッドからの要求を見分けるのに使い、本体には渡さない。
@@ -238,16 +265,16 @@ DLL の中で、Direct2D + DirectWrite で描く (絵文字もカラーで出る
 |---|---|---|---|
 | 入力の本体 (ImeSession) | `src/Meltype.Core.Tests/SessionFacadeTests.cs`・`InputRegressionTests.cs` など | Windows・Linux・Mac | 打鍵ごとの確定・表示、予測の候補と Tab、変換中のショートカット、コードの行、英数の自動判定 |
 | フロントと本体の境目 (ImeHost の JSON) | `src/Meltype.Core.Tests/ImeContractTests.cs` | Windows・Linux・Mac | 入力 → 変換 → 確定 → 続けて入力、BackSpace・Esc、確定で変換を終える、キャレットを動かしたら前の確定を直さない、入力欄 (instance) ごとに分ける・閉じる、つなぎ直したフロントの続きを受け持たない、受け持たなくなったときの確定、入力モードのキー、受け取るキー、選んだ文字の再変換、コードの行 |
-| TipServer の要求と入力モードの表示 | `src/Meltype.Windows.Tests/TipIndicatorTests.cs` | Windows (build.yml の test) | 要求の位置の読み取り、明示的な切り替えで設定が ON のときだけ表示する |
+| TipServer の要求と入力モードの表示 | `src/Meltype.Windows.Tests/TipIndicatorTests.cs` | Windows (`windows.yml` の `test`) | 要求の位置の読み取り、明示的な切り替えで設定が ON のときだけ表示する |
 | パイプ | `--tip-client` | 手で流す | 実際のパイプでのやり取り |
 | DLL を含めた全体 | `--tip-e2e` | 手で流す (人が操作しているデスクトップが要る) | 登録した DLL で、RichEdit の入力欄に実際に打つ |
 
-- **契約テストが通っても、実際の Windows のデスクトップでキーが届き、正しく打てることは保証しない。** DLL (native/tip、C++) の TSF の処理 (キーの受け取り・未確定の文字の表示・フォーカスの通知・候補の一覧の描画) と、OS がキーを IME に配る部分は、自動テストでは通らない
-- 自動テストに無いもの: 設定の読み直し (config.json の書き換え) をはさむ流れ
+- **契約テストが通っても、実際の Windows のデスクトップでキーが届き、正しく打てることは保証しない。** DLL の TSF と OS がキーを IME に配る部分の全体は、Core のテストだけでは確かめられない。`InputEvents.exe` が確認する自動開閉・タスクバーのキー通過の範囲と、対話型デスクトップが必要な `--tip-e2e` を分けて扱う
+- Core の契約テストは設定値の変更も確かめる。実ファイルの `config.json` を書き換えて DLL・常駐側・画面へ反映されるところまでの流れは、実機で確認する
 - DLL まで含めた実際の打鍵のテスト (`--tip-e2e`) を定期的に流すなら、隔離した対話型の Windows で、任意または定期の実行にする。外部の Pull Request のコードを、個人の PC や権限の強いセルフホストランナーで無条件に動かさない
 - 不具合の報告を直したら、Core で確かめられることは Core のテストに、フロントとの境目の受け渡しで起きることは `ImeContractTests` に、操作の順番どおりに足す
 
 ## ビルドに要るもの
 
 - .NET 10 SDK
-- Visual Studio Build Tools の「C++ によるデスクトップ開発」(MSVC と Windows SDK)。無ければ `Build-Package.ps1` は Meltype IME を入れずにインストーラーを作る
+- Visual Studio Build Tools の「C++ によるデスクトップ開発」(MSVC と Windows SDK)。通常版の `Build-Package.ps1` は x64・ARM64X・x86 の DLL を必ず作り、1 つでも失敗したら止まる。手元の `Install-Meltype.ps1` は、その PC に必要なアーキテクチャを作る。必要なコンポーネントは [DEVELOPMENT.md](DEVELOPMENT.md#windows-でビルドして試す) を参照。ポータブル版は DLL を作らない

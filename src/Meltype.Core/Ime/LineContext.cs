@@ -79,6 +79,11 @@ internal static class LineContext
             }
             var atStart = lineStart && !char.IsWhiteSpace(c);
             if (!char.IsWhiteSpace(c)) lineStart = false;
+            if (UrlLength(text, i) is > 0 and var url)
+            {
+                i += url - 1;
+                continue;
+            }
             string? open = null;
             if (StartsWith(text, i, "\"\"\"")) (open, kind) = ("\"\"\"", LineKind.String);
             else if (StartsWith(text, i, "'''")) (open, kind) = ("'''", LineKind.String);
@@ -92,7 +97,7 @@ internal static class LineContext
                 continue;
             }
             // 1 行のコメント: 行の終わりまで飛ばす。
-            // ターミナルの引数の // (gs://bucket/*・https://example.com/*) も飛ばす。後ろの /* を、次の行まで続くコメントの始まりにしない
+            // ターミナルの引数の // (//src/work/* など) も飛ばす。後ろの /* を、次の行まで続くコメントの始まりにしない
             if (StartsWith(text, i, "//") || IsHashComment(text, i) || IsDashComment(text, i, atStart) ||
                 (atStart && StartsWithIgnoreCase(text, i, "rem ")))
             {
@@ -135,6 +140,11 @@ internal static class LineContext
             {
                 // ' は英単語の中 (don't) なら文字列の始まりではない。
                 quote = c;
+                continue;
+            }
+            if (UrlLength(line, i) is > 0 and var url)
+            {
+                i += url - 1;
                 continue;
             }
             if (IsSlashComment(line, i, terminal)) return LineKind.Comment;
@@ -194,6 +204,31 @@ internal static class LineContext
 
     // コメントの記号に使うものだけにする。[ ( " などは「せつめい」のように本文の始まりで、日本語の記号にする。
     private static bool IsSlashCommentMarker(char c) => c is '/' or '!' or '-' or '=' or '*';
+
+    // #1623: http:// や file:/// のスキーム名の後の / から URL の終わりまでの長さ (URL でなければ 0)。
+    // URL の中の // と /* (gs://bucket/* のワイルドカード) をコメントとみなさない。
+    // :// はほぼ URL にしか出ないので、スキーム名は一覧にせず「英字で始まり英数字・+・-・. が続く名前 + :」で見分ける (s3://・git+ssh://)。
+    // URL には空白と引用符が入らないので、そこを URL の終わりとする。後ろの // や # はコメントとして調べる。
+    // URL より前で開いた括弧を閉じる ) も URL の終わり (CSS の url(https://x/a.png);/* の /* はコメント)。
+    // URL の中で開いた括弧 (https://en.wikipedia.org/wiki/Foo_(bar)) は URL に含める。
+    private static int UrlLength(string text, int index)
+    {
+        if (index < 2 || text[index - 1] != ':') return 0;
+        var scheme = index - 1;
+        while (scheme > 0 && (char.IsAsciiLetterOrDigit(text[scheme - 1]) || text[scheme - 1] is '+' or '-' or '.')) scheme--;
+        if (scheme == index - 1 || !char.IsAsciiLetter(text[scheme])) return 0;
+        var slashes = index;
+        while (slashes < text.Length && text[slashes] == '/') slashes++;
+        if (slashes - index is not (2 or 3)) return 0;
+        var end = slashes;
+        var depth = 0; // URL の中で開いた括弧の数
+        for (; end < text.Length && !char.IsWhiteSpace(text[end]) && text[end] is not ('"' or '\'' or '`'); end++)
+        {
+            if (text[end] == '(') depth++;
+            else if (text[end] == ')' && depth-- == 0) break;
+        }
+        return end - index;
+    }
 
     /// <summary>
     /// ターミナルで動く AI・チャットの入力行か (Claude Code・Gemini CLI の「&gt; 」、Codex の「› 」。枠線の │ は飛ばす)。

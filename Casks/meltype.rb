@@ -1,8 +1,8 @@
 cask "meltype" do
-  version "1.7.1"
-  sha256 "7f91df261c359fc5f64ac8f99e1f4ef4ff84483150a3163cab2ef7677b70abf0"
+  version "1.8.0-pre.1"
+  sha256 "3c42c72254dff38373a3a043b8e9214660a4662f6154bbd3bc62e4515149dd01"
 
-  url "https://github.com/yksr-melt/Meltype/releases/download/v1.7.1/Meltype-#{version}-mac.zip"
+  url "https://github.com/yksr-melt/Meltype/releases/download/v1.8.0-pre.1/Meltype-#{version}-mac.zip"
   name "Meltype"
   desc "半角/全角を押さずに、日本語と英語をそのまま打てる日本語入力 (英単語は英字のまま、ローマ字は日本語に)"
   homepage "https://github.com/yksr-melt/Meltype"

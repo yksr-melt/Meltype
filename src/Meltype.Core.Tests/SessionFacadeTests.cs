@@ -200,6 +200,19 @@ internal static class SessionFacadeTests
         }
     }
 
+    /// <summary>長い URL の直後に打った英字を、URL の途中の / から始まる /command の名前とみなさない (#2199)。</summary>
+    [Test]
+    public static void Issue2199_RomajiAfterLongUrlComposes()
+    {
+        foreach (var url in new[] { "https://github.com/yksr-melt/Meltype/issues/2199", "https://github.com/Meltype" })
+        {
+            var field = new Field(url);
+            var results = Type(Create(), "kyouha\n", field);
+            Assert.True(results.All(r => r.Consumed), $"{url} の後ろで打った英字はアプリに渡さない");
+            Assert.Equal(url + "きょうは", field.Text);
+        }
+    }
+
     [Test]
     public static void Romaji_ComposesAndEnterCommits()
     {
@@ -1159,6 +1172,35 @@ internal static class SessionFacadeTests
             Type(session, "\n");
             Assert.True(!Type(session, "\n").Single().Consumed, "次の Enter は改行");
             Assert.True(Type(session, "ima").All(r => !r.Consumed), "改行後はコード");
+        }
+    }
+
+    [Test]
+    public static void CodeInput_UrlSchemesRemainCode()
+    {
+        // #1623: http:// の // はコメントではない。
+        foreach (var input in new[] { "curl http://example.com/a", "curl HTTPS://example.com", "open file:///tmp/a", "x=git+ssh://a", "aws s3 cp s3://bucket/a", "curl -x socks5://localhost", "curl http://a/b//", "gsutil ls gs://bucket/*", "open https://en.wikipedia.org/wiki/Foo_(bar)/*" })
+        {
+            var session = Create();
+            session.CodeInput = true;
+            var field = new Field();
+            Assert.True(Type(session, input, field).All(r => !r.Consumed && r.View is null), input);
+            Assert.Equal(input, field.Text);
+            Assert.True(Type(session, " ima", field).All(r => !r.Consumed && r.View is null), input);
+        }
+        // URL の後ろや前のコメント、引用符の中は今までどおり日本語。
+        foreach (var before in new[] { "curl http://a // ", "curl http://a #", "background: url(https://example.com/a.png);/* ", "x = 1 // http://a ", "s = \"http://a " })
+        {
+            var session = Create();
+            session.CodeInput = true;
+            Assert.Equal("いま", Type(session, "ima", new Field(before))[^1].View?.Text, before);
+        }
+        // URL の中の /* (ワイルドカード) は複数行コメントの始まりではない。次の行はコードのまま。
+        foreach (var before in new[] { "gsutil ls gs://bucket/*\n", "origins:\n  - https://example.com/*\n  - ", "const a = `https://x/*`;\n", "a { background: url(https://x/*); }\n" })
+        {
+            var session = Create();
+            session.CodeInput = true;
+            Assert.True(Type(session, "ima", new Field(before)).All(r => !r.Consumed && r.View is null), before);
         }
     }
 
