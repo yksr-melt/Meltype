@@ -31,6 +31,9 @@ internal static partial class CompositionText
     public static LanguageLearning LearnedLanguages(TextEnv env) =>
         env.Fragment is { } origin ? origin.Languages : new(env.Languages, env.Settings.ContextualLearning ? env.Context().PrecedingEnglish : null);
 
+    /// <summary><see cref="LearnedLanguages"/> の学習だけ。文脈 (<see cref="TextEnv.Context"/>) を計算しない。</summary>
+    private static LanguageMemory? LearnedMemory(TextEnv env) => env.Fragment is { } origin ? origin.Languages.Memory : env.Languages;
+
     /// <summary>
     /// 打った英字の一部を読み直すために作る断片に渡すもの。env は読み直す元の入力のもの。
     /// 断片は設定によらず既定の設定 (自動判定・z の記号・/ のまま) で読み、打ち間違いを直さない。英語 / 日本語の学習は元の入力のもの。

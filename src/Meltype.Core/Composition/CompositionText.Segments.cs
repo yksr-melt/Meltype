@@ -19,14 +19,14 @@ internal static partial class CompositionText
         // 1 キーごとに、表示・打ち間違いの直し・Space の扱いなどで何度も呼ばれる。区間分けは重い (打った文字のあらゆる区間を調べる) ので、
         // 打った内容と判定の条件が同じなら前の結果を使い回す。
         var key = CompositionText.SegmentsKey(state, env);
-        if (state.SegmentsCache is { } cached && cached.Key == key && ReferenceEquals(cached.Memory, LearnedLanguages(env).Memory))
+        if (state.SegmentsCache is { } cached && cached.Key == key && ReferenceEquals(cached.Memory, LearnedMemory(env)))
         {
             return cached.Segments;
         }
         // 区切りを選んだ理由も、区切りと同じ計算から取る (確定のログが、実際に確定した区切りと食い違わないように。issue #1644)
         var reasons = new List<Func<string>>();
         var result = CompositionText.Adjusted(state, env, CompositionText.ComputeSegments(state, env, reasons)[0], reasons);
-        state.SegmentsCache = (key, LearnedLanguages(env).Memory, result, reasons);
+        state.SegmentsCache = (key, LearnedMemory(env), result, reasons);
         return result;
     }
 
@@ -74,7 +74,7 @@ internal static partial class CompositionText
             .Append(env.Context().FollowingEnglish switch { true => 'E', false => 'J', null => '-' })
             .Append(env.Context().PrecedingEnglishSentence ? 'S' : '-').Append(env.Context().EndsWithEnglishAndSpace ? 'P' : '-').Append(state.KanaInput ? 'K' : '-')
             .Append(env.Context().PrecedingEnglishName ? 'N' : '-').Append(state.FullWidthParentheses ? 'W' : '-')
-            .Append(CompositionText.EffectiveManual(state, env) ? 'M' : '-').Append(':').Append(LearnedLanguages(env).Memory?.Version ?? -1).Append(':').Append(LearningContext(env) switch { true => 'e', false => 'j', null => '-' });
+            .Append(CompositionText.EffectiveManual(state, env) ? 'M' : '-').Append(':').Append(LearnedMemory(env)?.Version ?? -1).Append(':').Append(LearningContext(env) switch { true => 'e', false => 'j', null => '-' });
         return key.ToString();
     }
 
