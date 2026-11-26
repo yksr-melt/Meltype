@@ -6849,5 +6849,13 @@ internal static class CompositionTests
         Assert.Equal("拝見できかねます", KeigoConverter.Convert([new("みられない", false, ["見られない"])])[0].Text);
         Assert.Equal("チームがご覧になります", string.Concat(KeigoConverter.Convert([new("ちーむが", false, ["チームが"]), new("みます", false, ["見ます"])]).Select(c => c.Text)));
         Assert.Equal("当方が拝見いたします", string.Concat(KeigoConverter.Convert([new("とうほうが", false, ["当方が"]), new("みます", false, ["見ます"])]).Select(c => c.Text)));
+
+        // 「いいですか？ / 良いですか？ / 〜ていいですか？」→「よろしいでしょうか？」
+        Assert.Equal("よろしいでしょうか？", KeigoConverter.Convert([new("いいですか？", false, ["いいですか？"])])[0].Text);
+        Assert.Equal("よろしいでしょうか？", KeigoConverter.Convert([new("よいですか？", false, ["良いですか？"])])[0].Text);
+        Assert.Equal("確認してもよろしいでしょうか？", KeigoConverter.Convert([new("かくにんしていいですか？", false, ["確認していいですか？"])])[0].Text);
+        Assert.Equal("確認してよろしいでしょうか？", string.Concat(KeigoConverter.Convert([new("かくにんして", false, ["確認して"]), new("いいですか？", false, ["いいですか？"])]).Select(c => c.Text)));
+        Assert.Equal("これでよろしいでしょうか？", KeigoConverter.Convert([new("これでいいですか？", false, ["これでいいですか？"])])[0].Text);
+        Assert.Equal("明日がよろしいでしょうか？", KeigoConverter.Convert([new("あしたがいいですか？", false, ["明日がいいですか？"])])[0].Text);
     }
 }

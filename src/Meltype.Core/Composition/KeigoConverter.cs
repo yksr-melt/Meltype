@@ -508,7 +508,7 @@ internal static class KeigoConverter
             {
                 "ほしい" or "くれ" or "ちょうだい" or "もらえる" or "もらえます" or "もらえますか" or "くれます" or "くれますか" => "いただけますでしょうか" + punct,
                 "くれない" or "くれませんか" or "もらえない" or "もらえませんか" => "いただけませんでしょうか" + punct,
-                "いい" or "いいです" => "よろしいでしょうか" + punct,
+                "いい" or "いいです" or "いいですか" or "よい" or "よいです" or "よいですか" => "よろしいでしょうか" + punct,
                 "いる" or "います" or "るの" or "いるの" => "おりますでしょうか" + punct,
                 "いた" or "いました" or "たの" or "いたの" => "おりましたでしょうか" + punct,
                 "みる" or "みます" => "みますでしょうか" + punct,
@@ -692,38 +692,36 @@ internal static class KeigoConverter
             return prefixedQuestion + punct;
 
         var rewritten = ApplyInTextReplacements(textCore);
-        if (!rewritten.EndsWith("でしょうか", StringComparison.Ordinal) &&
+        var matched = false;
+        if (rewritten.Length > 0 && QuestionSuffixBuckets.TryGetValue(rewritten[^1], out var qBucket))
+        {
+            foreach (var (suffix, replacement) in qBucket)
+            {
+                if (rewritten.EndsWith(suffix, StringComparison.Ordinal))
+                {
+                    rewritten = AppendWithoutDuplicatePrefix(rewritten[..^suffix.Length], replacement);
+                    matched = true;
+                    break;
+                }
+            }
+        }
+
+        if (!matched &&
+            !rewritten.EndsWith("でしょうか", StringComparison.Ordinal) &&
             !rewritten.EndsWith("ますか", StringComparison.Ordinal) &&
             !rewritten.EndsWith("ましたか", StringComparison.Ordinal) &&
             !rewritten.EndsWith("ですか", StringComparison.Ordinal) &&
             !rewritten.EndsWith("ませんか", StringComparison.Ordinal))
         {
-            var matched = false;
-            if (rewritten.Length > 0 && QuestionSuffixBuckets.TryGetValue(rewritten[^1], out var qBucket))
-            {
-                foreach (var (suffix, replacement) in qBucket)
-                {
-                    if (rewritten.EndsWith(suffix, StringComparison.Ordinal))
-                    {
-                        rewritten = AppendWithoutDuplicatePrefix(rewritten[..^suffix.Length], replacement);
-                        matched = true;
-                        break;
-                    }
-                }
-            }
-
-            if (!matched)
-            {
-                // サ変動詞 + した？ / する？ (完了した？ → 完了されましたでしょうか？)
-                if (rewritten.EndsWith("した", StringComparison.Ordinal) && IsVerbalNounStem(rewritten.AsSpan(0, rewritten.Length - 2)))
-                    rewritten = rewritten[..^2] + "されましたでしょうか";
-                else if (rewritten.EndsWith("する", StringComparison.Ordinal) && IsVerbalNounStem(rewritten.AsSpan(0, rewritten.Length - 2)))
-                    rewritten = rewritten[..^2] + "されますでしょうか";
-                else if (rewritten.Length >= 2 && rewritten.EndsWith('だ') && IsNominalStem(rewritten[^2]))
-                    rewritten = rewritten[..^1] + "でしょうか";
-                else if (TryPoliteAdjective(rewritten) is not null)
-                    rewritten += "でしょうか";
-            }
+            // サ変動詞 + した？ / する？ (完了した？ → 完了されましたでしょうか？)
+            if (rewritten.EndsWith("した", StringComparison.Ordinal) && IsVerbalNounStem(rewritten.AsSpan(0, rewritten.Length - 2)))
+                rewritten = rewritten[..^2] + "されましたでしょうか";
+            else if (rewritten.EndsWith("する", StringComparison.Ordinal) && IsVerbalNounStem(rewritten.AsSpan(0, rewritten.Length - 2)))
+                rewritten = rewritten[..^2] + "されますでしょうか";
+            else if (rewritten.Length >= 2 && rewritten.EndsWith('だ') && IsNominalStem(rewritten[^2]))
+                rewritten = rewritten[..^1] + "でしょうか";
+            else if (TryPoliteAdjective(rewritten) is not null)
+                rewritten += "でしょうか";
         }
 
         return rewritten != textCore ? rewritten + punct : null;
