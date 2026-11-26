@@ -256,6 +256,12 @@ internal static class CompositionConversion
     /// 文全体の文節でなければ何もしない。どの案にも無い文 (打ち始めの ・ を Space で / にした文) を選んでいれば、分けずに学習しない文節にする。
     /// 分けたら、後から届いた変換エンジンの答えで文全体の文節に戻さない (<see cref="Conversion.Edited"/>)。
     /// </summary>
+    /// <summary>
+    /// 文脈の手がかり (ContextRules) を探すキャレットの前: 近くの 20 文字だけ。手がかりは同じ話題の近くの語 (気温 → 暑い) で、
+    /// 入力欄の前のほうにある語まで見ると、別の話題の語でも当たる。
+    /// </summary>
+    private static string CueBefore(CompositionEnv env) => env.Context().PrecedingText is { } before ? before[^Math.Min(20, before.Length)..] : "";
+
     internal static void SplitWholeSentence(Conversion conversion)
     {
         if (conversion.Clauses is not [{ Alternatives: { } alternatives } whole]) return;
@@ -323,7 +329,7 @@ internal static class CompositionConversion
     {
         var clause = new Clause(reading, false, JapaneseCandidates(env, reading, string.Concat(clauses.Select(c => c.Text)), null, zenzai: true)) { Raw = CompositionText.Raw(input.Text) };
         // 文の中の文節と同じく、文脈の手がかりか、前に選び直した語を最初の候補にする (ConvertWithEngine)
-        var surrounding = (env.Context().PrecedingText ?? "") + EnglishInComposition(input, env) + (env.Context().FollowingText ?? "");
+        var surrounding = CueBefore(env) + EnglishInComposition(input, env) + (env.Context().FollowingText ?? "");
         if ((env.Services.ContextRules?.Choose(reading, surrounding, clause.Text, text => Standalone(env, text)) ?? env.Learning.LearnedConversion(reading)) is { } preferred)
             Prefer(clause, preferred);
         KeepTypedSymbols(input, [clause], reading);
@@ -489,7 +495,7 @@ internal static class CompositionConversion
         for (var i = 0; i < clauses.Count; i++)
         {
             var others = string.Concat(clauses.Where((_, k) => k != i).Select(c => c.Text));
-            var surrounding = (env.Context().PrecedingText ?? "") + EnglishInComposition(input, env) + others + (env.Context().FollowingText ?? "");
+            var surrounding = CueBefore(env) + EnglishInComposition(input, env) + others + (env.Context().FollowingText ?? "");
             var preferred = env.Services.ContextRules?.Choose(clauses[i].Reading, surrounding, clauses[i].Text, text => Standalone(env, text)) ?? env.Learning.LearnedConversion(clauses[i].Reading);
             // 変換エンジンは、文節が「から」だけだと記号 (～) にしてしまう。記号だけの変換結果は、ひらがなの後ろに回す。
             // ユーザー辞書・同梱の語句の記号 (なかてん → ・) はそのまま

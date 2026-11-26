@@ -33,9 +33,6 @@ internal static class ImeSession
         return state;
     }
 
-    /// <summary>コードの入力欄でないときに、判定の文脈として使うキャレットの前の文字数。</summary>
-    private const int ContextLength = 20;
-
     public static void Close(ImeSessionState state, ImeEnv env, ImeField? field = null)
     {
         field ??= state.Field;
@@ -215,7 +212,7 @@ internal static class ImeSession
     private static List<int> SnippetKeys(ImeSessionState state, ImeEnv env, ImeEvent e, SessionResult result, Settings settings)
     {
         if (IsComposing(state)) return [];
-        var before = Before(state, e.Field);
+        var before = e.Field?.Before;
         if (e is ImeEvent.KeyPressed { Key: { Ch: > 0 and < 0x10000 } key } && !result.Consumed) before += (char)key.Ch;
         var keys = new List<int>();
         if (SnippetUsable(state, env, before, settings) && SnippetTrigger.TypedBefore(settings.SnippetMark, before) is { } typed && env.Environment.Snippets.Get(typed[1..]) is not null)
@@ -302,9 +299,6 @@ internal static class ImeSession
         return LineContext.ClassifyFocus(app, field.Element);
     }
 
-    private static string? Before(ImeSessionState state, ImeField? field) =>
-        field?.Before is { Length: > ContextLength } before && !CodeInput(state) ? before[^ContextLength..] : field?.Before;
-
     // ==== ワークアラウンド: ターミナルがキャレットの前の文字を渡さないことへの対処 (#1687) ====
     // 本体は判断を事実だけでするのが原則で、打ったキーから入力欄の中身を推測するのはこの 1 か所だけの例外。
     // 渡さないのはターミナル側の事情 (Windows Terminal の TSF は文書を持たないので空、iTerm2 は日本語を出したあと読めない)。
@@ -314,16 +308,9 @@ internal static class ImeSession
 
     /// <summary>
     /// コードの行の判断と変換の文脈に使うキャレットの前。コードの入力欄でキャレットの前が届かない (ターミナルで空のときも) ときだけ、
-    /// <see cref="ImeSessionState.Line"/> を使う (ワークアラウンド)。定型文・確定し直しは本物の文字が要るので、<see cref="Before"/> を使う。
+    /// <see cref="ImeSessionState.Line"/> を使う (ワークアラウンド)。定型文・確定し直しは本物の文字が要るので、入力欄の文字 (ImeField.Before) を使う。
     /// </summary>
     private static string? LineBefore(ImeSessionState state, ImeField? field) =>
-        WholeLineBefore(state, field) is { Length: > ContextLength } before && !CodeInput(state) ? before[^ContextLength..] : WholeLineBefore(state, field);
-
-    /// <summary>
-    /// <see cref="LineBefore"/> を文脈の長さで切らないもの。/command・$skill・@ファイル名 は語が空白の直後から始まるかで決めるので、
-    /// 途中で切った文字列では、切った所が語の始まりに見える (長い URL の後ろの /Meltype/issues/2199 が /command になる。#2199)。
-    /// </summary>
-    private static string? WholeLineBefore(ImeSessionState state, ImeField? field) =>
         CodeInput(state) && field is { } f && (f.Before is null || f.Before.Length == 0 && CodeTerminal(state)) ? state.Line.ToString() : field?.Before;
 
     private static void TrackLine(ImeSessionState state, ImeEvent e, SessionResult result)
@@ -392,7 +379,7 @@ internal static class ImeSession
                 return key.Repeat ? Consumed : Switch(state, env, vk != VirtualKeys.NonConvert, before, toggle: false);
             }
         }
-        if (!composing && !key.Ctrl && !key.Alt && !key.Command && Snippet(state, env, vk, key, Before(state, field), settings, lastSnippet) is { } snippet) return snippet;
+        if (!composing && !key.Ctrl && !key.Alt && !key.Command && Snippet(state, env, vk, key, field?.Before, settings, lastSnippet) is { } snippet) return snippet;
         // 複数のスカラーの文字 (アプリが元のイベントで入れる): 先頭が結合文字なら直前の文字につなげて確定する
         if (key.Text is { Length: > 0 } text && Rune.DecodeFromUtf16(text, out var first, out _) == System.Buffers.OperationStatus.Done)
         {
@@ -729,10 +716,9 @@ internal static class ImeSession
         }
         // 先頭か空白の直後の /command・$skill・@ファイル名 は、変換せずにそのままアプリへ渡す (#193)。
         // 文章の入力欄の / は、変換ボックスに ・ として入れる。Space で / にすると、続く名前はそのまま渡す。
-        var sigilBefore = WholeLineBefore(state, state.Field);
-        var slashAtStart = !modifier && !CompositionController.IsComposing(state.Composition) && ch is '/' && !PassesSlash(state, before) && !SigilWord.InNameAfter(sigilBefore) && settings.SigilWordsDirect &&
-            SigilWord.PassesAfter(sigilBefore, '/');
-        if (!slashAtStart && !modifier && !CompositionController.IsComposing(state.Composition) && ch is { } c && settings.SigilWordsDirect && SigilWord.PassesAfter(sigilBefore, c))
+        var slashAtStart = !modifier && !CompositionController.IsComposing(state.Composition) && ch is '/' && !PassesSlash(state, before) && !SigilWord.InNameAfter(before) && settings.SigilWordsDirect &&
+            SigilWord.PassesAfter(before, '/');
+        if (!slashAtStart && !modifier && !CompositionController.IsComposing(state.Composition) && ch is { } c && settings.SigilWordsDirect && SigilWord.PassesAfter(before, c))
         {
             return CompositionController.Pass(state.Composition, Env(state, env), now);
         }
