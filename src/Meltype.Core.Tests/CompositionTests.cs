@@ -7016,5 +7016,13 @@ internal static class CompositionTests
         Assert.Equal("申し上げております", KeigoConverter.Convert([new("いっている", false, ["言っている"])])[0].Text);
         Assert.Equal("お預かりいたします", KeigoConverter.Convert([new("あずかる", false, ["預かる"])])[0].Text);
         Assert.Equal("お届けいたしました", KeigoConverter.Convert([new("とどけた", false, ["届けた"])])[0].Text);
+
+        // 複合五段サ行動詞を「〜いたしました」と誤爆しないこと + ビジネスクッション言葉
+        Assert.Equal("取り消しました", KeigoConverter.Convert([new("とりけした", false, ["取り消した"])])[0].Text);
+        Assert.Equal("見直しました", KeigoConverter.Convert([new("みなおした", false, ["見直した"])])[0].Text);
+        Assert.Equal("折り返します", KeigoConverter.Convert([new("おりかえす", false, ["折り返す"])])[0].Text);
+        Assert.Equal("思い出しました", KeigoConverter.Convert([new("おもいだした", false, ["思い出した"])])[0].Text);
+        Assert.Equal("恐れ入りますが", KeigoConverter.Convert([new("おそれいりますが", false, ["恐れ入りますが"])])[0].Text);
+        Assert.Equal("差し支えなければ", KeigoConverter.Convert([new("さしつかえなければ", false, ["差し支えなければ"])])[0].Text);
     }
 }
