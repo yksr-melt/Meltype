@@ -2,6 +2,7 @@
 // Copyright (C) 2026 aster-void
 
 using System.Globalization;
+using Meltype.Composition;
 
 namespace Meltype.Composition.Utility;
 

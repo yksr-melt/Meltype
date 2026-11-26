@@ -8,7 +8,7 @@ namespace Meltype.Detection;
 /// JIS かな配列として読み替え、日本語としての妥当性 (辞書との前方一致) を評価する。
 /// ローマ字入力かかな入力かを厳密に識別する必要はなく、日本語らしさの加点だけを返す。
 /// </summary>
-public sealed class KanaDetector
+internal sealed class KanaDetector
 {
     // JIS かな配列 (Shift なし)。仮想キーコードは日本語 106/109 キーボードのもの。
     private static readonly Dictionary<int, char> JisKana = new()

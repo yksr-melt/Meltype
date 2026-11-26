@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 aster-void
 
+using Meltype.Composition;
 using Meltype.Config;
+using Meltype.Dictionary;
 
 namespace Meltype.Composition.Utility;
 
@@ -25,18 +27,10 @@ internal sealed record UtilityInput(CompositionTextState Text, string? Reading, 
 internal sealed record UtilityContext(
     Settings Settings,
     DateTime Now,
-    DateTime UtcNow,
-    TimeZoneInfo LocalTimeZone,
     Func<string?> Clipboard,
     Func<(string Title, string Artist)?> NowPlaying,
     GitHubIssueTitles? GitHubTitles,
-    Func<string?> OtherTipVersion)
-{
-    /// <summary>設定「時計の候補のタイムゾーン」の今の時刻。設定が空ならこの PC の時刻。</summary>
-    public DateTime ClockNow => ClockConversion.Zone(Settings.ClockTimeZone) is { } zone
-        ? TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(UtcNow, DateTimeKind.Utc), zone)
-        : Now;
-}
+    Func<string?> OtherTipVersion);
 
 internal enum UtilityPlacement
 {

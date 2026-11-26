@@ -633,7 +633,7 @@ function initDownloadLabel(os) {
   const main = document.querySelector("[data-download-main]");
   if (!main) return;
   if (OS_LABEL[os]) main.querySelector("[data-download-label]").textContent = OS_LABEL[os];
-  if (os === "mac") main.querySelector("[data-download-meta]").textContent = "macOS 13 以降・Apple シリコン";
+  if (os === "mac") main.querySelector("[data-download-meta]").textContent = "macOS 13.3 以降・Apple シリコン";
   if (os === "linux") {
     main.href = "https://github.com/yksr-melt/Meltype/blob/main/docs/LINUX.md#インストール";
     main.querySelector("[data-download-meta]").textContent = "IBus / fcitx5";

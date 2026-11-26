@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
 
-using System.Globalization;
 using System.Diagnostics;
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
-using Meltype.Composition;
+using Meltype.Dictionary;
+using Meltype.Engine;
 
 namespace Meltype.Tests;
 
@@ -20,7 +21,7 @@ namespace Meltype.Tests;
 /// </summary>
 internal static class Performance
 {
-    private const string DefaultCases = "tools/mozc-compare-cases.tsv";
+    private const string DefaultCases = "src/Meltype.Core.Tests/data/perf-cases.tsv";
     public const int DefaultSamples = 5;
 
     private static readonly JsonSerializerOptions Json = new()

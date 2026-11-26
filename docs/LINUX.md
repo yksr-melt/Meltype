@@ -142,14 +142,7 @@ sudo dnf install ./meltype-<version>-1.x86_64.rpm ./meltype-fcitx5-<version>-1.x
 
 設定「カッコを打ったら中にカーソルを移動」が ON のとき、`「」`・`（）`・`()` などの空の括弧を <kbd>Enter</kbd> で確定すると、改行せず括弧の中へ移ります。
 
-設定と学習データは `~/.local/share/Meltype` にあります。設定画面に無い項目 (アプリ別設定など) は、Windows 版と同じ `config.json` を直接編集します。先頭に `"$schema"` を書くと、エディターで項目の補完と説明が出ます。
-
-```json
-{
-  "$schema": "./config.schema.json",
-  "Punctuation": "FullWidthCommaPeriod"
-}
-```
+ユーザー辞書・定型文・学習データも「Meltype の設定」で扱います。設定と学習データは `~/.local/share/Meltype` にあります。
 
 <br>
 

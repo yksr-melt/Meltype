@@ -7,7 +7,7 @@ namespace Meltype.Detection;
 /// 日本語辞書 (ローマ字見出し) との前方一致。見出し語から綴りの揺れ
 /// (shi/si, tsu/tu, chi/ti, ん の n/nn …) を展開して登録するので、訓令式で打っても一致する。
 /// </summary>
-public sealed class DictionaryDetector
+internal sealed class DictionaryDetector
 {
     public WordList Words { get; }
 

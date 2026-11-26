@@ -119,50 +119,6 @@ internal static class ProfileTests
         Assert.True(!settings.ExportProfile().Contains("ProfileNames"), "書き出したファイルに、ほかのプロファイルの名前を入れない");
     }
     [Test]
-    public static void SettingsForm_KeepsTrayChangesMadeWhileOpen()
-    {
-        // 設定画面を開いた時点の値。開いている間に、トレイなどで一時停止・句読点を変える
-        var opened = new Settings().Normalize().AddProfile("仕事用")!.SwitchProfile("標準");
-        var current = opened.Clone();
-        current.Enabled = false;
-        current.Punctuation = PunctuationStyle.FullWidthCommaPeriod;
-
-        // 画面で何も変えずに閉じる: トレイなどで変えた値のまま
-        var kept = Settings.MergeEdits(opened, opened.Clone(), current);
-        Assert.True(!kept.Enabled, "一時停止のまま");
-        Assert.Equal(PunctuationStyle.FullWidthCommaPeriod, kept.Punctuation, "トレイなどで変えた句読点のまま");
-
-        // 画面で変えた項目だけを重ねる。画面で句読点も変えたら画面の値
-        var edited = opened.Clone();
-        edited.LiveConversion = false;
-        var merged = Settings.MergeEdits(opened, edited, current);
-        Assert.True(!merged.LiveConversion && !merged.Enabled, "ライブ変換 OFF を重ね、一時停止のまま");
-        Assert.Equal(PunctuationStyle.FullWidthCommaPeriod, merged.Punctuation);
-        edited.Punctuation = PunctuationStyle.FullWidthCommaKuten;
-        Assert.Equal(PunctuationStyle.FullWidthCommaKuten, Settings.MergeEdits(opened, edited, current).Punctuation, "画面で変えた値");
-
-        // トレイで「仕事用」に切り替えた: 画面 (標準のまま) で変えた値は標準に入り、仕事用は変わらない
-        var switched = opened.SwitchProfile("仕事用");
-        switched.Punctuation = PunctuationStyle.ToutenFullWidthPeriod;
-        var onWork = Settings.MergeEdits(opened, edited, switched);
-        Assert.Equal("仕事用", onWork.ActiveProfile, "トレイで切り替えたプロファイルのまま");
-        Assert.True(onWork.LiveConversion, "仕事用のライブ変換は変えない");
-        Assert.Equal(PunctuationStyle.ToutenFullWidthPeriod, onWork.Punctuation, "仕事用で変えた句読点のまま");
-        var standard = onWork.SwitchProfile("標準");
-        Assert.True(!standard.LiveConversion, "画面で変えた値は標準に入る");
-        Assert.Equal(PunctuationStyle.FullWidthCommaKuten, standard.Punctuation);
-        Assert.Equal(Settings.MergeEdits(opened, opened.Clone(), switched).ToJson(), switched.ToJson(), "何も変えなければ今の設定そのもの");
-
-        // 画面で「仕事用」に切り替えた (トレイでは切り替えていない): 画面のプロファイルにする
-        var formSwitched = opened.SwitchProfile("仕事用");
-        formSwitched.CorrectTypos = false;
-        var toWork = Settings.MergeEdits(opened, formSwitched, current);
-        Assert.Equal("仕事用", toWork.ActiveProfile);
-        Assert.True(!toWork.CorrectTypos && !toWork.Enabled, "画面で変えた値を重ね、一時停止のまま");
-        Assert.Equal(PunctuationStyle.Japanese, toWork.Punctuation, "標準でトレイなどで変えた句読点は、仕事用に入れない");
-        Assert.Equal(PunctuationStyle.FullWidthCommaPeriod, toWork.SwitchProfile("標準").Punctuation, "標準のトレイなどで変えた値は標準に残る");
-    }
-    [Test]
     public static void PasteApps_MatchProcessNames()
     {
         // #5: DaVinci Resolve は 1 文字ずつ送ると取り違えるので、最初から貼り付けで入れる

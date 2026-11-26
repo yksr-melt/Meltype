@@ -280,7 +280,10 @@ class PrivateDaemonTests(unittest.TestCase):
     def test_real_mozc_candidates_and_commit(self):
         self.type_text("kyou")
         self.assertTrue(self.key(self.IBus.KEY_space))
-        self.assertIn("今日", self.client.candidates, self.client.describe())
+        # IBus の候補には注記の欄が無いので、エンジンは注記を「　」で候補の後ろに付けて出す。
+        # 「今日」に Zenzai の注記が付くかは、Zenzai が答えたかで変わる
+        self.assertTrue(any(candidate == "今日" or candidate.startswith("今日　") for candidate in self.client.candidates),
+                        self.client.describe())
         for _ in range(len(self.client.candidates) + 1):
             if self.client.preedit == "今日":
                 break

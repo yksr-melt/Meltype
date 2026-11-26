@@ -1,20 +1,36 @@
 # Linux 版 (linux/、IBus・fcitx5) をビルドしてテストし、ビルド済みのファイルの zip と .deb・.rpm を Artifacts に置く。
-#   app・rpm・rpm-el9 … Linux 版・Mozc のヘルパー・共通部分を変えた Pull Request と main、手動実行、release.yml (タグ) から呼ばれたとき
-#   ime-ci   … IME の E2E の基盤 (tools/ime-tests) の契約のテスト
+#   app・rpm・rpm-el9 … Linux 版・Mozc のヘルパー・共通部分を変えた main、手動実行、release.yml (タグ) から呼ばれたとき
+#                       Linux 版のコードを変えた Pull Request では、app のビルドとテストだけを流す (.deb・.rpm は作らない)
+#   ime-ci   … IME の E2E の基盤 (linux/ime-tests) の契約のテスト
 #   ime-real … app が作った x64 の zip を、IBus と Chromium で実際に打って確かめる
 # リリースへの添付と apt・dnf のリポジトリの公開は release.yml。
 name: linux
 
 on:
+  # Core・辞書だけの変更は core.yml のテストと lint.yml の NativeAOT のアナライザーで見るので、ここでは流さない
   pull_request:
-    paths: &paths
+    paths:
       - 'linux/**'
       - 'native/mozc/**'
       - 'native/zenzai/**'
       - 'native/build-core-linux.sh'
       - '.github/actions/linux-native/**'
+      - '.github/actions/linux-mozc/**'
+      - 'src/Meltype.Core.CApi/**'
+      - 'src/Meltype.Settings/**'
+      - '.github/workflows/linux.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'linux/**'
+      - 'native/mozc/**'
+      - 'native/zenzai/**'
+      - 'native/build-core-linux.sh'
+      - '.github/actions/linux-native/**'
+      - '.github/actions/linux-mozc/**'
       - 'src/Meltype.Core/**'
       - 'src/Meltype.Core.CApi/**'
+      - 'src/Meltype.Settings/**'
       - 'dictionaries/**'
       - 'nuget.config'
       - 'global.json'
@@ -24,12 +40,7 @@ on:
       - 'src/Directory.Build.props'
       - 'src/Directory.Build.targets'
       - 'src/Directory.Packages.props'
-      - 'tools/test-native-boundaries.py'
-      - 'tools/ime-tests/**'
       - '.github/workflows/linux.yml'
-  push:
-    branches: [main]
-    paths: *paths
   workflow_dispatch:
   workflow_call:
 
@@ -67,20 +78,35 @@ jobs:
         run: |
           python3 -c "import ast; ast.parse(open('linux/ibus-engine-meltype', encoding='utf-8').read())"
           python3 linux/tests/test_virtual_key.py
-          python3 linux/tests/test_settings.py
       - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: 10.0.x
       # NativeAOT のリンクと、fcitx5 のアドオン・テストに使うもの
       - name: Packages
         run: |
-          sudo apt-get update
-          sudo apt-get install -y clang lld pkg-config zlib1g-dev python3 python3-gi gir1.2-ibus-1.0 \
+          sudo apt-get -o Acquire::Retries=3 update
+          sudo apt-get -o Acquire::Retries=3 install -y clang lld pkg-config zlib1g-dev python3 python3-gi gir1.2-ibus-1.0 \
             ibus dbus-x11 xvfb xauth \
             cmake fcitx5 fcitx5-modules-dev libfcitx5core-dev libfcitx5utils-dev libfcitx5config-dev
       - uses: ./.github/actions/linux-native
       - name: Build
         run: linux/build.sh
+      # 同梱するものが、サポートする中で一番古い glibc (2.34、RHEL 9 系) より新しいシンボルを使っていないか。
+      # rpm-el9 のジョブは PR で実行しないので、ここで見る。
+      # fcitx5 のアドオンは除く (deb はこのランナーの fcitx5 に対してビルドしたものを、rpm は Fedora でビルドし直したものを入れる)
+      - name: glibc symbol versions
+        run: |
+          bad=0
+          while IFS= read -r -d '' f; do
+            if [[ "$(head -c 4 "$f")" != $'\x7fELF' ]]; then continue; fi
+            syms="$(objdump -T "$f" | grep -E 'GLIBC_2\.(3[5-9]|[4-9][0-9])([^0-9]|$)' || true)"
+            if [[ -n "$syms" ]]; then
+              echo "::error::$f が glibc 2.34 より新しいシンボルを使っています"
+              echo "$syms"
+              bad=1
+            fi
+          done < <(find linux/build/Meltype-linux -path linux/build/Meltype-linux/fcitx5 -prune -o -type f -print0)
+          exit "$bad"
       # fcitx5 のアドオンを、fcitx5 のテスト用のフロントエンドで動かす。Mozc を外した本体だけで、かなの確定と変換の候補を見る
       - name: Test fcitx5 addon
         run: |
@@ -90,7 +116,7 @@ jobs:
           cmake --build linux/build/fcitx5-test
           HOME="$RUNNER_TEMP/fcitx5-home" MELTYPE_DIR="$PWD/linux/build/fcitx5-native" ctest --test-dir linux/build/fcitx5-test --output-on-failure
       - name: NativeAOT boundary tests
-        run: python3 tools/test-native-boundaries.py linux/build/Meltype-linux/libMeltypeNative.so
+        run: python3 src/Meltype.Core.CApi/tests/test-native-boundaries.py linux/build/Meltype-linux/libMeltypeNative.so
       - name: IBus and real Mozc integration tests
         run: timeout 120 python3 linux/tests/test_integration.py linux/build/Meltype-linux
       - name: Private IBus daemon tests
@@ -102,6 +128,7 @@ jobs:
           (cd linux/build && zip -qr "$name" Meltype-linux)
       # apt で入れられる .deb (#863)。タグなら版、それ以外は meltype.xml の版 + テスト版の印
       - name: Package (.deb)
+        if: github.event_name != 'pull_request'
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then version="${GITHUB_REF_NAME#v}"; else
             version="$(sed -n 's|.*<version>\(.*\)</version>.*|\1|p;T;q' linux/build/Meltype-linux/meltype.xml)~test.$(date +%Y%m%d%H%M)"; fi
@@ -111,10 +138,16 @@ jobs:
           ls -la linux/build
       # 実際に apt で入れて、決まった場所に置かれるか・外せるかを確かめる
       - name: Test .deb
+        if: github.event_name != 'pull_request'
         run: |
-          sudo apt-get install -y ./linux/build/meltype_*.deb
+          sudo apt-get -o Acquire::Retries=3 install -y ./linux/build/meltype_*.deb
           test -x /opt/meltype/ibus-engine-meltype
           test -x /opt/meltype/mozc/meltype_mozc_helper
+          # 設定アプリ (と描画に使う Skia) の要るライブラリが、deb の依存で入っているか
+          for f in /opt/meltype/meltype-settings /opt/meltype/libSkiaSharp.so /opt/meltype/libHarfBuzzSharp.so; do libs="$(ldd "$f")"; if grep 'not found' <<< "$libs"; then echo "::error::$f が要るライブラリがありません"; exit 1; fi; done
+          test -f /usr/share/applications/ibus-setup-meltype.desktop
+          # 設定アプリが X11 のライブラリ (dlopen で読むので ldd には出ない) を読んで起動し、落ちずに開いたままでいるか (timeout で止まると 124)
+          status=0; timeout 15 xvfb-run -a /opt/meltype/meltype-settings || status=$?; test "$status" -eq 124
           # Zenzai の llama-server が、同梱のライブラリと deb の依存で起動できるか
           /opt/meltype/zenzai/llama-server --version
           ls /opt/meltype/zenzai/*.gguf
@@ -135,6 +168,7 @@ jobs:
   # dnf で入れられる .rpm (Fedora・RHEL 9 系)。本体と Mozc のヘルパーは app のジョブがビルドした zip のものを使い、
   # fcitx5 のアドオン (meltype-fcitx5) だけ Fedora の fcitx5 に対してビルドし直す (Ubuntu 24.04 の fcitx5 とは版が違う)
   rpm:
+    if: github.event_name != 'pull_request'
     needs: app
     strategy:
       matrix:
@@ -188,6 +222,7 @@ jobs:
         run: |
           dnf install -y ./linux/build/meltype-*.rpm
           test -x /opt/meltype/ibus-engine-meltype
+          for f in /opt/meltype/meltype-settings /opt/meltype/libSkiaSharp.so /opt/meltype/libHarfBuzzSharp.so; do libs="$(ldd "$f")"; if grep 'not found' <<< "$libs"; then echo "::error::$f が要るライブラリがありません"; exit 1; fi; done
           test -x /opt/meltype/mozc/meltype_mozc_helper
           /opt/meltype/zenzai/llama-server --version
           grep -q '<exec>/opt/meltype/ibus-engine-meltype --ibus</exec>' /usr/share/ibus/component/meltype.xml
@@ -231,21 +266,24 @@ jobs:
       # 同梱の llama-server が、サポートする中で一番古い glibc 2.34・libstdc++ (GCC 11) で起動できるか
       - name: Zenzai llama-server
         run: /opt/meltype/zenzai/llama-server --version
+      # 設定アプリ (と描画に使う Skia) の要るライブラリが、rpm の依存で入っているか (glibc 2.34 で動くかも)
+      - name: Settings app libraries
+        run: |
+          for f in /opt/meltype/meltype-settings /opt/meltype/libSkiaSharp.so /opt/meltype/libHarfBuzzSharp.so; do libs="$(ldd "$f")"; if grep 'not found' <<< "$libs"; then echo "::error::$f が要るライブラリがありません"; exit 1; fi; done
       - name: Python tests
         run: |
           python3 linux/tests/test_virtual_key.py
-          python3 linux/tests/test_settings.py
       - name: IBus and real Mozc integration tests
         run: timeout 120 python3 linux/tests/test_integration.py /opt/meltype
 
-  # IME の E2E の基盤 (tools/ime-tests) 自身の契約のテスト。製品はビルドしない
+  # IME の E2E の基盤 (linux/ime-tests) 自身の契約のテスト。製品はビルドしない
   ime-ci:
     name: IME CI tests
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     defaults:
       run:
-        working-directory: tools/ime-tests
+        working-directory: linux/ime-tests
         shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -255,7 +293,7 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: tools/ime-tests/package-lock.json
+          cache-dependency-path: linux/ime-tests/package-lock.json
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - name: Linux session control tests
@@ -273,7 +311,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ime-tests
-          path: tools/ime-tests/artifacts/
+          path: linux/ime-tests/artifacts/
           if-no-files-found: warn
           retention-days: 14
 
@@ -291,17 +329,17 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: tools/ime-tests/package-lock.json
+          cache-dependency-path: linux/ime-tests/package-lock.json
       # linux_ime.py が実行環境の記録 (session.json) に dotnet の版を書く
       - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: 10.0.x
       - name: Install IBus and the test tools
         run: |
-          sudo apt-get update
-          sudo apt-get install -y python3-gi gir1.2-ibus-1.0 ibus ibus-gtk3 dbus-x11 xvfb xauth xdotool x11-xkb-utils
-          npm --prefix tools/ime-tests ci
-          cd tools/ime-tests
+          sudo apt-get -o Acquire::Retries=3 update
+          sudo apt-get -o Acquire::Retries=3 install -y python3-gi gir1.2-ibus-1.0 ibus ibus-gtk3 dbus-x11 xvfb xauth xdotool x11-xkb-utils
+          npm --prefix linux/ime-tests ci
+          cd linux/ime-tests
           npx playwright install --with-deps chromium
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -309,7 +347,7 @@ jobs:
           path: linux/build/artifact
       - run: (cd linux/build && unzip -q artifact/Meltype-*.zip)
       - name: OS keys through IBus, product Core and Chromium
-        working-directory: tools/ime-tests
+        working-directory: linux/ime-tests
         env:
           MELTYPE_PACKAGE_DIR: ${{ github.workspace }}/linux/build/Meltype-linux
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -319,6 +357,6 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ime-real-input-linux
-          path: tools/ime-tests/artifacts/
+          path: linux/ime-tests/artifacts/
           if-no-files-found: warn
           retention-days: 14

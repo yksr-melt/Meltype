@@ -100,7 +100,7 @@ Windows のコード署名の方針は [Code signing policy](docs/CODE-SIGNING.m
   <img src="docs/images/cards/privacy-storage.svg" alt="保存も PC の中: 設定・学習データ・辞書は %LOCALAPPDATA% の中に" width="32%">
 </p>
 
-保存するのは `%LOCALAPPDATA%\Meltype` の設定・学習データ・ユーザー辞書 (と、ON にしたときのログ、異常終了と自動更新の記録) だけです。
+保存するのは `%LOCALAPPDATA%\Meltype` の設定・学習データ・ユーザー辞書 (と、ON にしたときの打鍵数とログ、異常終了と自動更新の記録) だけです。
 セキュリティの方針と脆弱性の連絡先は [SECURITY.md](SECURITY.md) にあります。
 
 <br><br>
@@ -196,6 +196,8 @@ General Public License for more details.
   <a href="https://github.com/itouuuuuuuuu"><img src="https://github.com/itouuuuuuuuu.png?size=120" width="60" alt="@itouuuuuuuuu" title="@itouuuuuuuuu"></a>
   <a href="https://github.com/organic817"><img src="https://github.com/organic817.png?size=120" width="60" alt="@organic817" title="@organic817"></a>
   <a href="https://github.com/amanetoki7"><img src="https://github.com/amanetoki7.png?size=120" width="60" alt="@amanetoki7" title="@amanetoki7"></a>
+  <a href="https://github.com/YukiWorks432"><img src="https://github.com/YukiWorks432.png?size=120" width="60" alt="@YukiWorks432" title="@YukiWorks432"></a>
+  <a href="https://github.com/kagankan"><img src="https://github.com/kagankan.png?size=120" width="60" alt="@kagankan" title="@kagankan"></a>
 </p>
 <!-- sponsors:end -->
 <sub>名前を公開にして応援してくださった方を載せています。</sub>

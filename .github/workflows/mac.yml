@@ -1,24 +1,32 @@
-# Mac 版 (mac/) をビルドしてテストし、テスター向けの zip (Meltype.app + install.sh + 説明) を Artifacts (meltype-mac) に置く。
-# Mac 版・共通部分を変えた Pull Request と main、手動実行、release.yml (タグ) から呼ばれたとき。
+# Mac 版 (mac/) をビルドしてテストし、テスター向けの zip (Meltype.app・Meltype Settings.app + install.sh + 説明) を Artifacts (meltype-mac) に置く。
+# Mac 版・共通部分を変えた main、手動実行、release.yml (タグ) から呼ばれたとき。
+# Mac 版のコードを変えた Pull Request では、ビルドとテストだけを流す (署名と zip は作らない)。
 # リリースへの添付と Homebrew の cask の更新は release.yml。
 name: mac
 
 on:
+  # Core・辞書だけの変更は core.yml のテストと lint.yml の NativeAOT のアナライザーで見るので、ここでは流さない
   pull_request:
-    paths: &paths
+    paths:
       - 'mac/**'
-      - 'src/Meltype.Core/**'
       - 'src/Meltype.Core.CApi/**'
-      - 'dictionaries/**'
+      - 'src/Meltype.Settings/**'
       - 'native/mozc/**'
       - 'native/zenzai/**'
-      - 'tools/test-native-boundaries.py'
-      - 'tools/test-mac-boundaries.*'
-      - 'tools/test-mac-events.*'
+      - 'tests/test_mac_scripts.lisp'
       - '.github/workflows/mac.yml'
   push:
     branches: [main]
-    paths: *paths
+    paths:
+      - 'mac/**'
+      - 'src/Meltype.Core/**'
+      - 'src/Meltype.Core.CApi/**'
+      - 'src/Meltype.Settings/**'
+      - 'dictionaries/**'
+      - 'native/mozc/**'
+      - 'native/zenzai/**'
+      - 'tests/test_mac_scripts.lisp'
+      - '.github/workflows/mac.yml'
   workflow_dispatch:
   workflow_call:
 
@@ -35,6 +43,19 @@ defaults:
     shell: bash
 
 jobs:
+  # mac/ のスクリプトのテスト。Homebrew の sbcl は版を固定できないので、署名の証明書を読み込む app とは別の job で流す
+  scripts:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: SBCL
+        run: brew install sbcl
+      - name: Test
+        run: sbcl --script tests/test_mac_scripts.lisp
+
   app:
     runs-on: macos-15
     # Mozc のビルドは初回 30〜40 分かかる (2 回目からは Bazel のキャッシュを使う)
@@ -100,9 +121,9 @@ jobs:
         run: ./build.sh --no-install
       - name: NativeAOT and Swift boundary tests
         run: |
-          python3 tools/test-native-boundaries.py mac/build/Meltype.app/Contents/Frameworks/libMeltypeNative.dylib
-          python3 tools/test-mac-boundaries.py mac/build/Meltype.app/Contents/Frameworks/libMeltypeNative.dylib
-          python3 tools/test-mac-events.py mac/build/Meltype.app/Contents/Frameworks/libMeltypeNative.dylib
+          python3 src/Meltype.Core.CApi/tests/test-native-boundaries.py mac/build/Meltype.app/Contents/Frameworks/libMeltypeNative.dylib
+          python3 mac/Tests/test-mac-boundaries.py mac/build/Meltype.app/Contents/Frameworks/libMeltypeNative.dylib
+          python3 mac/Tests/test-mac-events.py mac/build/Meltype.app/Contents/Frameworks/libMeltypeNative.dylib
       # 公証 (notarization): 署名したときだけ。秘密 NOTARY_APPLE_ID・NOTARY_TEAM_ID・NOTARY_PASSWORD (App 用パスワード)
       - name: Notarize
         if: env.MELTYPE_MAC_IDENTITY != ''
@@ -111,16 +132,20 @@ jobs:
           NOTARY_TEAM_ID: ${{ secrets.NOTARY_TEAM_ID }}
           NOTARY_PASSWORD: ${{ secrets.NOTARY_PASSWORD }}
         run: |
-          ditto -c -k --keepParent mac/build/Meltype.app "$RUNNER_TEMP/notarize.zip"
-          xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" --apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" --password "$NOTARY_PASSWORD" --wait
-          xcrun stapler staple mac/build/Meltype.app
+          for app in Meltype "Meltype Settings"; do
+            ditto -c -k --keepParent "mac/build/$app.app" "$RUNNER_TEMP/notarize.zip"
+            xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" --apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" --password "$NOTARY_PASSWORD" --wait
+            xcrun stapler staple "mac/build/$app.app"
+          done
       - name: Package
+        if: github.event_name != 'pull_request'
         run: |
           # タグ (v1.0.0) なら Meltype-1.0.0-mac.zip、それ以外はテスト版の名前
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then name="Meltype-${GITHUB_REF_NAME#v}-mac.zip"; else name="Meltype-mac-test-$(date +%Y%m%d-%H%M).zip"; fi
           bash mac/package.sh "$name"
           ls -la dist
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: meltype-mac
           path: dist/Meltype-*.zip

@@ -39,9 +39,11 @@ impl を更新した後の確認では、入力先アプリの再起動は要り
 
 自動開閉の検証は次で行えます。短時間テスト画面が前面に出ます。Windows の実際の TSF コンパートメントと通常欄・パスワード欄を使い、プログラムからの開閉は明示的な切り替え (`ModeToggleRequested`) として送らず、タスクバーのボタンでは 1 回ずつ送ることを確認します。パイプ通信だけを記録用に置き換えており、通常の Meltype 本体・設定・学習データには接続しません。前面に出せない場合は終了コード 77 でスキップします。
 
+同じテストで、タスクバーと同じクラス名のウィンドウにフォーカスを移し、最初の打鍵から英数字と Space をメニューに通すこと、タスクバーの Edit (アドレス ツールバー) とタスクバーから出た後は通常どおり受け取ることも確かめます。
+
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File native/tip/tests/build-mode-indicator-test.ps1
-native/tip/bin/tests/ModeIndicatorEvents.exe
+powershell -NoProfile -ExecutionPolicy Bypass -File native/tip/tests/build-input-event-test.ps1
+native/tip/bin/tests/InputEvents.exe
 ```
 
 `--tip-e2e` の制約: Windows は、人のキーボード操作がしばらく無い状態だと、プログラムが送り込んだキー (SendInput) も、TSF のキー処理を直接呼んだキー (ITfKeystrokeMgr) も、IME に渡さない。
@@ -97,13 +99,16 @@ stub が impl をロードし、Meltype の更新後は、アプリを再起動�
 | ITfCompositionSink | アプリの側が変換中の文字を確定したとき (打っている途中で、キャレットがその後ろのままなら、次のキーで変換中に戻して続ける。空のノートに最初の文字を入れたときに、アプリが入力欄を作り直して確定することがあるため) |
 | ITfDisplayAttributeProvider | 下線の種類 (打っている途中は点線、変換した文節は細線、選んでいる文節は太線) |
 | ITfCompartmentEventSink | 日本語 ⇔ 英数 (IME の ON/OFF)。半角/全角 と、タスクバーの「あ / A」のボタン (ITfLangBarItemButton) で切り替える |
+| ITfCandidateListUIElement | 候補の一覧を UI Element として `ITfUIElementMgr` に知らせる (`CandidateWindow.cpp`)。アプリが自分で描くと答えたら (`BeginUIElement` の show が FALSE) 窓は出さない |
 
-ゲームなど、候補を自分で描くアプリ向けの UILess (ITfCandidateListUIElement) には対応していない。
+ゲームなど、候補を自分で描くアプリ (UILess) は、スレッドを `TF_TMAE_UIELEMENTENABLEDONLY` で始め、`GUID_TFCAT_TIPCAP_UIELEMENTENABLED` に登録した IME だけを有効にする。
+登録していないと、そのアプリでは IME が動かず、打ったキーがそのまま入る。そのため、このカテゴリに登録し、候補の一覧は必ず `ITfUIElementMgr` を通して出す。
+アプリが自分で描くときに渡すのは候補の一覧だけで、「もしかして」・打ったキー・案内・候補の意味は出ない。ページの区切りは Meltype が決める (`SetPageIndex` は受け付けない)。
 
 ### キーの流れ
 
 1. `OnTestKeyDown`: 変換中ならキーを使う。変換していないときは、最後の応答の `state.capture` が受け取ると言ったキーだけを使う
-   (`keys` の入力モードのキー・切り替えキー、`word` の英字・数字・@・_、`symbol` の記号、`space`・`shiftSpace`)。Ctrl・Alt・Windows キー付き・ほかのソフトが送り込んだ文字 (VK_PACKET) は使わない
+   (`printableAscii` の文字から `printableAsciiExcept` を除いたもの、`shortcuts` の入力モードのキー・切り替えキー・Space・Shift+Space)。Ctrl・Alt・Windows キー付き・ほかのソフトが送り込んだ文字 (VK_PACKET) は使わない
    (変換中なら、その場で確定してからアプリに通す。その場で確定できないアプリでは受け取り、2. で確定してから送り直す)。
    まだ応答が無い・つながらないときは、日本語入力として文字と入力モードのキーを使う。
    パスワード欄か (入力欄の種類 InputScope) も、ここでキーごとに読み直す (読んだ結果は、続く同じキー・同じ入力欄の `OnKeyDown` で 1 回だけ使う)。
@@ -142,6 +147,9 @@ stub が impl をロードし、Meltype の更新後は、アプリを再起動�
   元の欄をすぐに編集できず `Password` の通知が先になる場合は、元の欄に表示済みの文字を残し、編集できるようになった時点で TSF の変換だけを終了する。
   `IS_PRIVATE` のみを受け取った欄では、`Private` を送って学習を抑止し、変換は継続する。
 - Meltype.exe が動いていない・一時停止中・動作モードが Meltype IME でない・アプリ別設定で OFF のアプリ (応答の `state.handlesInput` が false)
+- タスクバーの XAML メニュー (Win+X など) やボタンにフォーカスしているときの、修飾キー (Shift を含む) なしで入力される英数字・記号 (ASCII の `!` から `~` の範囲) と Space。Space を入力モードのキーに割り当てていても、メニューに通す。
+  Win32 のメニューフラグが立たないため、TIP がキーを処理するときに、このスレッドのフォーカスのルート HWND のクラスが `Shell_TrayWnd` / `Shell_SecondaryTrayWnd` かを調べる。打鍵と同時に調べるので、メニューを開いた直後の 1 打目にも間に合う。
+  タスクバーで文字を入力する Windows 10 のアドレス ツールバー (`Edit`) は除く。
 
 ## 通信
 
@@ -185,7 +193,7 @@ DLL の中で、Direct2D + DirectWrite で描く (絵文字もカラーで出る
   そのとき (とトレイで Meltype IME を選んだとき) は、いま使う入力方式も Meltype IME にする (ITfInputProcessorProfileMgr::ActivateProfile の TF_IPPMF_FORSESSION)
 - Meltype.exe 自身の画面 (はじめに・設定など) でも使える。そこでは UI スレッドが DLL の中で応答を待って止まるので、
   UI スレッドからの要求 (要求の `thread` で見分ける) は、UI スレッドに移さずにパイプのスレッドで処理する (UI スレッドは止まっているので、ほかの処理と同時には動かない)
-- つながりごとの `ImeHost` に `CompositionService.Parts` を渡し、辞書・学習データ・変換エンジンを変換ボックスと共有する。すべて UI スレッドで動かす
+- つながりごとの `ImeHost` は `CompositionService.CreateHost` で作り、辞書・学習データ・変換エンジンを変換ボックスと共有する。すべて UI スレッドで動かす
 
 ## インストール
 
@@ -206,9 +214,6 @@ DLL の中で、Direct2D + DirectWrite で描く (絵文字もカラーで出る
 - 動作モードが Meltype IME なのに、ポータブル版か、登録されていないか (登録を外した・ほかのユーザーがアンインストールした・TIP のキーだけ残り、64 ビットの `InprocServer32` か DLL が無い)、
   このユーザーのキーボードの一覧に無ければ、Meltype キーボードで動かす。起動したとき・config.json を読み直したとき・トレイや設定画面で変えたときのどれでも同じ。
   config.json は書き換えない (動かしている動作モードは `MeltypeEngine.Mode`)。Meltype IME を入れ直したら、Meltype.exe を起動し直すか、トレイで Meltype IME を選び直すと Meltype IME で動く
-- 管理者として動かす前に、DLL が配布したときのハッシュ (`MeltypeTip.dll.package.sha256`、無ければ `.sha256`) と合うかを確かめる (壊れた DLL を登録しないため)。
-  確かめてから使うまでにすり替えられないように、管理者として動く側は DLL と Register-Tip.ps1 を `C:\Program Files\Meltype` の下に写し、昇格する前に確かめたハッシュと合うものだけで登録する。
-  その処理は、ファイルではなくコマンドとして渡す (ユーザーのフォルダーのスクリプトを、管理者として直接動かさない)
 - 「言語と地域」のキーボードの一覧に Meltype を足す (今のユーザー)。既定の入力方式を自分で決めていなければ、Meltype にする (アンインストールで、Meltype のままなら戻す)
 - アンインストールでは、一覧から外し、登録を外して DLL を消す。画面の無いアンインストール (winget uninstall) でも、インストールと同じく UAC の前に説明を出して外す。UAC を断られたら、一覧から外すだけで登録は残す。アプリが使っていて消せない DLL は、次に Windows を起動したときに消す。
   IME の登録は PC 全体なので、同じ PC のほかのユーザーも Meltype を使っていると、そのユーザーの Meltype IME も使えなくなる
@@ -218,11 +223,10 @@ DLL の中で、Direct2D + DirectWrite で描く (絵文字もカラーで出る
 - 同じユーザーの権限で動くほかのプログラムが Meltype.exe より先に同じ名前のパイプを作ると、Meltype IME はそのプログラムにつながり、打鍵とキャレットの前後の文字がそのプログラムに渡り、返ってきた文字が入力欄に入る。同じユーザーの権限で動くプログラムはもともとキーボードの入力を読めるので、それ以上の被害にはならない
 - ストアアプリ (自分も Low で、相手のプロセスを調べられない) は、パイプの所有者が同じユーザーかだけを確かめる。同じユーザーの Low のプログラムが先に作ったパイプにはつながってしまう
 - ストアアプリは自分で入力の本体を作って変換を頼めるので、変換の候補の順番 (学習した結果)・ユーザー辞書の語を間接的に知り、学習データに書き込める。ほかのアプリの入力やファイルは読めない
-- 登録のときに管理者として動くスクリプトと DLL は、ユーザーが書き換えられるインストール先から読む。ハッシュを確かめる前に、同じユーザーの権限で動くプログラムがハッシュのファイルやスクリプトごと書き換えていれば防げない (インストーラーをユーザーのフォルダーに置く作りに共通の制限)
+- 登録のときに管理者として動くスクリプトと DLL は、ユーザーが書き換えられるインストール先から読み、中身を確かめない。同じユーザーの権限で動くプログラムが書き換えていれば、UAC で「はい」を選んだときに書き換えたものが登録される。インストール先にハッシュを置いても、同じプログラムがハッシュも書き換えられるので防げない (インストーラーをユーザーのフォルダーに置く作りに共通の制限)
 
 ## 未対応・確かめていないこと
 
-- UILess (候補を自分で描くアプリ)
 - ARM64 の Windows では、64 ビットのアプリ用に ARM64X の DLL (`tip\arm64`。ARM64 と x64 のアプリのどちらにも読み込める) を登録する。
   ARM64 の実機では、まだ広くは確かめていない
 - 確かめたのは、RichEdit の入力欄 (`--tip-e2e`)、パイプ (`--tip-client`)、ストアアプリと同じ AppContainer からの接続。

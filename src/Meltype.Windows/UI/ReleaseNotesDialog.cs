@@ -29,10 +29,8 @@ internal sealed class ReleaseNotesDialog : Form
                 // チェックは画面の操作から直接呼ばれるので、設定の保存や反映で例外が出ても画面を壊さない
                 try
                 {
-                    var next = engine.Settings.Clone();
-                    if (next.ShowReleaseNotesAfterUpdate == showAfterUpdate) return;
-                    next.ShowReleaseNotesAfterUpdate = showAfterUpdate;
-                    engine.ApplySettings(next);
+                    if (engine.Settings.ShowReleaseNotesAfterUpdate == showAfterUpdate) return;
+                    engine.EditSettings(settings => settings.ShowReleaseNotesAfterUpdate = showAfterUpdate);
                 }
                 catch (Exception ex)
                 {

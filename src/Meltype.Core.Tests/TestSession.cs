@@ -3,6 +3,9 @@
 
 using Meltype.Composition;
 using Meltype.Config;
+using Meltype.Detection;
+using Meltype.Dictionary;
+using Meltype.Engine;
 using Meltype.Ime;
 
 namespace Meltype.Tests;
@@ -61,7 +64,7 @@ internal sealed class TestSession : IImeEnvironment
     public bool Direct
     {
         get => !State.ImeOpen;
-        set => Send(value ? ImeEventType.AlphanumericModeSelected : ImeEventType.JapaneseModeSelected);
+        set => Send(value ? new ImeEvent.AlphanumericModeSelected() : new ImeEvent.JapaneseModeSelected());
     }
 
     /// <summary>英数状態で英語と分かった語の続きを打っているか。</summary>
@@ -70,19 +73,14 @@ internal sealed class TestSession : IImeEnvironment
     /// <summary>変換ボックスに何か入っているか。</summary>
     public bool IsComposing => _last?.View is not null;
 
-    public SessionResult Send(ImeEventType type, ImeKey? key = null, ImeCaret? caret = null, int index = 0, string? before = null, string? after = null)
+    public SessionResult Send(ImeEvent e, string? before = null, string? after = null)
     {
         var traits = new List<ImeTrait>();
         if (CodeTerminal) traits.Add(ImeTrait.Terminal);
         if (Private) traits.Add(ImeTrait.Private);
-        var output = _host.Handle(new ImeEvent
+        var output = _host.Handle(e with
         {
-            Version = ImeHost.Version,
-            Type = type,
             Instance = "test",
-            Key = key,
-            Caret = caret,
-            Index = index,
             Field = new ImeField { Before = before, After = after, Composing = IsComposing, App = CodeInput ? "Code.exe" : null, Traits = traits },
         });
         State = output.State;
@@ -91,19 +89,19 @@ internal sealed class TestSession : IImeEnvironment
     }
 
     public SessionResult HandleKey(int vk, char? ch, bool shift, bool control, bool alt, bool command, string? before = null, string? after = null) =>
-        Send(ImeEventType.KeyPressed, new ImeKey { Vk = vk, Ch = ch ?? 0, Shift = shift, Ctrl = control, Alt = alt, Command = command }, before: before, after: after);
+        Send(new ImeEvent.KeyPressed(new ImeKey { Vk = vk, Ch = ch ?? 0, Shift = shift, Ctrl = control, Alt = alt, Command = command }), before, after);
 
     /// <summary>未確定の内容を確定する (フォーカスが移ったなど)。</summary>
-    public SessionResult CommitPending() => Send(ImeEventType.CommitRequested);
+    public SessionResult CommitPending() => Send(new ImeEvent.CommitRequested());
 
     /// <summary>前の応答の一覧の index 番目をクリックする (予測変換の候補なら確定する)。</summary>
-    public SessionResult SelectCandidate(int index) => Send(ImeEventType.CandidateClicked, index: index);
+    public SessionResult SelectCandidate(int index) => Send(new ImeEvent.CandidateClicked(index));
 
     /// <summary>背景の変換の結果が届いた。表示が変わらなければ null。</summary>
     public SessionResult? RefreshConversion()
     {
         var before = ViewJson(_last);
-        var result = Send(ImeEventType.ConversionFinished);
+        var result = Send(new ImeEvent.ConversionFinished());
         return ViewJson(result) == before ? null : result;
     }
 
@@ -111,15 +109,15 @@ internal sealed class TestSession : IImeEnvironment
 
     /// <summary>キャレットが動いた (passedVk はアプリに通したキー。0 ならクリックなど)。</summary>
     public SessionResult CaretMoved(int passedVk, bool control = false) =>
-        Send(ImeEventType.CaretMoved, caret: new ImeCaret { Moved = true, PassedKey = passedVk, Ctrl = control });
+        Send(new ImeEvent.CaretMoved(new ImeCaret { Moved = true, PassedKey = passedVk, Ctrl = control }));
 
     /// <summary>キャレットの前が before のとき、打ったら英数のままアプリに通るか (入力モードの表示が A か)。</summary>
     public bool CodeEnglishAt(string before)
     {
-        Send(ImeEventType.CaretMoved, before: before);
+        Send(new ImeEvent.CaretMoved(new ImeCaret()), before);
         return State is { ImeOpen: true, LanguageMode: ImeLanguageMode.Alphanumeric };
     }
 
     /// <summary>日本語 ⇔ 英数を切り替える (タスクバーのボタンなど)。</summary>
-    public SessionResult Toggle(string before) => Send(ImeEventType.ModeToggleRequested, before: before);
+    public SessionResult Toggle(string before) => Send(new ImeEvent.ModeToggleRequested(), before);
 }

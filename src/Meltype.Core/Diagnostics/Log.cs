@@ -98,9 +98,9 @@ public static class Log
             if (File.Exists(path) && new FileInfo(path).Length > 5 * 1024 * 1024) File.Move(path, path + ".old", overwrite: true);
             File.AppendAllText(path, builder.ToString());
         }
-        catch
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // ログの失敗で入力処理を止めない。
+            // ログを書けない (ディスクがいっぱい・権限が無い) ときも、入力処理を止めない。
         }
     }
 }

@@ -528,7 +528,7 @@ describe("タイピング調査", async () => {
     return call("/api/typing/trials", {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-      body: JSON.stringify({ sentence: FIRST.id, keys: KEYS, duration: 400, ...extra }),
+      body: JSON.stringify({ sentence: FIRST.id, keys: KEYS, duration: 400, version: 2, ...extra }),
     });
   }
 
@@ -560,10 +560,11 @@ describe("タイピング調査", async () => {
     assert.deepEqual(row.keys, KEYS);
     assert.deepEqual(row.profile, { touch: "yes", layout: "jis", os: "windows" });
     assert.ok(!("typed" in row));
+    assert.equal(row.version, 2);
     assert.ok(!JSON.stringify(row).includes("203.0.113.9"));
     // 打った文字・一致率・打鍵の数など、打鍵とお手本から計算できる値は保存しない
     const columns = (await env.TYPING_DB.prepare("SELECT name FROM pragma_table_info('typing_trials')").all()).results.map((c) => c.name);
-    assert.deepEqual(columns, ["id", "session_id", "sentence_id", "keys", "duration_ms", "created_at"]);
+    assert.deepEqual(columns, ["id", "session_id", "sentence_id", "keys", "duration_ms", "created_at", "version"]);
     const counts = await (await call("/api/dashboard/typing/sentences", { headers: await auth() })).json();
     assert.equal(counts.sentences.find((s) => s.id === FIRST.id).count, 1);
     assert.equal(counts.sentences.filter((s) => s.count > 0).length, 1);
@@ -571,6 +572,7 @@ describe("タイピング調査", async () => {
 
   it("知らない文・おかしな打鍵は受け付けない", async () => {
     const { token } = await (await start()).json();
+    assert.equal((await trial(token, { version: 1 })).status, 400);
     assert.equal((await trial(token, { sentence: "nope" })).status, 400);
     assert.equal((await trial(token, { keys: [["KeyK", "k", 100, 50]] })).status, 400);
     assert.equal((await trial(token, { keys: [["KeyK", "k", 100, null], ["KeyY", "y", 50, null]] })).status, 400);
