@@ -1163,6 +1163,28 @@ internal static class ImeContractTests
     }
 
     [Test]
+    public static void FieldMode_IsLearnedFromTheSwitchBeforeTyping()
+    {
+        // #1144: 入力欄に入ってまだ何も打たないうちに切り替えたモードを覚え、次にその入力欄に入ったらそのモードにする
+        var front = new Front { Services = new() { FieldModes = new Meltype.Learning.FieldModes(null) }, App = "chat.exe" };
+        Assert.True(Japanese(front.Event("CaretMoved", extra: Entered)), front.Trace);
+        Assert.True(!Japanese(front.Key(0xF0)), "英数キーで英数に" + front.Trace);
+        front.Type("hello ");
+        // 打ち始めてからの切り替えは一時的なもの
+        Assert.True(Japanese(front.Event("JapaneseModeSelected")), front.Trace);
+        front.App = "notepad.exe";
+        Assert.True(Japanese(front.Event("CaretMoved", extra: Entered)), "覚えていない入力欄はそのまま" + front.Trace);
+        front.App = "chat.exe";
+        Assert.True(!Japanese(front.Event("CaretMoved", extra: Entered)), "覚えたモードにする" + front.Trace);
+        // 自動で切り替えた直後に逆へ直したら、覚え直す
+        Assert.True(Japanese(front.Event("JapaneseModeSelected")), front.Trace);
+        front.App = "notepad.exe";
+        front.Event("CaretMoved", extra: Entered);
+        front.App = "chat.exe";
+        Assert.True(Japanese(front.Event("CaretMoved", extra: Entered)), "直したモードを覚え直す" + front.Trace);
+    }
+
+    [Test]
     public static void CapsLock_TypesCapitalsOnlyWhenTheSettingIsOn()
     {
         // #837: 日本語入力中も CapsLock で大文字にしたい人と、CapsLock を ON のまま日本語にしたい人 (#736) がいる

@@ -8,6 +8,7 @@ using Meltype.Composition;
 using Meltype.Config;
 using Meltype.Dictionary;
 using Meltype.Input;
+using Meltype.Learning;
 
 namespace Meltype.Ime;
 
@@ -119,6 +120,14 @@ internal static class ImeSession
         if (game && !state.Game) CompositionController.SetDirect(state.Composition, true);
         state.Game = game;
         var before = LineBefore(state, e.Field);
+        var (fieldModes, fieldKey) = FieldModeOf(env, state.Field);
+        if (e is ImeEvent.WithCaret { Caret.FocusEntered: true })
+        {
+            state.FreshFocus = true;
+            // 前にこの入力欄で切り替えたモードにする
+            if (active && !game && !IsComposing(state) && LearnedMode(env, state.Field) is { } learned && learned != ShowsJapanese(state, before))
+                Switch(state, env, learned, before, toggle: false);
+        }
         var wasJapanese = ShowsJapanese(state, before);
         var composing = IsComposing(state);
         // view が null だと、フロントは変換中の表示を消す。表示を変えない出来事は今の表示を返す
@@ -146,6 +155,7 @@ internal static class ImeSession
         // 日本語のままだと閉じたあとの移動のキー (WASD) が変換中の文字になる。チャットを送る・閉じる前の Enter・Esc を区切りにする
         if (game && composing && !IsComposing(state) && e is ImeEvent.KeyPressed { Key.Vk: VirtualKeys.Return or VirtualKeys.Escape }) CompositionController.SetDirect(state.Composition, true);
         TrackLine(state, e, result);
+        RememberFieldMode(state, e, result, handled.ExplicitChange, wasJapanese, ShowsJapanese(state, before), fieldModes, fieldKey);
         var snippetKeys = SnippetKeys(state, env, e, result, settings);
         // キーでアプリの文字が変わったあとの位置は、フロントが次の出来事 (caret) で知らせる
         var japanese = ShowsJapanese(state, before);
@@ -503,6 +513,26 @@ internal static class ImeSession
     /// 英数にするとき、toggle (日本語 ⇔ 英数の切り替え) は、日本語にしていたコードの行を英数に戻すだけで IME を開いたままにする。
     /// そうでなければ (英数キー・無変換) 直接入力にする。
     /// </summary>
+    private static (FieldModes? Modes, string? Key) FieldModeOf(ImeEnv env, ImeField? field) =>
+        (ForbidsLearning(field) || !env.Settings.ForApp(field?.App).LearningEnabled ? null : env.Parts.Services.FieldModes,
+         FieldModes.KeyOf(field?.App, field?.Element?.ClassName, field?.Element?.Name));
+
+    /// <summary>入力欄で前に切り替えたモード (日本語なら true)。覚えていない・ゲームなら null。</summary>
+    public static bool? LearnedMode(ImeEnv env, ImeField? field) =>
+        !IsGame(env.Settings, field) && FieldModeOf(env, field) is ({ } modes, { } key) ? modes.Get(key) : null;
+
+    /// <summary>
+    /// 入力欄に入ってまだ何も打たないうちに切り替えたら、その入力欄のモードとして覚える。打ち始めたら (文字のキー・確定) 覚えない
+    /// (英単語を 1 つだけ英数で打つ、などの一時的な切り替え)。
+    /// </summary>
+    private static void RememberFieldMode(ImeSessionState state, ImeEvent e, SessionResult result, bool explicitChange, bool wasJapanese, bool japanese,
+        FieldModes? fieldModes, string? fieldKey)
+    {
+        if (!state.FreshFocus) return;
+        if (explicitChange && japanese != wasJapanese && fieldKey is not null) fieldModes?.Remember(fieldKey, japanese);
+        if (IsComposing(state) || result.Commits.Count > 0 || e is ImeEvent.KeyPressed { Key.Ch: > 0 } or ImeEvent.KeyPressed { Key.Text: not null }) state.FreshFocus = false;
+    }
+
     private static Handled Switch(ImeSessionState state, ImeEnv env, bool japanese, string? before, bool toggle)
     {
         var result = IsComposing(state) ? CommitPending(state, env) : Consumed;
