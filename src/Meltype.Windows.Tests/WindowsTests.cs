@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
 
-using Meltype.Config;
-using Meltype.Input;
-using Meltype.Composition;
-using Meltype.WindowsIme;
 using System.Diagnostics;
+using Meltype.Composition;
+using Meltype.Config;
+using Meltype.Engine;
+using Meltype.Input;
+using Meltype.WindowsIme;
 
 namespace Meltype.Tests;
 
@@ -179,7 +180,6 @@ internal static class WindowsTests
             if (mozc.Convert(new ConversionRequest("てすと", null)) is null) return; // 起動できない環境
             mozc.Dispose();
             var before = Helpers();
-            mozc.Learn("", [new ConversionClause("てすと", "テスト")]);
             Assert.Equal(before, Helpers(), "Dispose のあとで覚えさせても、ヘルパーを起動しない");
             Assert.True(mozc.Convert(new ConversionRequest("てすと", null)) is null, "Dispose のあとは変換しない");
             Assert.Equal(before, Helpers(), "Dispose のあとで変換しても、ヘルパーを起動しない");
@@ -203,9 +203,9 @@ internal static class WindowsTests
     }
 
     [Test]
-    public static void ApplySettings_ActivatesTsfOnlyWhenSwitchingToIt()
+    public static void SettingsChange_ActivatesTsfOnlyWhenSwitchingToIt()
     {
-        // トレイでも設定画面でも、動作モードを Meltype IME に変えたら入力方式も Meltype IME にする。
+        // トレイでも設定アプリでも、動作モードを Meltype IME に変えたら入力方式も Meltype IME にする。
         Assert.True(MeltypeEngine.SwitchesToTsf(InputMode.Keyboard, InputMode.Tsf), "Meltype キーボードから");
         Assert.True(!MeltypeEngine.SwitchesToTsf(InputMode.Tsf, InputMode.Tsf), "ほかの設定だけ変えたときは切り替えない");
         Assert.True(!MeltypeEngine.SwitchesToTsf(InputMode.Keyboard, InputMode.Keyboard), "Meltype IME を使えずに元のモードに戻したときは切り替えない");
@@ -428,85 +428,6 @@ internal static class WindowsTests
             if (before is not null) Clipboard.SetDataObject(before, copy: true);
             else Clipboard.Clear();
         }
-    }
-
-    [Test]
-    public static void SettingsToolTip_BreaksLinesForReading()
-    {
-        Assert.Equal("ひとつめ。\nふたつめ。", UI.SettingsForm.WrapToolTip("ひとつめ。ふたつめ。"), "文ごとに改行する");
-        Assert.Equal($"{new string('あ', 39)}\nAnyDesk を使う", UI.SettingsForm.WrapToolTip($"{new string('あ', 39)}AnyDesk を使う"), "英単語の途中で折り返さない");
-        Assert.Equal($"{new string('あ', 39)}\nあ、い", UI.SettingsForm.WrapToolTip($"{new string('あ', 40)}、い"), "読点を行頭に置かない");
-        Assert.Equal($"{new string('あ', 39)}\n(OFF)", UI.SettingsForm.WrapToolTip($"{new string('あ', 39)}(OFF)"), "開き括弧を行末に置かない");
-
-        // 設定画面に出す説明すべてで、文字を落とさず、長すぎる行・行頭の閉じ括弧・行末の開き括弧を作らない
-        var descriptions = typeof(Settings).GetProperties()
-            .Select(p => p.GetCustomAttributes(typeof(System.ComponentModel.DescriptionAttribute), false).OfType<System.ComponentModel.DescriptionAttribute>().FirstOrDefault()?.Description)
-            .OfType<string>().ToList();
-        Assert.True(descriptions.Count > 20, "説明を読めている");
-        foreach (var description in descriptions)
-        {
-            var wrapped = UI.SettingsForm.WrapToolTip(description);
-            Assert.Equal(description.Replace(" ", ""), wrapped.Replace("\n", "").Replace(" ", ""), description);
-            foreach (var line in wrapped.Split('\n'))
-            {
-                Assert.True(line.Sum(c => c < 0x80 ? 1 : 2) <= 80, $"長すぎる行: {line}");
-                Assert.True(line.Length > 0 && !")）」』]、。,.・".Contains(line[0]) && !"(（「『[".Contains(line[^1]), $"括弧・句読点の位置: {line}");
-            }
-        }
-    }
-
-    [Test]
-    public static void SettingsForm_UsesToggleSwitchesForEveryOnOffSetting()
-    {
-        using var engine = new MeltypeEngine(TestRuntime.Create());
-        using var form = new UI.SettingsForm(engine, new AppState());
-        var controls = Descendants(form).ToList();
-        // 設定画面に出す bool の項目は、すべてスイッチ (ON/OFF だけのプルダウン・チェックボックスを残さない)
-        var settings = typeof(Settings).GetProperties().Count(p => p.PropertyType == typeof(bool) && p.CanWrite &&
-            p.GetCustomAttributes(typeof(System.ComponentModel.BrowsableAttribute), false).OfType<System.ComponentModel.BrowsableAttribute>().FirstOrDefault()?.Browsable != false);
-        Assert.True(settings >= 30, $"ON/OFF の設定を読めている: {settings}");
-        Assert.Equal(settings + 2, controls.OfType<UI.ToggleSwitch>().Count(), "ON/OFF の設定 + 上の表示オプション 2 つ");
-        Assert.True(!controls.OfType<ComboBox>().Any(c => c.Items.Count == 2 && c.Items.Contains("ON")), "ON/OFF だけのプルダウンが残っていない");
-        Assert.True(!controls.OfType<CheckBox>().Any(), "チェックボックスが残っていない");
-        // 表の ON/OFF の列 (アプリ別設定の「有効」「入力欄とみなす」) もスイッチで、値は bool
-        var columns = controls.OfType<DataGridView>().SelectMany(g => g.Columns.Cast<DataGridViewColumn>()).ToList();
-        Assert.Equal(2, columns.OfType<UI.ToggleSwitchColumn>().Count(), "表のスイッチの列");
-        Assert.True(!columns.OfType<DataGridViewComboBoxColumn>().Any(c => c.Items.Count == 2 && c.Items.Contains("ON")), "表に ON/OFF だけのプルダウンの列が残っていない");
-        var rules = controls.OfType<DataGridView>().First(g => g.Columns[0].HeaderText.StartsWith("プロセス名", StringComparison.Ordinal));
-        Assert.Equal(false, rules.Rows.Cast<DataGridViewRow>().First(r => Equals(r.Cells[0].Value, "mstsc.exe")).Cells[1].Value, "mstsc.exe は OFF");
-        Assert.Equal(true, rules.Rows.Cast<DataGridViewRow>().First(r => Equals(r.Cells[0].Value, "Code.exe")).Cells[1].Value, "Code.exe は ON");
-        // 画面の値を設定に戻す (Collect) ときも、スイッチと表の bool がそのまま設定になる
-        var collect = form.GetType().GetMethod("Collect", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
-        var collected = (Settings)collect.Invoke(form, null)!;
-        Assert.True(!collected.IsAppEnabled("mstsc.exe") && collected.IsAppEnabled("Code.exe"), "表の値がそのまま設定になる");
-        Assert.Equal(engine.Running.Clone().Normalize().ToJson(), collected.ToJson(), "何も変えなければ、開いたときの値 (動かしている設定) のまま (閉じるときに保存しない)");
-        var live = controls.OfType<UI.ToggleSwitch>().First(t => t.AccessibleName == "ライブ変換");
-        Assert.True(live.Checked, "既定の ON が画面に出ている");
-        live.Checked = false;
-        Assert.True(!((Settings)collect.Invoke(form, null)!).LiveConversion, "スイッチを OFF にしたら設定も OFF");
-    }
-
-    [Test]
-    public static void ToggleSwitch_TogglesByDefaultActionAndPaints()
-    {
-        using var toggle = new UI.ToggleSwitch { Font = new Font("Yu Gothic UI", 9.5F) };
-        var changed = 0;
-        toggle.CheckedChanged += (_, _) => changed++;
-        toggle.Checked = true;
-        toggle.Checked = true;
-        Assert.Equal(1, changed, "同じ値では CheckedChanged を出さない");
-        Assert.True((toggle.AccessibilityObject.State & AccessibleStates.Checked) != 0, "ナレーターに ON と伝わる");
-        toggle.AccessibilityObject.DoDefaultAction();
-        Assert.True(!toggle.Checked && changed == 2, "ナレーターの既定の操作で切り替わる");
-        Assert.True((toggle.AccessibilityObject.State & AccessibleStates.Checked) == 0, "ナレーターに OFF と伝わる");
-        var plain = toggle.Width;
-        Assert.True(plain > 40 && toggle.Height >= 20, $"トラック (40×20) と文字のぶんの大きさ: {toggle.Size}");
-        toggle.Text = "見出し";
-        Assert.True(toggle.Width > plain, "見出しのぶん広がる");
-        // 描ける (自己診断と --render-forms は設定画面ごと画像に描く)
-        using var bitmap = new Bitmap(toggle.Width, toggle.Height);
-        toggle.DrawToBitmap(bitmap, toggle.ClientRectangle);
-        Assert.True(UI.ToggleSwitch.AccentColor().A == 255, "アクセント色を読める (読めなければ既定の青)");
     }
 
     private static IEnumerable<Control> Descendants(Control root)

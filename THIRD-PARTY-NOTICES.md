@@ -2,19 +2,19 @@
 
 Meltype のソースコード (このリポジトリ) には、次のものを除いて他者の著作物は含まれていません。
 
-- かな配列 (月配列 U9・花配列・NICOLA・中指NICOLA・TRON 配列) の表 (`src/Meltype.Core/Input/KanaLayout.cs`): [benizara](https://github.com/k-ayaki/benizara) の配列定義ファイルから取りました。MIT License (Copyright (c) 2018 綾木健一郎)
+- かな配列 (月配列 U9・花配列・NICOLA・中指NICOLA・TRON 配列) の表 (`dictionaries/kana-layouts.txt`): [benizara](https://github.com/k-ayaki/benizara) の配列定義ファイルから取りました。MIT License (Copyright (c) 2018 綾木健一郎)
 
 ## 配布用パッケージに同梱しているもの
 
 | 部品 | ライセンス | 同梱先 |
 | --- | --- | --- |
 | .NET ランタイム (Microsoft.NETCore.App, Microsoft.WindowsDesktop.App) | MIT License | `app\dotnet\` (ライセンス: `app\dotnet\LICENSE.txt`、同梱部品の通知: `app\dotnet\ThirdPartyNotices.txt`) |
-| Microsoft Visual C++ のランタイム (`msvcp140.dll`・`vcruntime140.dll` など、Mozc の変換ヘルパーが使うもの。一覧は `app\mozc\VC-RUNTIME.txt`) | Microsoft Visual Studio ソフトウェア ライセンス条項の「再頒布可能コード」(Visual Studio の VC\Redist にあり、REDIST の一覧に載っているファイル。変えずにアプリと一緒に配ることが認められている) | `app\mozc\` |
+| Microsoft Visual C++ のランタイム (`msvcp140.dll`・`vcruntime140.dll` など、Mozc の変換ヘルパーと llama-server が使うもの。一覧は `app\mozc\VC-RUNTIME.txt`・`app\zenzai\VC-RUNTIME.txt`) | Microsoft Visual Studio ソフトウェア ライセンス条項の「再頒布可能コード」(Visual Studio の VC\Redist にあり、REDIST の一覧に載っているファイル。変えずにアプリと一緒に配ることが認められている) | `app\mozc\`・`app\zenzai\` |
 | [Mozc](https://github.com/google/mozc) の変換エンジンと辞書 (`meltype_mozc_helper.exe`。Meltype 用の小さな入出力部分 `native/mozc/meltype_mozc_helper.cc` を足してビルドしたもの) | Mozc: BSD-3-Clause (Copyright Google Inc.)。辞書: IPAdic (NAIST)・ICOT・沖縄辞書 のライセンス。組み込みのライブラリ: Abseil (Apache-2.0)・Protocol Buffers (BSD-3-Clause)・Japanese Usage Dictionary など | `app\mozc\` (ライセンス: `app\mozc\MOZC-LICENSE.txt`、辞書とライブラリの全文: `app\mozc\MOZC-CREDITS.html`。Qt は使っていない) |
-| [llama.cpp](https://github.com/ggml-org/llama.cpp) の `llama-server.exe` と DLL (CPU 版。Zenzai に使う。版とハッシュは `native/zenzai/Get-Zenzai.ps1` で固定) | MIT License (Copyright The ggml authors)。組み込みの LLVM OpenMP (`libomp.dll`): Apache-2.0 WITH LLVM-exception | `app\zenzai\` (ライセンス: `app\zenzai\LICENSE-llama.cpp.txt`・`LICENSE-LLVM-OpenMP`、`app\zenzai\ZENZAI-NOTICE.txt`) |
+| [llama.cpp](https://github.com/ggml-org/llama.cpp) の `llama-server.exe` と DLL (CPU 版。Zenzai に使う。版とハッシュは `native/zenzai/Get-Zenzai.ps1` で固定。横に置く Visual C++ のランタイムの一覧は `app\zenzai\VC-RUNTIME.txt`) | MIT License (Copyright The ggml authors)。組み込みの LLVM OpenMP (`libomp.dll`): Apache-2.0 WITH LLVM-exception | `app\zenzai\` (ライセンス: `app\zenzai\LICENSE-llama.cpp.txt`・`LICENSE-LLVM-OpenMP`、`app\zenzai\ZENZAI-NOTICE.txt`) |
 | [zenz-v3.2-small](https://huggingface.co/Miwa-Keita/zenz-v3.2-small-gguf) (Zenzai のかな漢字変換モデル。`zenz-v3.2-small-Q5_K_M.gguf`) | Apache License 2.0 (Miwa-Keita) | `app\zenzai\` (ライセンス: `app\zenzai\LICENSE-zenz.txt`) |
 
-ポータブル版も通常版と同じフォルダー構成で配布します。アプリと .NET ランタイムに関するライセンス・第三者通知、および Mozc をビルドに含める場合のライセンス・辞書クレジットは、各配布物に同梱します。Mozc の VC ランタイム DLL は元のバイナリを変更せずに実行し、対象ファイルの一覧を `VC-RUNTIME.txt` に記載します。
+ポータブル版も通常版と同じフォルダー構成で配布します。アプリと .NET ランタイムに関するライセンス・第三者通知、および Mozc をビルドに含める場合のライセンス・辞書クレジットは、各配布物に同梱します。Mozc の変換ヘルパーと llama-server の横に置く VC ランタイム DLL は元のバイナリを変更せずに置き、対象ファイルの一覧をそれぞれの `VC-RUNTIME.txt` に記載します。
 
 ## Mac 版 (mac/) に同梱するもの
 
@@ -56,7 +56,7 @@ Meltype のソースコード (このリポジトリ) には、次のものを�
 
 ### よく使う語でない語の読みの一覧 (dictionaries/readings-rare.txt)
 
-日本語と英語の区切りを決めるときに、日本語の語として読むのに使います。JMdict のよく使う語の印が無い語の、ひらがなで 5 文字以上の読みと活用の種類を `tools/make-readings.mjs` で取り出して作りました。著作権・ライセンスは英訳の候補と同じ (EDRDG、CC BY-SA 4.0) で、この派生データも CC BY-SA 4.0 です。
+日本語と英語の区切りを決めるときに、日本語の語として読むのに使います。JMdict のよく使う語の印が無い語の、ひらがなで 3 文字以上の読み (3〜4 文字は古語・廃語などを除く) と活用の種類を `tools/make-readings.mjs` で取り出して作りました。著作権・ライセンスは英訳の候補と同じ (EDRDG、CC BY-SA 4.0) で、この派生データも CC BY-SA 4.0 です。
 
 ### カタカナで書く語の読みの一覧 (dictionaries/katakana.txt)
 
@@ -65,6 +65,48 @@ Meltype のソースコード (このリポジトリ) には、次のものを�
 ### 英字で書く語の候補 (dictionaries/loanwords.txt)
 
 リナックス → Linux のように、カタカナで打った語の候補に英字の書き方を出すのに使います。JMdict の英字で書く語 (Ｌｉｎｕｘ、ＧＨＱ) の書き方とカタカナの読みを `tools/make-loanwords.mjs` で取り出して作りました。著作権・ライセンスは英訳の候補と同じ (EDRDG、CC BY-SA 4.0) で、この派生データも CC BY-SA 4.0 です。
+
+### 英単語のカタカナ表記 (dictionaries/katakana-spellings.txt)
+
+export → エクスポート のように、英語として打った語の変換の候補にカタカナ表記を出すのに使います。JMdict のカタカナ語の英訳から括弧の説明を外し、よく使う英単語 1 語になるものを `tools/make-katakana-spellings.mjs` で取り出して作りました。英訳が一致しただけの別語を減らすため、[CMUdict](https://github.com/cmusphinx/cmudict) の発音とカタカナの子音の並びが一致する組だけを残しています。CMUdict は生成時の照合にだけ使い、実行時には使いません。著作権・ライセンスは英訳の候補と同じ (EDRDG、CC BY-SA 4.0) で、この派生データも CC BY-SA 4.0 です。
+
+CMUdict の LICENSE の全文:
+
+```
+Copyright (C) 1993-2015 Carnegie Mellon University. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+
+1. Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+   The contents of this file are deemed to be source code.
+
+2. Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in
+   the documentation and/or other materials provided with the
+   distribution.
+
+This work was supported in part by funding from the Defense Advanced
+Research Projects Agency, the Office of Naval Research and the National
+Science Foundation of the United States of America, and by member
+companies of the Carnegie Mellon Sphinx Speech Consortium. We acknowledge
+the contributions of many volunteers to the expansion and improvement of
+this dictionary.
+
+THIS SOFTWARE IS PROVIDED BY CARNEGIE MELLON UNIVERSITY ``AS IS'' AND
+ANY EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL CARNEGIE MELLON UNIVERSITY
+NOR ITS EMPLOYEES BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+```
 
 ### 候補の意味 (dictionaries/meanings.txt)
 
@@ -402,6 +444,7 @@ SPDX-License-Identifier: Unicode-3.0
 | `domain-stations.txt` | [SKK 辞書](https://github.com/skk-dev/dict) SKK-JISYO.station | MITA Yuusuke、SKK Development Team | GPL-2.0-or-later (Meltype では GPL-3.0-or-later で使う) |
 | `domain-propernouns.txt` | SKK 辞書 SKK-JISYO.propernoun | MITA Yuusuke、SKK Development Team | GPL-2.0-or-later (同上) |
 | `domain-names.txt` | SKK 辞書 SKK-JISYO.jinmei・SKK-JISYO.fullname | Wnn Consortium、SKK Development Team、Akie Kaidoh | GPL-2.0-or-later (同上) |
+| `names.txt` | SKK 辞書 SKK-JISYO.jinmei の読み | Wnn Consortium、SKK Development Team | GPL-2.0-or-later (同上) |
 | `domain-propernouns-sudachi.txt`・`domain-words-sudachi.txt` | [SudachiDict](https://github.com/WorksApplications/SudachiDict) core (20261015) の固有名詞 (一般)・普通名詞 (正規化表記と同じ表記だけ) | Works Applications Co., Ltd.。一部は UniDic (Copyright (c) 2011-2013, The UniDic Consortium) | Apache License 2.0。UniDic 由来の部分は BSD-3-Clause (下の全文) |
 | `domain-laws.txt` | [e-Gov 法令検索](https://laws.e-gov.go.jp/) の法令 API の、今ある法律の題名と読み | デジタル庁 | [公共データ利用規約 (第1.0版)](https://www.digital.go.jp/resources/open_data/public_data_license_v1.0) (CC BY 4.0 と互換)。出典: e-Gov 法令検索。題名と読みを取り出して加工した |
 

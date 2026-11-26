@@ -13,6 +13,11 @@ const root = path.join(path.dirname(self), '..', 'dictionaries');
 const hiragana = /^[ぁ-ゖー゛゜ゔ]+$/;
 const kana = /^[ぁ-ゖァ-ヺー・ゔヴ]+$/;
 const ascii = /^[\x21-\x7e]+$/;
+// Mozc の品詞名 (src/data/rules/user_pos.def の 1 列目)
+const mozcPos = new Set(['品詞なし', '名詞', '短縮よみ', 'サジェストのみ', '固有名詞', '人名', '姓', '名', '組織', '地名', '名詞サ変', '名詞形動', '数',
+  'アルファベット', '記号', '顔文字', '副詞', '連体詞', '接続詞', '感動詞', '接頭語', '助数詞', '接尾一般', '接尾人名', '接尾地名',
+  '動詞ワ行五段', '動詞カ行五段', '動詞サ行五段', '動詞タ行五段', '動詞ナ行五段', '動詞マ行五段', '動詞ラ行五段', '動詞ガ行五段', '動詞バ行五段',
+  '動詞ハ行四段', '動詞一段', '動詞カ変', '動詞サ変', '動詞ザ変', '動詞ラ変', '形容詞', '終助詞', '句読点', '独立語', '抑制単語']);
 // Core (WordList.ParseWords・ProperNouns.AddText) の語の区切り。全角空白は区切りでない (含むトークンは語にならず捨てられる)
 const coreTokens = line => line.split(/[ \t\r,]+/).filter(Boolean);
 
@@ -44,6 +49,14 @@ const dictionaries = {
   },
   'loanwords.txt': {
     format: spaced((reading, rest) => [hiragana.test(reading) ? null : `読み「${reading}」がひらがなでない`, rest.length === 0 ? '候補が無い' : null]),
+  },
+  // 英単語 カタカナ カタカナ …。Core は打った英字を小文字にして引く
+  'katakana-spellings.txt': {
+    format: spaced((word, rest) => [
+      /^[a-z]+$/.test(word) ? null : `「${word}」が小文字の英単語でない`,
+      rest.length === 0 ? '候補が無い' : null,
+      ...rest.filter(w => !/^[ァ-ヺー]+$/.test(w)).map(w => `「${w}」がカタカナでない`),
+    ]),
   },
   'propernouns.txt': {
     // Core (ProperNouns) は空白・タブ・, で区切った語のうち、ASCII の英数字だけの語を登録し、それ以外は黙って捨てる
@@ -89,11 +102,20 @@ const dictionaries = {
       ];
     },
   },
-  // 読み<Tab>語句。同じ数の | で区切ると別の文節にする (いち|がっき<Tab>一|学期)
+  // 配列<Tab>打つキー<Tab>かな (かな配列の表)。打つキーは刻印の 1 文字・L・R を空白 (並び) か + (同時) でつなぐ
+  'kana-layouts.txt': {
+    format: tabbed(3, 3, ([layout, keys, kana]) => [
+      /^[A-Z][A-Za-z]+$/.test(layout) ? null : `配列「${layout}」が KanaLayout の名前でない`,
+      /^([1-90\-^\\a-z@[;:\],./_LR])([ +][1-90\-^\\a-z@[;:\],./_LR])*$/.test(keys) ? null : `打つキー「${keys}」の書き方が違う`,
+      kana.length > 0 ? null : 'かなが空',
+    ]),
+    keysOf: line => { const [layout, keys] = line.split('\t'); return [[`${layout}\t${keys}`, line]]; },
+  },
+  // 読み<Tab>語句[<Tab>品詞]。Mozc のヘルパーは知らない品詞名を名詞にするので、品詞名は Mozc の user_pos.def の名前に限る
   'phrases.txt': {
-    format: tabbed(2, 2, ([reading, word]) => [
-      reading.replace(/^\^/, '').split('|').every(r => hiragana.test(r)) ? null : `読み「${reading}」がひらがなでない`,
-      reading.split('|').length === word.split('|').length && !word.split('|').includes('') ? null : `読み「${reading}」と語句「${word}」の | の数が違う`,
+    format: tabbed(2, 3, ([reading, , pos]) => [
+      hiragana.test(reading) ? null : `読み「${reading}」がひらがなでない`,
+      pos === undefined || mozcPos.has(pos) ? null : `品詞「${pos}」が Mozc の品詞名でない`,
     ]),
   },
   // 読み<Tab>語句<Tab>出し始める読み (予測変換の定型句)。出し始める読みは、読みの打ちかけ
@@ -118,7 +140,7 @@ const dictionaries = {
   'readings-rare.txt': {
     format: tabbed(1, 2, ([reading]) => [
       hiragana.test(reading) ? null : `読み「${reading}」がひらがなでない`,
-      [...reading].length >= 5 ? null : `読み「${reading}」が 5 文字より短い`,
+      [...reading].length >= 3 ? null : `読み「${reading}」が 3 文字より短い`,
     ]),
   },
   'readings-extra.txt': {
@@ -135,6 +157,9 @@ const dictionaries = {
     ]),
   },
   'katakana.txt': {
+    format: tabbed(1, 1, ([reading]) => [hiragana.test(reading) ? null : `読み「${reading}」がひらがなでない`]),
+  },
+  'names.txt': {
     format: tabbed(1, 1, ([reading]) => [hiragana.test(reading) ? null : `読み「${reading}」がひらがなでない`]),
   },
   // 顔文字に # が入るので、行頭の # だけがコメント。空白も中身なので前後の空白を除かない

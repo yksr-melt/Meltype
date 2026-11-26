@@ -1,0 +1,554 @@
+# かな配列の表 (設定「かな配列」で JIS かな以外を選んだとき)。Core の KanaLayoutEngine が読む
+# 形式: 配列<Tab>打つキー<Tab>かな
+# 打つキーは日本語 106/109 キーボードの刻印 (q ; @ など。¥ は \、ろ は _)。L は左の親指キー (無変換)、R は右の親指キー (変換)
+#   d f   … d を打ってから f を打つ (前置シフト)
+#   L+f   … 同時に押す (同時打鍵・親指シフト)
+# 表は benizara (https://github.com/k-ayaki/benizara、MIT License、Copyright (c) 2018 綾木健一郎) の定義ファイルから取った
+Nicola	-	ー
+Nicola	q	。
+Nicola	w	か
+Nicola	e	た
+Nicola	r	こ
+Nicola	t	さ
+Nicola	y	ら
+Nicola	u	ち
+Nicola	i	く
+Nicola	o	つ
+Nicola	p	、
+Nicola	@	、
+Nicola	[	゛
+Nicola	a	う
+Nicola	s	し
+Nicola	d	て
+Nicola	f	け
+Nicola	g	せ
+Nicola	h	は
+Nicola	j	と
+Nicola	k	き
+Nicola	l	い
+Nicola	;	ん
+Nicola	z	。
+Nicola	x	ひ
+Nicola	c	す
+Nicola	v	ふ
+Nicola	b	へ
+Nicola	n	め
+Nicola	m	そ
+Nicola	,	ね
+Nicola	.	ほ
+Nicola	/	・
+Nicola	L+2	・
+Nicola	L+q	ぁ
+Nicola	L+w	え
+Nicola	L+e	り
+Nicola	L+r	ゃ
+Nicola	L+t	れ
+Nicola	L+y	ぱ
+Nicola	L+u	ぢ
+Nicola	L+i	ぐ
+Nicola	L+o	づ
+Nicola	L+p	ぴ
+Nicola	L+[	゜
+Nicola	L+a	を
+Nicola	L+s	あ
+Nicola	L+d	な
+Nicola	L+f	ゅ
+Nicola	L+g	も
+Nicola	L+h	ば
+Nicola	L+j	ど
+Nicola	L+k	ぎ
+Nicola	L+l	ぽ
+Nicola	L+z	ぅ
+Nicola	L+x	ー
+Nicola	L+c	ろ
+Nicola	L+v	や
+Nicola	L+b	ぃ
+Nicola	L+n	ぷ
+Nicola	L+m	ぞ
+Nicola	L+,	ぺ
+Nicola	L+.	ぼ
+Nicola	R+2	・
+Nicola	R+w	が
+Nicola	R+e	だ
+Nicola	R+r	ご
+Nicola	R+t	ざ
+Nicola	R+y	よ
+Nicola	R+u	に
+Nicola	R+i	る
+Nicola	R+o	ま
+Nicola	R+p	ぇ
+Nicola	R+[	゜
+Nicola	R+a	ゔ
+Nicola	R+s	じ
+Nicola	R+d	で
+Nicola	R+f	げ
+Nicola	R+g	ぜ
+Nicola	R+h	み
+Nicola	R+j	お
+Nicola	R+k	の
+Nicola	R+l	ょ
+Nicola	R+;	っ
+Nicola	R+x	び
+Nicola	R+c	ず
+Nicola	R+v	ぶ
+Nicola	R+b	べ
+Nicola	R+n	ぬ
+Nicola	R+m	ゆ
+Nicola	R+,	む
+Nicola	R+.	わ
+Nicola	R+/	ぉ
+NakayubiNicola	-	ー
+NakayubiNicola	q	。
+NakayubiNicola	w	か
+NakayubiNicola	e	た
+NakayubiNicola	r	こ
+NakayubiNicola	t	さ
+NakayubiNicola	y	ら
+NakayubiNicola	u	ち
+NakayubiNicola	i	く
+NakayubiNicola	o	つ
+NakayubiNicola	p	、
+NakayubiNicola	@	、
+NakayubiNicola	[	゛
+NakayubiNicola	a	う
+NakayubiNicola	s	し
+NakayubiNicola	d	て
+NakayubiNicola	f	け
+NakayubiNicola	g	せ
+NakayubiNicola	h	は
+NakayubiNicola	j	と
+NakayubiNicola	k	き
+NakayubiNicola	l	い
+NakayubiNicola	;	ん
+NakayubiNicola	z	。
+NakayubiNicola	x	ひ
+NakayubiNicola	c	す
+NakayubiNicola	v	ふ
+NakayubiNicola	b	へ
+NakayubiNicola	n	め
+NakayubiNicola	m	そ
+NakayubiNicola	,	ね
+NakayubiNicola	.	ほ
+NakayubiNicola	/	・
+NakayubiNicola	L+2	・
+NakayubiNicola	L+q	ぁ
+NakayubiNicola	L+w	え
+NakayubiNicola	L+e	り
+NakayubiNicola	L+r	ゃ
+NakayubiNicola	L+t	れ
+NakayubiNicola	L+y	ぱ
+NakayubiNicola	L+u	ぢ
+NakayubiNicola	L+i	ぐ
+NakayubiNicola	L+o	づ
+NakayubiNicola	L+p	ぴ
+NakayubiNicola	L+[	゜
+NakayubiNicola	L+a	を
+NakayubiNicola	L+s	あ
+NakayubiNicola	L+d	な
+NakayubiNicola	L+f	ゅ
+NakayubiNicola	L+g	も
+NakayubiNicola	L+h	ば
+NakayubiNicola	L+j	ど
+NakayubiNicola	L+k	ぎ
+NakayubiNicola	L+l	ぽ
+NakayubiNicola	L+z	ぅ
+NakayubiNicola	L+x	ー
+NakayubiNicola	L+c	ろ
+NakayubiNicola	L+v	や
+NakayubiNicola	L+b	ぃ
+NakayubiNicola	L+n	ぷ
+NakayubiNicola	L+m	ぞ
+NakayubiNicola	L+,	ぺ
+NakayubiNicola	L+.	ぼ
+NakayubiNicola	R+2	・
+NakayubiNicola	R+w	が
+NakayubiNicola	R+e	だ
+NakayubiNicola	R+r	ご
+NakayubiNicola	R+t	ざ
+NakayubiNicola	R+y	よ
+NakayubiNicola	R+u	に
+NakayubiNicola	R+i	る
+NakayubiNicola	R+o	ま
+NakayubiNicola	R+p	ぇ
+NakayubiNicola	R+[	゜
+NakayubiNicola	R+a	ゔ
+NakayubiNicola	R+s	じ
+NakayubiNicola	R+d	で
+NakayubiNicola	R+f	げ
+NakayubiNicola	R+g	ぜ
+NakayubiNicola	R+h	み
+NakayubiNicola	R+j	お
+NakayubiNicola	R+k	の
+NakayubiNicola	R+l	ょ
+NakayubiNicola	R+;	っ
+NakayubiNicola	R+x	び
+NakayubiNicola	R+c	ず
+NakayubiNicola	R+v	ぶ
+NakayubiNicola	R+b	べ
+NakayubiNicola	R+n	ぬ
+NakayubiNicola	R+m	ゆ
+NakayubiNicola	R+,	む
+NakayubiNicola	R+.	わ
+NakayubiNicola	R+/	ぉ
+NakayubiNicola	k+2	・
+NakayubiNicola	k+q	ぁ
+NakayubiNicola	k+w	え
+NakayubiNicola	k+e	り
+NakayubiNicola	k+r	ゃ
+NakayubiNicola	k+t	れ
+NakayubiNicola	k+a	を
+NakayubiNicola	k+s	あ
+NakayubiNicola	k+d	な
+NakayubiNicola	k+f	ゅ
+NakayubiNicola	k+g	も
+NakayubiNicola	k+z	ぅ
+NakayubiNicola	k+x	ー
+NakayubiNicola	k+c	ろ
+NakayubiNicola	k+v	や
+NakayubiNicola	k+b	ぃ
+NakayubiNicola	d+y	よ
+NakayubiNicola	d+u	に
+NakayubiNicola	d+i	る
+NakayubiNicola	d+o	ま
+NakayubiNicola	d+p	ぇ
+NakayubiNicola	d+[	゜
+NakayubiNicola	d+h	み
+NakayubiNicola	d+j	お
+NakayubiNicola	d+k	の
+NakayubiNicola	d+l	ょ
+NakayubiNicola	d+;	っ
+NakayubiNicola	d+n	ぬ
+NakayubiNicola	d+m	ゆ
+NakayubiNicola	d+,	む
+NakayubiNicola	d+.	わ
+NakayubiNicola	d+/	ぉ
+Tron	-	ー
+Tron	q	ら
+Tron	w	る
+Tron	e	こ
+Tron	r	は
+Tron	t	ょ
+Tron	y	き
+Tron	u	の
+Tron	i	く
+Tron	o	あ
+Tron	p	れ
+Tron	@	ー
+Tron	a	た
+Tron	s	と
+Tron	d	か
+Tron	f	て
+Tron	g	も
+Tron	h	を
+Tron	j	い
+Tron	k	う
+Tron	l	し
+Tron	;	ん
+Tron	z	ま
+Tron	x	り
+Tron	c	に
+Tron	v	さ
+Tron	b	な
+Tron	n	す
+Tron	m	つ
+Tron	,	、
+Tron	.	。
+Tron	/	っ
+Tron	L+2	・
+Tron	L+q	ひ
+Tron	L+w	そ
+Tron	L+e	・
+Tron	L+r	ゃ
+Tron	L+t	ほ
+Tron	L+y	ぎ
+Tron	L+u	げ
+Tron	L+i	ぐ
+Tron	L+p	ゐ
+Tron	L+a	ぬ
+Tron	L+s	ね
+Tron	L+d	ゅ
+Tron	L+f	よ
+Tron	L+g	ふ
+Tron	L+h	゛
+Tron	L+j	ぢ
+Tron	L+k	ゔ
+Tron	L+l	じ
+Tron	L+;	ゑ
+Tron	L+z	ぇ
+Tron	L+x	ぉ
+Tron	L+c	せ
+Tron	L+v	ゆ
+Tron	L+b	へ
+Tron	L+n	ず
+Tron	L+m	づ
+Tron	L+,	、
+Tron	L+.	。
+Tron	L+/	ゎ
+Tron	R+2	・
+Tron	R+q	び
+Tron	R+w	ぞ
+Tron	R+e	ご
+Tron	R+r	ば
+Tron	R+t	ぼ
+Tron	R+y	え
+Tron	R+u	け
+Tron	R+i	め
+Tron	R+o	む
+Tron	R+p	ろ
+Tron	R+a	だ
+Tron	R+s	ど
+Tron	R+d	が
+Tron	R+f	で
+Tron	R+g	ぶ
+Tron	R+h	お
+Tron	R+j	ち
+Tron	R+k	ー
+Tron	R+l	み
+Tron	R+;	や
+Tron	R+z	ゕ
+Tron	R+x	ゖ
+Tron	R+c	ぜ
+Tron	R+v	ざ
+Tron	R+b	べ
+Tron	R+n	わ
+Tron	R+m	ぃ
+Tron	R+,	ぁ
+Tron	R+.	゜
+Tron	R+/	ぅ
+Tsuki	q	ゅ
+Tsuki	w	と
+Tsuki	e	し
+Tsuki	r	こ
+Tsuki	t	ょ
+Tsuki	y	つ
+Tsuki	u	ん
+Tsuki	i	い
+Tsuki	o	か
+Tsuki	p	り
+Tsuki	@	ー
+Tsuki	a	は
+Tsuki	f	て
+Tsuki	g	た
+Tsuki	h	く
+Tsuki	j	う
+Tsuki	;	き
+Tsuki	:	ち
+Tsuki	z	す
+Tsuki	x	を
+Tsuki	c	に
+Tsuki	v	な
+Tsuki	b	さ
+Tsuki	n	っ
+Tsuki	m	る
+Tsuki	,	の
+Tsuki	.	も
+Tsuki	/	へ
+Tsuki	_	・
+Tsuki	s w	ど
+Tsuki	s e	じ
+Tsuki	s r	ご
+Tsuki	s y	づ
+Tsuki	s u	ぴ
+Tsuki	s i	ぽ
+Tsuki	s o	が
+Tsuki	s a	ば
+Tsuki	s s	げ
+Tsuki	s d	。
+Tsuki	s f	で
+Tsuki	s g	だ
+Tsuki	s h	ぐ
+Tsuki	s j	ゔ
+Tsuki	s k	ぼ
+Tsuki	s l	ぞ
+Tsuki	s ;	ぎ
+Tsuki	s :	ぢ
+Tsuki	s z	ず
+Tsuki	s x	ぱ
+Tsuki	s c	ぜ
+Tsuki	s b	ざ
+Tsuki	s n	び
+Tsuki	s m	ぷ
+Tsuki	s ,	ぶ
+Tsuki	s .	ぺ
+Tsuki	s /	べ
+Tsuki	d q	ぁ
+Tsuki	d w	ゃ
+Tsuki	d e	ね
+Tsuki	d r	ら
+Tsuki	d t	め
+Tsuki	d y	ぬ
+Tsuki	d u	む
+Tsuki	d i	み
+Tsuki	d o	え
+Tsuki	d p	ぇ
+Tsuki	d a	ぃ
+Tsuki	d s	け
+Tsuki	d d	、
+Tsuki	d f	あ
+Tsuki	d g	れ
+Tsuki	d h	ま
+Tsuki	d j	お
+Tsuki	d k	ほ
+Tsuki	d l	そ
+Tsuki	d ;	ろ
+Tsuki	d z	ぅ
+Tsuki	d x	や
+Tsuki	d c	せ
+Tsuki	d v	よ
+Tsuki	d b	ゆ
+Tsuki	d n	ひ
+Tsuki	d m	わ
+Tsuki	d ,	ふ
+Tsuki	d .	ぃ
+Tsuki	d /	ぉ
+Tsuki	k q	ぁ
+Tsuki	k w	ゃ
+Tsuki	k e	ね
+Tsuki	k r	ら
+Tsuki	k t	め
+Tsuki	k y	ぬ
+Tsuki	k u	む
+Tsuki	k i	み
+Tsuki	k o	え
+Tsuki	k p	ぇ
+Tsuki	k a	ぃ
+Tsuki	k s	け
+Tsuki	k d	、
+Tsuki	k f	あ
+Tsuki	k g	れ
+Tsuki	k h	ま
+Tsuki	k j	お
+Tsuki	k k	ほ
+Tsuki	k l	そ
+Tsuki	k ;	ろ
+Tsuki	k z	ぅ
+Tsuki	k x	や
+Tsuki	k c	せ
+Tsuki	k v	よ
+Tsuki	k b	ゆ
+Tsuki	k n	ひ
+Tsuki	k m	わ
+Tsuki	k ,	ふ
+Tsuki	k .	ぃ
+Tsuki	k /	ぉ
+Tsuki	l w	ど
+Tsuki	l e	じ
+Tsuki	l r	ご
+Tsuki	l y	づ
+Tsuki	l u	ぴ
+Tsuki	l i	ぽ
+Tsuki	l o	が
+Tsuki	l a	ば
+Tsuki	l s	げ
+Tsuki	l d	。
+Tsuki	l f	で
+Tsuki	l g	だ
+Tsuki	l h	ぐ
+Tsuki	l j	ゔ
+Tsuki	l k	ぼ
+Tsuki	l l	ぞ
+Tsuki	l ;	ぎ
+Tsuki	l :	ぢ
+Tsuki	l z	ず
+Tsuki	l x	ぱ
+Tsuki	l c	ぜ
+Tsuki	l b	ざ
+Tsuki	l n	び
+Tsuki	l m	ぷ
+Tsuki	l ,	ぶ
+Tsuki	l .	ぺ
+Tsuki	l /	べ
+Hana	\	ぇ
+Hana	q	ょ
+Hana	w	て
+Hana	e	と
+Hana	r	こ
+Hana	t	は
+Hana	y	っ
+Hana	u	く
+Hana	i	う
+Hana	o	る
+Hana	p	ら
+Hana	@	ー
+Hana	a	す
+Hana	s	か
+Hana	f	き
+Hana	g	た
+Hana	h	ん
+Hana	j	れ
+Hana	l	゛
+Hana	;	ろ
+Hana	:	り
+Hana	z	さ
+Hana	x	し
+Hana	c	な
+Hana	v	の
+Hana	b	に
+Hana	n	い
+Hana	m	つ
+Hana	,	。
+Hana	.	、
+Hana	/	め
+Hana	_	え
+Hana	d \	え
+Hana	d q	ひ
+Hana	d w	け
+Hana	d e	ぇ
+Hana	d r	ほ
+Hana	d t	へ
+Hana	d y	ゃ
+Hana	d u	ま
+Hana	d i	そ
+Hana	d o	も
+Hana	d p	ぃ
+Hana	d a	ぁ
+Hana	d s	よ
+Hana	d d	ゅ
+Hana	d f	や
+Hana	d g	゜
+Hana	d h	・
+Hana	d j	ふ
+Hana	d k	ち
+Hana	d l	む
+Hana	d ;	ぉ
+Hana	d z	ぅ
+Hana	d x	せ
+Hana	d c	あ
+Hana	d v	わ
+Hana	d b	ゆ
+Hana	d n	ね
+Hana	d m	み
+Hana	d ,	を
+Hana	d .	お
+Hana	d /	ぬ
+Hana	k \	え
+Hana	k q	ひ
+Hana	k w	け
+Hana	k e	ぇ
+Hana	k r	ほ
+Hana	k t	へ
+Hana	k y	ゃ
+Hana	k u	ま
+Hana	k i	そ
+Hana	k o	も
+Hana	k p	ぃ
+Hana	k a	ぁ
+Hana	k s	よ
+Hana	k d	ゅ
+Hana	k f	や
+Hana	k g	゜
+Hana	k h	・
+Hana	k j	ふ
+Hana	k k	ち
+Hana	k l	む
+Hana	k ;	ぉ
+Hana	k z	ぅ
+Hana	k x	せ
+Hana	k c	あ
+Hana	k v	わ
+Hana	k b	ゆ
+Hana	k n	ね
+Hana	k m	み
+Hana	k ,	を
+Hana	k .	お
+Hana	k /	ぬ

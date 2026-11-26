@@ -1,6 +1,6 @@
-# コンフリクトのお知らせ (.github/bot/conflicts.mjs)。
-#   いまのコンフリクト: main とコンフリクトしている Pull Request に、ラベルとコメントを付ける (解消したら外す)
-#   マージ後の予告:     「この Pull Request をマージすると、どの Pull Request がコンフリクトするか」をコメントする
+# マージしたあとのコンフリクトの予告 (.github/bot/conflicts.mjs)。
+#   「この Pull Request をマージすると、どの Pull Request がコンフリクトするか」をコメントする
+#   (いま main とコンフリクトしているかのラベルとコメントは Mergify が付ける。.mergify.yml)
 # main に push されたときと 1 時間ごとに、開いている Pull Request を全部調べる (Pull Request のイベントでは動かさない)。
 # Pull Request のコードは git の中に取ってくるだけで、実行しない
 # (スクリプトは main のものを使い、コンフリクトは git merge-tree で確かめる)。
@@ -41,7 +41,7 @@ jobs:
           persist-credentials: false
       - id: app
         if: vars.BOT_APP_ID != ''
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
         with:
           app-id: ${{ vars.BOT_APP_ID }}
           private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}

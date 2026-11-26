@@ -12,15 +12,14 @@ internal static class ContextBoundaryTests
     private static (CompositionTextState Text, CompositionEnv Env) Create(string before = "", bool manual = false, LanguageMemory? memory = null)
     {
         var detector = CompositionDetector.CreateDefault();
-        detector.Memory = memory;
         detector.IsCommonJapanese = RomajiTypoCorrector.Load(detector.Romaji).IsCommonJapanese;
         var context = TextContext.None with
         {
             PrecedingEnglish = before.Length == 0 ? null : true,
             PrecedingEnglishSentence = before.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length >= 2,
-            PrecedingEnglishName = CompositionController.IsEnglishNameContext(before),
+            PrecedingEnglishName = CompositionContext.IsEnglishNameContext(before),
         };
-        return (new CompositionTextState(), TestSupport.Env(detector, new Settings { AutoDetection = !manual }) with { Context = () => context });
+        return (new CompositionTextState(), TestSupport.Env(detector, new Settings { AutoDetection = !manual }) with { Context = () => context, Languages = memory });
     }
 
     [Test]
@@ -39,7 +38,7 @@ internal static class ContextBoundaryTests
             foreach (var c in "taro") CompositionText.Append(text, env, c);
             Assert.Equal("たろ", CompositionText.Display(text, env, final: true));
         }
-        // 英字に直して覚えた日本語由来の語 (sushi) は英字のまま (tools/test-native-boundaries.py と同じ)
+        // 英字に直して覚えた日本語由来の語 (sushi) は英字のまま (src/Meltype.Core.CApi/tests/test-native-boundaries.py と同じ)
         var englishMemory = new LanguageMemory(null);
         englishMemory.Remember("sushi", english: true, explicitChoice: true);
         englishMemory.Remember("sushi", english: true, explicitChoice: true);

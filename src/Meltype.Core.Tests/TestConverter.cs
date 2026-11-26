@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 aster-void
 
-using Meltype.Composition;
+using Meltype.Engine;
 
 namespace Meltype.Tests;
 
@@ -15,7 +15,6 @@ internal abstract class TestConverter : IKanjiConverter
 
     public virtual IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) => null;
 
-    public virtual void Learn(string? before, IReadOnlyList<ConversionClause> clauses) { }
 
     public IReadOnlyList<ConversionClause>? Convert(ConversionRequest request) =>
         ConvertClauses(request.Hiragana, request.Before) ?? (Convert(request.Hiragana, request.Before) is { } text ? [new ConversionClause(request.Hiragana, text)] : null);

@@ -34,12 +34,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly HashSet<string> _outdatedApps = new(StringComparer.OrdinalIgnoreCase);
     private readonly Keyboard.KeyboardFront _keyboard;
     private readonly ToolStripMenuItem _tsfModeItem;
-    private SettingsForm? _settingsForm;
     private LogForm? _logForm;
-    private UserDictionaryForm? _dictionaryForm;
-    private SnippetsForm? _snippetsForm;
     private ReportDialog? _reportDialog;
-    private LearnedWordsForm? _learnedForm;
     private KeyCountForm? _keyCountForm;
     private WelcomeForm? _welcomeForm;
     private readonly Updater _updater;
@@ -55,12 +51,12 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _invoker.CreateControl();
         // 入力・表示は、動かしている設定 (Meltype IME を使えなければ Meltype キーボード) を読む
         _composition = new Composition.CompositionService(_invoker, _engine.Runtime, () => _engine.Running);
-        _keyboard = new Keyboard.KeyboardFront(_invoker, _composition, environment => new Ime.ImeHost(environment, _composition.Parts, () => _engine.Running), () => _engine.OtherTipVersion);
+        _keyboard = new Keyboard.KeyboardFront(_invoker, _composition, environment => _composition.CreateHost(environment, () => _engine.Running), () => _engine.OtherTipVersion);
         _keyboard.ModeChanged += OnKeyboardModeChanged;
         _engine.Keyboard = _keyboard;
         _engine.Focus = _composition.Focus;
         _composition.Focus.TextInputEntered += _engine.OnTextInputEntered;
-        _tipServer = new Tip.TipServer(_invoker, _composition, environment => new Ime.ImeHost(environment, _composition.Parts, () => _engine.Running));
+        _tipServer = new Tip.TipServer(_invoker, _composition, environment => _composition.CreateHost(environment, () => _engine.Running));
         _engine.ImeServer = _tipServer;
         _tipServer.ClientOutdated += process =>
         {
@@ -109,26 +105,15 @@ internal sealed class TrayApplicationContext : ApplicationContext
             menu.Items.Add(startup);
         }
         menu.Items.Add("使い方...", null, (_, _) => ShowWelcome());
-        menu.Items.Add("設定...", null, (_, _) => ShowSettings());
-        menu.Items.Add("ユーザー辞書...", null, (_, _) => ShowUserDictionary());
-        menu.Items.Add("定型文...", null, (_, _) => ShowSnippets());
+        // 設定・ユーザー辞書・定型文・学習データ・バックアップは、設定アプリ (MeltypeSettings.exe) で扱う
+        menu.Items.Add("設定・辞書・学習データ...", null, (_, _) => SettingsApp.Open());
         menu.Items.Add("ログ / 判定理由...", null, (_, _) => ShowLog());
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("データフォルダを開く", null, (_, _) => OpenDataFolder());
-        var backup = new ToolStripMenuItem("バックアップ");
-        backup.DropDownItems.Add("バックアップを書き出す...", null, (_, _) => CreateBackup());
-        backup.DropDownItems.Add("バックアップから戻す...", null, (_, _) => RestoreBackup());
-        menu.Items.Add(backup);
         menu.Items.Add("不具合の報告・提案...", null, (_, _) => OpenReport());
         menu.Items.Add("直した誤判定を報告...", null, (_, _) => new CorrectionReportDialog(_composition.Corrections, _engine.Running).Show());
         menu.Items.Add("Meltype について...", null, (_, _) => MessageBox.Show(AppInfo.AboutText, "Meltype について", MessageBoxButtons.OK, MessageBoxIcon.Information));
-        menu.Items.Add("学習した語...", null, (_, _) => ShowLearnedWords());
         menu.Items.Add("打鍵数...", null, (_, _) => ShowKeyCount());
-        var forget = new ToolStripMenuItem("学習データを消す");
-        forget.DropDownItems.Add("この 1 時間に覚えたもの...", null, (_, _) => ForgetRecentLearning(DateTime.UtcNow.AddHours(-1), "この 1 時間"));
-        forget.DropDownItems.Add("今日覚えたもの...", null, (_, _) => ForgetRecentLearning(DateTime.Today.ToUniversalTime(), "今日"));
-        forget.DropDownItems.Add("すべて (リセット)...", null, (_, _) => ResetLearning());
-        menu.Items.Add(forget);
         if (!AppPaths.IsPortable) menu.Items.Add("アンインストール...", null, (_, _) => Uninstall());
         // 更新: 自動更新の ON/OFF、今すぐ確認、ダウンロード済みなら更新して再起動
         var updates = new ToolStripMenuItem("更新");
@@ -203,9 +188,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         var wasTsf = _engine.Running.Mode == InputMode.Tsf;
         _state.TsfIntroduced = true;
         _state.Save();
-        var next = _engine.Settings.Clone();
-        next.Mode = InputMode.Tsf;
-        _engine.ApplySettings(next);
+        _engine.EditSettings(settings => settings.Mode = InputMode.Tsf);
         // ほかのモードからなら MeltypeEngine.OnSettingsChanged が切り替える。もう Meltype IME のモードだったときも、入力方式を Meltype IME にする
         if (wasTsf) Tip.TipServer.ActivateForSession();
         Diagnostics.Log.Info("Meltype IME が入っているので、動作モードを Meltype IME にしました。");
@@ -240,7 +223,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         if (!await OfferRegisterTsf("Meltype IME を更新しますか？\n\n" +
             "Windows に登録されている Meltype IME が、ほかの版の Meltype のものです。更新するまでは、Meltype キーボード (変換ボックスで入力) で動きます。")) return;
         // 動かす動作モード (MeltypeEngine.Running) を決め直す
-        _engine.ApplySettings(_engine.Settings);
+        _engine.EditSettings(_ => { });
         UpdateStatus();
     }
 
@@ -380,7 +363,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     /// <summary>除外した登録の先頭 3 件をキー名で示し、残り件数とログ画面への案内を付けた通知本文を作る。</summary>
     internal static string ShortcutExclusionMessage(IReadOnlyList<Diagnostics.ShortcutExclusion> excluded)
     {
-        var names = excluded.Take(3).Select(e => e.Shortcut is { } shortcut ? ShortcutEditor.Describe(shortcut) : "不正な登録 (null)");
+        var names = excluded.Take(3).Select(e => e.Shortcut is { } shortcut ? shortcut.Describe() : "不正な登録 (null)");
         var remaining = excluded.Count > 3 ? $"、ほか {excluded.Count - 3} 件" : "";
         return $"{string.Join("、", names)}{remaining}\n詳細は「ログ / 判定理由」で確認できます。";
     }
@@ -436,6 +419,10 @@ internal sealed class TrayApplicationContext : ApplicationContext
             {
                 _engine.OnSettingsChanged(previous, next);
                 UpdateStatus();
+                // 設定アプリで動作モードを Meltype IME にしたが、Windows に登録されていない (Meltype キーボードで動く)
+                if (previous.Mode != InputMode.Tsf && next.Mode == InputMode.Tsf && CanRegisterTsf && !Tip.TipServer.IsUsable)
+                    EnableTsf("Meltype IME を Windows に登録しますか？\n\n" +
+                        "Meltype IME は Windows の IME として、打った文字を入力欄に直接入れます。登録するまでは Meltype キーボード (変換ボックスで入力) で動きます。");
             });
         }
         catch (InvalidOperationException)
@@ -482,10 +469,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     private void ToggleAutoUpdate()
     {
-        var next = _engine.Settings.Clone();
-        next.AutoUpdate = !next.AutoUpdate;
-        _engine.ApplySettings(next);
-        _autoUpdateItem.Checked = next.AutoUpdate;
+        _engine.EditSettings(settings => settings.AutoUpdate = !settings.AutoUpdate);
+        _autoUpdateItem.Checked = _engine.Settings.AutoUpdate;
     }
 
     private void FillProfiles()
@@ -497,13 +482,13 @@ internal sealed class TrayApplicationContext : ApplicationContext
             _profileItem.DropDownItems.Add(new ToolStripMenuItem(name, null, (_, _) => SwitchProfile(name)) { Checked = name == settings.ActiveProfile });
         }
         _profileItem.DropDownItems.Add(new ToolStripSeparator());
-        _profileItem.DropDownItems.Add("プロファイルを足す・名前を変える (設定)...", null, (_, _) => ShowSettings());
+        _profileItem.DropDownItems.Add("プロファイルを足す・名前を変える (設定)...", null, (_, _) => SettingsApp.Open());
     }
 
     private void SwitchProfile(string name)
     {
         if (name == _engine.Settings.ActiveProfile) return;
-        _engine.ApplySettings(_engine.Settings.SwitchProfile(name));
+        _engine.ReplaceSettings(settings => settings.SwitchProfile(name));
         UpdateStatus();
         if (ProfileSwitchMessage(_engine.Settings) is { } message) ShowBalloonTip(1500, "Meltype", message);
     }
@@ -515,9 +500,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     private void ToggleAutoDetection()
     {
-        var next = _engine.Settings.Clone();
-        next.AutoDetection = !next.AutoDetection;
-        _engine.ApplySettings(next);
+        _engine.EditSettings(settings => settings.AutoDetection = !settings.AutoDetection);
         UpdateStatus();
     }
 
@@ -525,10 +508,11 @@ internal sealed class TrayApplicationContext : ApplicationContext
     {
         if (AppPaths.IsPortable && mode != InputMode.Keyboard) return;
         var wasTsf = _engine.Running.Mode == InputMode.Tsf;
-        var next = _engine.Settings.Clone();
-        next.Mode = mode;
-        next.Enabled = true;
-        _engine.ApplySettings(next);
+        _engine.EditSettings(settings =>
+        {
+            settings.Mode = mode;
+            settings.Enabled = true;
+        });
         // ほかのモードからなら MeltypeEngine.OnSettingsChanged が切り替える。もう Meltype IME のモードで選び直したとき (Win + Space でほかの IME にしていた) も、入力方式を Meltype IME に戻す
         if (wasTsf && mode == InputMode.Tsf) Tip.TipServer.ActivateForSession();
     }
@@ -573,18 +557,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _tray.Text = tip.Length > 63 ? tip[..63] : tip;
     }
 
-    private void ShowSettings()
-    {
-        if (_settingsForm is { IsDisposed: false })
-        {
-            _settingsForm.Activate();
-            return;
-        }
-        _settingsForm = new SettingsForm(_engine, _state);
-        _settingsForm.FormClosed += (_, _) => UpdateStatus();
-        _settingsForm.Show();
-    }
-
     private void ShowKeyCount()
     {
         if (_keyCountForm is { IsDisposed: false })
@@ -592,45 +564,12 @@ internal sealed class TrayApplicationContext : ApplicationContext
             _keyCountForm.Activate();
             return;
         }
-        _keyCountForm = new KeyCountForm(_engine.KeyCounter);
+        _keyCountForm = new KeyCountForm(_engine);
         _keyCountForm.Show();
     }
 
-    private void ShowLearnedWords()
-    {
-        if (_learnedForm is { IsDisposed: false })
-        {
-            _learnedForm.Activate();
-            return;
-        }
-        _learnedForm = new LearnedWordsForm(_composition.Languages, _composition.History);
-        _learnedForm.Show();
-    }
-
-    private void ShowUserDictionary()
-    {
-        if (_dictionaryForm is { IsDisposed: false })
-        {
-            _dictionaryForm.Activate();
-            return;
-        }
-        _dictionaryForm = new UserDictionaryForm(_composition);
-        _dictionaryForm.Show();
-    }
-
-    private void ShowSnippets()
-    {
-        if (_snippetsForm is { IsDisposed: false })
-        {
-            _snippetsForm.Activate();
-            return;
-        }
-        _snippetsForm = new SnippetsForm(_composition.Snippets, () => _engine.Settings.SnippetMark);
-        _snippetsForm.Show();
-    }
-
     /// <summary>
-    /// Ctrl+F7: 前面のアプリで選んでいる語を、ユーザー辞書の登録画面に入れて開く (読みは Microsoft IME で推測)。
+    /// Ctrl+F7: 前面のアプリで選んでいる語を、設定アプリのユーザー辞書の登録欄に入れて開く (読みは変換エンジンで推測)。
     /// 選んでいる語は、Ctrl+C を送ってクリップボードから読む (クリップボードの元の中身は戻す)。
     /// </summary>
     private async void RegisterSelectedWord()
@@ -653,9 +592,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
         {
             try { if (saved is not null) Clipboard.SetDataObject(saved, copy: true); } catch { }
         }
-        ShowUserDictionary();
         // 1 行で短いものだけ (文章を選んでいたら語は入れない)
-        if (word is { Length: > 0 and <= 30 } && !word.Contains('\n')) _dictionaryForm!.Prefill(word, _composition.GuessReading(word));
+        if (word is { Length: > 0 and <= 30 } && !word.Contains('\n')) SettingsApp.Open("--add-word", word, _composition.Runtime.GuessReading(word));
+        else SettingsApp.Open("--add-word");
     }
 
     private void ShowLog()
@@ -669,80 +608,10 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _logForm.Show();
     }
 
-    /// <summary>設定・学習データ・ユーザー辞書を 1 つのファイルに書き出す (PC の買い替え・別の PC への移行)。</summary>
-    private static void CreateBackup()
-    {
-        using var dialog = new SaveFileDialog
-        {
-            Title = "Meltype のバックアップを書き出す",
-            Filter = "Meltype のバックアップ (*.meltype-backup)|*.meltype-backup",
-            FileName = $"Meltype-{DateTime.Now:yyyyMMdd}.meltype-backup",
-        };
-        if (dialog.ShowDialog() != DialogResult.OK) return;
-        try
-        {
-            var (content, files) = Config.Backup.Create(AppPaths.DataDirectory, AppInfo.Version);
-            File.WriteAllBytes(dialog.FileName, content);
-            MessageBox.Show($"設定・学習データ・ユーザー辞書を書き出しました ({files} 個のファイル)。\n別の PC の Meltype で「バックアップ」→「バックアップから戻す...」を選ぶと戻せます。", "Meltype のバックアップ",
-                MessageBoxButtons.OK, MessageBoxIcon.Information);
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"書き出せませんでした。\n\n{ex.Message}", "Meltype のバックアップ", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-        }
-    }
-
-    /// <summary>バックアップから戻す。Meltype を起動し直し、新しい Meltype が戻してから読み込む。</summary>
-    private void RestoreBackup()
-    {
-        using var dialog = new OpenFileDialog
-        {
-            Title = "Meltype のバックアップから戻す",
-            Filter = "Meltype のバックアップ (*.meltype-backup)|*.meltype-backup|すべてのファイル (*.*)|*.*",
-        };
-        if (dialog.ShowDialog() != DialogResult.OK) return;
-        try
-        {
-            var content = File.ReadAllBytes(dialog.FileName);
-            var (created, app, files) = Config.Backup.Inspect(content);
-            var answer = MessageBox.Show($"{created} に作ったバックアップ (Meltype {app}、{files.Count} 個のファイル) で、今の設定・学習データ・ユーザー辞書を置き換えます。\nMeltype を起動し直します。よろしいですか？",
-                "Meltype のバックアップ", MessageBoxButtons.OKCancel, MessageBoxIcon.Question);
-            if (answer != DialogResult.OK) return;
-            // 新しい Meltype に渡す (この Meltype が終わってから戻す)
-            var copy = Path.Combine(Path.GetTempPath(), $"meltype-restore-{Environment.ProcessId}.meltype-backup");
-            File.WriteAllBytes(copy, content);
-            var start = new ProcessStartInfo(Application.ExecutablePath) { UseShellExecute = false };
-            start.ArgumentList.Add("--restore");
-            start.ArgumentList.Add(copy);
-            Process.Start(start);
-            ExitThread();
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"戻せませんでした。\n\n{ex.Message}", "Meltype のバックアップ", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-        }
-    }
-
     private static void OpenDataFolder()
     {
         Directory.CreateDirectory(AppPaths.DataDirectory);
         Process.Start(new ProcessStartInfo("explorer.exe", $"\"{AppPaths.DataDirectory}\"") { UseShellExecute = true });
-    }
-
-    private void ResetLearning()
-    {
-        var answer = MessageBox.Show("学習データ (選び直した変換 conversions.json、英字 / かなに直した語 languages.json、予測変換の語句 phrases.txt、選んだ英訳 translations.json) をすべて削除します。よろしいですか？\n\nユーザー辞書 (userdict.txt) と設定は消えません。", "Meltype", MessageBoxButtons.OKCancel, MessageBoxIcon.Question);
-        if (answer == DialogResult.OK) _composition.Runtime.ResetLearning();
-    }
-
-    /// <summary>最近覚えたものだけを忘れる (<see cref="Composition.MeltypeRuntime.ForgetLearningSince"/>)。</summary>
-    private void ForgetRecentLearning(DateTime sinceUtc, string label)
-    {
-        var answer = MessageBox.Show($"{label}に覚えた学習データ (選び直した変換・英字 / かなに直した語・予測変換の語句) を削除します。よろしいですか？", "Meltype", MessageBoxButtons.OKCancel, MessageBoxIcon.Question);
-        if (answer != DialogResult.OK) return;
-        var count = _composition.Runtime.ForgetLearningSince(sinceUtc);
-        Diagnostics.Log.Info($"{label}に覚えた学習データを削除しました ({count} 件)。");
-        MessageBox.Show(count > 0 ? $"{count} 件削除しました。" : "削除するものはありませんでした。", "Meltype", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     /// <summary>インストーラーのアンインストーラーでアンインストールする (確認もアンインストーラーが出す)。</summary>
@@ -767,13 +636,10 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _tipServer.Dispose();
         _engine.Keyboard = null;
         _keyboard.Dispose();
-        Composition.LearningSaves.FlushAll();
+        Config.LearningSaves.FlushAll();
         _composition.Dispose();
-        _settingsForm?.Close();
         _logForm?.Close();
-        _dictionaryForm?.Close();
         _reportDialog?.Close();
-        _learnedForm?.Close();
         _welcomeForm?.Close();
         _updater.Dispose();
         _hotkey.Dispose();

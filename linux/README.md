@@ -6,14 +6,16 @@
 | --- | --- |
 | IBus のエンジン (`ibus-engine-meltype`, Python) | IBus からキーを受け取り、判定の本体に渡して、変換中の文字・候補・確定を入力欄に反映する |
 | fcitx5 のアドオン (`fcitx5/`, C++) | fcitx5 からキーを受け取り、判定の本体に渡す |
-| 設定画面 (`meltype-settings`, Python・GTK 4) | `config.schema.json` から画面を組み立てて、`config.json` を書く |
+| 設定アプリ (`meltype-settings`) | Windows・Mac と共通の `src/Meltype.Settings` を NativeAOT でビルドしたもの。IBus・fcitx5 の設定と、アプリの一覧の「Meltype の設定」から開く |
 | 判定の本体 (`libMeltypeNative.so`) | Windows 版と共通の C# の部分 (`src/Meltype.Core`) を NativeAOT で Linux 用のライブラリにしたもの |
 | 漢字変換 | Mozc の変換ヘルパー (`native/mozc`) |
-| 文脈を見た変換 (Zenzai) | llama.cpp の llama-server と zenz のモデル。llama-server は `native/zenzai/build-llama-server.sh` が `native/zenzai/zenzai.env` の版のソースからビルドし、モデルは `native/build-core-linux.sh` が取ってくる (取れなければ同梱せず、Mozc だけで変換する)。どちらも `zenzai/` に置く |
+| 文脈を見た変換 (Zenzai) | llama.cpp の llama-server と zenz のモデル。llama-server は `native/zenzai/build-llama-server.sh` が `native/zenzai/zenzai.env` の版のソースからビルドし、モデルは `native/build-core-linux.sh` が取ってくる (リリースタグでは取得失敗で停止。手元のタグなしビルドだけは、モデルを取れなければ Mozc だけで変換する)。どちらも `zenzai/` に置く |
 
 全体の仕組み・テストは [docs/dev/DEVELOPMENT.md](../docs/dev/DEVELOPMENT.md) にあります。
 
 ## ビルドする
+
+.NET 10 SDK を使います。公式配布物の NativeAOT は glibc 2.34 を基準にビルドします。手元では、`MELTYPE_SYSROOT` を指定しなければビルド環境の glibc が基準になります。古いディストリビューションへ配る場合は [native/build-core-linux.sh](../native/build-core-linux.sh) と [CI の sysroot 設定](../.github/actions/linux-native/action.yml) を参照してください。
 
 Ubuntu・Debian (WSL を含む) と Fedora でビルドできます。`--setup` は、apt か dnf でビルドに要るものを入れます。
 

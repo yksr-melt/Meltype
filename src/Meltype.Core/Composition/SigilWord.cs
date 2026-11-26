@@ -9,7 +9,7 @@ namespace Meltype.Composition;
 /// (変換ボックスに溜めると、アプリ側の補完の候補が出ない・選べない)。名前の後に空白を打てば普通の入力に戻る。
 /// taro@example.com の @ は前が英字なので対象にしない。どれもキャレットの前の文字 (before) だけで決める。
 /// </summary>
-public static class SigilWord
+internal static class SigilWord
 {
     /// <summary>名前の前に付ける記号。</summary>
     public static bool IsSigil(char c) => c is '/' or '$' or '@';
@@ -20,16 +20,19 @@ public static class SigilWord
     /// <summary>
     /// キャレットの前の文字列 before の後に打った c を、変換せずにそのままアプリへ渡すか (状態を持たない版)。
     /// 先頭か空白の直後の記号と、記号から続く名前の文字。before が分からなければ渡さない。
+    /// slashComment はコードのコメント文脈。// から続く本文を補完名に含めない。
     /// </summary>
-    public static bool PassesAfter(string? before, char c) =>
-        before is not null && (InNameAfter(before) ? IsNameChar(c) : IsSigil(c) && LastWord(before).IsEmpty);
+    public static bool PassesAfter(string? before, char c, bool slashComment = false) =>
+        before is not null && (InNameAfter(before, slashComment) ? IsNameChar(c) : IsSigil(c) && LastWord(before).IsEmpty);
 
     /// <summary>before の後で、記号から始めた名前を打っている途中か。</summary>
-    public static bool InNameAfter(string? before)
+    public static bool InNameAfter(string? before, bool slashComment = false)
     {
         if (before is null) return false;
         var word = LastWord(before);
         if (word.IsEmpty || !IsSigil(word[0])) return false;
+        // #1623: コードの // はコメントの開始なので、空白なしで続く本文も日英判定へ渡す。
+        if (slashComment && word.StartsWith("//", StringComparison.Ordinal)) return false;
         foreach (var c in word)
         {
             if (!IsNameChar(c)) return false;

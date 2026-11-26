@@ -2,8 +2,8 @@
 // Copyright (C) 2026 Yukishiro
 
 using System.Reflection;
-using Meltype.Composition;
 using Meltype.Detection;
+using Meltype.Libraries.Lexicon;
 
 namespace Meltype.Tests;
 

@@ -214,8 +214,11 @@ class IntegrationTests(unittest.TestCase):
     def test_real_mozc_candidate_selection(self):
         self.type_text("kyou")
         self.assertTrue(self.special(IBus.KEY_space))
-        self.assertIn("今日", self.engine.visible_candidates)
-        index = self.engine.visible_candidates.index("今日")
+        # IBus の候補には注記の欄が無いので、エンジンは注記を「　」で候補の後ろに付けて出す。
+        # 「今日」に Zenzai の注記が付くかは、Zenzai が答えたかで変わる
+        index = next((i for i, candidate in enumerate(self.engine.visible_candidates)
+                      if candidate == "今日" or candidate.startswith("今日　")), None)
+        self.assertIsNotNone(index, self.engine.visible_candidates)
         page_size = self.engine._lookup.get_page_size()
         while self.engine._lookup.get_cursor_pos() // page_size < index // page_size:
             self.special(IBus.KEY_Page_Down)
@@ -495,6 +498,19 @@ class IntegrationTests(unittest.TestCase):
         self.special(IBus.KEY_Muhenkan)
         self.type_text("ka")
         self.assertEqual("ka かかka", self.engine.document)
+
+    def test_held_mode_key_switches_once(self):
+        # 押したままの自動の繰り返しは、間にほかのキーを押して離しても、入力モードを切り替えない (evdev の keycode)
+        press, release = 0, IBus.ModifierType.RELEASE_MASK
+        hankaku, shift = (IBus.KEY_Zenkaku_Hankaku, 41), (IBus.KEY_Shift_L, 42)
+        for (keyval, keycode), state in ((hankaku, press), (hankaku, press), (shift, press), (shift, release), (hankaku, press), (hankaku, release)):
+            self.engine.do_process_key_event(keyval, keycode, state)
+        self.type_text("ka")
+        self.assertEqual(("ka", ""), (self.engine.document, self.engine.marked))
+        # 離してから押せば、また切り替わる
+        self.engine.do_process_key_event(*hankaku, press)
+        self.type_text("ka")
+        self.assertEqual(("ka", "か"), (self.engine.document, self.engine.marked))
 
     def test_caret_back_moves_into_the_brackets(self):
         # 空の括弧を確定したあと、キャレットを括弧の中に戻す (← をアプリに送る)

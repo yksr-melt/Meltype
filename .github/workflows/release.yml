@@ -58,6 +58,7 @@ jobs:
         with:
           files: |
             dist/Meltype-*.zip
+            dist/Meltype-*-mac.dmg
             dist/Meltype-*-setup.exe
             dist/meltype_*.deb
             dist/meltype-*.rpm
@@ -90,12 +91,12 @@ jobs:
           path: dist
       - name: Homebrew cask
         run: |
-          node tools/make-manifests.mjs "${GITHUB_REF_NAME#v}" "dist/Meltype-${GITHUB_REF_NAME#v}-mac.zip"
+          node packaging/make-manifests.mjs "${GITHUB_REF_NAME#v}" "dist/Meltype-${GITHUB_REF_NAME#v}-mac.zip"
           cat dist/manifests/homebrew/Casks/meltype.rb
       # GitHub App のトークンなら、作成した PR の CI も起動する (bot.yml / sponsors.yml と同じ)。
       - id: app-token
         if: vars.BOT_APP_ID != ''
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
         with:
           app-id: ${{ vars.BOT_APP_ID }}
           private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
@@ -148,37 +149,21 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: publish
     runs-on: ubuntu-24.04
-    outputs:
-      ready: ${{ steps.signing.outputs.ready }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Check apt signing key
-        id: signing
-        env:
-          APT_SIGNING_KEY_B64: ${{ secrets.APT_SIGNING_KEY_B64 }}
-        run: |
-          if [[ -z "$APT_SIGNING_KEY_B64" ]]; then
-            echo 'ready=false' >> "$GITHUB_OUTPUT"
-            echo '::notice::APT_SIGNING_KEY_B64 is not set; skipping apt and dnf repository publication.'
-          else
-            echo 'ready=true' >> "$GITHUB_OUTPUT"
-          fi
       - name: Download Linux packages
-        if: steps.signing.outputs.ready == 'true'
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: meltype-linux*
           path: ${{ runner.temp }}/meltype-artifacts
           merge-multiple: true
       - name: Install repository tools
-        if: steps.signing.outputs.ready == 'true'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y apt-utils gnupg rpm createrepo-c
+          sudo apt-get -o Acquire::Retries=3 update
+          sudo apt-get -o Acquire::Retries=3 install -y apt-utils gnupg rpm createrepo-c
       - name: Build signed apt repository
-        if: steps.signing.outputs.ready == 'true'
         env:
           APT_SIGNING_KEY_B64: ${{ secrets.APT_SIGNING_KEY_B64 }}
           APT_SIGNING_KEY_PASSPHRASE: ${{ secrets.APT_SIGNING_KEY_PASSPHRASE }}
@@ -190,7 +175,6 @@ jobs:
           fi
           bash linux/build-apt-repository.sh "${debs[@]}" "$RUNNER_TEMP/meltype-pages"
       - name: Build signed dnf repository
-        if: steps.signing.outputs.ready == 'true'
         env:
           APT_SIGNING_KEY_B64: ${{ secrets.APT_SIGNING_KEY_B64 }}
           APT_SIGNING_KEY_PASSPHRASE: ${{ secrets.APT_SIGNING_KEY_PASSPHRASE }}
@@ -198,13 +182,12 @@ jobs:
           mapfile -d '' -t rpms < <(find "$RUNNER_TEMP/meltype-artifacts" -type f -name 'meltype-*.rpm' -print0 | sort -z)
           bash linux/build-rpm-repository.sh "$RUNNER_TEMP/meltype-pages" "${rpms[@]}"
       - name: Upload apt and dnf repositories for GitHub Pages
-        if: steps.signing.outputs.ready == 'true'
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: ${{ runner.temp }}/meltype-pages
 
   publish-repositories:
-    if: startsWith(github.ref, 'refs/tags/v') && needs.build-repositories.outputs.ready == 'true'
+    if: startsWith(github.ref, 'refs/tags/v')
     needs: build-repositories
     runs-on: ubuntu-24.04
     concurrency:

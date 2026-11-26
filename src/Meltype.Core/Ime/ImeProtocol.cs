@@ -14,72 +14,159 @@ namespace Meltype.Ime;
 // フロントは state を毎回まるごと置き換え、result をそのまま適用する。表示・時間・番号の出し分けもフロントは決めない。
 // 判断がフロントに残っているのは、ImeTrait.Game・NonText の推測と、TSF の DLL のパスワード欄の判定 (打鍵を Meltype.exe に送らない) だけ。
 // JSON の項目名を変えたら、JSON を読む 6 つのフロント (native/tip/TextService.cpp・linux/fcitx5/meltype.cpp・linux/ibus-engine-meltype・
-// mac/Sources/MeltypeIME/NativeCore.swift・android/app/src/main/kotlin/io/github/ninjin0802/keyboard/app/core/ImeJson.kt・tui/meltype-tty) を直す (FrontProtocolTests が突き合わせる)。
+// mac/Sources/MeltypeIME/NativeCore.swift・android/app/src/main/kotlin/app/meltype/keyboard/core/ImeJson.kt・tui/meltype-tty) を直す (FrontProtocolTests が突き合わせる)。
 
-/// <summary>フロントが送る出来事。JSON の名前はメンバー名のまま。知らない名前の出来事は、警告をログに出して受け持たない。</summary>
-public enum ImeEventType
+/// <summary>
+/// フロントが送る出来事。種類ごとの型が、その種類に要る値だけを持つ。JSON の type は型の名前。
+/// 知らない種類・要る値の無い出来事・種類に無い項目の付いた出来事は、警告をログに出して受け持たない。
+/// 種類で場合分けするときは <see cref="Match"/> を使う (種類を足すと、直していない所がコンパイルエラーになる)。
+/// </summary>
+// Match が internal なので、ほかのアセンブリの型は派生できない
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
+[JsonDerivedType(typeof(KeyPressed), nameof(KeyPressed))]
+[JsonDerivedType(typeof(KeyReleased), nameof(KeyReleased))]
+[JsonDerivedType(typeof(ModeToggleRequested), nameof(ModeToggleRequested))]
+[JsonDerivedType(typeof(JapaneseModeSelected), nameof(JapaneseModeSelected))]
+[JsonDerivedType(typeof(AlphanumericModeSelected), nameof(AlphanumericModeSelected))]
+[JsonDerivedType(typeof(CommitRequested), nameof(CommitRequested))]
+[JsonDerivedType(typeof(CommittedByApp), nameof(CommittedByApp))]
+[JsonDerivedType(typeof(CandidateClicked), nameof(CandidateClicked))]
+[JsonDerivedType(typeof(CandidateHighlighted), nameof(CandidateHighlighted))]
+[JsonDerivedType(typeof(ConversionFinished), nameof(ConversionFinished))]
+[JsonDerivedType(typeof(CaretMoved), nameof(CaretMoved))]
+[JsonDerivedType(typeof(StateRequested), nameof(StateRequested))]
+[JsonDerivedType(typeof(InstanceDestroyed), nameof(InstanceDestroyed))]
+public abstract record ImeEvent
 {
-    KeyPressed,
-    /// <summary>
-    /// キーを離した (Key.Vk と Key.Interrupted)。送るのは次の 2 つだけ:
-    /// ImeCapture.AltKeys のあいだに KeyPressed で送った左右の Alt (Windows・Linux のフロント)。
-    /// ワークアラウンド: 親指シフトの同時打鍵のために、ImeCapture.KeyReleases のあいだに ImeKey.ReleaseFollows を付けて送ったキー
-    /// (送るのは Meltype キーボードだけで、ほかのフロントでは親指シフトの同時打鍵が効かない)。
-    /// </summary>
-    KeyReleased,
-    /// <summary>キーを使わない日本語 ⇔ 英数の切り替え (タスクバーのボタンなど)。</summary>
-    ModeToggleRequested,
-    /// <summary>キーを使わずに日本語を選んだ (入力メニューなど)。</summary>
-    JapaneseModeSelected,
-    /// <summary>キーを使わずに英数を選んだ (入力メニューなど)。</summary>
-    AlphanumericModeSelected,
-    /// <summary>未確定の内容を確定する (フォーカスが移ったなど)。確定する文字は応答で返す。</summary>
-    CommitRequested,
-    /// <summary>OS・アプリが、変換中の文字を表示のまま確定した (IBus のフォーカスの移動・TSF の OnCompositionTerminated)。応答で確定はしない。</summary>
-    CommittedByApp,
-    /// <summary>前の応答の一覧 (view.candidates) の Index 番目をクリックした。予測変換の候補なら確定する。</summary>
-    CandidateClicked,
-    /// <summary>前の応答の一覧の Index 番目にマウスで選択を動かした。予測変換の候補は確定しない。</summary>
-    CandidateHighlighted,
-    /// <summary>背景の変換の結果が届いた。</summary>
-    ConversionFinished,
-    /// <summary>
-    /// フロントが自分で書き換えていないのに、キャレットが動いた・入力欄の文字が変わった (クリック・フロントがアプリに通したキー・アプリの編集)。
-    /// フロントは見つけたらすぐ送る (Core は打ったキーからキャレットの位置を追いかけない)。
-    /// </summary>
-    CaretMoved,
-    /// <summary>今の状態だけを受け取る (設定を変えたかもしれないときなど)。入力の本体は作らない。</summary>
-    StateRequested,
-    /// <summary>
-    /// フロントの IME のインスタンス (Instance) がなくなった (TSF の Deactivate)。未確定の文字は捨てる。
-    /// 1 つのインスタンスですべての入力欄を受け持つフロント (Meltype キーボード・Mac・IBus・fcitx5・Android) は送らない。
-    /// </summary>
-    InstanceDestroyed,
-}
+    private ImeEvent() { }
 
-public sealed record ImeEvent
-{
     /// <summary>プロトコルの版。<see cref="ImeHost.Version"/> と違えば、ImeHost は何も受け持たない。</summary>
-    public required int Version { get; init; }
-
-    public required ImeEventType Type { get; init; }
+    [JsonRequired]
+    public int Version { get; init; } = ImeHost.Version;
 
     /// <summary>フロントの IME のインスタンス (TSF ではスレッド) ごとにフロントが振る ID。</summary>
     // init にすると、source-gen の JSON は項目が無いときに初期値ではなく null を入れる
     public string Instance { get; set; } = "";
-
-    public ImeKey? Key { get; init; }
 
     public ImeField? Field { get; init; }
 
     /// <summary>OS が持つ IME の開閉 (TSF の GUID_COMPARTMENT_KEYBOARD_OPENCLOSE)。OS が持たないフロントは送らない。</summary>
     public bool? ImeOpen { get; init; }
 
-    /// <summary>CaretMoved・CommitRequested・CommittedByApp: キャレットがどう動いたか。</summary>
-    public ImeCaret? Caret { get; init; }
+    internal abstract T Match<T>(Cases<T> cases);
 
-    /// <summary>CandidateClicked・CandidateHighlighted: 前の応答の一覧 (view.candidates) の何番目か。</summary>
-    public int Index { get; init; }
+    internal readonly record struct Cases<T>
+    {
+        public required Func<KeyPressed, T> KeyPressed { get; init; }
+        public required Func<KeyReleased, T> KeyReleased { get; init; }
+        public required Func<ModeToggleRequested, T> ModeToggleRequested { get; init; }
+        public required Func<JapaneseModeSelected, T> JapaneseModeSelected { get; init; }
+        public required Func<AlphanumericModeSelected, T> AlphanumericModeSelected { get; init; }
+        public required Func<CommitRequested, T> CommitRequested { get; init; }
+        public required Func<CommittedByApp, T> CommittedByApp { get; init; }
+        public required Func<CandidateClicked, T> CandidateClicked { get; init; }
+        public required Func<CandidateHighlighted, T> CandidateHighlighted { get; init; }
+        public required Func<ConversionFinished, T> ConversionFinished { get; init; }
+        public required Func<CaretMoved, T> CaretMoved { get; init; }
+        public required Func<StateRequested, T> StateRequested { get; init; }
+        public required Func<InstanceDestroyed, T> InstanceDestroyed { get; init; }
+    }
+
+    /// <summary>キャレットがどう動いたかも知らせる出来事。</summary>
+    public abstract record WithCaret : ImeEvent
+    {
+        private protected WithCaret(ImeCaret caret) => Caret = caret;
+
+        public ImeCaret Caret { get; }
+    }
+
+    public sealed record KeyPressed(ImeKey Key) : ImeEvent
+    {
+        internal override T Match<T>(Cases<T> cases) => cases.KeyPressed(this);
+    }
+
+    /// <summary>
+    /// キーを離した。送るのは次の 2 つだけ:
+    /// ImeCapture.AltKeys のあいだに KeyPressed で送った左右の Alt (Windows・Linux のフロント)。
+    /// ワークアラウンド: 親指シフトの同時打鍵のために、ImeCapture.KeyReleases のあいだに ImeKey.ReleaseFollows を付けて送ったキー
+    /// (送るのは Meltype キーボードだけで、ほかのフロントでは親指シフトの同時打鍵が効かない)。
+    /// </summary>
+    public sealed record KeyReleased(ImeKeyRelease Key) : ImeEvent
+    {
+        internal override T Match<T>(Cases<T> cases) => cases.KeyReleased(this);
+    }
+
+    /// <summary>キーを使わない日本語 ⇔ 英数の切り替え (タスクバーのボタンなど)。</summary>
+    public sealed record ModeToggleRequested : ImeEvent
+    {
+        internal override T Match<T>(Cases<T> cases) => cases.ModeToggleRequested(this);
+    }
+
+    /// <summary>キーを使わずに日本語を選んだ (入力メニューなど)。</summary>
+    public sealed record JapaneseModeSelected : ImeEvent
+    {
+        internal override T Match<T>(Cases<T> cases) => cases.JapaneseModeSelected(this);
+    }
+
+    /// <summary>キーを使わずに英数を選んだ (入力メニューなど)。</summary>
+    public sealed record AlphanumericModeSelected : ImeEvent
+    {
+        internal override T Match<T>(Cases<T> cases) => cases.AlphanumericModeSelected(this);
+    }
+
+    /// <summary>未確定の内容を確定する (フォーカスが移ったなど)。確定する文字は応答で返す。Caret を省くと、キャレットは動いていない。</summary>
+    public sealed record CommitRequested(ImeCaret? Caret = null) : WithCaret(Caret ?? new())
+    {
+        internal override T Match<T>(Cases<T> cases) => cases.CommitRequested(this);
+    }
+
+    /// <summary>OS・アプリが、変換中の文字を表示のまま確定した (IBus のフォーカスの移動・TSF の OnCompositionTerminated)。応答で確定はしない。</summary>
+    public sealed record CommittedByApp(ImeCaret Caret) : WithCaret(Caret)
+    {
+        internal override T Match<T>(Cases<T> cases) => cases.CommittedByApp(this);
+    }
+
+    /// <summary>前の応答の一覧 (view.candidates) の Index 番目をクリックした。予測変換の候補なら確定する。</summary>
+    public sealed record CandidateClicked(int Index) : ImeEvent
+    {
+        internal override T Match<T>(Cases<T> cases) => cases.CandidateClicked(this);
+    }
+
+    /// <summary>前の応答の一覧の Index 番目にマウスで選択を動かした。予測変換の候補は確定しない。</summary>
+    public sealed record CandidateHighlighted(int Index) : ImeEvent
+    {
+        internal override T Match<T>(Cases<T> cases) => cases.CandidateHighlighted(this);
+    }
+
+    /// <summary>背景の変換の結果が届いた。</summary>
+    public sealed record ConversionFinished : ImeEvent
+    {
+        internal override T Match<T>(Cases<T> cases) => cases.ConversionFinished(this);
+    }
+
+    /// <summary>
+    /// フロントが自分で書き換えていないのに、キャレットが動いた・入力欄の文字が変わった (クリック・フロントがアプリに通したキー・アプリの編集)。
+    /// フロントは見つけたらすぐ送る (Core は打ったキーからキャレットの位置を追いかけない)。
+    /// </summary>
+    public sealed record CaretMoved(ImeCaret Caret) : WithCaret(Caret)
+    {
+        internal override T Match<T>(Cases<T> cases) => cases.CaretMoved(this);
+    }
+
+    /// <summary>今の状態だけを受け取る (設定を変えたかもしれないときなど)。入力の本体は作らない。</summary>
+    public sealed record StateRequested : ImeEvent
+    {
+        internal override T Match<T>(Cases<T> cases) => cases.StateRequested(this);
+    }
+
+    /// <summary>
+    /// フロントの IME のインスタンス (Instance) がなくなった (TSF の Deactivate)。未確定の文字は捨てる。
+    /// 1 つのインスタンスですべての入力欄を受け持つフロント (Meltype キーボード・Mac・IBus・fcitx5・Android) は送らない。
+    /// </summary>
+    public sealed record InstanceDestroyed : ImeEvent
+    {
+        internal override T Match<T>(Cases<T> cases) => cases.InstanceDestroyed(this);
+    }
 }
 
 /// <summary>
@@ -99,11 +186,13 @@ public sealed record ImeKey
     public bool Repeat { get; init; }
     /// <summary>1 回のキーで入る文字が複数のスカラーのとき (結合文字・ZWJ の絵文字。Mac)、その文字列。Ch は 0。本体は未確定の内容を確定して、キーをアプリに通させる。</summary>
     public string? Text { get; init; }
-    /// <summary>KeyReleased: 離すまでのあいだに、ほかのキー (修飾キーを含む)・マウスのボタンを押していた (このキーより先に押していたものも含む)。</summary>
-    public bool Interrupted { get; init; }
-    /// <summary>ワークアラウンド (<see cref="ImeEventType.KeyReleased"/>): このキーを離したら KeyReleased を送る。false なら本体は押した直後に離したとみなす。</summary>
+    /// <summary>ワークアラウンド (<see cref="ImeEvent.KeyReleased"/>): このキーを離したら KeyReleased を送る。false なら本体は押した直後に離したとみなす。</summary>
     public bool ReleaseFollows { get; init; }
 }
+
+/// <summary>離したキー。</summary>
+/// <param name="Interrupted">離すまでのあいだに、ほかのキー (修飾キーを含む)・マウスのボタンを押していた (このキーより先に押していたものも含む)。</param>
+public sealed record ImeKeyRelease(int Vk, bool Interrupted = false);
 
 /// <summary>OS (・Windows のフロントが調べた) 入力欄の性質。JSON の名前はメンバー名のまま。知らない性質のある出来事は、警告をログに出して受け持たない。</summary>
 public enum ImeTrait
@@ -210,6 +299,8 @@ public sealed record ImeState
 /// <summary>
 /// 変換していないときに受け取るキー。変換中はすべてのキーを受け取る。
 /// PrintableAscii は、Ctrl・Alt・Command を押さずに打った ASCII の文字 (! から ~ まで。空白は含まない) を受け取るか。PrintableAsciiExcept はそのうち受け取らない文字。
+/// テンキー (仮想キーコード 0x60〜0x6F) の文字は、PrintableAscii でも受け取らない (変換していないときの本体はテンキーをそのまま通すので、
+/// 受け取ってからアプリに入れ直すと、入れ直しが届かない入力欄でテンキーが効かなくなる: issue #2388)。
 /// Shortcuts は文字に関係なく受け取るキー (Space・Shift+Space・入力モードのキーなど。TSF は修飾キー付きのものを PreserveKey で登録する)。
 /// </summary>
 public sealed record ImeCapture
@@ -219,7 +310,7 @@ public sealed record ImeCapture
     public IReadOnlyList<ImeShortcut> Shortcuts { get; init; } = [];
     /// <summary>変換中に Ctrl と一緒に押しても変換ボックスで使うキー (設定「Control キーの割り当て」)。ほかの Ctrl・Alt・Win と一緒のキーは、確定してアプリに通す。</summary>
     public IReadOnlyList<ImeShortcut> CtrlKeysWhileComposing { get; init; } = [];
-    /// <summary>ワークアラウンド (<see cref="ImeEventType.KeyReleased"/>): 親指シフトのかな配列なので、送ったキーを離したことも受け取る。</summary>
+    /// <summary>ワークアラウンド (<see cref="ImeEvent.KeyReleased"/>): 親指シフトのかな配列なので、送ったキーを離したことも受け取る。</summary>
     public bool KeyReleases { get; init; }
     /// <summary>
     /// 左右の Alt (0xA4・0xA5) の押下を KeyPressed で、解放を KeyReleased で送る (設定「左 Alt で英数 / 右 Alt で日本語」。Windows・Linux のフロント)。
@@ -269,7 +360,8 @@ public sealed record ImeOutput(ImeState State, SessionResult Result)
 }
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, UseStringEnumConverter = true,
-    UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow)]
+    UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow, AllowOutOfOrderMetadataProperties = true,
+    RespectNullableAnnotations = true, RespectRequiredConstructorParameters = true)]
 [JsonSerializable(typeof(ImeEvent))]
 [JsonSerializable(typeof(ImeState))]
 internal sealed partial class ImeJsonContext : JsonSerializerContext;

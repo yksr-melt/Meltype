@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- 設定アプリ (src/Meltype.Settings) の Meltype Settings.app。build.sh が版を入れる -->
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>ja</string>
+	<key>CFBundleExecutable</key>
+	<string>MeltypeSettings</string>
+	<!-- 入力メニューの「Meltype の設定…」(InputController.openSettings) が、この ID で探して開く -->
+	<key>CFBundleIdentifier</key>
+	<string>io.github.yksr-melt.Meltype.Settings</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>Meltype Settings</string>
+	<key>CFBundleDisplayName</key>
+	<string>Meltype Settings</string>
+	<key>LSHasLocalizedDisplayName</key>
+	<true/>
+	<key>CFBundleIconFile</key>
+	<string>icon.icns</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.0.0</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>13.3</string>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSHumanReadableCopyright</key>
+	<string>Copyright (C) 2026 雪代 / Yukishiro. GPL-3.0-or-later</string>
+</dict>
+</plist>

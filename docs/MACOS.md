@@ -3,7 +3,8 @@
 </p>
 
 <a name="meltype-for-mac"></a>
-<p align="center"><img src="images/headings/mac/title.svg" alt="Meltype for Mac" height="80"></p>
+
+# Meltype for Mac
 
 <p align="center"><b>雪解けのように、半角/全角の壁を溶かす日本語入力。</b></p>
 
@@ -31,54 +32,68 @@ Mac 版のインストール・設定・困ったときの説明です。キー�
 
 > **プレビュー版です。** 動かないところやビルドエラーがあれば、エラーの全文とあわせて [Issues](https://github.com/yksr-melt/Meltype/issues) で教えてください！
 
-<br>
-
 <a name="動く環境"></a>
-<img src="images/headings/mac/01.svg" alt="動く環境" height="53"><br>
+
+## 動く環境
 
 - macOS 13.3 以降
-- 配布している zip は Apple シリコン (M1 / M2 / M3 / M4 …) の Mac 用です。Intel の Mac では、[ソースからビルド](../mac/README.md#ビルドする)してください (ビルドした CPU 向けのアプリができるので、Apple シリコン版と Intel 版は互換ではありません)
-
-<br>
+- 配布している zip と DMG は Apple シリコン (M1 / M2 / M3 / M4 …) の Mac 用です。Intel の Mac では、[ソースからビルド](../mac/README.md#ビルドする)してください (ビルドした CPU 向けのアプリができるので、Apple シリコン版と Intel 版は互換ではありません)
 
 <a name="インストール"></a>
-<img src="images/headings/mac/02.svg" alt="インストール" height="53"><br>
+
+## インストール
 
 Meltype はアプリではなく「入力ソース」(日本語入力) です。`Meltype.app` をダブルクリックしても何も起きません。
+ZIP・DMG・Homebrew のどれかで入れます。
+
+インストールの途中で macOS から Meltype の有効化を求められたら「許可」を押してください。自動で切り替わらなかったときは、入力メニューから Meltype を選んでください。
+起動エラーが出たときは、入力メニューから ABC または標準の日本語入力を選んでください。入力メニューに Meltype が出てこないときは、[困ったとき](#困ったとき)を見てください。
+
+### ZIP で入れる
 
 1. [Releases](https://github.com/yksr-melt/Meltype/releases/latest) から `Meltype-<version>-mac.zip` をダウンロードして、**zip 全体を**展開する
 2. 「Install Meltype.command」をダブルクリック
    - 「開発元が未確認のため開けません」と出たら、右クリック (control + クリック) →「開く」→「開く」
    - macOS 15 以降は、一度ダブルクリックしてから、システム設定 → プライバシーとセキュリティ → 下のほうの「このまま開く」を押す
    - それでも開けないときは、「ターミナル」で `bash ~/Downloads/Meltype-mac/install.sh` を実行する
-3. インストーラーが Meltype を登録・起動します。初回は Meltype の選択を試み、配布 ZIP の更新時は更新前の入力ソースへ戻します
-
-起動エラーが出たときは、入力メニューから ABC または標準の日本語入力を選んでください。入力メニューに Meltype が出てこないときは、[困ったとき](#困ったとき)を見てください。
+3. インストーラーが Meltype を登録・起動します。初回は同梱の補助ツールで Meltype の選択を試み、配布 ZIP の更新時は更新前の入力ソースへ戻します
 
 配布 ZIP からの更新も同じ手順です。`Meltype.app` を先に削除したり、手で上書きしたりせず、新しい ZIP 全体を展開してインストーラーを実行してください。ソースビルドからの更新も、外側のアプリを残して内容を交換します。更新時は入力メニューを再起動せず、更新前の入力ソースへ戻します。
 
-Homebrew から入れる場合は、最初に tap を追加してからインストールします。以後は `brew upgrade --cask meltype` で更新できます。
+### DMG で入れる
+
+1. [Releases](https://github.com/yksr-melt/Meltype/releases/latest) から `Meltype-<version>-mac.dmg` をダウンロードして開く
+2. 中の「Install Meltype」をダブルクリック
+   - 「“Install Meltype.app” は開いていません」と出たら「完了」を押し、システム設定 → プライバシーとセキュリティ → 下のほうの「このまま開く」を押して、パスワードなどで認証する
+3. 「インストール」を押す。途中で「"Meltype" が "Meltype" を有効にすることを許可しますか?」と出たら「許可」を押す
+4. 完了画面が出たら、入力メニューが Meltype になっていることを確かめて「取り出して閉じる」を押す (DMG も取り出されます)
+
+DMG からの更新も同じ手順です。更新では許可の確認は出ず、更新前の入力ソースへ戻します。
+
+### Homebrew で入れる
+
+最初に tap を追加してからインストールします。以後は `brew upgrade --cask meltype` で更新できます。
 
 ```bash
 brew tap yksr-melt/Meltype https://github.com/yksr-melt/Meltype.git
 brew install --cask yksr-melt/Meltype/meltype
 ```
 
-<br>
-
 <a name="使い方"></a>
-<img src="images/headings/mac/03.svg" alt="使い方" height="53"><br>
+
+## 使い方
 
 入力メニューの「日本語・英語の自動判定」で使います。JIS キーボードの <kbd>英数</kbd> / <kbd>かな</kbd> で、英数 (直接入力) / 日本語に切り替えます。
 
 変換の候補と入力中の案内は、入力位置の近くに表示します。候補はキー操作やクリックで選べます。
 
-設定・学習データ・ユーザー辞書は `~/Library/Application Support/Meltype` にあります (入力メニューの「Meltype のデータフォルダを開く」)。設定は Windows 版と同じ `config.json` で、入力メニューの「Meltype の設定ファイル (config.json) を開く…」で開いて直接編集します。VS Code などのエディターでは、項目の補完と説明が出ます。
+設定・ユーザー辞書・定型文・学習データは、Launchpad の「Meltype の設定」(入力メニューの「Meltype の設定…」でも開けます) で変えます。ファイルは `~/Library/Application Support/Meltype` にあります (入力メニューの「Meltype のデータフォルダを開く」)。
 
-かな漢字変換は、同梱の Mozc で行います。Zenzai (llama.cpp の llama-server と zenz-v3.2-small、同梱) で、キャレットの前の文を文脈にして変換します (既定で ON。CPU で計算します)。使わないときは `config.json` の `"UseZenzai": false`、自分の llama-server・モデルを使うときは `"ZenzaiServerPath"`・`"ZenzaiModelPath"` に場所を書きます。
+かな漢字変換は、同梱の Mozc で行います。Zenzai (llama.cpp の llama-server と zenz-v3.2-small、同梱) で、キャレットの前の文を文脈にして変換します (既定で ON。CPU で計算します)。使わないときは「Meltype の設定」の「Zenzai を使う」を OFF にします。自分の llama-server・モデルは「Zenzai: llama-server の場所」「Zenzai: モデル (GGUF) の場所」で指定できます (`config.json` では `UseZenzai`・`ZenzaiServerPath`・`ZenzaiModelPath`)。
 
 <a name="入力モードのショートカット"></a>
-<img src="images/headings/mac/s06.svg" alt="入力モードのショートカット" height="40">
+
+### 入力モードのショートカット
 
 入力メニューのモード (日本語・英語の自動判定 / 英数の直接入力) は、macOS の「サービス」にキーを割り当てて切り替えられます。最初はキーを割り当てていません。
 
@@ -98,9 +113,10 @@ brew install --cask yksr-melt/Meltype/meltype
 - VS Code・ターミナルなど「コード」のアプリでは、コメント・文字列の外は英数のまま入ります (Windows 版と同じアプリ別設定。既定で主なエディター・ターミナルが入っています)
 
 <a name="ユーザー辞書"></a>
-<img src="images/headings/mac/s02.svg" alt="ユーザー辞書" height="40">
 
-ユーザー辞書は、データフォルダ (`~/Library/Application Support/Meltype`) の `userdict.txt` に、1 行に「読み<Tab>単語」(UTF-8、読みはひらがな) で書きます。変換では最優先に使います。1 文字の読みは、その 1 文字だけを変換するときだけ使います。
+### ユーザー辞書
+
+「Meltype の設定」の「ユーザー辞書」で登録・編集できます。ファイルを直接編集する場合は、Meltype を終了してから、データフォルダ (`~/Library/Application Support/Meltype`) の `userdict.txt` に、1 行に「読み<Tab>単語」(UTF-8、読みはひらがな) で書きます。動詞・形容詞などは「読み<Tab>単語<Tab>品詞」と 3 列目に品詞 (`動詞ラ行五段`・`形容詞` など。Google 日本語入力・Microsoft IME の品詞名も使えます) を書くと、活用した形も変換できます。品詞を書かなければ名詞です。登録した語は Mozc のユーザー辞書に入り、ほかの語の途中の読み (わたしのことがすき の しの) には当てはめません。
 
 macOS の「ユーザ辞書」の語は、次の手順で `userdict.txt` に取り込めます。
 
@@ -111,21 +127,22 @@ macOS の「ユーザ辞書」の語は、次の手順で `userdict.txt` に取�
 - 空の読みと、タブや改行を含む語は取り込みません
 
 <a name="windows-版との違い"></a>
-<img src="images/headings/mac/s03.svg" alt="Windows 版との違い (今のところ)" height="40">
 
-- 設定画面・トレイ・ユーザー辞書の画面はありません (`config.json`・`userdict.txt` を直接編集。[ユーザー辞書](#ユーザー辞書))
+### Windows 版との違い (今のところ)
+
+- トレイはありません (入力メニューから操作します)
 - 設定「カッコを打ったら中にカーソルを移動」は未対応です
 
-<br>
-
 <a name="困ったとき"></a>
-<img src="images/headings/mac/04.svg" alt="困ったとき" height="53"><br>
+
+## 困ったとき
 
 - **入力ソースに出てこない**: まず入力メニューを見る。無ければ、ターミナルで次を実行する
   ```bash
   ~/Library/Input\ Methods/Meltype.app/Contents/MacOS/MeltypeRegisterInputSource
   ```
   これで戻らなければ、システム設定 → キーボード →（テキスト入力の）入力ソース →「編集…」→「+」→ 日本語 → Meltype で追加する (macOS 27 では、この手順が必要になることがあります)。それでも出てこなければ、ログアウトしてログインし直し、`~/Library/Input Methods/Meltype.app` があるか確かめる。
+- **設定にはあるのに入力メニューに出ない**: システム設定 → キーボード →（テキスト入力の）入力ソース →「編集…」で Meltype を選び、「–」で外す。「+」→ 日本語 → Meltype から追加し直して、入力メニューから選ぶ。
 - **Meltype がいくつも並ぶ**: ターミナルで次を実行する
   ```bash
   "$HOME/Library/Input Methods/Meltype.app/Contents/MacOS/Meltype" --register-input-source
@@ -139,8 +156,8 @@ macOS の「ユーザ辞書」の語は、次の手順で `userdict.txt` に取�
 - **止まってしまった**: まず入力メニューで ABC または標準の日本語入力を選び、`pkill -x Meltype` (次にキーを打つと macOS が起動し直します)。zip を展開したフォルダーで次を実行しても再起動できます
   ```bash
   bash ./start-input-method.sh "$HOME/Library/Input Methods/Meltype.app"
-  swift ./select-input-source.swift
   ```
+  起動したら、入力メニューから Meltype を選んでください。
 
 不具合を報告するときは、どのアプリで・何と打って・どうなったか (できればスクリーンショットも) を教えてください。
 
@@ -152,16 +169,15 @@ Chrome でパスワード欄にフォーカスしたまま別のアプリに切�
 
 Safari や一般のネイティブアプリのパスワード欄は、現在 Meltype で判別できません。入力メニューで入力ソースを ABC に変更してから、パスワードを入力してください。
 
-<br>
-
 <a name="アンインストール"></a>
-<img src="images/headings/mac/05.svg" alt="アンインストール" height="53"><br>
+
+## アンインストール
 
 入力ソースから Meltype を外してから、ターミナルで次を実行します。
 
 ```bash
 launchctl remove io.github.yksr-melt.Meltype.manual
-rm -rf ~/Library/Input\ Methods/Meltype.app
+rm -rf ~/Library/Input\ Methods/Meltype.app ~/Applications/Meltype\ Settings.app
 # 設定と学習データも消すなら
 rm -rf ~/Library/Application\ Support/Meltype
 ```

@@ -10,6 +10,8 @@ using System.Text.Json;
 using Meltype.Composition;
 using Meltype.Config;
 using Meltype.Diagnostics;
+using Meltype.Dictionary;
+using Meltype.Engine;
 using Meltype.Ime;
 using Meltype.Input;
 
@@ -759,7 +761,7 @@ internal sealed class TipServer : IDisposable
 /// </summary>
 internal sealed record TipRequest(uint Thread, Point? Anchor, ImeEvent Event, long? WaitSince)
 {
-    public string Type => WaitSince is null ? Event.Type.ToString() : "wait";
+    public string Type => WaitSince is null ? Event.GetType().Name : "wait";
 
     /// <summary>読めない・形の違う要求なら null。</summary>
     public static TipRequest? Parse(string json)
@@ -785,5 +787,5 @@ internal sealed record TipRequest(uint Thread, Point? Anchor, ImeEvent Event, lo
         }
     }
 
-    private static readonly ImeEvent Waiting = new() { Version = ImeHost.Version, Type = ImeEventType.StateRequested };
+    private static readonly ImeEvent Waiting = new ImeEvent.StateRequested();
 }

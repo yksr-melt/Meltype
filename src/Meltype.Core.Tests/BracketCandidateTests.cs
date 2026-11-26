@@ -4,7 +4,10 @@
 using System.Text.Json;
 using Meltype.Composition;
 using Meltype.Config;
+using Meltype.Dictionary;
+using Meltype.Engine;
 using Meltype.Input;
+using Meltype.Learning;
 
 namespace Meltype.Tests;
 
@@ -240,14 +243,12 @@ internal static class BracketCandidateTests
     private sealed class CountingConverter : TestConverter
     {
         public int Calls { get; private set; }
-        public ManualResetEventSlim Learned { get; } = new();
         public override string? Convert(string reading, string? before) { Calls++; return reading; }
         public override IReadOnlyList<ConversionClause>? ConvertClauses(string reading, string? before)
         {
             Calls++;
             return [new(reading, reading)];
         }
-        public override void Learn(string? context, IReadOnlyList<ConversionClause> clauses) => Learned.Set();
     }
 
     [Test]
@@ -276,7 +277,6 @@ internal static class BracketCandidateTests
         Assert.Equal(version, history.Version, "選び直しても履歴を更新しない");
         Assert.Equal(0, converter.Calls, "括弧をエンジンに渡さない");
         Assert.Equal(0, moreCalls, "表示や候補送りでも外部候補を追加しない");
-        Assert.True(!converter.Learned.Wait(100), "非同期の外部学習を送らない");
     }
 
     [Test]

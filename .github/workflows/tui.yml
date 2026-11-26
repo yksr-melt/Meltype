@@ -1,16 +1,30 @@
 # 端末版 (tui/) をビルドしてテストし、本体・Mozc・Zenzai を同梱した zip を Artifacts に置く。
-# 端末版・共通部分を変えた Pull Request と main、手動実行、release.yml (タグ) から呼ばれたとき。
+# 端末版・共通部分を変えた main、手動実行、release.yml (タグ) から呼ばれたとき。
+# 端末版のコードを変えた Pull Request では、ビルドとテストだけを流す (zip は作らない)。
 # リリースへの添付は release.yml。
 name: tui
 
 on:
+  # Core・辞書だけの変更は core.yml のテストと lint.yml の NativeAOT のアナライザーで見るので、ここでは流さない
   pull_request:
-    paths: &paths
+    paths:
       - 'tui/**'
       - 'native/mozc/**'
       - 'native/zenzai/**'
       - 'native/build-core-linux.sh'
       - '.github/actions/linux-native/**'
+      - '.github/actions/linux-mozc/**'
+      - 'src/Meltype.Core.CApi/**'
+      - '.github/workflows/tui.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'tui/**'
+      - 'native/mozc/**'
+      - 'native/zenzai/**'
+      - 'native/build-core-linux.sh'
+      - '.github/actions/linux-native/**'
+      - '.github/actions/linux-mozc/**'
       - 'src/Meltype.Core/**'
       - 'src/Meltype.Core.CApi/**'
       - 'dictionaries/**'
@@ -23,9 +37,6 @@ on:
       - 'src/Directory.Build.targets'
       - 'src/Directory.Packages.props'
       - '.github/workflows/tui.yml'
-  push:
-    branches: [main]
-    paths: *paths
   workflow_dispatch:
   workflow_call:
 
@@ -65,8 +76,8 @@ jobs:
       # NativeAOT のリンクに使うもの
       - name: Packages
         run: |
-          sudo apt-get update
-          sudo apt-get install -y clang lld zlib1g-dev
+          sudo apt-get -o Acquire::Retries=3 update
+          sudo apt-get -o Acquire::Retries=3 install -y clang lld zlib1g-dev
       - uses: ./.github/actions/linux-native
       - name: Build
         run: tui/build.sh
@@ -74,11 +85,13 @@ jobs:
       - name: Smoke test
         run: tui/build/Meltype-tty/meltype-tty --version
       - name: Package
+        if: github.event_name != 'pull_request'
         run: |
           # タグ (v1.0.0) なら Meltype-1.0.0-tty-linux.zip (arm64 は Meltype-1.0.0-tty-linux-arm64.zip)、それ以外はテスト版の名前
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then name="Meltype-${GITHUB_REF_NAME#v}-${{ matrix.asset }}.zip"; else name="Meltype-${{ matrix.asset }}-test-$(date +%Y%m%d-%H%M).zip"; fi
           (cd tui/build && zip -qr "$name" Meltype-tty)
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: meltype-${{ matrix.asset }}
           path: tui/build/Meltype-*.zip

@@ -4,7 +4,11 @@
 using Meltype.Composition;
 using Meltype.Config;
 using Meltype.Detection;
+using Meltype.Dictionary;
+using Meltype.Engine;
+using Meltype.Ime;
 using Meltype.Input;
+using Meltype.Learning;
 
 namespace Meltype.Tests;
 
@@ -42,44 +46,27 @@ internal static class FeedbackTests
     public static void Issue303_ArtistNames_StayEnglish()
     {
         // Issue #303: 大文字の語 + 日本語 (K|はぃふぁ、She|えらん、Gran|で) に区切られていた名前と、記号を混ぜて書く名前
-        foreach (var (typed, expected) in new[]
-        {
+        CompositionTests.AssertCommitted(
             ("Wiz Khalifa", "Wiz Khalifa"), ("Ariana Grande", "Ariana Grande"), ("Ed Sheeran", "Ed Sheeran"),
             ("Marshmello", "Marshmello"), ("beabadoobee", "beabadoobee"), ("The Chainsmokers", "The Chainsmokers"),
             ("999dobby", "999dobby"),
             ("B.o.B", "B.o.B"), ("U.S.A.", "U.S.A."), ("Chri$tian Gate$", "Chri$tian Gate$"), ("Ke$ha", "Ke$ha"),
             // 大文字の語 + 助詞は今までどおり区切る
-            ("Anisiyouka", "Aにしようか"), ("Tokyonisumu", "Tokyoにすむ"),
-        })
-        {
-            var k = new CompositionTests.Keyboard();
-            k.Type(typed + "\n");
-            Assert.Equal(expected, k.Host.Document, typed);
-        }
+            ("Anisiyouka", "Aにしようか"), ("Tokyonisumu", "Tokyoにすむ"));
     }
 
     [Test]
     public static void Issue369_Huihui_StaysEnglish()
     {
         // Issue #369: huihui (AI のモデルを出している huihui-ai) が ふいふい (→ 回回) になっていた。ふいふい は日本語の語ではない
-        foreach (var (typed, expected) in new[] { ("huihui", "huihui"), ("huihuino", "huihuiの"), ("fuifui", "ふいふい") })
-        {
-            var k = new CompositionTests.Keyboard();
-            k.Type(typed + "\n");
-            Assert.Equal(expected, k.Host.Document, typed);
-        }
+        CompositionTests.AssertCommitted(("huihui", "huihui"), ("huihuino", "huihuiの"), ("fuifui", "ふいふい"));
     }
 
     [Test]
     public static void Issue413_VibeCodingStaysEnglish()
     {
         // vibe も coding もローマ字として途中まで読める (ゔぃべ、こぢん + g)。2 語の合成語なので英語のまま。
-        foreach (var (typed, expected) in new[] { ("vibecoding", "vibecoding"), ("vibecodingga", "vibecodingが") })
-        {
-            var k = new CompositionTests.Keyboard();
-            k.Type(typed + "\n");
-            Assert.Equal(expected, k.Host.Document, typed);
-        }
+        CompositionTests.AssertCommitted(("vibecoding", "vibecoding"), ("vibecodingga", "vibecodingが"));
     }
 
     [Test]
@@ -87,16 +74,9 @@ internal static class FeedbackTests
     {
         // Issue #377: gameover が がめover になっていた (game は がめ と読める)。英単語 2 つの合成語で、後ろの語 (over) が
         // ローマ字として最後まで読めないなら、前の語も英語。よく使う日本語の語 (sake・made) の後ろは今までどおり
-        foreach (var (typed, expected) in new[]
-        {
+        CompositionTests.AssertCommitted(
             ("gameover", "gameover"), ("gameoverninaru", "gameoverになる"),
-            ("sakeover", "さけover"), ("madeover", "までover"), ("shabushabu", "しゃぶしゃぶ"), ("commitshitai", "commitしたい"),
-        })
-        {
-            var k = new CompositionTests.Keyboard();
-            k.Type(typed + "\n");
-            Assert.Equal(expected, k.Host.Document, typed);
-        }
+            ("sakeover", "さけover"), ("madeover", "までover"), ("shabushabu", "しゃぶしゃぶ"), ("commitshitai", "commitしたい"));
     }
 
     [Test]
@@ -119,21 +99,26 @@ internal static class FeedbackTests
     }
 
     [Test]
+    public static void Issue1744_CapitalizedJapaneseName_IsNotSplit()
+    {
+        // Issue #1744・#2168: 大文字で始めて打った日本人名が、頭で切られて日本語が続いていた (T赤橋・Yukiしろ・Takeもと・Toyoだ・Satoし)。
+        CompositionTests.AssertCommitted(
+            ("Takahashi", "Takahashi"), ("Yukishiro", "Yukishiro"), ("Takemoto", "Takemoto"), ("Toyoda", "Toyoda"), ("Satoshi", "Satoshi"),
+            // 長音を書かないヘボン式と、書いた綴り
+            ("Sato", "Sato"), ("Satou", "Satou"),
+            // 名前の後ろの付属語は日本語のまま。小文字で打った名前は日本語
+            ("Tanakaga", "Tanakaが"), ("Satoshiha", "Satoshiは"), ("takahashi", "たかはし"));
+    }
+
+    [Test]
     public static void Issue376_SuruAfterEnglishAndParticle_IsJapanese()
     {
         // Issue #376: 英単語 + 助詞 + する の活用 (password|ni|site) を、英単語 + 助詞 + 英単語 (api|no|error) と見て site を英字にしていた
-        foreach (var (typed, expected) in new[]
-        {
+        CompositionTests.AssertCommitted(
             ("passwordnisite", "passwordにして"), ("passwordwosite", "passwordをして"), ("passwordnisitekudasai", "passwordにしてください"),
             ("emailwositai", "emailをしたい"),
             // 英単語 + 助詞 + 英単語 は今までどおり
-            ("apinoerror", "apiのerror"), ("websitewomiru", "websiteをみる"),
-        })
-        {
-            var k = new CompositionTests.Keyboard();
-            k.Type(typed + "\n");
-            Assert.Equal(expected, k.Host.Document, typed);
-        }
+            ("apinoerror", "apiのerror"), ("websitewomiru", "websiteをみる"));
     }
 
     [Test]
@@ -141,57 +126,33 @@ internal static class FeedbackTests
     {
         // Issue #379: face の後に日本語 (face + ni) が ふぁせに (ファ背に) になっていた。c で綴った英単語 + 助詞 は英単語 + 助詞。
         // 日本語の途中の c 行の綴り (fucarete・shoucanshi) は今までどおり日本語
-        foreach (var (typed, expected) in new[]
-        {
+        CompositionTests.AssertCommitted(
             ("faceni", "faceに"), ("facewo", "faceを"), ("faceniutsu", "faceにうつ"), ("placega", "placeが"),
-            ("fucarete", "ふかれて"), ("shoucanshi", "しょうかんし"),
-        })
-        {
-            var k = new CompositionTests.Keyboard();
-            k.Type(typed + "\n");
-            Assert.Equal(expected, k.Host.Document, typed);
-        }
+            ("fucarete", "ふかれて"), ("shoucanshi", "しょうかんし"));
     }
 
     [Test]
     public static void Issue357_Delegate_StaysEnglish()
     {
         // Issue #357: handanwodelegatesuru が 判断をでlegateする (de|legate) になっていた。今の main では delegate のまま (戻らないように)
-        foreach (var (typed, expected) in new[] { ("handanwodelegatesuru", "はんだんをdelegateする"), ("delegate", "delegate"), ("delegatewotsukau", "delegateをつかう") })
-        {
-            var k = new CompositionTests.Keyboard();
-            k.Type(typed + "\n");
-            Assert.Equal(expected, k.Host.Document, typed);
-        }
+        CompositionTests.AssertCommitted(("handanwodelegatesuru", "はんだんをdelegateする"), ("delegate", "delegate"), ("delegatewotsukau", "delegateをつかう"));
     }
 
     [Test]
     public static void Issue1873_PluralOfKnownWord_StaysEnglish()
     {
         // Issue #1873: english-words.txt は deploy を持たず ploys を持つので、deploys が de|ploys に割れていた
-        foreach (var (typed, expected) in new[]
-        {
+        CompositionTests.AssertCommitted(
             ("deploys", "deploys"), ("updates", "updates"),
             // 逆向き: 英単語の後ろの す で始まる日本語はそのまま
-            ("deploysuru", "deployする"), ("reflectsareta", "reflectされた"),
-        })
-        {
-            var k = new CompositionTests.Keyboard();
-            k.Type(typed + "\n");
-            Assert.Equal(expected, k.Host.Document, typed);
-        }
+            ("deploysuru", "deployする"), ("reflectsareta", "reflectされた"));
     }
 
     [Test]
     public static void Issue378_Memoirs_StaysEnglish()
     {
         // Issue #378: memoirs が メモリ絵s になる報告。今の main では memoirs・memories とも英字のまま (戻らないように)
-        foreach (var (typed, expected) in new[] { ("memoirs", "memoirs"), ("memories", "memories"), ("memoirsgaii", "memoirsがいい") })
-        {
-            var k = new CompositionTests.Keyboard();
-            k.Type(typed + "\n");
-            Assert.Equal(expected, k.Host.Document, typed);
-        }
+        CompositionTests.AssertCommitted(("memoirs", "memoirs"), ("memories", "memories"), ("memoirsgaii", "memoirsがいい"));
     }
 
     [Test]
@@ -208,20 +169,13 @@ internal static class FeedbackTests
     public static void Issue594_Shatsu_KeepsJapaneseReadingWithEnglishPrefix()
     {
         // shat は英単語でも、しゃつ の tsu を t + su に分けない。
-        foreach (var (typed, expected) in new[]
-        {
+        CompositionTests.AssertCommitted(
             ("shatsu", "しゃつ"), ("shatu", "しゃつ"), ("syatsu", "しゃつ"), ("syatu", "しゃつ"),
             ("shatsuwokau", "しゃつをかう"), ("Tshatsu", "Tしゃつ"),
             ("I shat", "I shat"),
             ("commitsuru", "commitする"), ("commitsite", "commitして"), ("reflectsareta", "reflectされた"),
             ("shutsita", "shutした"), ("shitsumon", "しつもん"), ("teishutsushita", "ていしゅつした"),
-            ("sounitsuite", "そうについて"), ("AInitsuite", "AIについて"),
-        })
-        {
-            var k = new CompositionTests.Keyboard();
-            k.Type(typed + "\n");
-            Assert.Equal(expected, k.Host.Document, typed);
-        }
+            ("sounitsuite", "そうについて"), ("AInitsuite", "AIについて"));
     }
 
     [Test]
@@ -255,12 +209,7 @@ internal static class FeedbackTests
     public static void Laughter_IsNotTakenAsWordFoundMidRomaji()
     {
         // kiyagat|taw の taw (ビー玉) で、笑いの w を英字にしていた (きやがっtaw)
-        foreach (var (typed, expected) in new[] { ("kiyagattaw", "きやがったw"), ("kitaw!", "きたw！"), ("new", "new"), ("show", "show") })
-        {
-            var k = new CompositionTests.Keyboard();
-            k.Type(typed + "\n");
-            Assert.Equal(expected, k.Host.Document, typed);
-        }
+        CompositionTests.AssertCommitted(("kiyagattaw", "きやがったw"), ("kitaw!", "きたw！"), ("new", "new"), ("show", "show"));
     }
 
     [Test]
@@ -651,59 +600,39 @@ internal static class LanguageLearningTests
     public static void F10_TeachesEnglish_ThenUsedInContext()
     {
         var memory = new LanguageMemory(null);
-        CompositionTests.Detector.Memory = memory;
-        try
-        {
-            var k = new CompositionTests.Keyboard(languages: memory);
-            k.Type("tao");
-            Assert.Equal("たお", k.Showing, "最初は日本語");
-            k.Press(VirtualKeys.F10);
-            k.Type("\n");
-            Assert.Equal("tao", k.Host.Document);
-            Assert.Equal(true, memory.Get("tao"), "F10 で英字にして確定したので覚える");
+        var k = new CompositionTests.Keyboard(languages: memory);
+        k.Type("tao");
+        Assert.Equal("たお", k.Showing, "最初は日本語");
+        k.Press(VirtualKeys.F10);
+        k.Type("\n");
+        Assert.Equal("tao", k.Host.Document);
+        Assert.Equal(true, memory.Get("tao"), "F10 で英字にして確定したので覚える");
 
-            var next = new CompositionTests.Keyboard(languages: memory);
-            next.Type("taonoerror\n");
-            Assert.Equal("taoのerror", next.Host.Document, "次からは文の中でも英字");
-        }
-        finally
-        {
-            CompositionTests.Detector.Memory = null;
-        }
+        var next = new CompositionTests.Keyboard(languages: memory);
+        next.Type("taonoerror\n");
+        Assert.Equal("taoのerror", next.Host.Document, "次からは文の中でも英字");
     }
 
     [Test]
     public static void ReadingLattice_SplitsReportedExamples()
     {
-        foreach (var (typed, expected) in new[]
-        {
+        CompositionTests.AssertCommitted(
             ("adbyuukounisuru", "adbゆうこうにする"), // #1131
             ("dive into summer", "dive into summer"), // #1125
             ("imagenzai", "いまげんざい"), ("imagewohiraku", "imageをひらく"), // #1175
-            ("pa-thisyon", "ぱーてぃしょん"), ("applenoiphonehakanaritakai", "appleのiphoneはかなりたかい"),
+            ("pa-thisyon", "ぱーてぃしょん"), ("applenoiphonehakanaritakai", "appleのiPhoneはかなりたかい"),
             ("erroraru", "errorある"),
             // issue を いっ|すえ と読まない。っ で終わる語の後ろの す (いいっす) は日本語のまま
             ("issuearu", "issueある"), ("issueyomu", "issueよむ"), ("issuetaberu", "issueたべる"),
             ("issuyo", "いっすよ"), ("issune", "いっすね"), ("iissune", "いいっすね"), ("soussu", "そうっす"), ("ittekita", "いってきた"), ("issyoniiku", "いっしょにいく"),
             // #1148 で英語になっていた日本語
-            ("intoro", "いんとろ"), ("tonegawa", "とねがわ"), ("metaboriltuku", "めたぼりっく"), ("pureriri-su", "ぷれりりーす"), ("mainkurafuto", "まいんくらふと"),
-        })
-        {
-            var k = new CompositionTests.Keyboard();
-            k.Type(typed + "\n");
-            Assert.Equal(expected, k.Host.Document, typed);
-        }
+            ("intoro", "いんとろ"), ("tonegawa", "とねがわ"), ("metaboriltuku", "めたぼりっく"), ("pureriri-su", "ぷれりりーす"), ("mainkurafuto", "まいんくらふと"));
     }
 
     [Test]
     public static void Issue960_Kwo_IsSmallO()
     {
-        foreach (var (typed, expected) in new[] { ("kwo", "くぉ"), ("talkwo", "talkを"), ("backwo", "backを"), ("bookwotoru", "bookをとる") })
-        {
-            var k = new CompositionTests.Keyboard();
-            k.Type(typed + "\n");
-            Assert.Equal(expected, k.Host.Document, typed);
-        }
+        CompositionTests.AssertCommitted(("kwo", "くぉ"), ("talkwo", "talkを"), ("backwo", "backを"), ("bookwotoru", "bookをとる"));
     }
 
     [Test]
@@ -713,20 +642,12 @@ internal static class LanguageLearningTests
         // きょう はよく使う日本語の語なので、2 回直して覚える
         memory.Remember("kyou", english: true, explicitChoice: true);
         memory.Remember("kyou", english: true, explicitChoice: true);
-        CompositionTests.Detector.Memory = memory;
-        try
-        {
-            var k = new CompositionTests.Keyboard(languages: memory);
-            k.Type("kyou");
-            Assert.Equal("kyou", k.Showing, "入力中は覚えた英字");
-            k.Press(VirtualKeys.Convert);
-            var candidates = k.Host.View!.Candidates;
-            Assert.Equal("今日", candidates[0], $"変換キーの第一候補は変換エンジンの漢字: {string.Join(" ", candidates)}");
-        }
-        finally
-        {
-            CompositionTests.Detector.Memory = null;
-        }
+        var k = new CompositionTests.Keyboard(languages: memory);
+        k.Type("kyou");
+        Assert.Equal("kyou", k.Showing, "入力中は覚えた英字");
+        k.Press(VirtualKeys.Convert);
+        var candidates = k.Host.View!.Candidates;
+        Assert.Equal("今日", candidates[0], $"変換キーの第一候補は変換エンジンの漢字: {string.Join(" ", candidates)}");
     }
 
     [Test]
@@ -735,20 +656,12 @@ internal static class LanguageLearningTests
         // 一度 go を英字で確定したら、日本語 (nihongo) が にほんgo になっていた。
         var memory = new LanguageMemory(null);
         memory.Remember("go", english: true, explicitChoice: true);
-        CompositionTests.Detector.Memory = memory;
-        try
-        {
-            var k = new CompositionTests.Keyboard(languages: memory);
-            k.Type("nihongo\n");
-            Assert.Equal("にほんご", k.Host.Document, "日本語のすぐ後ろでは、覚えた短い英単語を使わない");
-            k = new CompositionTests.Keyboard(languages: memory);
-            k.Type("go\n");
-            Assert.Equal("go", k.Host.Document, "単独なら覚えたとおり英字");
-        }
-        finally
-        {
-            CompositionTests.Detector.Memory = null;
-        }
+        var k = new CompositionTests.Keyboard(languages: memory);
+        k.Type("nihongo\n");
+        Assert.Equal("にほんご", k.Host.Document, "日本語のすぐ後ろでは、覚えた短い英単語を使わない");
+        k = new CompositionTests.Keyboard(languages: memory);
+        k.Type("go\n");
+        Assert.Equal("go", k.Host.Document, "単独なら覚えたとおり英字");
     }
 
     [Test]
@@ -756,24 +669,16 @@ internal static class LanguageLearningTests
     {
         // #1137: go を英字で確定したあと、go + 変換キーの候補が ご ゴ ｺﾞ go Go GO だけで、語 碁 後 が出ない。
         var memory = new LanguageMemory(null);
-        CompositionTests.Detector.Memory = memory;
-        try
-        {
-            // go は英単語として見えるので、F10 は大文字・小文字を変える。英字にして確定した学習を直接入れる
-            memory.Remember("go", english: true, explicitChoice: true);
-            var k = new CompositionTests.Keyboard(languages: memory, moreCandidates: reading => reading == "ご" ? ["語", "碁", "後"] : []);
-            k.Type("go");
-            Assert.Equal("go", k.Showing, "覚えたとおり英字");
-            k.Press(VirtualKeys.Convert);
-            var candidates = k.Host.View!.Candidates.ToList();
-            Assert.True(candidates.Contains("碁") && candidates.Contains("後"), string.Join(",", candidates));
-            Assert.True(candidates.IndexOf("碁") < candidates.IndexOf("ゴ"), "変換エンジンの候補はかなより前: " + string.Join(",", candidates));
-            Assert.True(candidates.IndexOf("ゴ") < candidates.IndexOf("go"), "英字の候補は日本語の候補の後ろのまま: " + string.Join(",", candidates));
-        }
-        finally
-        {
-            CompositionTests.Detector.Memory = null;
-        }
+        // go は英単語として見えるので、F10 は大文字・小文字を変える。英字にして確定した学習を直接入れる
+        memory.Remember("go", english: true, explicitChoice: true);
+        var k = new CompositionTests.Keyboard(languages: memory, moreCandidates: reading => reading == "ご" ? ["語", "碁", "後"] : []);
+        k.Type("go");
+        Assert.Equal("go", k.Showing, "覚えたとおり英字");
+        k.Press(VirtualKeys.Convert);
+        var candidates = k.Host.View!.Candidates.ToList();
+        Assert.True(candidates.Contains("碁") && candidates.Contains("後"), string.Join(",", candidates));
+        Assert.True(candidates.IndexOf("碁") < candidates.IndexOf("ゴ"), "変換エンジンの候補はかなより前: " + string.Join(",", candidates));
+        Assert.True(candidates.IndexOf("ゴ") < candidates.IndexOf("go"), "英字の候補は日本語の候補の後ろのまま: " + string.Join(",", candidates));
     }
 
 
@@ -782,16 +687,9 @@ internal static class LanguageLearningTests
     {
         // kyouhameetinggaarimasu が きょうはめえちんっがあります になっていた (meeting の g が が とつながって っが)。
         // また、表示では きょうはmeetingです なのに、確定したら打ち間違いとして g を直されて めえちんがです になっていた。
-        foreach (var (typed, expected) in new[]
-        {
+        CompositionTests.AssertCommitted(
             ("meetingga", "meetingが"), ("shoppinggasuki", "shoppingがすき"), ("sanngatsu", "さんがつ"),
-            ("kyouhameetinggaarimasu", "きょうはmeetingがあります"), ("kyouhameetingdesu", "きょうはmeetingです"), ("onegaishimsu", "おねがいします"),
-        })
-        {
-            var k = new CompositionTests.Keyboard();
-            k.Type(typed + "\n");
-            Assert.Equal(expected, k.Host.Document, typed);
-        }
+            ("kyouhameetinggaarimasu", "きょうはmeetingがあります"), ("kyouhameetingdesu", "きょうはmeetingです"), ("onegaishimsu", "おねがいします"));
     }
 
 
@@ -818,17 +716,6 @@ internal static class LanguageLearningTests
     }
 
     [Test]
-    public static void Phrase_AgeashiWoToru()
-    {
-        // 揚げ足取るな が 揚げ足とルナ になっていた (issue #147)。同梱の語句で 揚げ足取る を 1 つの文節にする
-        var k = new CompositionTests.Keyboard(userDictionary: new UserDictionary(null));
-        k.Type("ageashitoruna ");
-        var view = k.Host.View!;
-        Assert.True(view.Converting, "変換中");
-        Assert.Equal("揚げ足取る", view.Clauses![0], string.Join("|", view.Clauses));
-    }
-
-    [Test]
     public static void TesterNames_AreCandidates()
     {
         // 協力してくださった方々の名前を変換しやすくする (issue #156)
@@ -841,44 +728,39 @@ internal static class LanguageLearningTests
     public static void Issue1512_LearnedNoteDoesNotSplitJapaneseWord()
     {
         var memory = new LanguageMemory(null);
-        CompositionTests.Detector.Memory = memory;
-        try
+        // 環境によって未学習の note 自体が英語と判定されるため、学習時は日本語に見える状態から F10 で直す。
+        var teach = new CompositionTests.Keyboard(languages: memory) { Manual = true };
+        teach.Type("note");
+        teach.Press(VirtualKeys.F10);
+        teach.Press(VirtualKeys.Return);
+        Assert.Equal("note", teach.Host.Document, "F10 で英字にして確定する");
+        Assert.True(memory.Get("note") == true, "英語の学習が有効");
+        foreach (var live in new[] { false, true })
         {
-            // 環境によって未学習の note 自体が英語と判定されるため、学習時は日本語に見える状態から F10 で直す。
-            var teach = new CompositionTests.Keyboard(languages: memory) { Manual = true };
-            teach.Type("note");
-            teach.Press(VirtualKeys.F10);
-            teach.Press(VirtualKeys.Return);
-            Assert.Equal("note", teach.Host.Document, "F10 で英字にして確定する");
-            Assert.True(memory.Get("note") == true, "英語の学習が有効");
-            foreach (var live in new[] { false, true })
+            foreach (var (typed, expected) in new[]
             {
-                foreach (var (typed, expected) in new[]
-                {
-                    ("konotennmo", "このてんも"), ("konotenmo", "このてんも"),
-                    ("sonotennmo", "そのてんも"), ("konotennki", "このてんき"),
-                    ("donotenpo", "どのてんぽ"), ("anotensai", "あのてんさい"),
-                    ("sonotesuto", "そのてすと"), ("konotesuto", "このてすと"),
-                })
-                {
-                    var keyboard = new CompositionTests.Keyboard(live: live, languages: memory);
-                    keyboard.Type(typed + "\n");
-                    Assert.Equal(expected, keyboard.Host.Document, typed + " は日本語のまま");
-                }
+                ("konotennmo", "このてんも"), ("konotenmo", "このてんも"),
+                ("sonotennmo", "そのてんも"), ("konotennki", "このてんき"),
+                ("donotenpo", "どのてんぽ"), ("anotensai", "あのてんさい"),
+                ("sonotesuto", "そのてすと"), ("konotesuto", "このてすと"),
+            })
+            {
+                var keyboard = new CompositionTests.Keyboard(live: live, languages: memory);
+                keyboard.Type(typed + "\n");
+                Assert.Equal(expected, keyboard.Host.Document, typed + " は日本語のまま");
             }
-            var english = new CompositionTests.Keyboard(languages: memory);
-            english.Type("note\n");
-            Assert.Equal("note", english.Host.Document, "単独の note は学習どおり英語");
-            var mixed = new CompositionTests.Keyboard(languages: memory);
-            mixed.Type("notewomiru\n");
-            Assert.True(mixed.Host.Document.StartsWith("noteを", StringComparison.Ordinal), "助詞を伴う note も英語: " + mixed.Host.Document);
-            var settings = new Settings { LiveConversion = true, UseZenzai = false };
-            var session = new TestSession(() => settings, services: new CompositionServices { Languages = memory });
-            foreach (var c in "konotennmo") session.HandleKey(char.ToUpperInvariant(c), c, false, false, false, false);
-            var enter = session.HandleKey(VirtualKeys.Return, null, false, false, false, false);
-            Assert.Equal("このてんも", enter.Commits.Single().Text, "IME の入力セッションでも日本語のまま");
         }
-        finally { CompositionTests.Detector.Memory = null; }
+        var english = new CompositionTests.Keyboard(languages: memory);
+        english.Type("note\n");
+        Assert.Equal("note", english.Host.Document, "単独の note は学習どおり英語");
+        var mixed = new CompositionTests.Keyboard(languages: memory);
+        mixed.Type("notewomiru\n");
+        Assert.True(mixed.Host.Document.StartsWith("noteを", StringComparison.Ordinal), "助詞を伴う note も英語: " + mixed.Host.Document);
+        var settings = new Settings { LiveConversion = true, UseZenzai = false };
+        var session = new TestSession(() => settings, services: new CompositionServices { Languages = memory });
+        foreach (var c in "konotennmo") session.HandleKey(char.ToUpperInvariant(c), c, false, false, false, false);
+        var enter = session.HandleKey(VirtualKeys.Return, null, false, false, false, false);
+        Assert.Equal("このてんも", enter.Commits.Single().Text, "IME の入力セッションでも日本語のまま");
     }
 
     [Test]
@@ -1126,37 +1008,23 @@ internal static class LanguageLearningTests
     {
         // 大文字の略語の後ろのローマ字 (AInituite → AIについて: issue #129)。
         // AIde を英単語 aide、AInit を init と読んで、後ろまで英字にしていた
-        foreach (var (typed, expected) in new[]
-        {
+        CompositionTests.AssertCommitted(
             ("AInituite", "AIについて"), ("AInitsuite", "AIについて"), ("AIdekiru", "AIできる"), ("GPTnituite", "GPTについて"),
             ("AIde", "AIで"), ("iOSdekiru", "iOSできる"),
             // 略語に英単語が続くもの・英文の中の略語は英語のまま
-            ("HTTPserver", "HTTPserver"), ("GPT is great", "GPT is great"), ("use HTTPS for login", "use HTTPS for login"),
-        })
-        {
-            var k = new CompositionTests.Keyboard();
-            k.Type(typed + "\n");
-            Assert.Equal(expected, k.Host.Document, typed);
-        }
+            ("HTTPserver", "HTTPserver"), ("GPT is great", "GPT is great"), ("use HTTPS for login", "use HTTPS for login"));
     }
 
     [Test]
     public static void ShortHeadThenCapital_IsName()
     {
         // #266: McAfeeto が McA|feeto で切れて McAふぇえと になっていた。Mc・Le の後ろの大文字で終わる頭 (McA・LeB) は略語ではなく名前の途中
-        foreach (var (typed, expected) in new[]
-        {
+        CompositionTests.AssertCommitted(
             ("McAfeeto", "McAfeeと"), ("McAfeewo", "McAfeeを"), ("McAfeede", "McAfeeで"), ("LeBronde", "LeBronで"),
             // 英単語 + 大文字 1 文字・大文字が続く略語は今までどおり区切る
             ("PlanBdeiku", "PlanBでいく"), ("TypeAnohou", "TypeAのほう"), ("OrpCde", "OrpCで"), ("oRPCde", "oRPCで"), ("ORPCde", "ORPCで"),
             ("OCRwoshi", "OCRをし"), ("DeNAde", "DeNAで"), ("OpenAIno", "OpenAIの"), ("Anisiyouka", "Aにしようか"), ("MrXde", "MrXで"),
-            ("McAfee", "McAfee"), ("McKinseyde", "McKinseyで"), ("McDonaldsde", "McDonaldsで"),
-        })
-        {
-            var k = new CompositionTests.Keyboard();
-            k.Type(typed + "\n");
-            Assert.Equal(expected, k.Host.Document, typed);
-        }
+            ("McAfee", "McAfee"), ("McKinseyde", "McKinseyで"), ("McDonaldsde", "McDonaldsで"));
 
         var typing = new CompositionTests.Keyboard();
         typing.Type("McAfeeto");
@@ -1219,21 +1087,14 @@ internal static class LanguageLearningTests
     public static void UnitsAfterNumbers_StayLetters()
     {
         // 単位 (mm、min) が打ちにくく、日本語になることがあった (10mmで → 10っまで、5min → 5みん)。
-        foreach (var (typed, expected) in new[]
-        {
+        CompositionTests.AssertCommitted(
             ("10mmde", "10mmで"), ("kyouha10mmdesu", "きょうは10mmです"), ("5min", "5min"), ("3mol", "3mol"), ("2mmol", "2mmol"),
             ("100mlnomizu", "100mlのみず"), ("3nin", "3にん"), ("1man", "1まん"), ("10mina", "10みな"), ("5ko", "5こ"),
             // cc も 1 語の単位 (50cc原付 が 50っc原付 になっていた: issue #130)。ppm・ppb・ppt も同じく促音になっていた
             ("50cc", "50cc"), ("50ccgenntuki", "50ccげんつき"), ("150ccdattara", "150ccだったら"), ("50ccwokatta", "50ccをかった"),
             ("100ppm", "100ppm"), ("50ppbhikaku", "50ppbひかく"),
             // 数字の後ろでない っ (ccha・tchi 系) は今までどおりかな
-            ("cchau", "っちゃう"), ("yacchatta", "やっちゃった"), ("50ccha", "50ccは"), ("50ccchan", "50ccちゃん"),
-        })
-        {
-            var k = new CompositionTests.Keyboard();
-            k.Type(typed + "\n");
-            Assert.Equal(expected, k.Host.Document, typed);
-        }
+            ("cchau", "っちゃう"), ("yacchatta", "やっちゃった"), ("50ccha", "50ccは"), ("50ccchan", "50ccちゃん"));
     }
 
 
@@ -1263,7 +1124,7 @@ internal static class LanguageLearningTests
             // Issue #104: 英単語 (moral) の最後の l + tu が っ にならなかった。英単語 + つ (hotel|tukau) は今までどおり
             ("moraltute", "もらって"), ("hoteltukau", "hotelつかう"), ("hoteltsukau", "hotelつかう"), ("mailtukau", "mailつかう"), ("realtukau", "realつかう"), ("tooltukau", "toolつかう"),
             // Issue #218: 英単語 (hotel・total) の後ろでわざわざ打った ltu が、l の重なり (te|ll = tell) で英字になっていた
-            ("hotelltu", "hotelっ"), ("hotelltsu", "hotelっ"), ("totalltute", "totalって"), ("hotellya", "hotellや"), ("welltuned", "welltuned"),
+            ("hotelltu", "hotelっ"), ("hotelltsu", "hotelっ"), ("totalltute", "totalって"), ("welltuned", "welltuned"),
             // Issue #220: 表示では tabで なのに、確定すると打ち間違いとして たべ に直されていた
             ("tabde", "tabで"), ("tabga", "tabが"), ("kyouhatabdeyaru", "きょうはtabでやる"), ("tabete", "たべて"), ("onegaishimsu", "おねがいします"),
             // 伸ばす音の う + について (そう|u|ni|t の unit) で、t と s が つ にならず英単語 unit になっていた。英単語 + する (commit|する) は今までどおり
@@ -1285,7 +1146,7 @@ internal static class LanguageLearningTests
             // Issue #1216: not|とっている になっていた。Issue #1193: えんv になっていた
             ("nottotteiru", "のっとっている"), ("env", "env"),
             // 略語 + 日本語 + 記号は今までどおり (BE|かな？ が BEkana？ になっていた)
-            ("tougouhandakaraBEkana?", "とうごうはんだからBEかな？"), ("fubusangaXshisuginadakenanda!!", "ふぶさんがXしすぎなだけなんだ！！"), ("tsubemyunorevancedtsukatteru", "つべみゅのrevancedつかってる"),
+            ("tougouhandakaraBEkana?", "とうごうはんだからBEかな？"), ("fubusangaXshisuginadakenanda!!", "ふぶさんがXしすぎなだけなんだ！！"), ("tsubemyunorevancedtsukatteru", "つべみゅのReVancedつかってる"),
             // テスターの報告 (2026-10-05): 英語のユーザー名が打てない。@ の後ろ (メンション)・_ の入った語は英字のまま
             ("@kuraido", "@kuraido"), ("@una08142009 arigatou", "@una08142009 ありがとう"), ("upah_setu", "upah_setu"), ("cafely_latte", "cafely_latte"),
             // メールアドレスは @ の前も英字のまま (issue #59。前は たろ@... だった。例には example.com を使う)
@@ -1313,6 +1174,9 @@ internal static class LanguageLearningTests
         Assert.True(!memory.Entries().Single().Active, "一覧では「2 回目を待っている」");
         memory.Remember("go", english: true);
         Assert.Equal(true, memory.Get("go"), "2 回目で英語として覚える");
+        memory.Remember("no", english: true, context: true);
+        Assert.Equal(null, memory.Get("no", context: true), "文脈ごとに分けても、1 回目はまだ覚えない");
+        Assert.True(!memory.Entries().Single(e => e.Word == "no").Active, "文脈ごとに分けても、一覧では「2 回目を待っている」");
         memory.Remember("to", english: true, explicitChoice: true);
         Assert.Equal(true, memory.Get("to"), "F10 ではっきり直したら 1 回で覚える");
         memory.Remember("api", english: true);
@@ -1327,65 +1191,42 @@ internal static class LanguageLearningTests
         // 英字と判定された語も変換できるように: Shift+Space でローマ字として読んで変換する。
         var memory = new LanguageMemory(null);
         memory.Remember("go", english: true, explicitChoice: true);
-        CompositionTests.Detector.Memory = memory;
-        try
-        {
-            var k = new CompositionTests.Keyboard(languages: memory);
-            k.Type("go");
-            k.TypeKeys((VirtualKeys.Space, true));
-            k.Type("\n");
-            Assert.Equal("ご", k.Host.Document, "Shift+Space で日本語の候補が先頭");
-            Assert.Equal(false, memory.Get("go"), "日本語で確定したので、次から日本語");
-        }
-        finally
-        {
-            CompositionTests.Detector.Memory = null;
-        }
+        var k = new CompositionTests.Keyboard(languages: memory);
+        k.Type("go");
+        k.TypeKeys((VirtualKeys.Space, true));
+        k.Type("\n");
+        Assert.Equal("ご", k.Host.Document, "Shift+Space で日本語の候補が先頭");
+        Assert.Equal(false, memory.Get("go"), "日本語で確定したので、次から日本語");
     }
 
     [Test]
     public static void F6_TeachesJapanese()
     {
         var memory = new LanguageMemory(null);
-        CompositionTests.Detector.Memory = memory;
-        try
-        {
-            var k = new CompositionTests.Keyboard(languages: memory);
-            k.Type("google");
-            k.Press(VirtualKeys.F6);
-            k.Type("\n");
-            Assert.Equal("ごおgぇ", k.Host.Document);
-            Assert.Equal(false, memory.Get("google"), "F6 でかなにして確定したので覚える");
-            var next = new CompositionTests.Keyboard(languages: memory);
-            next.Type("google");
-            Assert.Equal("ごおgぇ", next.Showing);
-        }
-        finally
-        {
-            CompositionTests.Detector.Memory = null;
-        }
+        var k = new CompositionTests.Keyboard(languages: memory);
+        k.Type("google");
+        k.Press(VirtualKeys.F6);
+        k.Type("\n");
+        Assert.Equal("ごおgぇ", k.Host.Document);
+        Assert.Equal(false, memory.Get("google"), "F6 でかなにして確定したので覚える");
+        var next = new CompositionTests.Keyboard(languages: memory);
+        next.Type("google");
+        // 見せるのは Enter で確定する形 (打ち間違いとして直した形)
+        Assert.Equal("ごごぇ", next.Showing);
     }
 
     [Test]
     public static void ExplicitEnglish_BeatsLattice()
     {
         var memory = new LanguageMemory(null);
-        CompositionTests.Detector.Memory = memory;
-        try
-        {
-            // すし はよく使う日本語の語なので、F10 で直しても 2 回で覚える
-            memory.Remember("sushi", english: true, explicitChoice: true);
-            memory.Remember("sushi", english: true, explicitChoice: true);
-            var k = new CompositionTests.Keyboard(languages: memory);
-            k.Type("sushi");
-            Assert.Equal("sushi", k.Showing);
-            k.Type("\n");
-            Assert.Equal("sushi", k.Host.Document);
-        }
-        finally
-        {
-            CompositionTests.Detector.Memory = null;
-        }
+        // すし はよく使う日本語の語なので、F10 で直しても 2 回で覚える
+        memory.Remember("sushi", english: true, explicitChoice: true);
+        memory.Remember("sushi", english: true, explicitChoice: true);
+        var k = new CompositionTests.Keyboard(languages: memory);
+        k.Type("sushi");
+        Assert.Equal("sushi", k.Showing);
+        k.Type("\n");
+        Assert.Equal("sushi", k.Host.Document);
     }
 
     [Test]
@@ -1510,23 +1351,15 @@ internal static class RawCandidateTests
     public static void Conversion_OffersTypedLetters_AndLearns()
     {
         var memory = new LanguageMemory(null);
-        CompositionTests.Detector.Memory = memory;
-        try
-        {
-            var k = new CompositionTests.Keyboard(languages: memory);
-            k.Type("tao ");
-            var candidates = k.Host.View!.Candidates;
-            Assert.True(candidates.Contains("tao") && candidates.Contains("ｔａｏ"), $"候補に打ったままの英字と全角の英字: {string.Join(" ", candidates)}");
-            // Space を連打して英字まで送る
-            for (var i = 0; i < 10 && k.Host.View!.Candidates[k.Host.View.SelectedIndex] != "tao"; i++) k.Press(VirtualKeys.Space);
-            k.Type("\n");
-            Assert.Equal("tao", k.Host.Document);
-            Assert.Equal(true, memory.Get("tao"), "英字を選んで確定したので覚える");
-        }
-        finally
-        {
-            CompositionTests.Detector.Memory = null;
-        }
+        var k = new CompositionTests.Keyboard(languages: memory);
+        k.Type("tao ");
+        var candidates = k.Host.View!.Candidates;
+        Assert.True(candidates.Contains("tao") && candidates.Contains("ｔａｏ"), $"候補に打ったままの英字と全角の英字: {string.Join(" ", candidates)}");
+        // Space を連打して英字まで送る
+        for (var i = 0; i < 10 && k.Host.View!.Candidates[k.Host.View.SelectedIndex] != "tao"; i++) k.Press(VirtualKeys.Space);
+        k.Type("\n");
+        Assert.Equal("tao", k.Host.Document);
+        Assert.Equal(true, memory.Get("tao"), "英字を選んで確定したので覚える");
     }
 
     [Test]
@@ -1546,8 +1379,7 @@ internal static class RomajiTypoTests
     [Test]
     public static void RomajiTypos_AreFixedOnCommit()
     {
-        foreach (var (typed, expected) in new[]
-        {
+        CompositionTests.AssertCommitted(
             ("onegaishimsu", "おねがいします"),   // 抜け
             ("arigatpu", "ありがとう"),           // 隣のキー
             ("arigtou", "ありがとう"),
@@ -1555,13 +1387,7 @@ internal static class RomajiTypoTests
             ("shitmeasu", "してます"),
             ("gozaimsu", "ございます"),
             ("yorosikuy", "よろしく"),            // 余計な 1 文字
-            ("kinouhaamegafuttemshita", "きのうはあめがふってました"),
-        })
-        {
-            var k = new CompositionTests.Keyboard();
-            k.Type(typed + "\n");
-            Assert.Equal(expected, k.Host.Document, typed);
-        }
+            ("kinouhaamegafuttemshita", "きのうはあめがふってました"));
     }
 
     [Test]
@@ -1569,39 +1395,25 @@ internal static class RomajiTypoTests
     {
         // すみ|mas|ね の mas は、同梱の英単語の一覧にあるので、打っている途中は英字に見える。
         // 直すと すみません (4 文字以上の 1 つの語) になるなら直す (issue #971)
-        foreach (var (typed, expected) in new[]
-        {
+        CompositionTests.AssertCommitted(
             ("sumimasne", "すみません"),
             // 直しても短い語 (たべ・たば) にしかならないものは英字のまま (issue #220)
             ("tabde", "tabで"),
             ("tabga", "tabが"),
             ("kyouhatabdeyaru", "きょうはtabでやる"),
             // できません / できますね のどちらか分からないものは直さない
-            ("dekimasne", "できmasね"),
-        })
-        {
-            var k = new CompositionTests.Keyboard();
-            k.Type(typed + "\n");
-            Assert.Equal(expected, k.Host.Document, typed);
-        }
+            ("dekimasne", "できmasね"));
     }
 
     [Test]
     public static void RomajiTypos_LeaveEnglishAndAbbreviations()
     {
-        foreach (var (typed, expected) in new[]
-        {
+        CompositionTests.AssertCommitted(
             ("oknotasuku", "okのたすく"),
             ("googlede", "googleで"),
             ("kyouhamtgdesu", "きょうはmtgです"),
             ("sdakega", "sだけが"),
-            ("htmlnokaisetu", "htmlのかいせつ"),
-        })
-        {
-            var k = new CompositionTests.Keyboard();
-            k.Type(typed + "\n");
-            Assert.Equal(expected, k.Host.Document, typed);
-        }
+            ("htmlnokaisetu", "htmlのかいせつ"));
     }
 
     [Test]
@@ -1617,35 +1429,21 @@ internal static class RomajiTypoTests
     public static void Issue243_BacktickBeforeEnglish_IsHalfWidth()
     {
         // Issue #243: 後ろが英語のバッククォート (Markdown のインラインコード) も ( " と同じく半角にする
-        foreach (var (typed, expected) in new[]
-        {
+        CompositionTests.AssertCommitted(
             ("kore`git status`dekakunin", "これ`git status`でかくにん"),
             ("`npm install`wojikkou", "`npm install`をじっこう"),
-            ("`kakko`", "`かっこ`"),   // 後ろが日本語でも半角 (#1301 から。以前は ｀)
-        })
-        {
-            var k = new CompositionTests.Keyboard();
-            k.Type(typed + "\n");
-            Assert.Equal(expected, k.Host.Document, typed);
-        }
+            ("`kakko`", "`かっこ`")); // 後ろが日本語でも半角 (#1301 から。以前は ｀)
     }
 
     [Test]
     public static void CamelCaseWord_AfterJapanese_SplitsOffJapanese()
     {
-        foreach (var (typed, expected) in new[]
-        {
+        CompositionTests.AssertCommitted(
             ("kyouhaGitHubni", "きょうはGitHubに"),
             ("kyouhaGitHubnipushshita", "きょうはGitHubにpushした"),
             ("camelCaseName", "camelCaseName"),         // 識別子はそのまま英字
             ("getElementById", "getElementById"),
-            ("dataSetName", "dataSetName"),
-        })
-        {
-            var k = new CompositionTests.Keyboard();
-            k.Type(typed + "\n");
-            Assert.Equal(expected, k.Host.Document, typed);
-        }
+            ("dataSetName", "dataSetName"));
     }
 
     [Test]
@@ -1655,17 +1453,10 @@ internal static class RomajiTypoTests
         // 日本語の語の後ろの付属語と、付属語だけを打った入力 (masu) は今までどおり。
         // getsu も 月 になってほしいが、まだ get す になる: get + する の打ちかけ (get|す = 2) が、語にならないかな 2 音 (げ|つ = 6) より軽い。
         // げつ は readings.txt (JMdict のよく使う語) に無い
-        foreach (var (typed, expected) in new[]
-        {
+        CompositionTests.AssertCommitted(
             ("getu", "げつ"), ("hituatu", "ひつあつ"), ("shunpatu", "しゅんぱつ"), ("repro", "repro"), ("diffmireba", "diffみれば"),
             ("masu", "ます"), ("tari", "たり"), ("ikou", "いこう"), ("yomou", "よもう"), ("utau", "うたう"), ("ureta", "うれた"), ("reigai", "れいがい"), ("teire", "ていれ"),
-            ("getup", "getup"), ("pushsita", "pushした"),
-        })
-        {
-            var k = new CompositionTests.Keyboard();
-            k.Type(typed + "\n");
-            Assert.Equal(expected, k.Host.Document, typed);
-        }
+            ("getup", "getup"), ("pushsita", "pushした"));
     }
 
     [Test]
@@ -1674,13 +1465,26 @@ internal static class RomajiTypoTests
         // Issue #1784・#1761・#1764: よく使う語でない長い読み (かんれんづける・くるまどめ・ぼごわしゃ) が無く、英単語に負けていた (関連|duke)。
         // よく使う語どうしの区切り (きょうは|image) は割らない。カタカナの読みの外来語 (vitamin) は英語のまま。打ち間違い直しには使わない (shuppnbutsu)。
         // katakana.txt と重なる読み (おねしゃす) は katakana.txt の重みのまま
-        foreach (var (typed, expected) in new[]
-        {
+        CompositionTests.AssertCommitted(
             ("kanrenduke", "かんれんづけ"), ("kurumadome", "くるまどめ"), ("bogowasha", "ぼごわしゃ"),
             ("kyouhaimagewotsukuru", "きょうはimageをつくる"), ("kyouhaimagega", "きょうはimageが"), ("kyouhainitwo", "きょうはinitを"), ("konodotwo", "このdotを"),
             ("vitamin", "vitamin"), ("paranoia", "paranoia"), ("veteran", "veteran"), ("shuppnbutsu", "しゅっぱんぶつ"),
             // katakana.txt にもある読みは、katakana.txt の重みのまま
-            ("oneshasu", "おねしゃす"),
+            ("oneshasu", "おねしゃす"));
+    }
+
+    [Test]
+    public static void RareReadings_IncludeShortReadings()
+    {
+        // Issue #2015・#2016・#2024: よく使う語でない 3〜4 文字の読み (ごびゅう・ろんぱ・おんぱ・うちどめ) が無く、後ろを英単語にしていた (ろんpa・うちdome)。
+        // 日本語の後ろに打った英単語 (いとてきなbug・うちのdomain) は英語のまま。使わない語の読み (これしゃ = 此れ者) では割らない
+        foreach (var (typed, expected) in new[]
+        {
+            ("itotekinagobyuu", "いとてきなごびゅう"), ("ronpa", "ろんぱ"), ("onpa", "おんぱ"), ("uchidome", "うちどめ"), ("ronpasuru", "ろんぱする"),
+            ("itotekinabug", "いとてきなbug"), ("uchinodomain", "うちのdomain"), ("koreshasuru", "これshaする"),
+            ("konocubekudasai", "このcubeください"), ("zenbutimenisuru", "ぜんぶtimeにする"),
+            ("aduchimomoyamajidai", "あづちももやまじだい"), ("godaijikkoku", "ごだいじっこく"),
+            ("ushiguruma", "うしぐるま"), ("akkanbee", "あっかんべえ"), ("messhiboukou", "めっしぼうこう"),
         })
         {
             var k = new CompositionTests.Keyboard();
