@@ -69,6 +69,15 @@ internal static class ReportedMisdetectionTests
     }
 
     [Test]
+    public static void DoubledConsonant_IsSokuonOfJapaneseWord()
+    {
+        // 重ねた子音のあいだで英語と日本語に切らない: dot|とえ でなく どっと + え (issue #2390)。
+        // 逆向き: 英語の後ろの付属語 (bot|とも・dot|と|net)、読めない英語 (help|ぺーじ) は今までどおり
+        Check(("dottoe", "どっとえ"), ("dottoha", "どっとは"), ("dot", "dot"), ("bottomo", "botとも"), ("dottonet", "dotとnet"),
+            ("atohahelppe-jitoka", "あとはhelpぺーじとか"));
+    }
+
+    [Test]
     public static void Digits_InsideJapaneseAreNotNumeronyms()
     {
         // 前の語の続きの母音 + 数字 + かな (mou|1|tu・dai|1|dan) は日本語 (issue #1718・#2379)。略語 (i18n・e2e・k8s) は今までどおり

@@ -206,6 +206,12 @@ internal sealed partial class CompositionDetector
                 if (!edge.Particle && from.Edge.Name && from.Edge.End == edge.Start && edge.Start < length && char.IsAsciiLetterLower(text[edge.Start])) counts[(int)LinkFeature.NameSplit]++;
                 counts[(int)LinkFeature.SpelledSokuon] += SpelledSokuons(edge.Start, edge.End);
                 if (edge.Kana == "っ" && DoubledAt(edge.Start) && state.Side != Side.Japanese) counts[(int)LinkFeature.DanglingSokuon]++;
+                // 重ねた子音 (tt) のあいだで英語から付属語でない日本語に切る (dot|とえ): 重ねた子音は っ の打ち方なので、っ を含む日本語の語 (どっと) と比べる。
+                // 英語の語の最後の子音を除くとローマ字として読めるとき (do|t) だけ: help|ぺーじ・50cc|ちゃん の英語は読めない。
+                // 付属語 (bot|と・main|に) は英語の後ろに付くので数えない。nn は ん、ll は ltu の打ち方
+                if (!edge.Particle && from.Edge.English && from.Edge.End == edge.Start && DoubledAt(edge.Start - 1) && char.IsAsciiLetterLower(text[edge.Start]) &&
+                    text[edge.Start] is not ('n' or 'l' or 'x') &&
+                    _romaji.AnalyzeFragment(text[from.Edge.Start..(edge.Start - 1)].ToLowerInvariant()) is { IsValid: true, Partial: "" }) counts[(int)LinkFeature.DanglingSokuon]++;
                 // 語の終わりの っ (ぶっ・まっ) の後ろに、和語では っ の後ろに来ない音 (濁音・な行・あ行など) で始まる語が続く (ぶっ|が):
                 // 英単語の最後の子音を重ねて読んだ切り間違い (bug|が)
                 if (from.Edge is { English: false, Neutral: false, Kana: [_, .., 'っ'] } && from.Edge.End == edge.Start && edge.Kana is [var after, ..] &&
