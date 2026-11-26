@@ -97,7 +97,7 @@ internal static class CompositionController
         CompositionOutput.Begin(state.Out);
         if (state.Scene is CompositionScene.Typing { Input: var input } && CompositionPresentation.CurrentPredictions(input, env) is var predictions && index >= 0 && index < predictions.Count)
         {
-            CompositionText.MergeTail(input.Text, env);
+            input.Text = CompositionText.MergeTail(input.Text);
             CompositionCommit.CommitPrediction(state, input, env, predictions[index]);
             CompositionPresentation.UpdateView(state, env);
         }
@@ -118,15 +118,15 @@ internal static class CompositionController
     private static void CommitAll(CompositionState state, CompositionEnv env, bool preserveLatinRaw, bool preserveText)
     {
         env = env.WaitingForInput();
-        if (state.Scene is CompositionScene.WithInput { Input.Text: var editing }) CompositionText.MergeTail(editing, env);
+        if (state.Scene is CompositionScene.WithInput { Input: var editing }) editing.Text = CompositionText.MergeTail(editing.Text);
         if (state.Scene is CompositionScene.Judging) CompositionDirectInput.ReleaseAsEnglish(state);
         // e + 結合アクセントを「え + アクセント」にしない。明示した表示モード・候補・かな入力は尊重する。
         // ASCII 英字だけの原文に Latin アクセントが続く場合に限り、変換や学習を経由せず確定する。
         if (preserveLatinRaw && state.Scene is CompositionScene.Typing { Input: { Reconversion: null, Text: { KanaInput: false, Mode: DisplayMode.Auto or DisplayMode.HalfWidthAlphanumeric } text } } &&
-            CompositionText.Raw(text).All(char.IsAsciiLetter))
+            CompositionText.Raw(CompositionText.Read(text, env)).All(char.IsAsciiLetter))
         {
             state.Correctable.Clear();
-            CompositionCommit.CommitText(state, env, ComposedText.English(CompositionText.Raw(text)), english: true, preserveText: true, rule: "英字にアクセント記号が続くので打ったまま");
+            CompositionCommit.CommitText(state, env, ComposedText.English(CompositionText.Raw(CompositionText.Read(text, env))), english: true, preserveText: true, rule: "英字にアクセント記号が続くので打ったまま");
         }
         else CompositionCommit.CommitIfAny(state, env, preserveText);
         CompositionPresentation.UpdateView(state, env);

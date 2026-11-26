@@ -11,7 +11,7 @@ namespace Meltype.Composition;
 /// <summary>記号・カタカナ・全角の文字の変換。</summary>
 internal static partial class CompositionText
 {
-    private static string PendingText(CompositionTextState state, TextEnv env, bool final)
+    private static string PendingText(TextReading state, TextEnv env, bool final)
     {
         var pending = CompositionText.Pending(state);
         if (pending.Length == 0) return "";
@@ -19,7 +19,7 @@ internal static partial class CompositionText
     }
 
     /// <summary>日本語の中で打った記号 (全角。テスターの報告で決めた)。英語の区間では打ったままの半角で出す。数字と括弧は半角のまま。</summary>
-    private static char Symbol(CompositionTextState state, char c) => c switch
+    private static char Symbol(TextReading state, char c) => c switch
     {
         '-' => 'ー',
         // 読みにするときに TypedMarks が決める。

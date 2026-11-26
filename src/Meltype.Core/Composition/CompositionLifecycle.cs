@@ -200,7 +200,7 @@ internal static class CompositionLifecycle
     /// <summary>打った文字がすべて消えたら、入力を終える。</summary>
     internal static void FinishIfEmpty(CompositionState state, CompositionInput input)
     {
-        if (CompositionText.IsEmpty(input.Text)) Finish(state);
+        if (input.Text.IsEmpty) Finish(state);
     }
 
     /// <summary>入力を終える (確定した・取り消した)。</summary>
