@@ -5,6 +5,7 @@ using System.Text;
 using Meltype.Detection;
 using Meltype.Dictionary;
 using Meltype.Libraries.Chars;
+using Meltype.Notation;
 
 namespace Meltype.Composition;
 
@@ -360,11 +361,11 @@ internal static partial class CompositionText
     /// <summary>水平線・front matter の区切り (3 個以上の -) だけの入力か。打った半角のまま表示・確定する。</summary>
     public static bool IsHorizontalRule(CompositionTextState state) => !state.KanaInput && CompositionText.Raw(state).Length >= 3 && CompositionText.Raw(state).All(c => c == '-');
 
-    /// <summary>変換区間に * が 2 個以上あるときだけ、表示の ＊ を打った半角の * にする (強調 **bold**・*italic*)。</summary>
-    private static string HalfWidthStars(CompositionTextState state, string text) => !state.KanaInput && CompositionText.Raw(state).Count(c => c == '*') >= 2 ? text.Replace('＊', '*') : text;
+    /// <summary>表記の規則が見る打った文字。かな入力では、打ったキーの英字・記号は入力した文字でないので空。</summary>
+    private static string TypedForNotation(CompositionTextState state) => state.KanaInput ? "" : CompositionText.Raw(state);
 
     /// <summary>変換の最初の候補を、入力中の表示と同じ半角にする (* が 2 個以上・---)。当てはまらなければそのまま返す。</summary>
     public static string AsDisplayedHalfWidth(CompositionTextState state, string candidate, string? clauseRaw) =>
-        CompositionText.IsHorizontalRule(state) ? clauseRaw ?? candidate : CompositionText.HalfWidthStars(state, candidate);
+        CompositionText.IsHorizontalRule(state) ? clauseRaw ?? candidate : NotationRules.Show(ComposedText.Of(SpanKind.Japanese, candidate), TypedForNotation(state)).Text;
 
 }

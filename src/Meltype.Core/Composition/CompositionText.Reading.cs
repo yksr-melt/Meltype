@@ -5,6 +5,7 @@ using System.Text;
 using Meltype.Detection;
 using Meltype.Dictionary;
 using Meltype.Libraries.Chars;
+using Meltype.Notation;
 
 namespace Meltype.Composition;
 
@@ -143,26 +144,9 @@ internal static partial class CompositionText
         _ => text,
     };
 
-    /// <summary>
-    /// すべて小文字で打った英単語を、自動で正しい大文字小文字に直した形 (iphone → iPhone、iphone's → iPhone's)。直さないなら null。
-    /// コードの文字列の中 (require('jquery')) や、ユーザーが小文字で確定して覚えた語は直さない。
-    /// </summary>
-    internal static string? AutoCanonical(TextEnv env, string raw)
-    {
-        if (env.CodeString) return null;
-        var stem = raw.EndsWith("'s", StringComparison.Ordinal) ? raw[..^2] : raw;
-        if (env.History?.Get(stem) == stem) return null;
-        return env.Detector.ProperNouns.AutoCanonical(raw);
-    }
-
-    /// <summary>前後の区間と . でつながったドメイン・識別子の一部 (github.com・google.github) か。文末の句点 (github.) や連続する . は含めない。</summary>
-    internal static bool IsDotConnected(IReadOnlyList<CompositionSegment> segments, int index) =>
-        index >= 2 && segments[index - 1].Raw == "." && segments[index - 2].Raw is [.., var prev] && char.IsAsciiLetterOrDigit(prev) ||
-        index + 2 < segments.Count && segments[index + 1].Raw == "." && segments[index + 2].Raw is [var next, ..] && char.IsAsciiLetterOrDigit(next);
-
-    /// <summary>英語の区間の表示テキスト。ドメインの一部 (github.com など) は打ったまま、それ以外は自動で正しい大文字小文字に直す。</summary>
-    internal static string DisplayEnglishSegment(IReadOnlyList<CompositionSegment> segments, int index, TextEnv env) =>
-        IsDotConnected(segments, index) ? segments[index].Raw : AutoCanonical(env, segments[index].Raw) ?? segments[index].Raw;
+    /// <summary>区間ごとの打った文字 (区間と同じ数・順)。英語の区間は見せる表記にしてある。</summary>
+    internal static IReadOnlyList<TextSpan> TypedSpans(IReadOnlyList<CompositionSegment> segments, TextEnv env) =>
+        NotationRules.Typed([.. segments.Select(s => new TextSpan(s.IsProtected ? SpanKind.Protected : s.IsEnglish ? SpanKind.Typed : SpanKind.Japanese, s.Raw))], env.ProperNoun);
 
     /// <summary>英語区間は英字のまま、日本語区間はかな (または漢字)。保護範囲は打った原文のまま。</summary>
     private static ComposedText RenderSegments(CompositionTextState state, TextEnv env, bool final, Func<string, bool, string, ComposedText>? convert)
@@ -171,12 +155,13 @@ internal static partial class CompositionText
         if (CompositionText.VerifyProtectedRaw(state)) return ComposedText.Of(SpanKind.Protected, CompositionText.Raw(state));
         var built = ComposedText.Empty;
         var segments = CompositionText.Segments(state, env);
+        var typed = TypedSpans(segments, env);
         for (var i = 0; i < segments.Count; i++)
         {
             var segment = segments[i];
             if (segment.IsEnglish)
             {
-                built += ComposedText.Of(segment.IsProtected ? SpanKind.Protected : SpanKind.English, DisplayEnglishSegment(segments, i, env));
+                built += ComposedText.Of(typed[i].Kind, typed[i].Text);
                 continue;
             }
             var isLast = i == segments.Count - 1;
@@ -201,7 +186,7 @@ internal static partial class CompositionText
             built += convert is not null && kana.Length > 0 ? convert(kana, i > 0 && segments[i - 1].IsEnglish, built.Text) : ComposedText.Kana(kana);
             built += ComposedText.Kana(pending);
         }
-        return built.MapChars(text => CompositionText.HalfWidthStars(state, text));
+        return NotationRules.Show(built, CompositionText.TypedForNotation(state));
     }
 
     /// <summary>英語判定を無視してすべてかなにしたもの (F6)。</summary>

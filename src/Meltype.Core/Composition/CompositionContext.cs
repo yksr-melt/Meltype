@@ -5,6 +5,8 @@
 
 using static Meltype.Libraries.Chars.TextChars;
 
+using Meltype.Notation;
+
 namespace Meltype.Composition;
 
 /// <summary>キャレットの前後と直前の確定から、判定・変換・学習の文脈を作る。</summary>
@@ -39,7 +41,7 @@ internal static class CompositionContext
     internal static void NoteCommit(CompositionState state, CompositionEnv env, int deleteBefore, ComposedText text)
     {
         var before = env.Context().PrecedingText ?? "";
-        var committed = before[..^Math.Min(deleteBefore, before.Length)] + CompositionOutput.FromSetting(env.Settings.Punctuation, CompositionOutput.Render(env, text));
+        var committed = before[..^Math.Min(deleteBefore, before.Length)] + NotationRules.Read(NotationRules.Write(text, env.Settings.Punctuation), env.Settings.Punctuation);
         state.Own = new OwnCommit(env.Before, committed.Length > OwnTextLength ? committed[^OwnTextLength..] : committed);
     }
 

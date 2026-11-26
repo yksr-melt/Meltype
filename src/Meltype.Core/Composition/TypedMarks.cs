@@ -45,7 +45,7 @@ internal static class TypedMarks
     {
         MarkRole.Number or MarkRole.Name or MarkRole.Enclosed => raw,
         MarkRole.Ellipsis => ".",
-        // 読みでは設定によらず 、 。 (設定の句読点は CompositionOutput が当てる)
+        // 読みでは設定によらず 、 。 (設定の句読点は文字列にするときに当てる)
         MarkRole.Punctuation => raw == "," ? "、" : "。",
         _ => throw new InvalidOperationException($"不明な MarkRole: {role}"),
     };
