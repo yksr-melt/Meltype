@@ -205,7 +205,8 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         if (state.HandlesInput && !_stale)
         {
             if (state.Capture.Shortcuts.Any(key => ToggleShortcut.NormalizeKey(key.Vk) == ToggleShortcut.NormalizeKey(e.ShortcutKey) && key.Modifiers == mods)) return true;
-            return (mods & ~1) == 0 && KeyText.CharFromKey(e.Vk, e.Scan, (mods & 1) != 0) is { } c && c is > ' ' and <= '~' &&
+            // テンキー (0x60〜0x6F) は文字を生んでも受け取らない (ImeCapture の契約)
+            return (mods & ~1) == 0 && e.Vk is not (>= 0x60 and <= 0x6F) && KeyText.CharFromKey(e.Vk, e.Scan, (mods & 1) != 0) is { } c && c is > ' ' and <= '~' &&
                 state.Capture.PrintableAscii && !state.Capture.PrintableAsciiExcept.Contains(c);
         }
         if ((mods & ~1) != 0) return false;
