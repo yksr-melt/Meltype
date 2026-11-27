@@ -584,6 +584,19 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void Issue2417_PendingSplitAcrossSegmentsIsNotDoubled()
+    {
+        // bug|w: 入力途中の子音 gw の g は英語の区間、w は日本語の区間。g を 2 度出さない
+        foreach (var typed in new[] { "bugw", "dogw", "logw" })
+        {
+            var k = new Keyboard();
+            k.Type(typed);
+            Assert.Equal(typed, k.Showing, typed);
+        }
+        AssertCommitted(("bugw", "bugw"), ("dogw", "dogw"), ("bugwo", "bugを"), ("bugwa", "bugわ"));
+    }
+
+    [Test]
     public static void Reconversion_RomajiTextBecomesJapanese()
     {
         // #288: ローマ字のまま入った文を選んで変換キー → Meltype の判定で日本語の所だけを日本語にして候補に出す。Enter で置き換える
