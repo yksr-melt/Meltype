@@ -2357,6 +2357,10 @@ em {
   height: 16px;
 }
 
+[data-attachments][hidden] {
+  display: none;
+}
+
 .dropzone {
   grid-column: 1 / -1;
   display: grid;
