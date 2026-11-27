@@ -738,7 +738,7 @@ internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
     ];
 
     // moe は meltype.moe のように使う (issue #1356)。ローマ字として読める前の語 (sugoku.moe) は、句点の後ろの日本語と重みで比べる
-    private static readonly HashSet<string> DomainSuffixes = ["ai", "app", "au", "biz", "ca", "cn", "co", "com", "de", "dev", "edu", "eu", "fr", "gg", "gov", "info", "in", "io", "jp", "kr", "me", "moe", "net", "org", "uk", "us", "xyz"];
+    private static readonly HashSet<string> DomainSuffixes = ["ai", "app", "au", "be", "biz", "ca", "cn", "co", "com", "de", "dev", "edu", "eu", "fr", "gg", "gov", "info", "in", "io", "jp", "kr", "me", "moe", "net", "org", "uk", "us", "xyz"];
 
     /// <summary>
     /// start から始まるユーザー名の終わり。無ければ -1。
