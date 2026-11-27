@@ -425,7 +425,7 @@ internal sealed class CompositionWindow : PopupForm
                     UpdateSmoothCaret(targetX);
                     drawX = (int)MathF.Round(_caretX);
                 }
-                using var caret = new Pen(Accent, 2);
+                using var caret = new Pen(_palette.Text, 2);
                 g.DrawLine(caret, drawX, y, drawX, y + _textFont.Height);
             }
             else if (_smoothCaret)
@@ -433,7 +433,7 @@ internal sealed class CompositionWindow : PopupForm
                 var targetX = 10 + TextRenderer.MeasureText(g, view.Text, _textFont, Size.Empty, TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding).Width;
                 UpdateSmoothCaret(targetX);
                 var drawX = (int)MathF.Round(_caretX);
-                using var caret = new Pen(Accent, 2);
+                using var caret = new Pen(_palette.Text, 2);
                 g.DrawLine(caret, drawX, y, drawX, y + _textFont.Height);
             }
             y += _textFont.Height;

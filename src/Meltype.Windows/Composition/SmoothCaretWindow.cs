@@ -31,8 +31,8 @@ internal sealed class SmoothCaretWindow : PopupForm
     public SmoothCaretWindow(Func<Rectangle?> uiaCaretProvider)
     {
         _uiaCaretProvider = uiaCaretProvider;
-        BackColor = ModeIndicatorWindow.DefaultJapaneseColor;
-        Size = new Size(3, 18);
+        BackColor = Color.FromArgb(24, 24, 24);
+        Size = new Size(2, 18);
         Opacity = 0.0;
 
         _pollTimer.Tick += (_, _) => PollCaret();
@@ -130,6 +130,7 @@ internal sealed class SmoothCaretWindow : PopupForm
     private void ApplyCaretTarget(Rectangle rect)
     {
         if (!Screen.AllScreens.Any(s => s.Bounds.Contains(rect.Location))) return;
+        UpdateCaretColor(rect.Left + 4, rect.Top + rect.Height / 2);
         if (_motion.SetTarget(rect.Left, rect.Top, rect.Height))
         {
             if (!_animTimer.Enabled)
@@ -140,6 +141,37 @@ internal sealed class SmoothCaretWindow : PopupForm
             RenderMotion();
         }
     }
+
+    /// <summary>カーソル付近の画面色を見て、明るい背景なら黒・暗い背景なら白のカーソル色にする。</summary>
+    private void UpdateCaretColor(int sampleX, int sampleY)
+    {
+        var hdc = GetDC(IntPtr.Zero);
+        if (hdc == IntPtr.Zero) return;
+        try
+        {
+            var pixel = GetPixel(hdc, sampleX, sampleY);
+            if (pixel == uint.MaxValue) return;
+            var r = (int)(pixel & 0xFF);
+            var g = (int)((pixel >> 8) & 0xFF);
+            var b = (int)((pixel >> 16) & 0xFF);
+            var luminance = (r * 299 + g * 587 + b * 114) / 1000;
+            var color = luminance >= 128 ? Color.FromArgb(24, 24, 24) : Color.FromArgb(245, 245, 245);
+            if (BackColor != color) BackColor = color;
+        }
+        finally
+        {
+            _ = ReleaseDC(IntPtr.Zero, hdc);
+        }
+    }
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetDC(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern int ReleaseDC(IntPtr hWnd, IntPtr hDC);
+
+    [DllImport("gdi32.dll")]
+    private static extern uint GetPixel(IntPtr hdc, int x, int y);
 
     private void OnAnimationTick()
     {
@@ -169,7 +201,7 @@ internal sealed class SmoothCaretWindow : PopupForm
         var x = (int)MathF.Round(_motion.CurrentX);
         var y = (int)MathF.Round(_motion.CurrentY);
         var h = Math.Max(10, (int)MathF.Round(_motion.CurrentHeight));
-        SetBounds(x, y, 3, h);
+        SetBounds(x, y, 2, h);
         Opacity = Math.Clamp(_motion.Opacity, 0.0, 1.0);
         if (!Visible && _motion.Opacity > 0.01f) ShowOnTop();
     }
