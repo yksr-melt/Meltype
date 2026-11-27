@@ -582,10 +582,12 @@ async function report() {
 
   if (action === 'test') {
     const ok = process.env.BOT_JOB_RESULT === 'success';
-    // 失敗したら、出力の末尾を見せる (失敗したテストと集計。ビルドで止まったときは test.txt が無いのでビルドの出力)
+    // 失敗したら、出力の末尾を見せる (失敗したテストと集計。ビルドで止まったときは test.txt が無いのでビルドの出力)。
+    // どちらも無ければ、キャンセル・タイムアウトや Mozc の取得の失敗などで、ビルドの前に止まっている
     const log = ok ? null : readText(path.join(dir, 'test.txt'), 3000) ?? readText(path.join(dir, 'build.txt'), 3000);
+    const status = ok ? '✅ テストが通りました' : log ? '❌ テストが失敗しました' : '⚠️ テストを実行できませんでした';
     await upsertComment(issue, `test-${process.env.BOT_COMMENT_ID}`, [
-      `${ok ? '✅ テストが通りました' : '❌ テストが失敗しました'} (${process.env.BOT_SHA?.slice(0, 7)})`,
+      `${status} (${process.env.BOT_SHA?.slice(0, 7)})`,
       log ? `\n${fence(log.trim())}` : '',
       `\n[実行結果](${runUrl})`,
     ].join('\n'));
