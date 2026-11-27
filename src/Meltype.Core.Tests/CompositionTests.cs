@@ -5807,6 +5807,35 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void LiveConversion_NextInputUsesWordRegisteredAfterInput()
+    {
+        // ライブ変換の控えを次の入力に持ち越さないことを確かめる。1 回目の入力の後に登録した語は、次の入力で同じ読みを打てば使う
+        // (変換エンジンの答えが記号だけ (にょろ → ～) のときは、ユーザー辞書の語でなければかなにする)。
+        // 前の文字と学習を変えないために、1 回目は確定せずに Esc で取り消す
+        var path = Path.Combine(Path.GetTempPath(), "meltype-live-cache-" + Guid.NewGuid().ToString("N") + ".txt");
+        try
+        {
+            var dictionary = new UserDictionary(path, builtIn: false);
+            var k = new Keyboard(live: true, converter: new WaveDashConverter(), userDictionary: dictionary);
+            k.Type("nyoro");
+            Assert.Equal("にょろ", k.Showing, "ユーザー辞書の語でない記号の答え");
+            k.Press(VirtualKeys.Escape);
+            Assert.True(dictionary.Add("にょろ", "～") is null, "登録");
+            k.Type("nyoro");
+            Assert.Equal("～", k.Showing, "次の入力では登録した語");
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    private sealed class WaveDashConverter : TestConverter
+    {
+        public override string? Convert(string hiragana, string? before) => hiragana == "にょろ" ? "～" : null;
+    }
+
+    [Test]
     public static void LiveConversion_SpaceShowsAlternatives()
     {
         var k = new Keyboard(live: true);
