@@ -10,12 +10,13 @@ namespace Meltype.Config;
 /// </summary>
 public sealed class SmoothCaretMotion
 {
-    private const float TauMs = 42f;
+    private const float TauMs = 28f;
     private const float SnapThresholdPx = 0.5f;
+    private const float MinGlideDistancePx = 3.5f;
     private const float MaxGlideDistancePx = 300f;
-    private const float ActiveOpacity = 0.9f;
-    private const float IdleBeforeFadeMs = 140f;
-    private const float FadeDurationMs = 180f;
+    private const float ActiveOpacity = 1.0f;
+    private const float IdleBeforeFadeMs = 16f;
+    private const float FadeDurationMs = 55f;
 
     private bool _initialized;
     private float _targetX;
@@ -54,9 +55,9 @@ public sealed class SmoothCaretMotion
         _targetHeight = height;
 
         var distance = Distance(x - CurrentX, y - CurrentY);
-        if (distance > MaxGlideDistancePx)
+        if (distance < MinGlideDistancePx || distance > MaxGlideDistancePx)
         {
-            // 別ウィンドウや大きく離れた行へのジャンプは画面を横切らせず即時スナップする
+            // 数pxの微小な揺れや、別ウィンドウ等への遠距離ジャンプはオーバーレイを出さず即時スナップする
             CurrentX = x;
             CurrentY = y;
             CurrentHeight = height;

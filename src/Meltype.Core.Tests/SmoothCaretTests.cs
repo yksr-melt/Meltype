@@ -44,5 +44,8 @@ internal static class SmoothCaretTests
         Assert.Equal(800f, motion.CurrentX);
         Assert.Equal(500f, motion.CurrentY);
         Assert.True(!motion.IsActive, "即時スナップ時はアニメーションを開始しない");
+
+        Assert.True(!motion.SetTarget(802, 500, 20), "微小な揺れ (3.5px 未満) は被り防止のためアニメーションしない");
+        Assert.True(!motion.IsActive, "微小な揺れ時は非アクティブのまま");
     }
 }
