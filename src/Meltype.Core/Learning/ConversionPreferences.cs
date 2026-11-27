@@ -260,7 +260,7 @@ internal sealed class ConversionHistory
         _saver.WriteNow();
     }
 
-    /// <summary>sinceUtc より後に覚えた (使った) 変換を忘れる (トレイの「最近の学習を消す」)。忘れた数を返す。</summary>
+    /// <summary>sinceUtc より後に覚えた (使った) 変換を忘れる (設定アプリの「最近の学習を消す」)。忘れた数を返す。</summary>
     public int ForgetSince(DateTime sinceUtc)
     {
         List<string> recent;

@@ -3,8 +3,8 @@
 # アプリの一覧 (ランチャー) にも出す (fcitx5 だけで使う人も、ここから開く)。
 # build-deb.sh・build-rpm.sh が @DIR@ をインストール先に置き換える。
 Type=Application
-Name=Meltype の設定
-Comment=日本語入力 Meltype の設定を変える
+Name=Meltype
+Comment=日本語と英語を自動で打ち分ける日本語入力 Meltype の設定・辞書・学習データ
 Exec=@DIR@/meltype-settings
 Icon=@DIR@/icon.png
 Categories=Settings;

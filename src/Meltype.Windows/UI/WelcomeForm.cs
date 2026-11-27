@@ -6,7 +6,7 @@ using Meltype.Input;
 namespace Meltype.UI;
 
 /// <summary>
-/// 使い方 (初めて起動したときと、トレイの「使い方...」)。半角/全角を押さずに打てること、困ったときのキーを説明し、
+/// 使い方 (初めて起動したときと、設定アプリの「使い方」)。半角/全角を押さずに打てること、困ったときのキーを説明し、
 /// 下の欄で実際に Meltype キーボードで打って試せる。
 /// </summary>
 internal sealed class WelcomeForm : Form
@@ -51,7 +51,7 @@ internal sealed class WelcomeForm : Form
         body.Controls.Add(Heading("思いどおりにならないとき"));
         body.Controls.Add(KeyTable(width,
         [
-            ("F10", "英字にする (次からその語は英字。覚えた語は「学習した語...」で見られます)"),
+            ("F10", "英字にする (次からその語は英字。覚えた語は設定の「学習データ」で見られます)"),
             ("F6 / F7", "ひらがな / カタカナにする (次からその語は日本語)"),
             ("Shift + Space", "英字になった語を、ローマ字として変換する (go → 語)"),
             ("Esc", "変換を取り消す・打った文字を消す"),
@@ -60,7 +60,7 @@ internal sealed class WelcomeForm : Form
         body.Controls.Add(Paragraph("候補で少し止まると、その語の意味が出ます (設定で OFF にできます)。"));
 
         body.Controls.Add(Heading("困ったら"));
-        var last = Paragraph("画面右下のタスクトレイの Meltype のアイコン (あ / A) を右クリックすると、設定・ユーザー辞書 (ほかの日本語入力の辞書の取り込みもここ)・学習した語・不具合の報告があります。この画面はトレイの「使い方...」でまた開けます。");
+        var last = Paragraph("画面右下のタスクトレイの Meltype のアイコン (あ / A) をクリックして開く「Meltype」に、設定・ユーザー辞書 (ほかの日本語入力の辞書の取り込みもここ)・学習データ・不具合の報告があります。この画面は「Meltype」の最初のページの「使い方」でまた開けます。");
         // 自動スクロールの枠は下の余白 (Padding) を含めないので、最後の段落の下に余白を取って見切れないようにする
         last.Margin = new Padding(0, 0, 0, 24);
         body.Controls.Add(last);

@@ -85,7 +85,7 @@ internal sealed class ZenzaiHolder(Func<string, string, string, ZenzaiConverter>
         Stop();
     }
 
-    /// <summary>Zenzai の今の状態 (トレイのメニューに出す。issue #1152)。OFF・まだ一度も変換していなければ null。</summary>
+    /// <summary>Zenzai の今の状態 (トレイのアイコンのツールチップに出す。issue #1152)。OFF・まだ一度も変換していなければ null。</summary>
     public string? Status => _key.Length == 0 ? null : _zenzai switch
     {
         null => "使えません (しばらくしてもう一度試します。ログに理由があります)",

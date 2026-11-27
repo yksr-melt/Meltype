@@ -127,7 +127,7 @@ internal sealed record CompositionEnv(CompositionDetector Detector, IKanjiConver
 
     /// <summary>
     /// ユーザーが自動の判定を自分で直して確定したとき (F6〜F10 で英字 / かなにした、変換の候補から打ったままの英字・日本語を選んだ)。
-    /// 誤判定の報告 (トレイの「直した誤判定を報告...」) に使う。記録を作るだけで、どこにも送らない (issue #284)。
+    /// 誤判定の報告 (設定アプリの「直した誤判定を報告」) に使う。記録を作るだけで、どこにも送らない (issue #284)。
     /// </summary>
     public Action<Correction>? Corrected { get; init; }
 }

@@ -247,21 +247,13 @@ public sealed class Settings
     public string? Schema { get; set; } = "./" + SettingsSchema.FileName;
 
     // 設定画面は、分類の中の項目をここに書いた順に並べる。分類の並びは設定アプリ (src/Meltype.Settings) の MainWindow.PageOrder
-    [Category("全般"), DisplayName("Meltype を有効にする")]
+    [Category("Meltype"), DisplayName("Meltype を有効にする")]
     public bool Enabled { get; set; } = true;
 
-    [Category("全般"), DisplayName("Meltype の一時停止 / 再開のホットキー"), Platforms(Platform.Windows),
-     Description("Meltype 全体の一時停止 / 再開に使うキーの組み合わせ (例: Ctrl+Alt+F10)。空のときは Ctrl+Alt+F12 (使えなければ Ctrl+Alt+F11 など)。変更は Meltype を起動し直すと効きます。変換・無変換キーが無い US 配列のキーボード向けです。")]
-    public string PauseHotkey { get; set; } = "";
-
-    [Category("全般"), DisplayName("動作モード"), Platforms(Platform.Windows),
+    [Category("Meltype"), DisplayName("動作モード"), Platforms(Platform.Windows),
      Description("Tsf = Windows の IME として入力欄に直接入力 (Win + Space で Meltype を選ぶ) / Keyboard = Meltype の変換ボックスで入力 (英単語は自動で英字、Space で変換、Enter で確定)")]
     [JsonConverter(typeof(InputModeJsonConverter))]
     public InputMode Mode { get; set; } = InputMode.Tsf;
-
-    [Category("全般"), DisplayName("通知を出す"), Platforms(Platform.Windows),
-     Description("Meltype を有効・一時停止にしたときなどに、画面の右下に通知を出します (Windows の通知の音も鳴ります)。OFF にすると通知も音も出しません。")]
-    public bool ShowNotifications { get; set; } = true;
 
     [Category("入力方式"), DisplayName("入力方式"), Description("ローマ字入力 / かな入力 (JIS、α版: 試験中)。Meltype キーボードでは、かな入力を選ぶと JIS かな配列で入力し (Shift+E = ぃ, Shift+Z = っ, Shift+ね = 、)、打ったキーの英字が英単語なら英字で見せます。")]
     [JsonConverter(typeof(InputStyleJsonConverter))]
@@ -413,6 +405,10 @@ public sealed class Settings
      Description("日本語入力のとき、z の後ろに記号や h j k l を打つと記号・矢印にします (Microsoft IME・Google 日本語入力と同じ。z/ → ・、z. → …、z, → ‥、z- → ～、z[ → 『、z] → 』、zh zj zk zl → ← ↓ ↑ →)。OFF にすると、z はほかの英字と同じに扱います (1000Hz. や quiz. の z. を … にしません)。")]
     public bool ZSymbols { get; set; } = true;
 
+    [Category("キー操作"), DisplayName("Meltype の一時停止 / 再開のホットキー"), Platforms(Platform.Windows),
+     Description("Meltype 全体の一時停止 / 再開に使うキーの組み合わせ (例: Ctrl+Alt+F10)。空のときは Ctrl+Alt+F12 (使えなければ Ctrl+Alt+F11 など)。変更は Meltype を起動し直すと効きます。変換・無変換キーが無い US 配列のキーボード向けです。")]
+    public string PauseHotkey { get; set; } = "";
+
     [Category("キー操作"), DisplayName("入力モード切り替えキー"),
      Description("日本語／英数の入力モードを切り替えるキーを複数登録できます。Windows や他のアプリで使うキー操作を登録すると、元の操作が使えなくなったり、入力モードの切り替えと同時に動いたりする場合があります。")]
     public List<ToggleShortcut>? ToggleShortcuts { get; set; }
@@ -481,6 +477,10 @@ public sealed class Settings
     [Category("キー操作"), DisplayName("Control キーの個別の割り当て"),
      Description("入力中の Control + 英字に、別のキーの働きを割り当てます。「T=F6;Y=F7;U=F8;I=F9;O=F10」のように、英字=キー名を ; で区切って書きます (F キーが無い HHKB やノートパソコン向け)。キー名: F6〜F10・Left・Right・Up・Down・Home・End・Delete・Back・Enter・Esc・Tab。ここに書いた英字は、「Control キーの割り当て」より優先します。")]
     public string ControlKeyBindings { get; set; } = "";
+
+    [Category("表示"), DisplayName("通知を出す"), Platforms(Platform.Windows),
+     Description("Meltype を有効・一時停止にしたときなどに、画面の右下に通知を出します (Windows の通知の音も鳴ります)。OFF にすると通知も音も出しません。")]
+    public bool ShowNotifications { get; set; } = true;
 
     [Category("表示"), DisplayName("入力モードをカーソルの近くに表示"),
      Description("入力モードを切り替えたとき (と入力欄に入ったとき) に、カーソルの近くに「あ」(日本語) か「A」(英数) を一瞬表示します。Meltype キーボードの使用中は Windows の IME を OFF にしているので、タスクバーの IME の表示は常に「A」になります。今のモードはこの表示かトレイの Meltype のアイコンで確認してください。")]
@@ -568,14 +568,14 @@ public sealed class Settings
      Description("キーごと・日ごと・時間帯ごとの打鍵数を数えて、この PC の中に保存します (打った文字の並びは保存しません)。Windows 以外では、Meltype で入力しているときの打鍵だけを数えます (Shift などの修飾キーは数えません)。端末版と Android では数えません。パスワード欄では数えませんが、macOS ではアプリによってパスワード欄の打鍵も数えることがあります。「Discord に表示する」を選ぶと、今日と合計の打鍵数・1 分あたりの打鍵数・Meltype を起動してからの時間を、この PC の Discord のアプリに送ります。既定は「数えない」です。")]
     public KeyCountMode KeyCount { get; set; }
 
-    [Category("打鍵数・ログ"), DisplayName("ファイルにログを書く"), Description("%LOCALAPPDATA%\\Meltype\\meltype.log にログを書きます (OFF でも、トレイの「ログ / 判定理由」で見られるログは Meltype が動いている間だけメモリに残ります)。アプリ名・入力欄の名前が含まれます。確定した文字列などは「ログに入力した文字を残す」が ON のときだけ残ります。")]
+    [Category("打鍵数・ログ"), DisplayName("ファイルにログを書く"), Description("%LOCALAPPDATA%\\Meltype\\meltype.log にログを書きます (OFF でも、下の「ログ / 判定理由」で見られるログは Meltype が動いている間だけメモリに残ります)。アプリ名・入力欄の名前が含まれます。確定した文字列などは「ログに入力した文字を残す」が ON のときだけ残ります。")]
     public bool FileLog { get; set; }
 
     [Category("打鍵数・ログ"), DisplayName("ログに入力した文字を残す"), Description("確定した文字列・打った英字・読み・直した語をログに残します (不具合を調べるとき用)。OFF なら文字数だけを残します。パスワード欄では入力を扱わないので残りません。")]
     public bool LogTypedText { get; set; }
 
     [Category("更新"), DisplayName("自動で更新する"), Platforms(Platform.Windows),
-     Description("新しい版が公開されたら自動でダウンロードし、次に Meltype を起動したとき (Windows にサインインしたとき) に更新します。トレイの「更新して再起動」で今すぐ更新もできます。設定・学習データはそのまま残ります。")]
+     Description("新しい版が公開されたら自動でダウンロードし、次に Meltype を起動したとき (Windows にサインインしたとき) に更新します。下の「今すぐ更新を確認」で今すぐ更新もできます。設定・学習データはそのまま残ります。")]
     public bool AutoUpdate { get; set; } = true;
 
     [Category("更新"), DisplayName("プレリリース版も自動で更新する"), Platforms(Platform.Windows),
@@ -583,7 +583,7 @@ public sealed class Settings
     public bool UpdatePrerelease { get; set; }
 
     [Category("更新"), DisplayName("更新後にリリースノートを表示する"), Platforms(Platform.Windows),
-     Description("新しい版に更新したあとの最初の起動で、その版のリリースノートを表示します。OFF にすると自動では表示しません (インストール版では、トレイの「更新」→「リリースノート...」からいつでも見られます)。リリースノートの画面の「今後表示しない」でも変えられます。全プロファイル共通です。")]
+     Description("新しい版に更新したあとの最初の起動で、その版のリリースノートを表示します。OFF にすると自動では表示しません (インストール版では、下の「リリースノート」からいつでも見られます)。リリースノートの画面の「今後表示しない」でも変えられます。全プロファイル共通です。")]
     public bool ShowReleaseNotesAfterUpdate { get; set; } = true;
 
     // v5 以前の設定を読み込むためだけに残す。移行後は保存しない。
@@ -653,7 +653,7 @@ public sealed class Settings
     [Browsable(false)]
     public int SettingsVersion { get; set; } = CurrentVersion;
 
-    /// <summary>プロファイル (仕事用・趣味用・SNS 用など)。設定画面の上と、トレイのメニューで切り替える。</summary>
+    /// <summary>プロファイル (仕事用・趣味用・SNS 用など)。設定アプリの「プロファイル」で切り替える。</summary>
     [Browsable(false)]
     public List<SettingsProfile> Profiles { get; set; } = [];
 

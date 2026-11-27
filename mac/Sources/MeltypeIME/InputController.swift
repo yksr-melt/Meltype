@@ -192,7 +192,7 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         menu.addItem(.separator())
         let importItem = menu.addItem(withTitle: "macOSのユーザー辞書を取り込む…", action: #selector(importUserDictionary(_:)), keyEquivalent: "")
         importItem.target = self
-        let settingsItem = menu.addItem(withTitle: "Meltype の設定…", action: #selector(openSettings(_:)), keyEquivalent: "")
+        let settingsItem = menu.addItem(withTitle: "Meltype を開く…", action: #selector(openSettings(_:)), keyEquivalent: "")
         settingsItem.target = self
         menu.addItem(withTitle: "Meltype のデータフォルダを開く (設定・ユーザー辞書)", action: #selector(openDataFolder(_:)), keyEquivalent: "")
         menu.addItem(withTitle: "不具合の報告・提案… (Mac 版はプレビュー版です)", action: #selector(openReport(_:)), keyEquivalent: "")
@@ -268,7 +268,7 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
     @objc private func openSettings(_ sender: Any?) {
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "io.github.yksr-melt.Meltype.Settings") else {
             let alert = NSAlert()
-            alert.messageText = "Meltype の設定アプリが見つかりません"
+            alert.messageText = "Meltype のアプリが見つかりません"
             alert.informativeText = "Meltype をインストールし直してください (Meltype Settings.app が ~/Applications に入ります)。"
             alert.runModal()
             return

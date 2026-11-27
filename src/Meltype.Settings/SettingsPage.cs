@@ -38,7 +38,11 @@ internal static class SettingsPage
         // 値はトレイで選んだプロファイルにも入るので、プロファイルを使い分けている人には、どれを変えているかを出す
         if (profileNote && store.Current.Profiles.Count > 1)
             cards.Children.Add(new TextBlock { Text = $"プロファイル「{store.Current.ActiveProfile}」の値を変えています。", Opacity = 0.7, Margin = new Thickness(0, 0, 0, 8) });
-        foreach (var item in items) cards.Children.Add(Card(item, SettingEditors.Create(new EditorContext(item, store, owner))));
+        foreach (var item in items)
+        {
+            cards.Children.Add(Card(item, SettingEditors.Create(new EditorContext(item, store, owner))));
+            if (OperatingSystem.IsWindows()) cards.Children.AddRange(WindowsCards.After(item));
+        }
         return cards;
     }
 

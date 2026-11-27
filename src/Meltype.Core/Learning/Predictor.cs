@@ -180,7 +180,7 @@ internal sealed class PhraseHistory
         _saver.WriteNow();
     }
 
-    /// <summary>sinceUtc より後に覚えた (確定した) 語句を忘れる (トレイの「最近の学習を消す」)。忘れた数を返す。</summary>
+    /// <summary>sinceUtc より後に覚えた (確定した) 語句を忘れる (設定アプリの「最近の学習を消す」)。忘れた数を返す。</summary>
     public int ForgetSince(DateTime sinceUtc)
     {
         List<(string Reading, string Text)> recent;

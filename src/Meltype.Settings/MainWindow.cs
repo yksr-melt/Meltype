@@ -20,10 +20,10 @@ internal sealed class MainWindow : Window
     /// </summary>
     private static readonly string[] PageOrder =
     [
-        "全般", "入力方式", "英語 / 日本語の判定", "変換", "便利変換", "記号・スペース", "キー操作", "表示", "動作する場面",
+        AboutPage.Title, "入力方式", "英語 / 日本語の判定", "変換", "便利変換", "記号・スペース", "キー操作", "表示", "動作する場面",
         UserDictionaryPage.Title, SnippetsPage.Title, LearningPage.Title, "打鍵数・ログ", "更新", "バックアップ",
         // プロファイルは使う人が少ないので、一覧の下に置く
-        "プロファイル", "Meltype について",
+        "プロファイル",
     ];
 
     private readonly SettingsStore _store = new();
@@ -35,7 +35,7 @@ internal sealed class MainWindow : Window
 
     public MainWindow(string[] args)
     {
-        Title = "Meltype の設定";
+        Title = "Meltype";
         Width = 1000;
         Height = 720;
         MinWidth = 640;

@@ -210,7 +210,7 @@ internal static class CompositionTests
         /// <summary>入力欄のアプリの設定。下の設定のプロパティはこれを読み書きする。</summary>
         public Meltype.Config.Settings Settings { get; }
 
-        /// <summary>ユーザーが判定を直した記録 (トレイの「直した誤判定を報告...」)。</summary>
+        /// <summary>ユーザーが判定を直した記録 (設定アプリの「直した誤判定を報告」)。</summary>
         public CorrectionLog Corrections { get; } = new();
 
         private static readonly Detection.ScoreEngine DirectEngine = TestSupport.CreateEngine();

@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 aster-void
 #
-# 設定アプリ (Meltype Settings.app) を ~/Applications に入れる (Launchpad・Spotlight に出し、入力メニューの「Meltype の設定…」が bundle ID で見つける)。
+# 設定アプリ (Meltype Settings.app) を ~/Applications に入れる (Launchpad・Spotlight に出し、入力メニューの「Meltype を開く…」が bundle ID で見つける)。
 # 管理者権限を使わないので /Applications ではなく ~/Applications に入れる。Homebrew の cask は、cask の app で /Applications に入れる。
 #   install-settings-app.sh "Meltype Settings.app"
 set -euo pipefail

@@ -180,7 +180,7 @@ internal sealed class TranslationHistory
         _saver.Request();
     }
 
-    /// <summary>選んだ英訳の記録をすべて消す (トレイの「学習データをリセット」)。</summary>
+    /// <summary>選んだ英訳の記録をすべて消す (設定アプリの「学習データをすべて消す」)。</summary>
     public void Clear()
     {
         lock (_gate) _counts.Clear();

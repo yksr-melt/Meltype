@@ -14,12 +14,6 @@ public static class ShortcutExclusions
     private static readonly object Gate = new();
     private static readonly List<ShortcutExclusion> Pending = [];
 
-    /// <summary>通常の通知より優先して知らせるべき、未通知の除外情報があるか。</summary>
-    public static bool HasPending
-    {
-        get { lock (Gate) return Pending.Count > 0; }
-    }
-
     /// <summary>除外情報を追加したことを、記録したスレッドから通知する。</summary>
     public static event Action? Added;
 

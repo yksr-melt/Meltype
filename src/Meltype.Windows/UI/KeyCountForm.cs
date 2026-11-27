@@ -8,7 +8,7 @@ using Meltype.Input;
 namespace Meltype.UI;
 
 /// <summary>
-/// 打鍵数 (トレイの「打鍵数...」)。typect (タイプ数カウンター) のように、合計・今日・キーごと・日ごとの打鍵数を見せる。
+/// 打鍵数 (設定アプリの「打鍵数」)。typect (タイプ数カウンター) のように、合計・今日・キーごと・日ごとの打鍵数を見せる。
 /// typect で数えた分は「typect から引き継ぐ...」で足せる (一覧をコピーしたテキスト・CSV)。
 /// </summary>
 internal sealed class KeyCountForm : Form

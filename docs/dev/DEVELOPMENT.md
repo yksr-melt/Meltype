@@ -49,7 +49,7 @@ powershell -ExecutionPolicy Bypass -File .\Install-Meltype.ps1
 `-NoIme` を付けると、Meltype IME を新しく登録しません (登録済みなら、インストーラーが更新します)。
 `-ExecutionPolicy Bypass` はこのコマンドにだけ効き、PC 全体の設定は変えません。
 
-アンインストールは、ふつうに入れたときと同じく、トレイの「アンインストール...」か Windows の「設定」→「アプリ」です。
+アンインストールは、ふつうに入れたときと同じく、「Meltype」の最初のページの「アンインストール…」か Windows の「設定」→「アプリ」です。
 
 必要なもの:
 

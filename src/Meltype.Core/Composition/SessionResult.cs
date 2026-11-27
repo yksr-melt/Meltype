@@ -197,7 +197,7 @@ internal sealed record SessionParts(CompositionDetector Detector, IKanjiConverte
     /// <summary>キーを処理した時刻 (ミリ秒。テストでは打った間隔を決める)。</summary>
     public Func<long> TimeMs { get; init; } = () => Environment.TickCount64;
 
-    /// <summary>ユーザーが判定を直した (トレイの「直した誤判定を報告...」)。</summary>
+    /// <summary>ユーザーが判定を直した (設定アプリの「直した誤判定を報告」)。</summary>
     public Action<Correction>? Corrected { get; init; }
 
     /// <summary>

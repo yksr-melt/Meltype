@@ -205,7 +205,7 @@ internal static class WindowsTests
     [Test]
     public static void SettingsChange_ActivatesTsfOnlyWhenSwitchingToIt()
     {
-        // トレイでも設定アプリでも、動作モードを Meltype IME に変えたら入力方式も Meltype IME にする。
+        // 設定アプリで動作モードを Meltype IME に変えたら入力方式も Meltype IME にする。
         Assert.True(MeltypeEngine.SwitchesToTsf(InputMode.Keyboard, InputMode.Tsf), "Meltype キーボードから");
         Assert.True(!MeltypeEngine.SwitchesToTsf(InputMode.Tsf, InputMode.Tsf), "ほかの設定だけ変えたときは切り替えない");
         Assert.True(!MeltypeEngine.SwitchesToTsf(InputMode.Keyboard, InputMode.Keyboard), "Meltype IME を使えずに元のモードに戻したときは切り替えない");
@@ -314,7 +314,7 @@ internal static class WindowsTests
     public static void StartupTask_IsLogonTriggerWithoutDelayAndAdmin()
     {
         // #283: サインインしたらすぐ起動するタスク。& などを含むユーザー名・パスでも XML として読める
-        var xml = Startup.TaskXml(@"PC\R&D <user>", @"C:\Users\R&D\AppData\Local\Programs\Meltype\Meltype.exe");
+        var xml = WindowsStartup.TaskXml(@"PC\R&D <user>", @"C:\Users\R&D\AppData\Local\Programs\Meltype\Meltype.exe");
         var document = System.Xml.Linq.XDocument.Parse(xml);
         System.Xml.Linq.XNamespace ns = "http://schemas.microsoft.com/windows/2004/02/mit/task";
         Assert.Equal(@"PC\R&D <user>", document.Descendants(ns + "LogonTrigger").Single().Element(ns + "UserId")!.Value);
@@ -506,7 +506,7 @@ internal static class WindowsTests
         Assert.True(UI.TrayApplicationContext.UpdateReadyMessage("1.2.3", autoUpdate: true).Contains("次に Windows にサインインしたときに更新します"), "ON はサインイン時に更新する");
         var off = UI.TrayApplicationContext.UpdateReadyMessage("1.2.3", autoUpdate: false);
         Assert.True(!off.Contains("サインイン"), "OFF はサインイン時に更新しない");
-        Assert.True(off.Contains("「Meltype 1.2.3 に更新して再起動」"), "OFF はトレイのメニューの項目名で案内する");
+        Assert.True(off.Contains("「今すぐ更新を確認」"), "OFF は設定アプリの項目名で案内する");
     }
 
     [Test]

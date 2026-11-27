@@ -8,7 +8,7 @@ namespace Meltype;
 
 /// <summary>
 /// 自動更新。GitHub のリリースに新しい版があれば、同梱の update.ps1 でインストーラー (setup.exe) をダウンロードしておき、
-/// 次に Meltype を起動したとき (Windows へのサインイン時) か、トレイの「更新して再起動」でインストーラーを /VERYSILENT で実行する。
+/// 次に Meltype を起動したとき (Windows へのサインイン時) か、設定アプリの「今すぐ更新を確認」・更新の通知のクリックでインストーラーを /VERYSILENT で実行する。
 /// ネットワークの処理は PowerShell に任せる (同梱の .NET ランタイムを小さく削っているため)。
 /// </summary>
 internal sealed class Updater : IDisposable
@@ -120,7 +120,7 @@ internal sealed class Updater : IDisposable
         }
     }
 
-    /// <summary>今すぐ確認する (トレイの「更新を確認」)。結果は Ready か戻り値の文言で返す。</summary>
+    /// <summary>今すぐ確認する (設定アプリの「今すぐ更新を確認」)。結果は Ready か戻り値の文言で返す。</summary>
     public Task<string> CheckNowAsync() => AppInfo.IsPublicRelease
         ? Task.Run(() => Run() ?? "更新を確認できませんでした。")
         : Task.FromResult($"Meltype {AppInfo.Version} はテスト版です。自動更新は公開版 (1.0.0) から使えます。新しいテスト版は配布元から受け取ってください。");
@@ -163,7 +163,7 @@ internal sealed class Updater : IDisposable
             if (line.StartsWith("ready ", StringComparison.Ordinal))
             {
                 var version = line[6..];
-                Log.Info(_enabled() ? $"Meltype {version} をダウンロードしました。次の起動時に更新します。" : $"Meltype {version} をダウンロードしました。トレイの「更新」→「Meltype {version} に更新して再起動」で更新できます。");
+                Log.Info(_enabled() ? $"Meltype {version} をダウンロードしました。次の起動時に更新します。" : $"Meltype {version} をダウンロードしました。「Meltype」の「更新」→「今すぐ更新を確認」で更新できます。");
                 Ready?.Invoke(version);
                 return $"Meltype {version} をダウンロードしました。";
             }

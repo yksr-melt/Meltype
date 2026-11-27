@@ -6,7 +6,7 @@ using Meltype.Config;
 
 namespace Meltype.Detection;
 
-/// <summary>英字で打った語を英語・日本語のどちらで出すかを学習したもの (トレイの「学習した語」の一覧に出す)。Active は今有効になっているか (2 回目を待っている語は false)。</summary>
+/// <summary>英字で打った語を英語・日本語のどちらで出すかを学習したもの (設定アプリの「学習データ」の一覧に出す)。Active は今有効になっているか (2 回目を待っている語は false)。</summary>
 public sealed record LearnedLanguage(string Word, bool English, int Count, DateTime Used, bool Active, string? Key = null, string? Context = null)
 {
     /// <summary>忘れるときに渡す名前 (文脈ごとに分けて覚えた語は、印 @e / @j 付き)。</summary>
@@ -33,7 +33,7 @@ internal sealed class LanguageMemory
 {
     private const int MaxEntries = 3000;
     private readonly string? _path;
-    // 覚える・忘れるは中身を書き換えるので、読むときも _gate を取る (設定・トレイの一覧は入力と別のスレッドから読む: issue #2271)
+    // 覚える・忘れるは中身を書き換えるので、読むときも _gate を取る (設定の一覧は入力と別のスレッドから読む: issue #2271)
     private Dictionary<string, Entry> _entries;
     private readonly object _gate = new();
     private readonly object _fileGate = new();
@@ -234,7 +234,7 @@ internal sealed class LanguageMemory
         _saver.WriteNow();
     }
 
-    /// <summary>sinceUtc より後に覚えた (直した) 語を忘れる (トレイの「最近の学習を消す」)。忘れた数を返す。</summary>
+    /// <summary>sinceUtc より後に覚えた (直した) 語を忘れる (設定アプリの「最近の学習を消す」)。忘れた数を返す。</summary>
     public int ForgetSince(DateTime sinceUtc)
     {
         List<string> recent;
