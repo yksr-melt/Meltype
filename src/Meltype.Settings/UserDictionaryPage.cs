@@ -11,7 +11,7 @@ using Meltype.Dictionary;
 
 namespace Meltype.SettingsApp;
 
-/// <summary>ユーザー辞書 (userdict.txt) の登録・削除・取り込み・書き出し。入力している Meltype は、次に入力を始めたときに読み直す。</summary>
+/// <summary>ユーザー辞書 (userdict.txt) の登録・編集・削除・取り込み・書き出し。入力している Meltype は、次に入力を始めたときに読み直す。</summary>
 internal static class UserDictionaryPage
 {
     public const string Title = "ユーザー辞書";
@@ -42,6 +42,7 @@ internal static class UserDictionaryPage
             ItemTemplate = new FuncDataTemplate<UserWord>((w, _) => new TextBlock { Text = w is null ? "" : $"{w.Reading}　→　{w.Word}" + (w.Category.Length > 0 ? $"　［{w.Category}］" : "") }),
         };
         var count = Pages.Hint("");
+        UserWord? editing = null;
 
         // 絞り込みの一覧を作り直すと SelectionChanged が出るので、作り直している間は読み直さない
         var reloading = false;
@@ -78,6 +79,75 @@ internal static class UserDictionaryPage
             count.Text = shown.Count == dictionary.Count ? $"{dictionary.Count} 語" : $"{shown.Count} / {dictionary.Count} 語";
         }
 
+        var edit = new Button { Content = "編集" };
+        var update = new Button { Content = "更新" };
+        edit.Click += (_, e) =>
+        {
+            e.Handled = true;
+            EditSelected();
+        };
+        update.Click += (_, e) =>
+        {
+            e.Handled = true;
+            UpdateWord();
+        };
+
+        void RefreshButtons()
+        {
+            edit.IsEnabled = list.SelectedItems?.Count == 1;
+            var kana = typed.ToHiragana(reading.Text ?? "").Trim();
+            var text = (word.Text ?? "").Trim();
+            update.IsEnabled = editing is { } target && CanUpdate(target, kana, text);
+        }
+
+        static bool CanUpdate(UserWord target, string kana, string text) =>
+            kana.Length >= UserDictionary.MinRegisteredReadingLength && text.Length > 0
+            && (kana != target.Reading || text != target.Word);
+
+        void EditSelected()
+        {
+            if (list.SelectedItems?.Count != 1 || list.SelectedItem is not UserWord selected) return;
+            editing = selected;
+            reading.Text = selected.Reading;
+            word.Text = selected.Word;
+            RefreshButtons();
+            Pages.Show(message, "読みか単語を直して「更新」を押してください。");
+            reading.Focus();
+        }
+
+        void UpdateWord()
+        {
+            if (editing is not { } target) return;
+            var kana = typed.ToHiragana(reading.Text ?? "").Trim();
+            var text = (word.Text ?? "").Trim();
+            if (!CanUpdate(target, kana, text)) return;
+            try
+            {
+                if (Open().Edit(target, kana, text) is { } error)
+                {
+                    Pages.Show(message, error, error: true);
+                    return;
+                }
+            }
+            catch (IOException ex)
+            {
+                Pages.Show(message, $"更新できませんでした: {ex.Message}", error: true);
+                return;
+            }
+            FinishEntry("更新しました。");
+        }
+
+        void FinishEntry(string text)
+        {
+            editing = null;
+            Pages.Show(message, text);
+            reading.Text = "";
+            word.Text = "";
+            Reload();
+            RefreshButtons();
+            reading.Focus();
+        }
+
         void Register()
         {
             var kana = typed.ToHiragana(reading.Text ?? "");
@@ -86,11 +156,7 @@ internal static class UserDictionaryPage
                 Pages.Show(message, error, error: true);
                 return;
             }
-            Pages.Show(message, $"登録しました: {kana} → {(word.Text ?? "").Trim()}");
-            reading.Text = "";
-            word.Text = "";
-            Reload();
-            reading.Focus();
+            FinishEntry($"登録しました: {kana} → {(word.Text ?? "").Trim()}");
         }
 
         void RemoveSelected()
@@ -131,13 +197,21 @@ internal static class UserDictionaryPage
         {
             Reload();
         };
-        reading.TextChanged += (_, _) => preview.Text = (reading.Text ?? "").Any(char.IsAsciiLetter) ? "→ " + typed.ToHiragana(reading.Text!) : "";
+        reading.TextChanged += (_, _) =>
+        {
+            preview.Text = (reading.Text ?? "").Any(char.IsAsciiLetter) ? "→ " + typed.ToHiragana(reading.Text!) : "";
+            RefreshButtons();
+        };
+        word.TextChanged += (_, _) => RefreshButtons();
+        list.SelectionChanged += (_, _) => RefreshButtons();
         filter.TextChanged += (_, _) => Reload();
         foreach (var box in new[] { reading, word })
         {
             box.KeyDown += (_, e) =>
             {
-                if (e.Key == Key.Enter) Register();
+                if (e.Key != Key.Enter) return;
+                if (editing is null) Register();
+                else UpdateWord();
             };
         }
         list.KeyDown += (_, e) =>
@@ -174,14 +248,17 @@ internal static class UserDictionaryPage
         var setCategory = SettingEditors.Button("選んだ語を分類の欄の名前に分ける", SetCategoryOfSelected);
 
         Reload();
+        RefreshButtons();
         return Pages.Layout(Title, "登録した語は、読みを変換したときに候補の先頭に出ます。読みはローマ字でも打てます。分類を付けると、分類ごとに絞り込めます。",
             Pages.Card(
                 Pages.Row(reading, preview),
-                Pages.Row(word, SettingEditors.Button("登録", Register)),
+                Pages.Row(word),
                 Pages.Row(category),
+                Pages.Row(update),
+                Pages.Row(SettingEditors.Button("登録", Register)),
                 message),
             Pages.Row(filter, categoryFilter, count),
             list,
-            Pages.Row(remove, setCategory, import, export));
+            Pages.Row(import, export, edit, remove, setCategory));
     }
 }
