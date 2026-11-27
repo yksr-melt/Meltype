@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Meltype.Composition;
+using Meltype.Input;
 
 namespace Meltype.Ime;
 
@@ -185,6 +186,8 @@ public sealed record ImeKey
 {
     public int Vk { get; init; }
     public int Ch { get; init; }
+    /// <summary>押した物理キー (OS が分かるフロントだけ)。無ければ、かな配列・SKY 配列は Vk の位置のキーとみなす。</summary>
+    public PhysicalKey? Physical { get; init; }
     public bool Shift { get; init; }
     public bool Ctrl { get; init; }
     public bool Alt { get; init; }
@@ -202,7 +205,8 @@ public sealed record ImeKey
 
 /// <summary>離したキー。</summary>
 /// <param name="Interrupted">離すまでのあいだに、ほかのキー (修飾キーを含む)・マウスのボタンを押していた (このキーより先に押していたものも含む)。</param>
-public sealed record ImeKeyRelease(int Vk, bool Interrupted = false);
+/// <param name="Physical">離した物理キー (押したときの <see cref="ImeKey.Physical"/> と同じもの)。</param>
+public sealed record ImeKeyRelease(int Vk, bool Interrupted = false, PhysicalKey? Physical = null);
 
 /// <summary>OS (・Windows のフロントが調べた) 入力欄の性質。JSON の名前はメンバー名のまま。知らない性質のある出来事は、警告をログに出して受け持たない。</summary>
 public enum ImeTrait
