@@ -189,10 +189,16 @@ internal sealed class WordJudge
         return Romaji.AnalyzeFragment(rest) is not { IsValid: true, Partial: "" } || IsListedEnglishWord(learning, rest);
     }
 
-    /// <summary>大文字 1 文字の後ろが小文字だけで、ローマ字で読むと日本人の姓・名の読み (dictionaries/names.txt) になるか (Takahashi・Sato)。</summary>
-    internal bool IsJapaneseName(string span) =>
+    /// <summary>
+    /// 大文字 1 文字の後ろが小文字だけで、ローマ字で読むと日本人の姓・名の読み (dictionaries/names.txt) か日本語の語の読みになるか
+    /// (Takahashi・Sato・Zenzai・Gohan)。
+    /// 語の読みは 3 音以上だけ: 2 音の語 (あに) は、大文字 1 文字 + 付属語 (A|にしようか) と同じ綴りになる。
+    /// </summary>
+    internal bool IsCapitalizedJapaneseWord(string span) =>
         span.Skip(1).All(char.IsAsciiLetterLower) && Romaji.ConvertLenient(span.ToLowerInvariant(), final: true) is var reading &&
-        reading.All(KanaChars.IsHiragana) && CommonReadings.Names.Contains(CommonReadings.WithoutLongVowels(reading));
+        reading.All(KanaChars.IsHiragana) &&
+        (CommonReadings.Names.Contains(CommonReadings.WithoutLongVowels(reading)) ||
+         reading.Length >= 3 && (RomajiTypoCorrector.CommonWordCost(reading) is not null || RomajiTypoCorrector.IsRareWord(reading)));
 
     /// <summary>英単語の書き方の大文字・小文字か (its・Its・ITS と、固有名詞の書き方 GitHub)。iTs は its の書き方ではない。</summary>
     internal bool IsWordCasing(string span) =>

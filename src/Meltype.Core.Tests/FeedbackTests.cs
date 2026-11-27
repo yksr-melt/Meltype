@@ -111,6 +111,16 @@ internal static class FeedbackTests
     }
 
     [Test]
+    public static void Issue1907_CapitalizedJapaneseWord_IsNotSplit()
+    {
+        // Issue #1907: 大文字で始めて打った日本語の語が、頭の英単語で切られて日本語が続いていた (Zenざい・Goはん・Kinつぎ・Goぜん)。
+        CompositionTests.AssertCommitted(
+            ("Zenzai", "Zenzai"), ("Gohan", "Gohan"), ("Kintsugi", "Kintsugi"), ("Gozen", "Gozen"),
+            // 語の後ろの付属語は日本語のまま。小文字で打った語は日本語。英単語 + 日本語の語は今までどおり区切る
+            ("Gohanga", "Gohanが"), ("zenzai", "ぜんざい"), ("Appleseihin", "Appleせいひん"), ("Gitkanri", "Gitかんり"));
+    }
+
+    [Test]
     public static void Issue376_SuruAfterEnglishAndParticle_IsJapanese()
     {
         // Issue #376: 英単語 + 助詞 + する の活用 (password|ni|site) を、英単語 + 助詞 + 英単語 (api|no|error) と見て site を英字にしていた

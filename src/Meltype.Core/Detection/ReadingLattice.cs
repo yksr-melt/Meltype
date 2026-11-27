@@ -681,9 +681,10 @@ internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
             else if (!kanaInput && unknown[end] > unknown[start])
             {
                 var name = span.Length >= 3 && char.IsAsciiLetterUpper(span[0]) && char.IsAsciiLetterLower(span[1]);
-                // 日本人名 (Takahashi) は長さによらず知っている英単語と同じ重みにする。小文字 1 文字ごとの重みでは、長い名前ほど頭で切って日本語を続けた道 (T|赤橋・Toyo|だ) が軽くなる (#1744)。
+                // 日本人名 (Takahashi) と大文字で始めた日本語の語 (Zenzai) は長さによらず知っている英単語と同じ重みにする。小文字 1 文字ごとの重みでは、
+                // 長い語ほど頭で切って日本語を続けた道 (T|赤橋・Toyo|だ・Zen|ざい・Go|はん) が軽くなる (#1744・#1907)。
                 // 名前の頭で切る道 (Ai|かわ) には、知らない語と同じく NameSplit の重みを足すので、Name の印は残す
-                cost = name && words.IsJapaneseName(span) ? KnownEnglishCost
+                cost = name && words.IsCapitalizedJapaneseWord(span) ? KnownEnglishCost
                     : span.Sum(ch => char.IsAsciiLetterUpper(ch) ? UnknownUpperCost : name ? NameLetterCost : UnknownLetterCost);
                 edges.Add((new LatticeEdge(start, end, true, "", false, false, Name: name), cost));
                 continue;
