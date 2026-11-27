@@ -158,48 +158,25 @@ internal sealed class SmoothCaretWindow : PopupForm
         if (!_enabled || IsDisposed || idObject != unchecked((int)Native.OBJID_CARET) || thread == 0 || thread != _activeThread)
             return;
 
-        if (TryReadThreadCaret(hwnd, thread) is { } rect)
+        // UI スレッドから対象アプリへ同期 SendMessage する AccessibleObjectFromWindow は使わず、
+        // カーネル状態のみを読む GetGUIThreadInfo でデッドロックを防ぎつつ自前補間や Win32 キャレットを捉える
+        if (TryReadWin32Caret(thread) is { } rect)
             ApplyCaretRect(rect);
     }
 
-    private static Rectangle? TryReadThreadCaret(IntPtr hwnd, uint thread)
+    private static Rectangle? TryReadWin32Caret(uint thread)
     {
         var info = new Native.GUITHREADINFO { cbSize = Marshal.SizeOf<Native.GUITHREADINFO>() };
-        if (Native.GetGUIThreadInfo(thread, ref info) && info.hwndCaret != IntPtr.Zero && info.rcCaret.Bottom > info.rcCaret.Top)
-        {
-            var top = new Native.POINT { X = info.rcCaret.Left, Y = info.rcCaret.Top };
-            if (Native.ClientToScreen(info.hwndCaret, ref top) && (top.X != 0 || top.Y != 0))
-            {
-                var width = Math.Clamp(info.rcCaret.Right - info.rcCaret.Left, 1, 3);
-                var height = Math.Max(10, info.rcCaret.Bottom - info.rcCaret.Top);
-                if (height < 200)
-                    return new Rectangle(top.X, top.Y, width, height);
-            }
-        }
+        if (!Native.GetGUIThreadInfo(thread, ref info) || info.hwndCaret == IntPtr.Zero || info.rcCaret.Bottom <= info.rcCaret.Top)
+            return null;
 
-        var targetHwnd = hwnd != IntPtr.Zero ? hwnd : info.hwndFocus;
-        if (targetHwnd == IntPtr.Zero) return null;
-        var iid = typeof(Accessibility.IAccessible).GUID;
-        if (Native.AccessibleObjectFromWindow(targetHwnd, Native.OBJID_CARET, ref iid, out var accessible) != 0 ||
-            accessible is not Accessibility.IAccessible caret)
-        {
+        var top = new Native.POINT { X = info.rcCaret.Left, Y = info.rcCaret.Top };
+        if (!Native.ClientToScreen(info.hwndCaret, ref top) || (top.X == 0 && top.Y == 0))
             return null;
-        }
-        try
-        {
-            caret.accLocation(out var left, out var top, out var width, out var height, 0);
-            return height is > 0 and < 200 && (left != 0 || top != 0)
-                ? new Rectangle(left, top, Math.Clamp(width, 1, 3), height)
-                : null;
-        }
-        catch (Exception)
-        {
-            return null;
-        }
-        finally
-        {
-            _ = Marshal.ReleaseComObject(caret);
-        }
+
+        var width = Math.Clamp(info.rcCaret.Right - info.rcCaret.Left, 1, 3);
+        var height = Math.Max(10, info.rcCaret.Bottom - info.rcCaret.Top);
+        return height < 200 ? new Rectangle(top.X, top.Y, width, height) : null;
     }
 
     private void ApplyCaretRect(Rectangle rect)

@@ -225,6 +225,7 @@ private:
 
     const HWND stub_;
     PipeClient pipe_;
+    PipeClient caretPipe_;         // スムーズカーソル位置通知専用。入力用の pipe_ を塞がない・切断しない
     std::string instance_;
     ServerState state_;
     bool smoothCaret_ = false;     // Meltype.exe 側でスムーズカーソルが有効か

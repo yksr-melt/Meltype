@@ -536,6 +536,7 @@ STDMETHODIMP TextService::OnSetFocus(BOOL foreground) {
     // キーを受け取らなくなった (スレッドが前面でなくなった・ほかの IME に移った): 受け取ったキーを離したことは届かないかもしれないので忘れる
     // (このスレッドで次に押したキーの、離したことまで受け取らないように)
     if (!foreground) {
+        caretPipe_.Close();
         for (bool& eaten : eatenDown_) eaten = false;
     }
     return S_OK;
@@ -941,7 +942,7 @@ void TextService::SendCaretPosition(const RECT& caret) {
                                 ",\"caret\":[" + std::to_string(caret.left) + "," + std::to_string(caret.top) + "," +
                                 std::to_string(caret.right) + "," + std::to_string(caret.bottom) + "]}";
     std::string response;
-    pipe_.Transact(request, response, 30, true);
+    caretPipe_.Transact(request, response, 50, true);
 }
 
 void TextService::QueryAndSendCaretAsync() {
@@ -1076,6 +1077,7 @@ void TextService::DestroyMessageWindow() {
         conversionWait_.get();
     }
     conversionPipe_.reset();
+    caretPipe_.Close();
     // クラスはプロセス内で共有する。他スレッドのウィンドウが残る間の解除失敗は許容し、最後のインスタンスがウィンドウを破棄したときに解除する
     UnregisterClassW(L"Meltype.Tip.Messages", g_module);
 }
