@@ -46,7 +46,7 @@ internal static class UtilityConversionTests
     }
 
     private static IEnumerable<string> FunctionCandidates(string raw) =>
-        UtilityConversions.Call(raw, Tuesday)?.Candidates.Select(c => c.Text) ?? [];
+        UtilityConversions.Call(raw, Tuesday).Select(c => c.Text);
 
     [Test]
     public static void Today_IsOfferedOnlyForTheWholeInput()
@@ -303,15 +303,12 @@ internal static class UtilityConversionTests
         spaceHex.Press(VirtualKeys.Return);
         Assert.Equal("#dadada", spaceHex.Host.Document);
 
-        // 予測候補 ON なら Tab → Enter でも #dadada を確定できる (Skip(1) せず変換結果を先頭に出す)
-        var predHex = new Keyboard();
-        predHex.Settings.PredictiveCandidates = true;
-        predHex.Type("hex(dadada)");
-        Assert.Equal("#dadada|#DADADA|rgb(218, 218, 218)|hsl(0, 0%, 85%)", string.Join("|", predHex.Host.View!.Predictions!));
-        Assert.Equal("#dadadaff|#dadadaff|#dadadaff|#d9d9d9ff", string.Join("|", predHex.Host.View.Colors!));
-        predHex.Press(VirtualKeys.Tab);
-        predHex.Press(VirtualKeys.Return);
-        Assert.Equal("#dadada", predHex.Host.Document);
+        // 予測候補 ON でも、Tab は予測を出さずに変換を始める
+        var tabHex = new Keyboard(tabConversion: true);
+        tabHex.Settings.PredictiveCandidates = true;
+        tabHex.Type("hex(dadada)");
+        tabHex.Press(VirtualKeys.Tab);
+        Assert.Equal("#dadada", tabHex.Host.View?.Candidates[0], "Tab で #dadada が第一候補");
 
         // rgb(59,130,246)・HEX(dadada) も Space 1 回で変換候補が開き、括弧内の途中 Space は色変換にしない
         var spaceRgb = new Keyboard();

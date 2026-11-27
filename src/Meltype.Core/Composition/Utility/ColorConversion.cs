@@ -21,8 +21,6 @@ internal sealed partial class ColorConversion : IFunctionConversion
     [GeneratedRegex(@"^(?<h>-?\d+(?:\.\d+)?)\s*(?:,\s*|\s+)(?<s>\d+(?:\.\d+)?)%\s*(?:,\s*|\s+)(?<l>\d+(?:\.\d+)?)%(?:\s*(?:,|/)\s*(?<a>\d+(?:\.\d+)?%?|\.\d+%?))?$")]
     private static partial Regex HslArgsPattern();
 
-    public bool Predictable => true;
-
     public IReadOnlyList<FunctionCandidate> Call(string name, string args, DateTime now)
     {
         switch (name)

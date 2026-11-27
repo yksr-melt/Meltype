@@ -7,7 +7,7 @@ namespace Meltype.Composition.Utility;
 /// UUID v4 / v7 生成ユーティリティ。
 /// - `uuid` / `guid` / `ゆーゆーあいでぃー`: 通常候補の後ろに新しい UUID 候補を足す (Append)
 /// - `uuid()` / `guid()` / `uuid(v4)` / `uuid(v7)` / `uuid(n)`: UUID 候補だけを先頭に出す (関数記法)
-/// ランダム生成のため学習には登録せず、予測の候補にも出さない。
+/// ランダム生成のため学習には登録しない。
 /// </summary>
 internal sealed class UuidConversion : IUtilityConversion, IFunctionConversion
 {
@@ -20,8 +20,6 @@ internal sealed class UuidConversion : IUtilityConversion, IFunctionConversion
         }
         return null;
     }
-
-    public bool Predictable => false;
 
     public IReadOnlyList<FunctionCandidate> Call(string name, string args, DateTime now)
     {

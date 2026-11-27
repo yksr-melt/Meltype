@@ -105,19 +105,15 @@ internal static class UtilityConversions
         new UuidConversion(),
     ];
 
-    /// <summary>打った英字の全体が関数記法 (英字の名前 + (引数)) で、どれかの変換が候補を返せば、その変換と候補。そうでなければ null。</summary>
-    internal static (IFunctionConversion Conversion, IReadOnlyList<FunctionCandidate> Candidates)? Call(string raw, DateTime now)
+    /// <summary>打った英字の全体が関数記法 (英字の名前 + (引数)) なら、最初に候補を返した変換の候補。そうでなければ空。</summary>
+    internal static IReadOnlyList<FunctionCandidate> Call(string raw, DateTime now)
     {
         var trimmed = raw.Trim();
         var open = trimmed.IndexOf('(');
-        if (open <= 0 || !trimmed.EndsWith(')') || !trimmed[..open].All(char.IsAsciiLetter)) return null;
+        if (open <= 0 || !trimmed.EndsWith(')') || !trimmed[..open].All(char.IsAsciiLetter)) return [];
         var name = trimmed[..open].ToLowerInvariant();
         var args = trimmed[(open + 1)..^1].Trim();
-        foreach (var conversion in Functions)
-        {
-            if (conversion.Call(name, args, now) is { Count: > 0 } candidates) return (conversion, candidates);
-        }
-        return null;
+        return Functions.Select(c => c.Call(name, args, now)).FirstOrDefault(c => c.Count > 0) ?? [];
     }
 
     /// <summary>一致したすべての変換の候補。1 つでも Replace なら Replace、そうでなく 1 つでも Prepend なら Prepend にする。どれも一致しなければ null。</summary>
