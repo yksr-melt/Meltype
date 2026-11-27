@@ -35,7 +35,7 @@ internal static class CompositionController
         CompositionOutput.Begin(state.Out);
         CompositionKeys.HandleRelease(state, env, vk, position);
         Settle(state, env);
-        // 離したことはフロントが押下のとおりに通す。Consumed が false なら、離したことで今のキーの働きをした (文字に使わずに離した親指キー)
+        // 文字に使わずに離した親指キーが元の働きでも使われなければ、フロントは保留していた押下と解放を通せる
         return Result(state, env, consumed: true);
     }
 

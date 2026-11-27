@@ -1248,11 +1248,13 @@ internal static class ImeContractTests
         JsonElement Press(int vk, char ch = '\0') =>
             front.Event("KeyPressed", extra: $",\"key\":{{\"vk\":{vk},\"ch\":{(int)ch},\"releaseFollows\":true}}");
         JsonElement Release(int vk) => front.Event("KeyReleased", extra: $",\"key\":{{\"vk\":{vk}}}");
+        Assert.True(Consumed(Press(VirtualKeys.NonConvert)), front.Trace);
+        Assert.True(!Consumed(Release(VirtualKeys.NonConvert)), "文頭の無変換の単独押しはアプリに渡せる\n" + front.Trace);
         Assert.True(Press(VirtualKeys.Convert).GetProperty("state").GetProperty("capture").GetProperty("keyReleases").GetBoolean(), front.Trace);
         // 右親指 (変換) を押したまま W: 右シフト面の「が」
         Press('W', 'w');
         Release('W');
-        Release(VirtualKeys.Convert);
+        Assert.True(Consumed(Release(VirtualKeys.Convert)), "同時打鍵に使った親指キーはアプリへ渡さない\n" + front.Trace);
         Assert.Equal("が", front.Composition["t1"], "親指キーを離すまでシフト面\n" + front.Trace);
         // 離してから打った W はふつうの面の「か」
         Press('W', 'w');
@@ -1319,6 +1321,7 @@ internal static class ImeContractTests
         // 英数状態で打った語を日本語に戻すときも、かなは位置で決める (Dvorak の k・a は QWERTY の v・a の位置)
         var direct = new Front { ClassifyDirect = (letters, _, _) => letters == "ka" ? Verdict.Japanese : Verdict.Undecided };
         direct.Settings.InputStyle = InputStyle.Kana;
+        direct.Settings.DirectModeAutoDetect = true;
         direct.Event("AlphanumericModeSelected");
         PhysicalKey(direct, Physical("Evdev", 47), 'k');
         PhysicalKey(direct, Physical("Evdev", 30), 'a');
@@ -1429,7 +1432,8 @@ internal static class ImeContractTests
         Assert.Equal(0, Capture(front.Event("StateRequested")).GetProperty("ctrlKeysWhileComposing").GetArrayLength(), "入力していなければ空\n" + front.Trace);
         var typing = front.Key('k');
         var keys = Capture(typing).GetProperty("ctrlKeysWhileComposing").EnumerateArray().Select(k => (k.GetProperty("vk").GetInt32(), k.GetProperty("modifiers").GetInt32())).ToList();
-        Assert.True(keys.Contains(('U', 2)) && keys.Contains(('H', 2)) && !keys.Contains(('J', 2)), "Ctrl+U・Ctrl+H は変換ボックスで使う\n" + front.Trace);
+        Assert.True(keys.Contains((VirtualKeys.Return, 2)) && keys.Contains(('U', 2)) && keys.Contains(('H', 2)) && !keys.Contains(('J', 2)),
+            "Ctrl+Enter・Ctrl+U・Ctrl+H は変換ボックスで使う\n" + front.Trace);
         front.Settings.ControlKeys = ControlKeyLayout.Mac;
         keys = Capture(front.Key('a')).GetProperty("ctrlKeysWhileComposing").EnumerateArray().Select(k => (k.GetProperty("vk").GetInt32(), k.GetProperty("modifiers").GetInt32())).ToList();
         Assert.True(keys.Contains(('J', 2)) && keys.Contains(('E', 2)), "macOS 風の割り当て\n" + front.Trace);
@@ -1563,11 +1567,14 @@ internal static class ImeContractTests
         Assert.True(HasKey(Capture(front.Event("StateRequested")), VirtualKeys.Space, 0), "全角スペースなら Space も受け取る\n" + front.Trace);
         front.Open = false;
         var english = Capture(front.Event("StateRequested"));
-        Assert.True(english.GetProperty("printableAscii").GetBoolean(), "英数でもローマ字を見分けるので受け取る\n" + front.Trace);
-        front.Settings.DirectModeAutoDetect = false;
-        english = Capture(front.Event("StateRequested"));
-        Assert.True(!english.GetProperty("printableAscii").GetBoolean() && !HasKey(english, VirtualKeys.Space, 1), "見分けないなら通す\n" + front.Trace);
+        Assert.True(!english.GetProperty("printableAscii").GetBoolean() && !HasKey(english, VirtualKeys.Space, 1), "既定の英数ではアプリへ通す\n" + front.Trace);
         Assert.True(HasKey(english, ToggleShortcut.Hankaku, 0), "英数でも切り替えキーは受け取る\n" + front.Trace);
+        front.Type("kyouha");
+        Assert.Equal("kyouha", front.Document, front.Trace);
+        Assert.True(!front.Open && front.Composition["t1"] is null, "英数のまま確定先に入る\n" + front.Trace);
+        front.Settings.DirectModeAutoDetect = true;
+        english = Capture(front.Event("StateRequested"));
+        Assert.True(english.GetProperty("printableAscii").GetBoolean(), "設定を ON にしたときだけ英数でも判定する\n" + front.Trace);
     }
 
     [Test]
