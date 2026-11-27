@@ -4,71 +4,94 @@
 namespace Meltype.Config;
 
 /// <summary>
-/// スムースカーソルの位置補間とフェードアウトを計算する純粋な状態マシン。
-/// 指数減衰イージングでターゲット位置へ滑らかに追従し、遠距離ジャンプ (ウィンドウ切替など) は即時スナップ、
-/// 到着後は元のアプリのカーソルと二重に見えないよう自然にフェードアウトする。
+/// スムースカーソルの位置補間と距離連動ハンドオフを計算する純粋な状態マシン。
+/// 指数減衰イージングでターゲット位置へ素早く滑らかに追従し、到着直前の数 px で透明へ溶け込むことで
+/// アプリ本来のキャレットとの二重表示・ぼやけ・残像ちらつきを防ぐ。
 /// </summary>
 public sealed class SmoothCaretMotion
 {
-    private const float TauMs = 28f;
-    private const float SnapThresholdPx = 0.5f;
-    private const float MinGlideDistancePx = 3.5f;
+    private const float TauMs = 17f;
+    private const float InitialStepRatio = 0.18f;
+    private const float ArriveSnapPx = 0.75f;
+    private const float FadeStartDistancePx = 3.2f;
+    private const float MinGlideDistancePx = 3.0f;
+    private const float SameLineTolerancePx = 3.0f;
+    private const float MinLineJumpPx = 6.0f;
     private const float MaxGlideDistancePx = 300f;
-    private const float ActiveOpacity = 1.0f;
-    private const float IdleBeforeFadeMs = 16f;
-    private const float FadeDurationMs = 55f;
+    private const float ActiveOpacity = 0.92f;
 
     private bool _initialized;
-    private float _targetX;
-    private float _targetY;
-    private float _targetHeight;
-    private float _settledMs;
 
     public float CurrentX { get; private set; }
     public float CurrentY { get; private set; }
     public float CurrentHeight { get; private set; } = 18f;
+    public float CurrentWidth { get; private set; } = 2f;
+    public float TargetX { get; private set; }
+    public float TargetY { get; private set; }
+    public float TargetHeight { get; private set; } = 18f;
+    public float TargetWidth { get; private set; } = 2f;
     public float Opacity { get; private set; }
     public bool IsActive { get; private set; }
 
     /// <summary>新しいターゲット矩形を設定する。アニメーションが必要なら true を返す。</summary>
-    public bool SetTarget(float x, float y, float height)
+    public bool SetTarget(float x, float y, float height, float width = 2f)
     {
         height = Math.Clamp(height, 10f, 64f);
+        width = Math.Clamp(width, 1f, 3f);
         if (!_initialized)
         {
             _initialized = true;
-            CurrentX = _targetX = x;
-            CurrentY = _targetY = y;
-            CurrentHeight = _targetHeight = height;
-            Opacity = 0f;
-            IsActive = false;
+            SnapTo(x, y, height, width);
             return false;
         }
 
-        var dx = x - _targetX;
-        var dy = y - _targetY;
-        if (MathF.Abs(dx) < SnapThresholdPx && MathF.Abs(dy) < SnapThresholdPx && MathF.Abs(height - _targetHeight) < SnapThresholdPx)
+        var targetDx = MathF.Abs(x - TargetX);
+        var targetDy = MathF.Abs(y - TargetY);
+        if (targetDx < 0.5f && targetDy < 0.5f && MathF.Abs(height - TargetHeight) < 0.5f)
             return IsActive;
 
-        _targetX = x;
-        _targetY = y;
-        _targetHeight = height;
+        var dx = x - CurrentX;
+        var dy = y - CurrentY;
+        var absDx = MathF.Abs(dx);
+        var absDy = MathF.Abs(dy);
+        var distance = Distance(dx, dy);
 
-        var distance = Distance(x - CurrentX, y - CurrentY);
-        if (distance < MinGlideDistancePx || distance > MaxGlideDistancePx)
+        // 同一箇所での UIA / フォントメトリクス由来の微小な揺れや、別ウィンドウ等への遠距離ジャンプは即時スナップする
+        var isJitter = absDx < MinGlideDistancePx && absDy < MathF.Max(MinLineJumpPx, height * 0.45f);
+        if (isJitter || distance < MinGlideDistancePx || distance > MaxGlideDistancePx)
         {
-            // 数pxの微小な揺れや、別ウィンドウ等への遠距離ジャンプはオーバーレイを出さず即時スナップする
-            CurrentX = x;
-            CurrentY = y;
-            CurrentHeight = height;
-            Opacity = 0f;
-            IsActive = false;
-            _settledMs = 0f;
+            SnapTo(x, y, height, width);
             return false;
         }
 
-        _settledMs = 0f;
-        Opacity = ActiveOpacity;
+        TargetX = x;
+        TargetY = y;
+        TargetHeight = height;
+        TargetWidth = width;
+        CurrentWidth = width;
+
+        // 同じ行の横移動で上下 1〜3px だけメトリクスが揺れる場合は、縦揺れを防ぐため Y と高さを即座に揃える
+        if (absDy <= SameLineTolerancePx)
+        {
+            CurrentY = y;
+            CurrentHeight = height;
+        }
+
+        if (!IsActive)
+        {
+            // キャレット位置の検出ラグを相殺するため、初回フレームでわずかに前進させて遅延感をなくす
+            CurrentX += (TargetX - CurrentX) * InitialStepRatio;
+            CurrentY += (TargetY - CurrentY) * InitialStepRatio;
+        }
+
+        var remaining = Distance(TargetX - CurrentX, TargetY - CurrentY);
+        if (remaining <= ArriveSnapPx)
+        {
+            SnapTo(x, y, height, width);
+            return false;
+        }
+
+        Opacity = ComputeOpacity(remaining);
         IsActive = true;
         return true;
     }
@@ -79,38 +102,19 @@ public sealed class SmoothCaretMotion
         if (!IsActive || dtMs <= 0f) return false;
 
         var alpha = 1f - MathF.Exp(-dtMs / TauMs);
-        CurrentX += (_targetX - CurrentX) * alpha;
-        CurrentY += (_targetY - CurrentY) * alpha;
-        CurrentHeight += (_targetHeight - CurrentHeight) * alpha;
+        CurrentX += (TargetX - CurrentX) * alpha;
+        CurrentY += (TargetY - CurrentY) * alpha;
+        CurrentHeight += (TargetHeight - CurrentHeight) * alpha;
 
-        var remaining = Distance(_targetX - CurrentX, _targetY - CurrentY);
-        if (remaining < SnapThresholdPx && MathF.Abs(_targetHeight - CurrentHeight) < SnapThresholdPx)
+        var remaining = Distance(TargetX - CurrentX, TargetY - CurrentY);
+        if (remaining <= ArriveSnapPx)
         {
-            CurrentX = _targetX;
-            CurrentY = _targetY;
-            CurrentHeight = _targetHeight;
-            _settledMs += dtMs;
-
-            if (_settledMs <= IdleBeforeFadeMs)
-            {
-                Opacity = ActiveOpacity;
-                return true;
-            }
-
-            var fadeElapsed = _settledMs - IdleBeforeFadeMs;
-            if (fadeElapsed >= FadeDurationMs)
-            {
-                Opacity = 0f;
-                IsActive = false;
-                return false;
-            }
-
-            Opacity = ActiveOpacity * (1f - fadeElapsed / FadeDurationMs);
-            return true;
+            // ネイティブキャレットが既に TargetX に描画されているため、重なって太くぼやける手前で完全に消して引き継ぐ
+            SnapTo(TargetX, TargetY, TargetHeight, TargetWidth);
+            return false;
         }
 
-        _settledMs = 0f;
-        Opacity = ActiveOpacity;
+        Opacity = ComputeOpacity(remaining);
         return true;
     }
 
@@ -119,7 +123,24 @@ public sealed class SmoothCaretMotion
         _initialized = false;
         Opacity = 0f;
         IsActive = false;
-        _settledMs = 0f;
+    }
+
+    private void SnapTo(float x, float y, float height, float width)
+    {
+        CurrentX = TargetX = x;
+        CurrentY = TargetY = y;
+        CurrentHeight = TargetHeight = height;
+        CurrentWidth = TargetWidth = width;
+        Opacity = 0f;
+        IsActive = false;
+    }
+
+    private static float ComputeOpacity(float remainingPx)
+    {
+        if (remainingPx >= FadeStartDistancePx) return ActiveOpacity;
+        if (remainingPx <= ArriveSnapPx) return 0f;
+        var t = (remainingPx - ArriveSnapPx) / (FadeStartDistancePx - ArriveSnapPx);
+        return ActiveOpacity * t;
     }
 
     private static float Distance(float dx, float dy) => MathF.Sqrt(dx * dx + dy * dy);

@@ -51,6 +51,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _invoker.CreateControl();
         // 入力・表示は、動かしている設定 (Meltype IME を使えなければ Meltype キーボード) を読む
         _composition = new Composition.CompositionService(_invoker, _engine.Runtime, () => _engine.Running);
+        _engine.CaretActivity += _composition.NotifyCaretActivity;
         _keyboard = new Keyboard.KeyboardFront(_invoker, _composition, environment => _composition.CreateHost(environment, () => _engine.Running), () => _engine.OtherTipVersion);
         _keyboard.ModeChanged += OnKeyboardModeChanged;
         _engine.Keyboard = _keyboard;

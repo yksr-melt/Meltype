@@ -80,6 +80,7 @@ internal sealed class CompositionWindow : PopupForm
     private bool _caretInitialized;
     private float _caretX;
     private float _caretTargetX;
+    private long _caretLastTicks;
     private System.Windows.Forms.Timer? _caretTimer;
 
     /// <summary>変換ボックス内のカーソルを滑らかに動かすか。</summary>
@@ -103,14 +104,14 @@ internal sealed class CompositionWindow : PopupForm
             _caretX = targetX;
             return;
         }
-        if (MathF.Abs(_caretTargetX - _caretX) < 0.5f)
+        if (MathF.Abs(_caretTargetX - _caretX) < 0.4f)
         {
             _caretX = _caretTargetX;
             return;
         }
         if (_caretTimer is null)
         {
-            _caretTimer = new System.Windows.Forms.Timer { Interval = 16 };
+            _caretTimer = new System.Windows.Forms.Timer { Interval = 8 };
             _caretTimer.Tick += (_, _) =>
             {
                 if (!Visible || !_smoothCaret)
@@ -118,8 +119,12 @@ internal sealed class CompositionWindow : PopupForm
                     _caretTimer.Stop();
                     return;
                 }
-                _caretX += (_caretTargetX - _caretX) * 0.35f;
-                if (MathF.Abs(_caretTargetX - _caretX) < 0.5f)
+                var now = System.Diagnostics.Stopwatch.GetTimestamp();
+                var dtMs = Math.Clamp((now - _caretLastTicks) * 1000f / System.Diagnostics.Stopwatch.Frequency, 1f, 50f);
+                _caretLastTicks = now;
+                var alpha = 1f - MathF.Exp(-dtMs / 17f);
+                _caretX += (_caretTargetX - _caretX) * alpha;
+                if (MathF.Abs(_caretTargetX - _caretX) < 0.4f)
                 {
                     _caretX = _caretTargetX;
                     _caretTimer.Stop();
@@ -127,7 +132,11 @@ internal sealed class CompositionWindow : PopupForm
                 Invalidate();
             };
         }
-        if (!_caretTimer.Enabled) _caretTimer.Start();
+        if (!_caretTimer.Enabled)
+        {
+            _caretLastTicks = System.Diagnostics.Stopwatch.GetTimestamp();
+            _caretTimer.Start();
+        }
     }
 
     /// <summary>文字の大きさの倍率 (1 = 打った文字が 13pt)。変わったときだけ作り直す。</summary>
@@ -418,23 +427,22 @@ internal sealed class CompositionWindow : PopupForm
             if (view.CaretBack > 0 && view.CaretBack <= view.Text.Length)
             {
                 // 読みの途中を直している間は、カーソルの位置に縦線を引く
-                var targetX = 10 + TextRenderer.MeasureText(g, view.Text[..^view.CaretBack], _textFont, Size.Empty, TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding).Width;
+                var targetX = 10f + TextRenderer.MeasureText(g, view.Text[..^view.CaretBack], _textFont, Size.Empty, TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding).Width;
                 var drawX = targetX;
                 if (_smoothCaret)
                 {
                     UpdateSmoothCaret(targetX);
-                    drawX = (int)MathF.Round(_caretX);
+                    drawX = _caretX;
                 }
-                using var caret = new Pen(_palette.Text, 2);
+                using var caret = new Pen(_palette.Text, 1.8f);
                 g.DrawLine(caret, drawX, y, drawX, y + _textFont.Height);
             }
             else if (_smoothCaret)
             {
-                var targetX = 10 + TextRenderer.MeasureText(g, view.Text, _textFont, Size.Empty, TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding).Width;
+                var targetX = 10f + TextRenderer.MeasureText(g, view.Text, _textFont, Size.Empty, TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding).Width;
                 UpdateSmoothCaret(targetX);
-                var drawX = (int)MathF.Round(_caretX);
-                using var caret = new Pen(_palette.Text, 2);
-                g.DrawLine(caret, drawX, y, drawX, y + _textFont.Height);
+                using var caret = new Pen(_palette.Text, 1.8f);
+                g.DrawLine(caret, _caretX, y, _caretX, y + _textFont.Height);
             }
             y += _textFont.Height;
             using (var underline = new Pen(_palette.Text, 1) { DashStyle = DashStyle.Dot })

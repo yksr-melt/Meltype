@@ -8,48 +8,100 @@ using Meltype.Config;
 namespace Meltype.Composition;
 
 /// <summary>
-/// システム全体の入力欄でテキストカーソルが動くとき、Word のようにふわっと滑らかに追従する
-/// クリックスルー・最前面のオーバーレイカーソル。動きが止まると元のカーソルへ自然に溶け込んで非表示になる。
+/// システム全体の入力欄でテキストカーソルが動くとき、Word のように滑らかに追従するクリックスルー・レイヤードオーバーレイ。
+/// UpdateLayeredWindow によるサブピクセル描画と DwmFlush 垂直同期駆動でちらつき・カクつきをなくし、
+/// 到着先のネイティブキャレットと重なる手前で透明へ溶け込ませることで二重表示やぼやけを防ぐ。
 /// </summary>
 internal sealed class SmoothCaretWindow : PopupForm
 {
-    private const int PollIntervalMs = 30;
-    private const int FrameIntervalMs = 16;
+    private const int WS_EX_LAYERED = 0x00080000;
+    private const uint EVENT_OBJECT_LOCATIONCHANGE = 0x800B;
+    private const uint EVENT_OBJECT_TEXTSELECTIONCHANGED = 0x8014;
+    private const int IdlePollIntervalMs = 45;
+    private const int BurstPollIntervalMs = 12;
+    private const int BurstDurationMs = 140;
+    private const int StripWidth = 4;
+    private const int MaxBitmapHeight = 128;
+    private const byte AC_SRC_OVER = 0;
+    private const byte AC_SRC_ALPHA = 1;
+    private const uint ULW_ALPHA = 0x00000002;
+    private const uint SWP_NOSIZE = 0x0001;
+    private const uint SWP_NOMOVE = 0x0002;
+    private const uint SWP_NOACTIVATE = 0x0010;
+    private const uint SWP_NOOWNERZORDER = 0x0200;
+    private const uint SWP_NOSENDCHANGING = 0x0400;
+    private static readonly IntPtr HWND_TOPMOST = new(-1);
 
+    private readonly Control _invoker;
     private readonly Func<Rectangle?> _uiaCaretProvider;
     private readonly SmoothCaretMotion _motion = new();
-    private readonly System.Windows.Forms.Timer _pollTimer = new() { Interval = PollIntervalMs };
-    private readonly System.Windows.Forms.Timer _animTimer = new() { Interval = FrameIntervalMs };
-    private readonly Stopwatch _clock = Stopwatch.StartNew();
+    private readonly System.Windows.Forms.Timer _pollTimer = new() { Interval = IdlePollIntervalMs };
+    private readonly Native.WinEventProc _winEventCallback;
+    private readonly Action _onVSyncFrameDelegate;
+    private readonly object _vsyncLock = new();
+    private readonly Thread _vsyncThread;
+    private readonly int[] _pixelScratch = new int[StripWidth * MaxBitmapHeight];
 
     private bool _enabled;
     private bool _suppressed;
-    private long _lastFrameMs;
+    private bool _layeredCleared = true;
+    private bool _vsyncActive;
+    private bool _vsyncStop;
+    private int _frameQueued;
+    private long _lastFrameTicks;
+    private long _burstUntilMs;
     private IntPtr _lastForeground;
+    private IntPtr _caretHook;
+    private IntPtr _selectionHook;
     private int _uiaQueryRunning;
+    private int _uiaDirty;
+
+    private volatile int _caretRgb = 0x141414;
+    private IntPtr _sampledForeground;
+    private long _lastColorSampleMs;
+
+    private IntPtr _memDc;
+    private IntPtr _dib;
+    private IntPtr _oldBitmap;
+    private IntPtr _dibBits;
 
     public SmoothCaretWindow(Control invoker, Func<Rectangle?> uiaCaretProvider)
     {
         _invoker = invoker;
         _uiaCaretProvider = uiaCaretProvider;
-        MinimumSize = new Size(1, 1);
-        BackColor = Color.FromArgb(24, 24, 24);
-        Size = new Size(2, 18);
-        Opacity = 0.0;
+        _winEventCallback = OnWinEvent;
+        _onVSyncFrameDelegate = OnVSyncFrame;
 
-        _pollTimer.Tick += (_, _) => PollCaret();
-        _animTimer.Tick += (_, _) => OnAnimationTick();
+        MinimumSize = new Size(1, 1);
+        Size = new Size(StripWidth, 18);
+
+        _pollTimer.Tick += (_, _) => OnPollTick();
+
+        _vsyncThread = new Thread(RunVSyncLoop)
+        {
+            IsBackground = true,
+            Name = "MeltypeSmoothCaretVSync",
+        };
+        _vsyncThread.Start();
     }
 
-    private readonly Control _invoker;
-
     protected override bool ClickThrough => true;
+
+    protected override CreateParams CreateParams
+    {
+        get
+        {
+            var cp = base.CreateParams;
+            cp.ExStyle |= WS_EX_LAYERED;
+            return cp;
+        }
+    }
 
     public void SetEnabled(bool enabled)
     {
         if (_enabled == enabled) return;
         _enabled = enabled;
-        UpdateTimers();
+        UpdateState();
     }
 
     /// <summary>変換ボックスが表示されている間はシステム側オーバーレイを隠す (変換ボックス内のスムースカーソルを使うため)。</summary>
@@ -57,18 +109,32 @@ internal sealed class SmoothCaretWindow : PopupForm
     {
         if (_suppressed == suppressed) return;
         _suppressed = suppressed;
-        UpdateTimers();
+        UpdateState();
     }
 
-    /// <summary>キー入力・確定・矢印移動の直後にキャレット位置を即座に追従する (TSF / UI Automation 対応)。</summary>
-    public void NotifyActivity(Point? anchor = null)
+    /// <summary>キー入力・確定・矢印移動の直後に短時間の高頻度ポーリングを行い、アプリのキャレット更新を遅延なく捉える。</summary>
+    public void NotifyActivity()
     {
         if (!_enabled || _suppressed || IsDisposed) return;
-        if (anchor is { X: var ax, Y: var ay } && (ax != 0 || ay != 0))
-        {
-            ApplyCaretTarget(new Rectangle(ax, ay, 2, 20));
+        _burstUntilMs = Environment.TickCount64 + BurstDurationMs;
+        if (_pollTimer.Interval != BurstPollIntervalMs)
+            _pollTimer.Interval = BurstPollIntervalMs;
+        PollCaret();
+    }
+
+    private void OnWinEvent(IntPtr hook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint thread, uint time)
+    {
+        if (!_enabled || _suppressed || IsDisposed) return;
+        if (eventType == EVENT_OBJECT_LOCATIONCHANGE && idObject != unchecked((int)Native.OBJID_CARET))
             return;
-        }
+        PollCaret();
+    }
+
+    private void OnPollTick()
+    {
+        if (!_enabled || _suppressed || IsDisposed) return;
+        if (_pollTimer.Interval != IdlePollIntervalMs && Environment.TickCount64 >= _burstUntilMs)
+            _pollTimer.Interval = IdlePollIntervalMs;
         PollCaret();
     }
 
@@ -76,57 +142,90 @@ internal sealed class SmoothCaretWindow : PopupForm
     {
         if (!_enabled || _suppressed || IsDisposed) return;
         if (PollWin32Caret()) return;
+
+        Volatile.Write(ref _uiaDirty, 1);
         if (Interlocked.CompareExchange(ref _uiaQueryRunning, 1, 0) != 0) return;
 
-        ThreadPool.QueueUserWorkItem(_ =>
-        {
-            try
-            {
-                var bounds = _uiaCaretProvider();
-                if (bounds is { Width: >= 0, Height: > 0 and < 200 } rect && (rect.X != 0 || rect.Y != 0) &&
-                    !IsDisposed && !_invoker.IsDisposed && _invoker.IsHandleCreated)
-                {
-                    _invoker.BeginInvoke(() =>
-                    {
-                        if (_enabled && !_suppressed && !IsDisposed)
-                            ApplyCaretTarget(rect);
-                    });
-                }
-            }
-            catch (Exception ex) when (ex is ObjectDisposedException or InvalidOperationException)
-            {
-            }
-            finally
-            {
-                Interlocked.Exchange(ref _uiaQueryRunning, 0);
-            }
-        });
+        ThreadPool.QueueUserWorkItem(_ => RunUiaQueryLoop());
     }
 
-    private void UpdateTimers()
+    private void RunUiaQueryLoop()
+    {
+        try
+        {
+            while (Interlocked.Exchange(ref _uiaDirty, 0) != 0 && _enabled && !_suppressed && !IsDisposed)
+            {
+                var foreground = Native.GetForegroundWindow();
+                var bounds = _uiaCaretProvider();
+                if (bounds is { Width: >= 0, Height: > 0 and < 200 } rect && (rect.X != 0 || rect.Y != 0))
+                {
+                    SampleCaretColorOnWorker(foreground, rect);
+                    if (!IsDisposed && !_invoker.IsDisposed && _invoker.IsHandleCreated)
+                    {
+                        _invoker.BeginInvoke(() =>
+                        {
+                            if (_enabled && !_suppressed && !IsDisposed)
+                                ApplyCaretTarget(foreground, rect);
+                        });
+                    }
+                }
+            }
+        }
+        catch (Exception ex) when (ex is ObjectDisposedException or InvalidOperationException)
+        {
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _uiaQueryRunning, 0);
+        }
+    }
+
+    private void UpdateState()
     {
         if (_enabled && !_suppressed)
         {
+            EnsureWindowReady();
+            InstallHooks();
+            _pollTimer.Interval = IdlePollIntervalMs;
             _pollTimer.Start();
             return;
         }
+
         _pollTimer.Stop();
-        _animTimer.Stop();
+        UninstallHooks();
+        SetVSyncActive(false);
         _motion.Reset();
-        if (Visible) Hide();
+        ClearLayered();
+        if (!_enabled && Visible) Hide();
+    }
+
+    private void InstallHooks()
+    {
+        const uint flags = Native.WINEVENT_OUTOFCONTEXT | Native.WINEVENT_SKIPOWNPROCESS;
+        if (_caretHook == IntPtr.Zero)
+            _caretHook = Native.SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE, IntPtr.Zero, _winEventCallback, 0, 0, flags);
+        if (_selectionHook == IntPtr.Zero)
+            _selectionHook = Native.SetWinEventHook(EVENT_OBJECT_TEXTSELECTIONCHANGED, EVENT_OBJECT_TEXTSELECTIONCHANGED, IntPtr.Zero, _winEventCallback, 0, 0, flags);
+    }
+
+    private void UninstallHooks()
+    {
+        if (_caretHook != IntPtr.Zero)
+        {
+            Native.UnhookWinEvent(_caretHook);
+            _caretHook = IntPtr.Zero;
+        }
+        if (_selectionHook != IntPtr.Zero)
+        {
+            Native.UnhookWinEvent(_selectionHook);
+            _selectionHook = IntPtr.Zero;
+        }
     }
 
     private bool PollWin32Caret()
     {
-        if (!_enabled || _suppressed || IsDisposed) return false;
         var foreground = Native.GetForegroundWindow();
         if (foreground == IntPtr.Zero) return false;
-        if (foreground != _lastForeground)
-        {
-            _lastForeground = foreground;
-            _motion.Reset();
-            if (Visible) Hide();
-        }
         var thread = Native.GetWindowThreadProcessId(foreground, out _);
         var info = new Native.GUITHREADINFO { cbSize = Marshal.SizeOf<Native.GUITHREADINFO>() };
         if (!Native.GetGUIThreadInfo(thread, ref info) || info.hwndCaret == IntPtr.Zero)
@@ -136,47 +235,394 @@ internal sealed class SmoothCaretWindow : PopupForm
         if (!Native.ClientToScreen(info.hwndCaret, ref top) || (top.X == 0 && top.Y == 0))
             return false;
 
+        var width = Math.Clamp(info.rcCaret.Right - info.rcCaret.Left, 1, 3);
         var height = Math.Max(10, info.rcCaret.Bottom - info.rcCaret.Top);
-        ApplyCaretTarget(new Rectangle(top.X, top.Y, 3, height));
+        var rect = new Rectangle(top.X, top.Y, width, height);
+        ScheduleWorkerColorSample(foreground, rect);
+        ApplyCaretTarget(foreground, rect);
         return true;
     }
 
-    private void ApplyCaretTarget(Rectangle rect)
+    private void ApplyCaretTarget(IntPtr foreground, Rectangle rect)
     {
-        if (!Screen.AllScreens.Any(s => s.Bounds.Contains(rect.Location))) return;
-        UpdateCaretColor(rect.Left + 4, rect.Top + rect.Height / 2);
-        if (_motion.SetTarget(rect.Left, rect.Top, rect.Height))
+        if (foreground != IntPtr.Zero && foreground != _lastForeground)
         {
-            if (!_animTimer.Enabled)
+            _lastForeground = foreground;
+            _motion.Reset();
+            ClearLayered();
+        }
+
+        if (!Screen.AllScreens.Any(s => s.Bounds.Contains(rect.Location))) return;
+
+        var caretWidth = rect.Width is >= 1 and <= 3 ? rect.Width : Math.Clamp(SystemInformation.CaretWidth, 1, 2);
+        var wasActive = _motion.IsActive;
+        if (_motion.SetTarget(rect.Left, rect.Top, rect.Height, caretWidth))
+        {
+            EnsureWindowReady();
+            if (!wasActive)
             {
-                _lastFrameMs = _clock.ElapsedMilliseconds;
-                _animTimer.Start();
+                _ = SetWindowPos(Handle, HWND_TOPMOST, 0, 0, 0, 0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_NOSENDCHANGING);
+                _lastFrameTicks = Stopwatch.GetTimestamp();
             }
-            RenderMotion();
+            RenderLayered();
+            SetVSyncActive(true);
+        }
+        else if (wasActive)
+        {
+            SetVSyncActive(false);
+            ClearLayered();
         }
     }
 
-    /// <summary>カーソル付近の画面色を見て、明るい背景なら黒・暗い背景なら白のカーソル色にする。</summary>
-    private void UpdateCaretColor(int sampleX, int sampleY)
+    private void ScheduleWorkerColorSample(IntPtr foreground, Rectangle rect)
     {
+        var now = Environment.TickCount64;
+        if (foreground == _sampledForeground && now - Interlocked.Read(ref _lastColorSampleMs) < 1500)
+            return;
+        Interlocked.Exchange(ref _lastColorSampleMs, now);
+        ThreadPool.QueueUserWorkItem(_ => SampleCaretColorOnWorker(foreground, rect));
+    }
+
+    /// <summary>UI スレッドを止めないようワーカースレッド側で背景輝度をサンプルし、明暗に応じたキャレット色をキャッシュする。</summary>
+    private void SampleCaretColorOnWorker(IntPtr foreground, Rectangle rect)
+    {
+        var now = Environment.TickCount64;
+        if (foreground == _sampledForeground && now - Interlocked.Read(ref _lastColorSampleMs) < 1500)
+            return;
+        if (_motion.IsActive && foreground == _sampledForeground)
+            return;
+
+        Interlocked.Exchange(ref _lastColorSampleMs, now);
+        _sampledForeground = foreground;
+
         var hdc = GetDC(IntPtr.Zero);
         if (hdc == IntPtr.Zero) return;
         try
         {
-            var pixel = GetPixel(hdc, sampleX, sampleY);
+            var pixel = GetPixel(hdc, rect.Left + 6, rect.Top + rect.Height / 2);
             if (pixel == uint.MaxValue) return;
             var r = (int)(pixel & 0xFF);
             var g = (int)((pixel >> 8) & 0xFF);
             var b = (int)((pixel >> 16) & 0xFF);
             var luminance = (r * 299 + g * 587 + b * 114) / 1000;
-            var color = luminance >= 128 ? Color.FromArgb(24, 24, 24) : Color.FromArgb(245, 245, 245);
-            if (BackColor != color) BackColor = color;
+            _caretRgb = luminance >= 128 ? 0x141414 : 0xF2F2F2;
         }
         finally
         {
             _ = ReleaseDC(IntPtr.Zero, hdc);
         }
     }
+
+    private void SetVSyncActive(bool active)
+    {
+        lock (_vsyncLock)
+        {
+            if (_vsyncActive == active) return;
+            _vsyncActive = active;
+            if (active) Monitor.PulseAll(_vsyncLock);
+        }
+    }
+
+    private void RunVSyncLoop()
+    {
+        while (true)
+        {
+            lock (_vsyncLock)
+            {
+                while (!_vsyncActive && !_vsyncStop)
+                    Monitor.Wait(_vsyncLock);
+                if (_vsyncStop) return;
+            }
+
+            // モニター本来のリフレッシュレート (60Hz / 120Hz / 144Hz / 240Hz) に完全同期して起床する
+            if (DwmFlush() != 0)
+                Thread.Sleep(8);
+
+            if (!_vsyncActive || _vsyncStop) continue;
+            if (Interlocked.CompareExchange(ref _frameQueued, 1, 0) == 0)
+            {
+                try
+                {
+                    if (!IsDisposed && !_invoker.IsDisposed && _invoker.IsHandleCreated)
+                        _invoker.BeginInvoke(_onVSyncFrameDelegate);
+                    else
+                        Interlocked.Exchange(ref _frameQueued, 0);
+                }
+                catch (Exception ex) when (ex is ObjectDisposedException or InvalidOperationException)
+                {
+                    Interlocked.Exchange(ref _frameQueued, 0);
+                }
+            }
+        }
+    }
+
+    private void OnVSyncFrame()
+    {
+        Interlocked.Exchange(ref _frameQueued, 0);
+        if (!_enabled || _suppressed || IsDisposed)
+        {
+            SetVSyncActive(false);
+            ClearLayered();
+            return;
+        }
+
+        var nowTicks = Stopwatch.GetTimestamp();
+        var dtMs = Math.Clamp((nowTicks - _lastFrameTicks) * 1000f / Stopwatch.Frequency, 0.5f, 50f);
+        _lastFrameTicks = nowTicks;
+
+        if (_motion.Step(dtMs))
+        {
+            RenderLayered();
+        }
+        else
+        {
+            SetVSyncActive(false);
+            ClearLayered();
+        }
+    }
+
+    private void EnsureWindowReady()
+    {
+        EnsureGdiBuffer();
+        if (!Visible)
+        {
+            ClearLayered();
+            ShowOnTop();
+        }
+    }
+
+    private void EnsureGdiBuffer()
+    {
+        if (_dib != IntPtr.Zero) return;
+        _memDc = CreateCompatibleDC(IntPtr.Zero);
+        var bmi = new BITMAPINFO
+        {
+            biSize = Marshal.SizeOf<BITMAPINFO>(),
+            biWidth = StripWidth,
+            biHeight = -MaxBitmapHeight, // 上端原点のトップダウン DIB
+            biPlanes = 1,
+            biBitCount = 32,
+            biCompression = 0,
+        };
+        _dib = CreateDIBSection(_memDc, ref bmi, 0, out _dibBits, IntPtr.Zero, 0);
+        if (_dib != IntPtr.Zero)
+            _oldBitmap = SelectObject(_memDc, _dib);
+    }
+
+    private void RenderLayered()
+    {
+        EnsureGdiBuffer();
+        if (_dib == IntPtr.Zero || _dibBits == IntPtr.Zero || !IsHandleCreated) return;
+
+        var opacity = Math.Clamp(_motion.Opacity, 0f, 1f);
+        if (opacity <= 0.01f)
+        {
+            ClearLayered();
+            return;
+        }
+
+        var currentX = _motion.CurrentX;
+        var baseX = (int)MathF.Floor(currentX);
+        var baseY = (int)MathF.Round(_motion.CurrentY);
+        var height = Math.Clamp((int)MathF.Round(_motion.CurrentHeight), 10, MaxBitmapHeight);
+        var width = Math.Clamp(_motion.CurrentWidth, 1f, 2.5f);
+        var fracX = currentX - baseX;
+
+        var sameLineAsTarget = MathF.Abs(_motion.TargetY - _motion.CurrentY) < 4f;
+        var targetColStart = (int)MathF.Round(_motion.TargetX);
+        var targetColEnd = targetColStart + Math.Max(1, (int)MathF.Round(_motion.TargetWidth)) - 1;
+
+        var rgb = _caretRgb;
+        var r = (rgb >> 16) & 0xFF;
+        var g = (rgb >> 8) & 0xFF;
+        var b = rgb & 0xFF;
+
+        Span<int> rowPixels = stackalloc int[StripWidth];
+        Span<int> capPixels = stackalloc int[StripWidth];
+        var anyVisible = false;
+
+        for (var col = 0; col < StripWidth; col++)
+        {
+            var screenX = baseX + col;
+            // ネイティブキャレットが既に描画されている列には一切重ね塗りせず、太り・ぼやけを物理的にゼロにする
+            if (sameLineAsTarget && screenX >= targetColStart && screenX <= targetColEnd)
+            {
+                rowPixels[col] = 0;
+                capPixels[col] = 0;
+                continue;
+            }
+
+            var left = MathF.Max(fracX, col);
+            var right = MathF.Min(fracX + width, col + 1f);
+            var coverage = Math.Clamp(right - left, 0f, 1f);
+            if (coverage <= 0.01f)
+            {
+                rowPixels[col] = 0;
+                capPixels[col] = 0;
+                continue;
+            }
+
+            // サブピクセル補間中でも細線のコントラストが薄まってぼやけないようガンマ補正をかける
+            var boosted = MathF.Pow(coverage, 0.78f);
+            var a = (int)MathF.Round(255f * opacity * boosted);
+            if (a <= 1)
+            {
+                rowPixels[col] = 0;
+                capPixels[col] = 0;
+                continue;
+            }
+
+            anyVisible = true;
+            rowPixels[col] = PackPremultipliedArgb(a, r, g, b);
+            capPixels[col] = PackPremultipliedArgb((a * 3) / 4, r, g, b);
+        }
+
+        if (!anyVisible)
+        {
+            ClearLayered();
+            return;
+        }
+
+        for (var y = 0; y < height; y++)
+        {
+            var src = (y == 0 || y == height - 1) && height >= 6 ? capPixels : rowPixels;
+            var offset = y * StripWidth;
+            _pixelScratch[offset] = src[0];
+            _pixelScratch[offset + 1] = src[1];
+            _pixelScratch[offset + 2] = src[2];
+            _pixelScratch[offset + 3] = src[3];
+        }
+
+        Marshal.Copy(_pixelScratch, 0, _dibBits, StripWidth * height);
+
+        var dstPt = new Native.POINT { X = baseX, Y = baseY };
+        var size = new SIZE { cx = StripWidth, cy = height };
+        var srcPt = new Native.POINT { X = 0, Y = 0 };
+        var blend = new BLENDFUNCTION
+        {
+            BlendOp = AC_SRC_OVER,
+            BlendFlags = 0,
+            SourceConstantAlpha = 255,
+            AlphaFormat = AC_SRC_ALPHA,
+        };
+        _ = UpdateLayeredWindow(Handle, IntPtr.Zero, ref dstPt, ref size, _memDc, ref srcPt, 0, ref blend, ULW_ALPHA);
+        _layeredCleared = false;
+    }
+
+    private void ClearLayered()
+    {
+        if (_layeredCleared || !IsHandleCreated) return;
+        EnsureGdiBuffer();
+        if (_dib == IntPtr.Zero || _dibBits == IntPtr.Zero) return;
+
+        Marshal.WriteInt32(_dibBits, 0);
+        var dstPt = new Native.POINT { X = -32000, Y = -32000 };
+        var size = new SIZE { cx = 1, cy = 1 };
+        var srcPt = new Native.POINT { X = 0, Y = 0 };
+        var blend = new BLENDFUNCTION
+        {
+            BlendOp = AC_SRC_OVER,
+            BlendFlags = 0,
+            SourceConstantAlpha = 0,
+            AlphaFormat = AC_SRC_ALPHA,
+        };
+        _ = UpdateLayeredWindow(Handle, IntPtr.Zero, ref dstPt, ref size, _memDc, ref srcPt, 0, ref blend, ULW_ALPHA);
+        _layeredCleared = true;
+    }
+
+    private static int PackPremultipliedArgb(int a, int r, int g, int b)
+    {
+        a = Math.Clamp(a, 0, 255);
+        var pr = (r * a + 127) / 255;
+        var pg = (g * a + 127) / 255;
+        var pb = (b * a + 127) / 255;
+        return (a << 24) | (pr << 16) | (pg << 8) | pb;
+    }
+
+    private void ReleaseGdiResources()
+    {
+        if (_memDc != IntPtr.Zero && _oldBitmap != IntPtr.Zero)
+        {
+            _ = SelectObject(_memDc, _oldBitmap);
+            _oldBitmap = IntPtr.Zero;
+        }
+        if (_dib != IntPtr.Zero)
+        {
+            _ = DeleteObject(_dib);
+            _dib = IntPtr.Zero;
+            _dibBits = IntPtr.Zero;
+        }
+        if (_memDc != IntPtr.Zero)
+        {
+            _ = DeleteDC(_memDc);
+            _memDc = IntPtr.Zero;
+        }
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        lock (_vsyncLock)
+        {
+            _vsyncActive = false;
+            _vsyncStop = true;
+            Monitor.PulseAll(_vsyncLock);
+        }
+        UninstallHooks();
+        if (disposing)
+        {
+            _pollTimer.Dispose();
+        }
+        ReleaseGdiResources();
+        base.Dispose(disposing);
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct SIZE
+    {
+        public int cx;
+        public int cy;
+    }
+
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    private struct BLENDFUNCTION
+    {
+        public byte BlendOp;
+        public byte BlendFlags;
+        public byte SourceConstantAlpha;
+        public byte AlphaFormat;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct BITMAPINFO
+    {
+        public int biSize;
+        public int biWidth;
+        public int biHeight;
+        public short biPlanes;
+        public short biBitCount;
+        public int biCompression;
+        public int biSizeImage;
+        public int biXPelsPerMeter;
+        public int biYPelsPerMeter;
+        public int biClrUsed;
+        public int biClrImportant;
+    }
+
+    [DllImport("user32.dll")]
+    private static extern bool UpdateLayeredWindow(
+        IntPtr hwnd,
+        IntPtr hdcDst,
+        ref Native.POINT pptDst,
+        ref SIZE psize,
+        IntPtr hdcSrc,
+        ref Native.POINT pptSrc,
+        uint crKey,
+        ref BLENDFUNCTION pblend,
+        uint dwFlags);
+
+    [DllImport("user32.dll")]
+    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint flags);
 
     [DllImport("user32.dll")]
     private static extern IntPtr GetDC(IntPtr hWnd);
@@ -187,46 +633,27 @@ internal sealed class SmoothCaretWindow : PopupForm
     [DllImport("gdi32.dll")]
     private static extern uint GetPixel(IntPtr hdc, int x, int y);
 
-    private void OnAnimationTick()
-    {
-        if (!_enabled || _suppressed || IsDisposed)
-        {
-            _animTimer.Stop();
-            if (Visible) Hide();
-            return;
-        }
-        var now = _clock.ElapsedMilliseconds;
-        var dt = Math.Clamp(now - _lastFrameMs, 1, 64);
-        _lastFrameMs = now;
+    [DllImport("gdi32.dll")]
+    private static extern IntPtr CreateCompatibleDC(IntPtr hdc);
 
-        if (_motion.Step(dt))
-        {
-            RenderMotion();
-        }
-        else
-        {
-            _animTimer.Stop();
-            if (Visible) Hide();
-        }
-    }
+    [DllImport("gdi32.dll")]
+    private static extern bool DeleteDC(IntPtr hdc);
 
-    private void RenderMotion()
-    {
-        var x = (int)MathF.Round(_motion.CurrentX);
-        var y = (int)MathF.Round(_motion.CurrentY);
-        var h = Math.Max(10, (int)MathF.Round(_motion.CurrentHeight));
-        SetBounds(x, y, 2, h);
-        Opacity = Math.Clamp(_motion.Opacity, 0.0, 1.0);
-        if (!Visible && _motion.Opacity > 0.01f) ShowOnTop();
-    }
+    [DllImport("gdi32.dll")]
+    private static extern IntPtr CreateDIBSection(
+        IntPtr hdc,
+        ref BITMAPINFO pbmi,
+        uint usage,
+        out IntPtr ppvBits,
+        IntPtr hSection,
+        uint offset);
 
-    protected override void Dispose(bool disposing)
-    {
-        if (disposing)
-        {
-            _pollTimer.Dispose();
-            _animTimer.Dispose();
-        }
-        base.Dispose(disposing);
-    }
+    [DllImport("gdi32.dll")]
+    private static extern IntPtr SelectObject(IntPtr hdc, IntPtr h);
+
+    [DllImport("gdi32.dll")]
+    private static extern bool DeleteObject(IntPtr ho);
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmFlush();
 }
