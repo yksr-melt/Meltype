@@ -160,13 +160,14 @@ internal sealed class CompositionWindow : PopupForm
         var size = Measure(view);
         if (anchor is not null) _above = above ? (anchor.Value.Y, belowY) : null;
         var location = anchor ?? Location;
-        if (rightEdge is { } edge) location.X = Math.Max(Screen.FromPoint(new Point(edge - 1, location.Y)).WorkingArea.Left, edge - size.Width);
-        // 画面からはみ出さないようにする。
-        var screen = Screen.FromPoint(location).WorkingArea;
+        // 長い変換中文字列も、変換ボックスの幅は置くモニターの作業領域に収める。
+        var screen = Screen.FromPoint(rightEdge is { } edge ? new Point(edge - 1, location.Y) : location).WorkingArea;
+        var width = Math.Min(size.Width, screen.Width);
+        if (rightEdge is { } right) location.X = Math.Max(screen.Left, right - width);
         if (_above is { } a) location.Y = a.Bottom - size.Height >= screen.Top ? a.Bottom - size.Height : a.BelowY;
-        if (location.X + size.Width > screen.Right) location.X = Math.Max(screen.Left, screen.Right - size.Width);
+        if (location.X + width > screen.Right) location.X = Math.Max(screen.Left, screen.Right - width);
         if (location.Y + size.Height > screen.Bottom) location.Y = overlay ? Math.Max(screen.Top, screen.Bottom - size.Height) : Math.Max(screen.Top, location.Y - size.Height - 28);
-        SetBounds(location.X, location.Y, size.Width, size.Height);
+        SetBounds(location.X, location.Y, width, size.Height);
         ShowOnTop();
         Invalidate();
         UpdateMeaning(view);
@@ -334,22 +335,30 @@ internal sealed class CompositionWindow : PopupForm
         g.SmoothingMode = SmoothingMode.AntiAlias;
         using (var border = new Pen(Accent)) g.DrawRectangle(border, 0, 0, Width - 1, Height - 1);
 
+        const TextFormatFlags flags = TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding;
+        int MeasureText(string text) => TextRenderer.MeasureText(g, text, _textFont, Size.Empty, flags).Width;
         var y = 8;
+        var visibleWidth = Math.Max(1, ClientSize.Width - 20);
+        var clip = g.Save();
+        g.SetClip(new Rectangle(10, y - 2, visibleWidth, _textFont.Height + 8), CombineMode.Intersect);
         if (view.Clauses is { Count: > 0 } clauses)
         {
-            // 変換中: 文節ごとに下線を引き、選択中の文節は背景を付けて太線にする。
-            const TextFormatFlags flags = TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding;
-            var x = 10;
+            // 変換中は、選択中の文節が入るよう入力行だけを横にずらす。
+            var widths = clauses.Select(MeasureText).ToArray();
+            var selectedEnd = widths.Take(Math.Clamp(view.SelectedClause + 1, 0, widths.Length)).Sum(w => w + 4);
+            var overflow = widths.Sum(w => w + 4) > visibleWidth;
+            var x = 10 - Math.Max(0, selectedEnd - visibleWidth);
             for (var i = 0; i < clauses.Count; i++)
             {
-                var width = TextRenderer.MeasureText(g, clauses[i], _textFont, Size.Empty, flags).Width;
+                var width = widths[i];
                 var selected = i == view.SelectedClause;
                 if (selected)
                 {
                     using var highlight = new SolidBrush(Color.FromArgb(90, Accent));
                     g.FillRectangle(highlight, x - 1, y - 1, width + 2, _textFont.Height + 2);
                 }
-                DrawText(g, clauses[i], _textFont, new Point(x, y), _palette.Text, selected ? Blend(Background, Color.FromArgb(90, Accent)) : Background, flags);
+                if (overflow) TextRenderer.DrawText(g, clauses[i], _textFont, new Point(x, y), _palette.Text, flags | TextFormatFlags.PreserveGraphicsClipping);
+                else DrawText(g, clauses[i], _textFont, new Point(x, y), _palette.Text, selected ? Blend(Background, Color.FromArgb(90, Accent)) : Background, flags);
                 using (var underline = new Pen(selected ? Accent : _palette.Underline, selected ? 3 : 1))
                 {
                     g.DrawLine(underline, x + 1, y + _textFont.Height + 1, x + width - 2, y + _textFont.Height + 1);
@@ -360,22 +369,29 @@ internal sealed class CompositionWindow : PopupForm
         }
         else
         {
-            DrawText(g, view.Text, _textFont, new Point(10, y), _palette.Text, Background, TextFormatFlags.NoPrefix);
-            var textWidth = TextRenderer.MeasureText(g, view.Text, _textFont).Width;
-            if (view.CaretBack > 0 && view.CaretBack <= view.Text.Length)
+            var textWidth = MeasureText(view.Text);
+            var hasCaret = view.CaretBack > 0 && view.CaretBack <= view.Text.Length;
+            var cursor = hasCaret ? MeasureText(view.Text[..^view.CaretBack]) : textWidth;
+            var x = textWidth > visibleWidth ? 10 - Math.Max(0, cursor - visibleWidth + 2) : 10;
+            if (textWidth > visibleWidth)
+                TextRenderer.DrawText(g, view.Text, _textFont, new Point(x, y), _palette.Text, flags | TextFormatFlags.PreserveGraphicsClipping);
+            else
+                DrawText(g, view.Text, _textFont, new Point(10, y), _palette.Text, Background, TextFormatFlags.NoPrefix);
+            if (hasCaret)
             {
-                // 読みの途中を直している間は、カーソルの位置に縦線を引く
-                var caretX = 10 + TextRenderer.MeasureText(g, view.Text[..^view.CaretBack], _textFont, Size.Empty, TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding).Width;
+                // 読みを途中で直していてもキャレットを入力行の中に出す。
                 using var caret = new Pen(Accent, 2);
-                g.DrawLine(caret, caretX, y, caretX, y + _textFont.Height);
+                g.DrawLine(caret, x + cursor, y, x + cursor, y + _textFont.Height);
             }
             y += _textFont.Height;
             using (var underline = new Pen(_palette.Text, 1) { DashStyle = DashStyle.Dot })
             {
-                g.DrawLine(underline, 12, y, 10 + textWidth - 4, y);
+                g.DrawLine(underline, x + 2, y, x + textWidth - 4, y);
             }
             y += 8;
         }
+
+        g.Restore(clip);
 
         if (view.Typed is { Length: > 0 } typed)
         {
