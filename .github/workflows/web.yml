@@ -6,6 +6,9 @@ on:
       - 'web/**'
       - 'docs/*.md'
       - 'docs/images/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
       - '.github/workflows/web.yml'
   push:
     branches: [main]

@@ -18,6 +18,9 @@ on:
       - '.github/actions/linux-mozc/**'
       - 'src/Meltype.Core.CApi/**'
       - 'src/Meltype.Settings/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
       - '.github/workflows/linux.yml'
   push:
     branches: [main]
@@ -31,6 +34,9 @@ on:
       - 'src/Meltype.Core/**'
       - 'src/Meltype.Core.CApi/**'
       - 'src/Meltype.Settings/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
       - 'dictionaries/**'
       - 'nuget.config'
       - 'global.json'
