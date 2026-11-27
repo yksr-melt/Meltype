@@ -3038,6 +3038,20 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void BoundControlKey_ConfirmsCompositionWithoutSendingEnter()
+    {
+        var k = new Keyboard { ControlKeyBindings = "J=Enter" };
+        k.Type("nihongo ");
+        Assert.True(k.Host.View?.Converting == true, "変換から確定する");
+        var candidate = k.Showing;
+        k.Key(VirtualKeys.LControl);
+        k.Press('J');
+        k.Key(VirtualKeys.LControl, up: true);
+        Assert.Equal(candidate, k.Host.Document, "選んだ候補だけを入力欄へ渡す");
+        Assert.True(k.Showing is null, "変換を終える");
+    }
+
+    [Test]
     public static void Issue63_ControlKeysCanBeBound()
     {
         var k = new Keyboard { ControlKeyBindings = "T=F7; Y=F6" };
