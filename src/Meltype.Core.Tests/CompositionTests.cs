@@ -2643,6 +2643,23 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void RepeatedPeriods_OfferOneJapaneseStopPerKey()
+    {
+        foreach (var count in new[] { 3, 4, 6 })
+        {
+            var raw = new string('.', count);
+            var expected = new string('。', count);
+            var keyboard = new Keyboard();
+            keyboard.Type(raw + " ");
+            var candidates = keyboard.Host.View!.Candidates;
+            Assert.True(candidates.Contains(raw) && candidates.Contains(expected), string.Join(", ", candidates));
+            keyboard.SelectCandidate(candidates.ToList().IndexOf(expected));
+            keyboard.Type("\n");
+            Assert.Equal(expected, keyboard.Host.Document);
+        }
+    }
+
+    [Test]
     public static void Issue495_MoreThanThreeSlashesExtendTheEllipsis()
     {
         var expected = new[] { (3, "…"), (4, "……"), (6, "……"), (7, "………") };

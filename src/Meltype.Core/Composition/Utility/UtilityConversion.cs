@@ -79,6 +79,7 @@ internal static class UtilityConversions
     internal static readonly IUtilityConversion[] All =
     [
         new BracketConversion(),
+        new RepeatedPeriodsConversion(),
         new CalculatorConversion(),
         new SlashDateConversion(),
         new GitHubIssueConversion(),
