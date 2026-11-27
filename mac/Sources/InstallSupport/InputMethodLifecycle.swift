@@ -54,12 +54,22 @@ private func enabledSource(id: String) -> TISInputSource? {
     }
 }
 
+// 親と日本語モードは別々に登録され、入力メニューで選べるのは日本語モード。
+private func japaneseSourceID(at url: URL) throws -> String {
+    guard let bundleID = Bundle(url: url)?.bundleIdentifier else { throw Failure("Input method bundle has no identifier") }
+    return bundleID + ".Japanese"
+}
+
+// 動き続けるプロセスでは、有効な入力ソースの一覧が古いまま更新されない (macOS 26.6.2)。
+// 呼び出し元は、確かめるたびにこの補助ツールを新しく起動する。
+func isJapaneseInputSourceEnabled(at url: URL) throws -> Bool {
+    enabledSource(id: try japaneseSourceID(at: url)) != nil
+}
+
 // --start・--stop と違い、LaunchServices でアプリを開いたり数えたりせず TIS だけを使う。
 // そのため、この補助ツールを外へコピーせず Meltype.app の中から直接動かしてよい。
 func selectJapaneseInputSource(at url: URL) throws {
-    guard let bundleID = Bundle(url: url)?.bundleIdentifier else { throw Failure("Input method bundle has no identifier") }
-    // 親と日本語モードは別々に登録され、入力メニューで選べるのは日本語モード。
-    let id = bundleID + ".Japanese"
+    let id = try japaneseSourceID(at: url)
     var failure = Failure("Meltype's Japanese input source is not enabled")
     // 登録・メニューの再起動直後は、選択できるようになるまで最大 3 秒待つ。
     // 間隔と上限は、前の select-input-source.swift (0.3 秒ごとに 10 回) を引き継いだもので、測って決めた値ではない。

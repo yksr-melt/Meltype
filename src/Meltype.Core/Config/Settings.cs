@@ -297,6 +297,31 @@ public sealed class Settings
      Description("Keyboard モードで、入力欄・行の先頭か空白の直後に打った / $ @ と、続く名前 (空白まで) は変換せず、打つたびにそのままアプリに渡します (AI エージェントの /command・$skill・@ファイル名 の補完を選びやすく)。名前の後に空白を打つと、普通の自動判定に戻ります。文章の入力欄 (コードエディターのコード以外) の / は「・」として入り、Space で / にしてから名前を打つと、名前はそのまま渡します。")]
     public bool SigilWordsDirect { get; set; } = true;
 
+    // コード入力のコメントの記号は、設定画面でこの順に並ぶ。言語ごとに探せるよう、組で使う // と /* を並べ、使う人の少ない REM を最後にする
+    [Category("4. 判定"), DisplayName("コード入力の // コメント"),
+     Description("アプリの種類「コード」で、// の後ろを日英判定します (C・Java・JavaScript・Go・Rust など)。")]
+    public bool CodeCommentSlash { get; set; } = true;
+
+    [Category("4. 判定"), DisplayName("コード入力の /* … */ コメント"),
+     Description("アプリの種類「コード」で、/* … */ の中と、行頭の * に続く本文を日英判定します (C・Java・JavaScript・CSS・SQL など)。")]
+    public bool CodeCommentBlock { get; set; } = true;
+
+    [Category("4. 判定"), DisplayName("コード入力の # コメント"),
+     Description("アプリの種類「コード」で、# の後ろを日英判定します (Python・シェル・Ruby・YAML など)。#include・#region などの指令はコメントとみなしません。")]
+    public bool CodeCommentHash { get; set; } = true;
+
+    [Category("4. 判定"), DisplayName("コード入力の -- コメント"),
+     Description("アプリの種類「コード」で、-- の後ろを日英判定します (SQL・Lua・Haskell など)。ターミナルでは git checkout -- や npm run build -- のような引数の区切りの後ろも日英判定するので、SQL・Lua などを書かなければ OFF にすると英数のまま打てます。")]
+    public bool CodeCommentDash { get; set; } = true;
+
+    [Category("4. 判定"), DisplayName("コード入力の <!-- … --> コメント"),
+     Description("アプリの種類「コード」で、<!-- … --> の中を日英判定します (HTML・XML・Markdown など)。")]
+    public bool CodeCommentHtml { get; set; } = true;
+
+    [Category("4. 判定"), DisplayName("コード入力の REM コメント"),
+     Description("アプリの種類「コード」で、行頭の REM と空白の後ろを日英判定します (Windows のバッチファイル)。")]
+    public bool CodeCommentRem { get; set; } = true;
+
     [Category("6. 候補"), DisplayName("定型文を出す記号"),
      Description("Keyboard モードで、入力欄・行の先頭か空白の直後にこの記号と名前を打って Space / Tab を押すと、トレイの「定型文...」で登録した文に置き換えます (;sig + Space → 署名)。名前が登録したものでなければ何もしません。置き換えた直後に Esc を押すと、打った ;名前 に戻します。空にすると使いません。定型文を 1 つも登録していなければ、記号は今までどおり入力します。")]
     public string SnippetMark { get; set; } = ";";
@@ -316,6 +341,10 @@ public sealed class Settings
     [Category("7. 記号・スペース"), DisplayName("スペースの幅"),
      Description("日本語入力のときの Space (何も打っていないとき) と Shift + Space で入れるスペースです。標準は Microsoft IME と同じです。英数状態では、どちらも半角スペースです。")]
     public SpaceWidth SpaceWidth { get; set; } = SpaceWidth.Standard;
+
+    [Category("8. キー操作"), DisplayName("CapsLock で大文字を入力"),
+     Description("日本語入力中も、CapsLock が ON なら英字を大文字で入力します。OFF のときは CapsLock を見ずに、Shift だけで大文字・小文字を決めます (CapsLock を ON にしたままでも日本語に変換できます)。")]
+    public bool CapsLockTypesCapitals { get; set; }
 
     [Category("8. キー操作"), DisplayName("F9 / F10 の 1 回目は打ったまま"),
      Description("入力中の表示が英字でも、F10 (Ctrl+O) の 1 回目は常に打ったまま (小文字) の英字にして、2 回目以降で すべて大文字 → 先頭だけ大文字 と切り替えます (Microsoft IME・Google 日本語入力と同じ)。OFF のときは、英字で見えている語の 1 回目の F10 で すべて大文字になります。")]
@@ -340,6 +369,10 @@ public sealed class Settings
     [Category("8. キー操作"), DisplayName("変換中の F6〜F10 は選んだ文節だけに効かせる"),
      Description("文節に分けて変換しているとき、F6〜F10 (ひらがな・カタカナ・半角カタカナ・全角英数・半角英数) を全体ではなく、選んでいる文節だけに効かせます (今日は|Google の「今日は」だけをカタカナにするなど)。打った英字が分からない文節 (かな入力など) では何もしません。")]
     public bool FunctionKeysAffectSelectedClause { get; set; }
+
+    [Category("8. キー操作"), DisplayName("変換中の矢印キーを ATOK と同じにする"),
+     Description("変換中の ← → で文節の区切りを変え、Shift + ← → で文節を移ります。↓ で選んでいる文節までを確定し、残りは続けて変換できます。")]
+    public bool AtokConversionKeys { get; set; }
 
     [Category("8. キー操作"), DisplayName("Shift + Enter で選んだ文節までを確定"),
      Description("文節に分けて変換しているとき、Shift + Enter で、選んでいる文節までを確定し、残りの文節は未確定のまま (ひらがなに戻して) 続けて編集できるようにします。")]
@@ -807,10 +840,10 @@ public sealed class Settings
             if (profile is not null) InitializeToggleShortcuts(profile.Values, profile.Name, report);
     }
 
-    public const int CurrentVersion = 13;
+    public const int CurrentVersion = 14;
 
     [Category("10. 学習"), DisplayName("ユーザー学習を使う"),
-     Description("OFF にすると、選び直した変換・英字 / かなに直した語・予測変換の語句・選んだ英訳を新しく覚えません (今まで覚えた分は使います)。今まで覚えた分を消すときは、トレイの「学習データを消す」を使います。")]
+     Description("OFF にすると、選び直した変換・英字 / かなに直した語・予測変換の語句・選んだ英訳を新しく覚えず、今まで覚えた分も使いません。今まで覚えた分は消えず、ON に戻すとまた使います。消すときは、設定の「学習データ」を使います。")]
     public bool LearningEnabled { get; set; } = true;
 
     /// <summary>このアプリの確定した文字の入れ方 (<see cref="AppRule.Commit"/>)。アプリ別設定に無ければ自動。</summary>
@@ -917,15 +950,29 @@ public sealed class Settings
     public AppKind? KindFor(string? processName) =>
         FindRule(processName)?.Kind is { Length: > 0 } name ? AppKinds.FirstOrDefault(k => k.Name == name) : null;
 
-    /// <summary>アプリの独自の種類で変えた項目 (自動判定・ライブ変換) を反映した設定。変えていなければ自分自身。</summary>
+    /// <summary>
+    /// アプリの独自の種類で変えた項目 (自動判定・ライブ変換) を反映した設定。変えていなければ自分自身。
+    /// 上書きする値が同じ間は同じインスタンスを返す (未確定の入力の読みの控えは、設定のインスタンスが同じ間だけ使うので、キーごとに複製すると毎回読み直す)。
+    /// 全体の設定は書き換えず、変えるときは別のインスタンスにする前提 (<see cref="SettingsFile.Edit"/>)。
+    /// </summary>
     public Settings ForApp(string? processName)
     {
         if (KindFor(processName) is not { } kind || (kind.AutoDetection is null && kind.LiveConversion is null)) return this;
-        var copy = Clone();
-        if (kind.AutoDetection is { } auto) copy.AutoDetection = auto;
-        if (kind.LiveConversion is { } live) copy.LiveConversion = live;
-        return copy;
+        var overrides = (kind.AutoDetection, kind.LiveConversion);
+        var copies = AppCopies.GetOrCreateValue(this);
+        lock (copies)
+        {
+            if (copies.TryGetValue(overrides, out var cached)) return cached;
+            var copy = Clone();
+            if (kind.AutoDetection is { } auto) copy.AutoDetection = auto;
+            if (kind.LiveConversion is { } live) copy.LiveConversion = live;
+            copies[overrides] = copy;
+            return copy;
+        }
     }
+
+    // Clone (MemberwiseClone) が写さないように、フィールドではなく外の表に持つ
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Settings, Dictionary<(bool? AutoDetection, bool? LiveConversion), Settings>> AppCopies = [];
 
     private AppRule? FindRule(string? processName)
     {
@@ -1031,6 +1078,7 @@ public sealed class Settings
         // v9: Zenzai を既定 ON にした。プロファイルの値にも効くよう、読み込む前の JSON で移す (MigrateToV9)。
         // v11: GitHubIssueCandidates を消した。プロファイルの値にも効くよう、読み込む前の JSON で移す (MigrateToV11)。
         // v13: ShowTypedKeys (真偽値) を TypedKeys (選択肢) にした。読み込む前の JSON で移す (MigrateToV13)。
+        // v14: コード入力のコメントの記号を 1 つずつ ON / OFF にする設定を足した。既定は今までの動きと同じすべて ON なので、移す値は無い。
         SettingsVersion = CurrentVersion;
         return true;
     }

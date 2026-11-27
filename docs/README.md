@@ -22,6 +22,7 @@ Mac・Linux・Android はプレビュー版です。Android の APK は、デス
 | --- | --- |
 | 構成・ビルド・テスト・Windows のパッケージ | [開発](dev/DEVELOPMENT.md) |
 | Windows の TSF・プロセス・通信・DLL 更新 | [Meltype IME の設計](dev/TSF_DESIGN.md) |
+| コードエディター・ターミナルの判定 | [コード入力の設計](dev/CODE_INPUT.md) |
 | macOS のビルド・入力ソースの登録 | [mac/README.md](../mac/README.md) |
 | Linux のビルド・パッケージ | [linux/README.md](../linux/README.md) |
 | TTY 版のビルド | [tui/README.md](../tui/README.md) |

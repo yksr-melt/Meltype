@@ -9,7 +9,7 @@ namespace Meltype.Ime;
 
 /// <summary>
 /// データフォルダーの学習データ: 選び直した変換 (conversions.json)・英字 / かなに直した語 (languages.json)・
-/// 予測変換の語句 (phrases.txt)・選んだ英訳 (translations.json)。
+/// 予測変換の語句 (phrases.txt)・選んだ英訳 (translations.json)・入力欄ごとの入力モード (fieldmodes.json)。
 /// 入力する Meltype は <see cref="MeltypeRuntime"/> の中に 1 つ持ち、設定アプリは <see cref="OpenStandalone"/> で開く。
 /// どちらも、ほかのプロセスが書き換えたファイルは保存せずに読み直す (<see cref="Config.FileStamp"/>)。一覧を返す前・消す前にも読み直す。
 /// </summary>
@@ -22,6 +22,8 @@ public sealed class LearningData(string dataDirectory)
     internal PhraseHistory Phrases { get; } = new(Path.Combine(dataDirectory, "phrases.txt"));
 
     internal TranslationHistory Translations { get; } = new(Path.Combine(dataDirectory, "translations.json"));
+
+    internal FieldModes FieldModes { get; } = new(Path.Combine(dataDirectory, "fieldmodes.json"));
 
     /// <summary>
     /// 入力する Meltype の外 (設定アプリ) で開く。判定器は作らないので、学習した語が今有効か (<see cref="LearnedLanguage.Active"/>) を決める
@@ -82,6 +84,7 @@ public sealed class LearningData(string dataDirectory)
         LanguageMemory.Clear();
         Phrases.Clear();
         Translations.Clear();
+        FieldModes.Clear();
         Diagnostics.Log.Info("学習データをリセットしました。");
     }
 
@@ -95,5 +98,6 @@ public sealed class LearningData(string dataDirectory)
         LanguageMemory.Refresh();
         Phrases.Refresh();
         Translations.Refresh();
+        FieldModes.Refresh();
     }
 }

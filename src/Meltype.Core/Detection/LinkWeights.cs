@@ -52,7 +52,7 @@ internal sealed class LinkWeights
         [LinkFeature.SpelledSokuon] = 2,
         [LinkFeature.VowelAfterEnglish] = 1,
         // 語にならないかな 1 音と同じ重さにする (っ そのものの重み LightKanaCost と合わせて UnknownKanaCost)
-        [LinkFeature.DanglingSokuon] = CompositionDetector.UnknownKanaCost - CompositionDetector.LightKanaCost,
+        [LinkFeature.DanglingSokuon] = ReadingLattice.UnknownKanaCost - ReadingLattice.LightKanaCost,
     });
 
     private readonly double[] _values;
