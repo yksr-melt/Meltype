@@ -939,15 +939,29 @@ public sealed class Settings
     public AppKind? KindFor(string? processName) =>
         FindRule(processName)?.Kind is { Length: > 0 } name ? AppKinds.FirstOrDefault(k => k.Name == name) : null;
 
-    /// <summary>アプリの独自の種類で変えた項目 (自動判定・ライブ変換) を反映した設定。変えていなければ自分自身。</summary>
+    /// <summary>
+    /// アプリの独自の種類で変えた項目 (自動判定・ライブ変換) を反映した設定。変えていなければ自分自身。
+    /// 上書きする値が同じ間は同じインスタンスを返す (未確定の入力の読みの控えは、設定のインスタンスが同じ間だけ使うので、キーごとに複製すると毎回読み直す)。
+    /// 全体の設定は書き換えず、変えるときは別のインスタンスにする前提 (<see cref="SettingsFile.Edit"/>)。
+    /// </summary>
     public Settings ForApp(string? processName)
     {
         if (KindFor(processName) is not { } kind || (kind.AutoDetection is null && kind.LiveConversion is null)) return this;
-        var copy = Clone();
-        if (kind.AutoDetection is { } auto) copy.AutoDetection = auto;
-        if (kind.LiveConversion is { } live) copy.LiveConversion = live;
-        return copy;
+        var overrides = (kind.AutoDetection, kind.LiveConversion);
+        var copies = AppCopies.GetOrCreateValue(this);
+        lock (copies)
+        {
+            if (copies.TryGetValue(overrides, out var cached)) return cached;
+            var copy = Clone();
+            if (kind.AutoDetection is { } auto) copy.AutoDetection = auto;
+            if (kind.LiveConversion is { } live) copy.LiveConversion = live;
+            copies[overrides] = copy;
+            return copy;
+        }
     }
+
+    // Clone (MemberwiseClone) が写さないように、フィールドではなく外の表に持つ
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Settings, Dictionary<(bool? AutoDetection, bool? LiveConversion), Settings>> AppCopies = [];
 
     private AppRule? FindRule(string? processName)
     {
