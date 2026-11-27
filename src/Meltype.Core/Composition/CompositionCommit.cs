@@ -192,7 +192,7 @@ internal static class CompositionCommit
         var previous = state.Correctable[^1];
         List<CommitRecord> targets = [];
         ComposedText? replacement = null;
-        if (!previous.English && english && env.Detector.IsDefinitelyEnglish(raw))
+        if (!previous.English && english && env.Detector.Words.IsDefinitelyEnglish(raw))
         {
             // 前の語の後ろを Space で区切らずに続けたとき (Enter で確定したときなど) は直さない。英語にすると前の語とつながる (あれ + ON → areON)
             if (!previous.SpaceIntended) return null;
@@ -219,7 +219,7 @@ internal static class CompositionCommit
         }
         // 前に英語が続いていた普通の英単語 (Are you の you) は、英文の続きとして打ったもの。後ろが日本語 (すし？) でも日本語に直さない (#265)。
         // 日本語由来の語 (I love sushi + がすき) は、日本語のつもりのことがあるので今までどおり直す。
-        else if (previous.English && !(previous.AfterEnglish && !CompositionDetector.IsJapaneseOriginWord(previous.Raw.ToLowerInvariant())) && !english && !env.Detector.IsAmbiguousWord(raw) && raw.Any(char.IsAsciiLetter))
+        else if (previous.English && !(previous.AfterEnglish && !WordJudge.IsJapaneseOriginWord(previous.Raw.ToLowerInvariant())) && !english && !env.Detector.Words.IsAmbiguousWord(raw) && raw.Any(char.IsAsciiLetter))
         {
             // 英語で確定した語を日本語に (Space で空白を入れていたら取る)。
             targets = [previous];
@@ -264,7 +264,7 @@ internal static class CompositionCommit
         if (!preserveText)
             text = NotationRules.Commit(text, corrected?.Text.Text ?? env.Context().PrecedingText, env.Context().FollowingText, env.Settings);
         // 英語とも日本語とも読める語を、文脈を決めずに (選び直さずに) 確定したときだけ、後で確定し直せるようにしておく。
-        if (!chosen && env.Detector.IsAmbiguousWord(raw))
+        if (!chosen && env.Detector.Words.IsAmbiguousWord(raw))
         {
             // 前の語の後に Space で区切って続けたときだけつなげる (それ以外は新しい並び)。
             if (state.Correctable.Count > 0 && !state.Correctable[^1].SpaceIntended) state.Correctable.Clear();

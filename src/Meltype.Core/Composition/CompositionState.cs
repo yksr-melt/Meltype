@@ -184,7 +184,7 @@ internal sealed class CompositionState
     // かな配列 (JIS かな以外。設定が変わったら作り直す。issue #1415)
     public KanaLayoutEngine KanaLayout = new(Input.KanaLayout.Jis);
 
-    /// <summary>ライブ変換の控え (<see cref="CompositionConversion.LiveClauses"/>)。</summary>
+    /// <summary>ライブ変換の控え (<see cref="CompositionConversion.LiveClauses"/>)。入力を始めるときに空にする。</summary>
     public readonly Dictionary<string, List<(string Reading, string? Engine, string Text)>> LiveCache = new(StringComparer.Ordinal);
 
     // 最後に押したキーの修飾キー (Shift は大文字・文節の区切り・Shift+Space に使う)。

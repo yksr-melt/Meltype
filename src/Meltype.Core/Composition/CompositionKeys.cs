@@ -73,7 +73,7 @@ internal static class CompositionKeys
             if (vk == VirtualKeys.OemMinus && !state.Shift && !state.Modifier && part.Length > 0 &&
                 env.Detector.Romaji.AnalyzeFragment(part) is { IsValid: true, Partial: "" })
             {
-                var prefix = !judging.Letters.ToString().Contains('-') && CompositionDetector.IsHyphenPrefix(part);
+                var prefix = !judging.Letters.ToString().Contains('-') && WordJudge.IsHyphenPrefix(part);
                 judging.Letters.Append('-');
                 judging.LastKeyTime = e.TimeMs;
                 if (prefix)
@@ -543,7 +543,7 @@ internal static class CompositionKeys
     private static bool SpaceCommitsAlphanumeric(CompositionTextState text, CompositionEnv env) =>
         CompositionText.IsAlphanumericAt(CompositionText.Read(text, env), env, final: true) && !(text.Mode == DisplayMode.Auto && CompositionText.IsNumeric(CompositionText.Read(text, env)) && CompositionText.Raw(CompositionText.Read(text, env)).All(char.IsAsciiDigit) && env.Context().PrecedingEnglish != true);
 
-    private static bool SpaceCommitsAutoEnglish(CompositionTextState text, CompositionEnv env) => text.Mode == DisplayMode.Auto && env.Detector.IsEnglishAtWordEnd(CompositionText.Raw(CompositionText.Read(text, env)), !env.Settings.AutoDetection);
+    private static bool SpaceCommitsAutoEnglish(CompositionTextState text, CompositionEnv env) => text.Mode == DisplayMode.Auto && env.Detector.Words.IsEnglishAtWordEnd(CompositionText.Raw(CompositionText.Read(text, env)), !env.Settings.AutoDetection);
 
     /// <summary>
     /// Space の分岐で変換を始める (StartConversion に行く) 場面か。Tab で始めるときも同じ場面に限る (issue #219)。

@@ -515,6 +515,9 @@ internal static class CompositionConversion
         return clauses;
     }
 
+    /// <summary>打ったものに英数字があるか (<see cref="KeepTypedSymbols"/> が見る。ライブ変換の控えの key にも入れる)。</summary>
+    private static bool TypedLetterOrDigit(CompositionInput input) => input.Text.TypedRaw.Any(char.IsLetterOrDigit);
+
     /// <summary>
     /// かなと一緒に打った記号 (読みの 、。？「 など。CompositionText.Symbol と TypedMarks が決めた文字) は、最初の候補でも読みの文字のままにする。
     /// 変換エンジンの答え・Mozc の学習・変換履歴は、記号を別の文字にすることがある
@@ -527,7 +530,7 @@ internal static class CompositionConversion
     /// </summary>
     private static void KeepTypedSymbols(CompositionInput input, IReadOnlyList<Clause> clauses, string reading)
     {
-        if (!input.Text.TypedRaw.Any(char.IsLetterOrDigit)) return;
+        if (!TypedLetterOrDigit(input)) return;
         var typed = reading.Where(IsSymbol).ToList();
         if (clauses.Sum(c => c.Text.Count(IsSymbol)) != typed.Count) return;
         var next = 0;
@@ -555,7 +558,7 @@ internal static class CompositionConversion
         var lower = raw.ToLowerInvariant();
         if (!SuruRomajiKeepJapanese.Contains(lower)) return false;
         var reading = env.Detector.Romaji.ConvertLenient(lower, final: true);
-        return CompositionDetector.IsSuruForm(reading);
+        return WordJudge.IsSuruForm(reading);
     }
 
     /// <summary>
@@ -563,7 +566,7 @@ internal static class CompositionConversion
     /// (なら → 奈良、しか → 歯科、なの → 名の、した → 下、したい → 死体)。
     /// </summary>
     private static bool IsParticleAfterEnglish(Clause clause) =>
-        (NounAttachedWords.Contains(clause.Reading) || CompositionDetector.SuruForms.Any(clause.Reading.StartsWith)) &&
+        (NounAttachedWords.Contains(clause.Reading) || WordJudge.SuruForms.Any(clause.Reading.StartsWith)) &&
         clause.Text.Length > 0 && !IsKana(clause.Text[0]) && clause.Text != clause.Reading;
 
     // 名詞に付く付属語。文節の読み全体と比べるので、変換エンジンが 1 つの文節にまとめる形 (には・なので) も並べる。
@@ -921,7 +924,7 @@ internal static class CompositionConversion
 
     /// <summary>
     /// ライブ変換: Space を押したときと同じく、文脈・手がかり辞書・学習を使って文節ごとに変換した結果を見せる。
-    /// 打つたびに呼ばれるので、かな・文脈・学習の状態が同じならキャッシュを使う。
+    /// 打つたびに呼ばれるので、1 回の入力の間だけ控えを使う。
     /// </summary>
     internal static ComposedText LiveConvert(CompositionInput input, CompositionEnv env, string kana, bool afterEnglish, string before)
     {
@@ -940,7 +943,8 @@ internal static class CompositionConversion
     /// <summary>ライブ変換の文節 (読み・変換エンジンの答え・学習などで選び直した後の文字)。予測変換で最後の文節を探すときも、同じ打鍵で変換した結果を使う。</summary>
     internal static List<(string Reading, string? Engine, string Text)> LiveClauses(CompositionInput input, CompositionEnv env, string kana, bool afterEnglish, string before)
     {
-        var key = string.Join("\u0001", kana, afterEnglish, before, EnglishInComposition(input, env), env.Context().FollowingText, env.Services.History?.Version);
+        // 辞書・学習・変換エンジンは入力の間は変わらない (控えは入力を始めるときに空にする)。打ったものに英数字があるか (KeepTypedSymbols) は入力の途中で変わる
+        var key = string.Join("\u0001", kana, afterEnglish, before, EnglishInComposition(input, env), env.Context().FollowingText, TypedLetterOrDigit(input));
         if (env.LiveCache.TryGetValue(key, out var cached)) return cached;
         var clauses = ConvertJapaneseSegment(input, env.WithoutWaiting(), kana, afterEnglish, before, zenzai: true).Select(c => (c.Reading, c.Engine, c.Text)).ToList();
         if (env.LiveCache.Count > 256) env.LiveCache.Clear();
