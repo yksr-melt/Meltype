@@ -492,4 +492,35 @@ internal static class WindowsTests
         Assert.True(!off.Contains("サインイン"), "OFF はサインイン時に更新しない");
         Assert.True(off.Contains("「Meltype 1.2.3 に更新して再起動」"), "OFF はトレイのメニューの項目名で案内する");
     }
+
+    [Test]
+    public static void ColorSwatch_IsDrawnForColorCandidates()
+    {
+        using var window = new CompositionWindow();
+        var view = new CompositionView("#3b82f6", [], -1, false, "Tab 予測の候補を選ぶ",
+            Predictions: ["rgb(59, 130, 246)", "hsl(217, 91%, 60%)"],
+            Colors: ["#3b82f6ff", "#3c83f6ff"]);
+        window.ShowView(view, new Point(-5000, -5000));
+        using var bmp = new Bitmap(window.Width, window.Height);
+        window.DrawToBitmap(bmp, new Rectangle(0, 0, window.Width, window.Height));
+        Assert.True(ContainsColor(bmp, 59, 130, 246), $"色見本 (59, 130, 246) が描画されている ({bmp.Width}x{bmp.Height})");
+
+        // Core から Colors が渡されていない候補には、文字が #3b82f6 でも色見本を描かない
+        var plainView = new CompositionView("#3b82f6", ["#3b82f6", "＃３ｂ８２ｆ６"], 0, true, "");
+        window.ShowView(plainView, new Point(-5000, -5000));
+        using var plainBmp = new Bitmap(window.Width, window.Height);
+        window.DrawToBitmap(plainBmp, new Rectangle(0, 0, window.Width, window.Height));
+        Assert.True(!ContainsColor(plainBmp, 59, 130, 246), "Colors が null なら色見本を描画しない");
+
+        static bool ContainsColor(Bitmap image, byte r, byte g, byte b)
+        {
+            for (var x = 0; x < image.Width; x++)
+                for (var y = 0; y < image.Height; y++)
+                {
+                    var p = image.GetPixel(x, y);
+                    if (p.R == r && p.G == g && p.B == b) return true;
+                }
+            return false;
+        }
+    }
 }
