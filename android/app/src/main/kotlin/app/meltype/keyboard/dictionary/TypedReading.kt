@@ -12,17 +12,25 @@ import app.meltype.keyboard.core.coreDataDirectory
  * 読みが英字のまま入っても、変換の読み (ひらがな) と食い違わないようにする。
  */
 internal object TypedReading {
-    /** 英字が無ければ、前後の空白を除いただけで返す。Core を読み込めないときも、打ったまま返す。 */
-    fun toHiragana(context: Context, input: String): String {
+    /**
+     * 英字が無ければ、前後の空白を除いただけで返す。英字があって Core でひらがなにできなかったら null
+     * (打った英字のまま登録すると、読みがひらがなの変換と一致しない。呼び出し側は登録を止めて理由を出す)。
+     */
+    fun toHiragana(context: Context, input: String): String? = toHiragana(input) { text ->
+        NativeApi.typedReading(
+            coreDataDirectory(context.applicationContext).absolutePath.encodeToByteArray(),
+            text.encodeToByteArray(),
+        )?.decodeToString()
+    }
+
+    /** [convert] は Core でひらがなにする (できなければ null)。Core を読み込めない (LinkageError) ときも null。 */
+    internal fun toHiragana(input: String, convert: (String) -> String?): String? {
         val text = input.trim()
         if (text.none { it in 'a'..'z' || it in 'A'..'Z' }) return text
         return try {
-            NativeApi.typedReading(
-                coreDataDirectory(context.applicationContext).absolutePath.encodeToByteArray(),
-                text.encodeToByteArray(),
-            )?.decodeToString() ?: text
+            convert(text)
         } catch (_: LinkageError) {
-            text
+            null
         }
     }
 }

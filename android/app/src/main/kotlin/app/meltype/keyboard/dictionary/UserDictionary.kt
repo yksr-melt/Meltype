@@ -70,5 +70,6 @@ object CoreUserDictionary {
         null
     }
 
-    private const val UNAVAILABLE = "ユーザー辞書を読み書きできませんでした。"
+    /** Core を呼べなかったときの理由 (読みをひらがなにできなかったときも、登録を止めてこれを出す)。 */
+    const val UNAVAILABLE = "ユーザー辞書を読み書きできませんでした。"
 }

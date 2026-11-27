@@ -544,8 +544,9 @@ class MainActivity : Activity() {
                 override fun afterTextChanged(s: Editable?) {
                     val typed = s?.toString().orEmpty()
                     val hasLetters = typed.any { it in 'a'..'z' || it in 'A'..'Z' }
-                    preview.text = if (hasLetters) "→ " + TypedReading.toHiragana(this@MainActivity, typed) else ""
-                    preview.visibility = if (hasLetters) View.VISIBLE else View.GONE
+                    val kana = if (hasLetters) TypedReading.toHiragana(this@MainActivity, typed) else null
+                    preview.text = if (kana != null) "→ " + kana else ""
+                    preview.visibility = if (kana != null) View.VISIBLE else View.GONE
                 }
             })
             word = inputField(this, "単語", original?.word.orEmpty(), "Meltype")
@@ -557,7 +558,12 @@ class MainActivity : Activity() {
             error.visibility = View.VISIBLE
         }
         button(content, "保存") {
+            // 英字の読みをひらがなにできなければ、登録しない (英字のまま残ると変換に出ない)
             val kana = TypedReading.toHiragana(this@MainActivity, reading.text.toString())
+            if (kana == null) {
+                failed(CoreUserDictionary.UNAVAILABLE)
+                return@button
+            }
             // 登録できない理由 (読みの先頭の # など) は Core が返す。設定アプリと同じ文
             val result = if (original == null) CoreUserDictionary.add(this@MainActivity, kana, word.text.toString())
                 else CoreUserDictionary.edit(this@MainActivity, original, kana, word.text.toString())
