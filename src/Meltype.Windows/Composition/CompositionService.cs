@@ -30,7 +30,7 @@ internal sealed class CompositionService : IDisposable
         _invoker = invoker;
         Runtime = runtime;
         _settings = settings;
-        _smoothCaret = new SmoothCaretWindow(invoker, () => Focus.CaretBounds(waitMs: 25));
+        _smoothCaret = new SmoothCaretWindow(invoker);
         _smoothCaret.SetEnabled(settings().UsesSmoothCaret);
         runtime.SettingsChanged += _ =>
         {
@@ -66,12 +66,27 @@ internal sealed class CompositionService : IDisposable
 
     public FocusInspector Focus { get; } = new();
 
-    /// <summary>TSF 等からの入力・キャレット移動を受けてスムーズカーソルを追従させる。</summary>
-    public void NotifyCaretActivity()
+    public bool UsesSmoothCaret => _settings().UsesSmoothCaret;
+
+    /// <summary>Meltype IME (TSF) の出来事に付随するキャレット情報をスムーズカーソルへ反映する。</summary>
+    public void NotifyImeCaret(uint thread, Rectangle? caret, bool isInput, bool focusEntered)
     {
-        if (!_settings().UsesSmoothCaret) return;
-        if (!_invoker.IsDisposed && _invoker.IsHandleCreated)
-            _invoker.BeginInvoke(() => _smoothCaret.NotifyActivity());
+        if (!UsesSmoothCaret || _invoker.IsDisposed || !_invoker.IsHandleCreated) return;
+        _invoker.BeginInvoke(() => _smoothCaret.OnImeCaret(thread, caret, isInput, focusEntered));
+    }
+
+    /// <summary>Meltype IME (TSF) の編集反映後に届いたキャレット矩形をスムーズカーソルへ反映する。</summary>
+    public void NotifyCaretRect(uint thread, Rectangle caret)
+    {
+        if (!UsesSmoothCaret || _invoker.IsDisposed || !_invoker.IsHandleCreated) return;
+        _invoker.BeginInvoke(() => _smoothCaret.OnCaretRect(thread, caret));
+    }
+
+    /// <summary>対象スレッドで Meltype IME が受け持たなくなった・フォーカスが外れたときにスムーズカーソルを消す。</summary>
+    public void ClearCaretThread(uint thread)
+    {
+        if (_invoker.IsDisposed || !_invoker.IsHandleCreated) return;
+        _invoker.BeginInvoke(() => _smoothCaret.ClearThread(thread));
     }
 
     /// <summary>
@@ -86,14 +101,12 @@ internal sealed class CompositionService : IDisposable
         if (!paste)
         {
             SendText(count, text);
-            _smoothCaret.NotifyActivity();
             return;
         }
         DeleteBackward(count);
         if (TryPaste(text.ReplaceLineEndings("\r\n")))
         {
             Diagnostics.Log.Info($"確定した文字を貼り付けで入力しました ({text.Length} 文字)。");
-            _smoothCaret.NotifyActivity();
             return;
         }
         Diagnostics.Log.Warn("貼り付けられなかったので、1 文字ずつ送ります (改行は Shift+Enter)。");
@@ -102,7 +115,6 @@ internal sealed class CompositionService : IDisposable
             if (i > 0) KeyInjector.SendShortcut(VirtualKeys.Shift, VirtualKeys.Return);
             SendText(0, line);
         }
-        _smoothCaret.NotifyActivity();
     }
 
     private static void SendText(int count, string text)
@@ -353,10 +365,6 @@ internal sealed class CompositionService : IDisposable
 
     public void Show(CompositionView view)
     {
-        var smooth = _settings().UsesSmoothCaret;
-        _window.SetSmoothCaret(smooth);
-        _smoothCaret.SetEnabled(smooth);
-        _smoothCaret.SetSuppressed(true);
         if (_window.Visible)
         {
             // Windows の検索の画面の横に出しているときは、確定しても動かさない。左なら右の端を、上なら下の端をそろえる (広がっても検索の画面の裏に入らないように)
@@ -501,8 +509,6 @@ internal sealed class CompositionService : IDisposable
         _committedWhileVisible = "";
         _beside = BesideSearch.None;
         if (_window.Visible) _window.Hide();
-        _smoothCaret.SetSuppressed(false);
-        _smoothCaret.NotifyActivity();
     }
 
     // Windows の検索・スタートメニューの画面のプロセス (Windows 10 / 11)

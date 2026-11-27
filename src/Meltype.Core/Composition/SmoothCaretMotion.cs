@@ -1,16 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 shiromenya
 
-namespace Meltype.Config;
+namespace Meltype.Composition;
 
 /// <summary>
-/// スムーズカーソルの位置補間とフェード・スパイク除去を計算する純粋な状態マシン。
-/// ゆったりとした指数減衰イージングでふわっと滑らかに追従し、
-/// 逆戻り座標スパイクの抑止・出発時のソフトフェードイン・到着時のハンドオフを行う。
+/// スムーズカーソルの位置補間・フェード・スパイク除去・アプリ自前補間の検知を行う純粋な状態マシン。
+/// ゆったりとした指数減衰イージングで追従し、1 回の入力に対してアプリ自身のキャレットが小刻みに補間移動している場合は自動で抑止する。
 /// </summary>
 public sealed class SmoothCaretMotion
 {
-    // ゆったりふわっと減速する指数減衰の時定数 (1 文字移動で約 160ms、長距離移動で約 200ms かけて柔らかく吸い付く)
     private const float TauMs = 46f;
     private const float ArriveSnapPx = 0.35f;
     private const float FadeStartDistancePx = 2.0f;
@@ -23,6 +21,9 @@ public sealed class SmoothCaretMotion
     private const float ActiveOpacity = 0.92f;
     private const float SpikeRevertWindowMs = 40f;
     private const float SpikeRevertTolerancePx = 1.5f;
+    private const float MaxNativeSubStepPx = 28f;
+    private const int NativeSubStepsToSuppress = 3;
+    private const int DiscreteInputsToRecover = 3;
 
     private bool _initialized;
     private float _elapsedMs;
@@ -30,6 +31,13 @@ public sealed class SmoothCaretMotion
     private float _previousTargetY;
     private float _sinceTargetChangeMs = 1000f;
     private bool _hasPreviousTarget;
+
+    private float _lastRawX;
+    private float _lastRawY;
+    private int _stepsInCurrentInput;
+    private int _sameDirStepsInInput;
+    private float _lastStepDirX;
+    private int _discreteInputStreak;
 
     public float CurrentX { get; private set; }
     public float CurrentY { get; private set; }
@@ -42,6 +50,42 @@ public sealed class SmoothCaretMotion
     public float Opacity { get; private set; }
     public bool IsActive { get; private set; }
 
+    /// <summary>アプリ自身のキャレットが補間移動していると判定し、オーバーレイを自動抑止しているか。</summary>
+    public bool NativeAnimationDetected { get; private set; }
+
+    /// <summary>打鍵・変換・確定など 1 回の離散的な入力操作を記録する。</summary>
+    public void NotifyInput()
+    {
+        if (_stepsInCurrentInput == 1)
+        {
+            _discreteInputStreak++;
+            if (_discreteInputStreak >= DiscreteInputsToRecover)
+                NativeAnimationDetected = false;
+        }
+        else if (_stepsInCurrentInput >= 2)
+        {
+            _discreteInputStreak = 0;
+        }
+
+        _stepsInCurrentInput = 0;
+        _sameDirStepsInInput = 0;
+        _lastStepDirX = 0f;
+    }
+
+    /// <summary>入力欄へのフォーカス移動時など、アニメーションさせずに現在位置だけ合わせる。</summary>
+    public void Snap(float x, float y, float height, float width = 2f)
+    {
+        height = Math.Clamp(height, 10f, 64f);
+        width = Math.Clamp(width, 1f, 3f);
+        _initialized = true;
+        _lastRawX = x;
+        _lastRawY = y;
+        _stepsInCurrentInput = 0;
+        _sameDirStepsInInput = 0;
+        _lastStepDirX = 0f;
+        SnapTo(x, y, height, width);
+    }
+
     /// <summary>新しいターゲット矩形を設定する。アニメーションが必要なら true を返す。</summary>
     public bool SetTarget(float x, float y, float height, float width = 2f, bool nativeCaretMasked = false)
     {
@@ -50,16 +94,41 @@ public sealed class SmoothCaretMotion
         if (!_initialized)
         {
             _initialized = true;
+            _lastRawX = x;
+            _lastRawY = y;
             SnapTo(x, y, height, width);
             return false;
         }
 
-        var targetDx = MathF.Abs(x - TargetX);
-        var targetDy = MathF.Abs(y - TargetY);
-        if (targetDx < 0.5f && targetDy < 0.5f && MathF.Abs(height - TargetHeight) < 0.5f)
+        var rawDx = x - _lastRawX;
+        var rawDy = y - _lastRawY;
+        if (MathF.Abs(rawDx) < 0.5f && MathF.Abs(rawDy) < 0.5f && MathF.Abs(height - TargetHeight) < 0.5f)
             return IsActive;
 
-        // UIA キャッシュ遅延などで 40ms 以内に直前の元の座標へ一瞬だけ逆戻りするスパイク座標を無視する
+        _lastRawX = x;
+        _lastRawY = y;
+        _stepsInCurrentInput++;
+
+        if (MathF.Abs(rawDy) <= SameLineTolerancePx && MathF.Abs(rawDx) is >= 0.5f and <= MaxNativeSubStepPx)
+        {
+            var dir = MathF.Sign(rawDx);
+            _sameDirStepsInInput = (_lastStepDirX == 0f || dir == _lastStepDirX) ? _sameDirStepsInInput + 1 : 1;
+            _lastStepDirX = dir;
+            if (_sameDirStepsInInput >= NativeSubStepsToSuppress)
+            {
+                // 1 回の入力に対してアプリ自身のキャレットが小刻みに連続移動している (Word・Excel・Outlook 等) ため抑止する
+                NativeAnimationDetected = true;
+                _discreteInputStreak = 0;
+            }
+        }
+
+        if (NativeAnimationDetected)
+        {
+            SnapTo(x, y, height, width);
+            return false;
+        }
+
+        // キャッシュ遅延などで 40ms 以内に直前の元の座標へ一瞬だけ逆戻りするスパイク座標を無視する
         if (IsActive && _hasPreviousTarget && _sinceTargetChangeMs <= SpikeRevertWindowMs &&
             MathF.Abs(x - _previousTargetX) <= SpikeRevertTolerancePx &&
             MathF.Abs(y - _previousTargetY) <= SpikeRevertTolerancePx)
@@ -73,7 +142,7 @@ public sealed class SmoothCaretMotion
         var absDy = MathF.Abs(dy);
         var distance = Distance(dx, dy);
 
-        // 同一箇所での UIA / フォントメトリクス由来の微小な揺れや、別ウィンドウ等への遠距離ジャンプは即時スナップする
+        // 同一箇所でのメトリクス由来の微小な揺れや、別ウィンドウ等への遠距離ジャンプは即時スナップする
         var isJitter = absDx < MinGlideDistancePx && absDy < MathF.Max(MinLineJumpPx, height * 0.45f);
         if (isJitter || distance < MinGlideDistancePx || distance > MaxGlideDistancePx)
         {
@@ -123,7 +192,6 @@ public sealed class SmoothCaretMotion
         var remaining = Distance(TargetX - CurrentX, TargetY - CurrentY);
         if (remaining <= ArriveSnapPx)
         {
-            // ネイティブキャレットへシームレスに引き継いで完了する
             SnapTo(TargetX, TargetY, TargetHeight, TargetWidth);
             return false;
         }
@@ -138,6 +206,11 @@ public sealed class SmoothCaretMotion
         _hasPreviousTarget = false;
         _elapsedMs = 0f;
         _sinceTargetChangeMs = 1000f;
+        _stepsInCurrentInput = 0;
+        _sameDirStepsInInput = 0;
+        _lastStepDirX = 0f;
+        _discreteInputStreak = 0;
+        NativeAnimationDetected = false;
         Opacity = 0f;
         IsActive = false;
     }
