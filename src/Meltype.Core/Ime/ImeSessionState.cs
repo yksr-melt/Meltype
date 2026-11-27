@@ -42,6 +42,10 @@ internal sealed class ImeSessionState
 
     public bool UnreadableCode;
 
+    // 入力欄に入ってから、まだ何も打っていない (この間に切り替えたモードを、入力欄のモードとして覚える)
+    // セッションはキーで作るので、作ったときはまだ何も打っていない
+    public bool FreshFocus = true;
+
     // ワークアラウンド: この入力欄の今の行のうち、本体が知っている文字 (通したキーの文字と確定した文字)。
     // キャレットが打つ以外で動いたら、空 (作ったときと同じ状態) に戻す
     public readonly StringBuilder Line = new();

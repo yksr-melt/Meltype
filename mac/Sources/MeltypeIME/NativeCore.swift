@@ -58,6 +58,8 @@ struct CompositionView: Decodable {
     let converting: Bool
     let clauses: [String]
     let selectedClause: Int
+    /// 変換中の文字の中のカーソルを、末尾から何文字 (UTF-16) 前に置くか
+    let caretBack: Int
     let hint: String
     let spellingSuggestion: String?
     /// 打ったキー (見えている文字と違うときだけ)

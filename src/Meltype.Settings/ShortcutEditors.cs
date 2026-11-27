@@ -65,7 +65,7 @@ internal static class ShortcutEditors
         ToggleShortcutValidator.Validate(shortcut, settings, others) switch
         {
             ShortcutValidationError.Invalid => "このキー操作は登録できません。Ctrl + 半角/全角 は Meltype の有効／無効に使用します。",
-            ShortcutValidationError.UnmodifiedKey => "修飾キーなし、または Shift のみで登録できるのは半角/全角・CapsLock・カタカナ/ひらがな・変換・無変換です。Ctrl・Alt・Win との組み合わせを選んでください。",
+            ShortcutValidationError.UnmodifiedKey => "修飾キーなし、または Shift のみで登録できるのは半角/全角・CapsLock・英数・カタカナ/ひらがな・変換・無変換です。Ctrl・Alt・Win との組み合わせを選んでください。",
             ShortcutValidationError.Duplicate => "同じショートカットがすでに登録されています。",
             ShortcutValidationError.ControlKeyBinding => "既存の「Control キーの割り当て」と競合します。先にその割り当てを変更してください。",
             ShortcutValidationError.Conversion => "このショートカットは既存の変換操作に使用します。",

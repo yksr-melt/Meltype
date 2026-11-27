@@ -40,6 +40,8 @@ public sealed record CompositionView(
     string? ContextHint = null,
     // 一覧に番号を出すか (数字キーで選べる変換中の候補だけ。SessionResult.ForFront が決める)
     bool Numbered = false,
+    // 変換中の文字の中のカーソルを、末尾から何文字 (UTF-16) 前に置くか (読みの途中を直している間だけ 1 以上)
+    int CaretBack = 0,
     // 候補と同じ順・件数の色見本 (#rrggbbaa)。色見本が無い候補は null、一覧全体で不要なら null
     IReadOnlyList<string?>? Colors = null);
 

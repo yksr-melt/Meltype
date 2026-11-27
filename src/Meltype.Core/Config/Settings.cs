@@ -310,6 +310,10 @@ public sealed class Settings
      Description("日本語入力のときの Space (何も打っていないとき) と Shift + Space で入れるスペースです。標準は Microsoft IME と同じです。英数状態では、どちらも半角スペースです。")]
     public SpaceWidth SpaceWidth { get; set; } = SpaceWidth.Standard;
 
+    [Category("8. キー操作"), DisplayName("CapsLock で大文字を入力"),
+     Description("日本語入力中も、CapsLock が ON なら英字を大文字で入力します。OFF のときは CapsLock を見ずに、Shift だけで大文字・小文字を決めます (CapsLock を ON にしたままでも日本語に変換できます)。")]
+    public bool CapsLockTypesCapitals { get; set; }
+
     [Category("8. キー操作"), DisplayName("F9 / F10 の 1 回目は打ったまま"),
      Description("入力中の表示が英字でも、F10 (Ctrl+O) の 1 回目は常に打ったまま (小文字) の英字にして、2 回目以降で すべて大文字 → 先頭だけ大文字 と切り替えます (Microsoft IME・Google 日本語入力と同じ)。OFF のときは、英字で見えている語の 1 回目の F10 で すべて大文字になります。")]
     public bool AlphanumericKeyStartsAsTyped { get; set; }
@@ -333,6 +337,10 @@ public sealed class Settings
     [Category("8. キー操作"), DisplayName("変換中の F6〜F10 は選んだ文節だけに効かせる"),
      Description("文節に分けて変換しているとき、F6〜F10 (ひらがな・カタカナ・半角カタカナ・全角英数・半角英数) を全体ではなく、選んでいる文節だけに効かせます (今日は|Google の「今日は」だけをカタカナにするなど)。打った英字が分からない文節 (かな入力など) では何もしません。")]
     public bool FunctionKeysAffectSelectedClause { get; set; }
+
+    [Category("8. キー操作"), DisplayName("変換中の矢印キーを ATOK と同じにする"),
+     Description("変換中の ← → で文節の区切りを変え、Shift + ← → で文節を移ります。↓ で選んでいる文節までを確定し、残りは続けて変換できます。")]
+    public bool AtokConversionKeys { get; set; }
 
     [Category("8. キー操作"), DisplayName("Shift + Enter で選んだ文節までを確定"),
      Description("文節に分けて変換しているとき、Shift + Enter で、選んでいる文節までを確定し、残りの文節は未確定のまま (ひらがなに戻して) 続けて編集できるようにします。")]
@@ -906,15 +914,29 @@ public sealed class Settings
     public AppKind? KindFor(string? processName) =>
         FindRule(processName)?.Kind is { Length: > 0 } name ? AppKinds.FirstOrDefault(k => k.Name == name) : null;
 
-    /// <summary>アプリの独自の種類で変えた項目 (自動判定・ライブ変換) を反映した設定。変えていなければ自分自身。</summary>
+    /// <summary>
+    /// アプリの独自の種類で変えた項目 (自動判定・ライブ変換) を反映した設定。変えていなければ自分自身。
+    /// 上書きする値が同じ間は同じインスタンスを返す (未確定の入力の読みの控えは、設定のインスタンスが同じ間だけ使うので、キーごとに複製すると毎回読み直す)。
+    /// 全体の設定は書き換えず、変えるときは別のインスタンスにする前提 (<see cref="SettingsFile.Edit"/>)。
+    /// </summary>
     public Settings ForApp(string? processName)
     {
         if (KindFor(processName) is not { } kind || (kind.AutoDetection is null && kind.LiveConversion is null)) return this;
-        var copy = Clone();
-        if (kind.AutoDetection is { } auto) copy.AutoDetection = auto;
-        if (kind.LiveConversion is { } live) copy.LiveConversion = live;
-        return copy;
+        var overrides = (kind.AutoDetection, kind.LiveConversion);
+        var copies = AppCopies.GetOrCreateValue(this);
+        lock (copies)
+        {
+            if (copies.TryGetValue(overrides, out var cached)) return cached;
+            var copy = Clone();
+            if (kind.AutoDetection is { } auto) copy.AutoDetection = auto;
+            if (kind.LiveConversion is { } live) copy.LiveConversion = live;
+            copies[overrides] = copy;
+            return copy;
+        }
     }
+
+    // Clone (MemberwiseClone) が写さないように、フィールドではなく外の表に持つ
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Settings, Dictionary<(bool? AutoDetection, bool? LiveConversion), Settings>> AppCopies = [];
 
     private AppRule? FindRule(string? processName)
     {
