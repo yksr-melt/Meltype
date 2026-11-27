@@ -514,6 +514,9 @@ internal static class CompositionConversion
         return clauses;
     }
 
+    /// <summary>打ったものに英数字があるか (<see cref="KeepTypedSymbols"/> が見る。ライブ変換の控えの key にも入れる)。</summary>
+    private static bool TypedLetterOrDigit(CompositionInput input) => input.Text.TypedRaw.Any(char.IsLetterOrDigit);
+
     /// <summary>
     /// かなと一緒に打った記号 (読みの 、。？「 など。CompositionText.Symbol と TypedMarks が決めた文字) は、最初の候補でも読みの文字のままにする。
     /// 変換エンジンの答え・Mozc の学習・変換履歴は、記号を別の文字にすることがある
@@ -524,9 +527,6 @@ internal static class CompositionConversion
     /// 打った記号を文字の種類と数で見分けているのは、変換の結果が区間の種類を持たない文字列だから。区間の種類を持ち回すようになったら (#1735)、区間で決める。
     /// 最初の候補を決める所 (ConvertWithEngine・Reconvert・WholeClause) の最後に呼ぶ。
     /// </summary>
-    /// <summary>打ったものに英数字があるか (<see cref="KeepTypedSymbols"/> が見る。ライブ変換の控えの key にも入れる)。</summary>
-    private static bool TypedLetterOrDigit(CompositionInput input) => input.Text.TypedRaw.Any(char.IsLetterOrDigit);
-
     private static void KeepTypedSymbols(CompositionInput input, IReadOnlyList<Clause> clauses, string reading)
     {
         if (!TypedLetterOrDigit(input)) return;
