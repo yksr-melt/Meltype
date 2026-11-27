@@ -16,6 +16,21 @@ namespace Meltype.Composition;
 /// </summary>
 internal sealed class CompositionService : IDisposable
 {
+    internal (int ScalePercent, string Font) TipCandidateAppearance()
+    {
+        var settings = _settings();
+        return (FixedScalePercent(settings.CompositionSize), settings.CompositionFont);
+    }
+
+    private static int FixedScalePercent(Config.CompositionSize size) => size switch
+    {
+        Config.CompositionSize.Small => 80,
+        Config.CompositionSize.Large => 125,
+        Config.CompositionSize.ExtraLarge => 160,
+        Config.CompositionSize.Huge => 200,
+        _ => 100,
+    };
+
     private readonly Control _invoker;
     private readonly CompositionWindow _window = new();
     private readonly ModeIndicatorWindow _indicator = new();
@@ -393,16 +408,12 @@ internal sealed class CompositionService : IDisposable
         _window.SetMonitorScale(monitorScale);
         // 文字の大きさ: 自動なら、入力欄の文字の高さに合わせる。小さな入力欄で大きく出すぎないように。
         // 入力位置の高さはそのモニターのピクセルなので、拡大率の分を除いてから比べる
-        _window.SetScale(_settings().CompositionSize switch
+        _window.SetScale(settings.CompositionSize switch
         {
-            Config.CompositionSize.Small => 0.8F,
-            Config.CompositionSize.Large => 1.25F,
-            Config.CompositionSize.ExtraLarge => 1.6F,
-            Config.CompositionSize.Huge => 2F,
             Config.CompositionSize.Auto when textHeight is { } h && h >= 8 => Math.Clamp(h / (_window.BaseTextHeight * monitorScale), 0.7F, 1.4F),
             // 文字の高さが分からないときは、ふつうの画面の文字 (16px 前後) に近い大きさ
             Config.CompositionSize.Auto => 0.8F,
-            _ => 1F,
+            _ => FixedScalePercent(settings.CompositionSize) / 100F,
         });
         // Windows の検索・スタートメニューは、ふつうのアプリより上の特別な層に出るので、重なると変換ボックスが隠れてしまう。
         // 検索の画面の左に入れば左、上に打った行が入れば上、どちらも入らなければ右に出す。

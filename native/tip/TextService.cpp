@@ -2336,6 +2336,9 @@ void TextService::ShowCandidates(TfEditCookie ec, ITfContext* context, const Jso
     data.suggestion = view[L"spellingSuggestion"].Str();
     data.typed = view[L"typedKeys"].Str();
     data.hint = view[L"hint"].Str();
+    const auto& scale = view[L"candidateScalePercent"];
+    if (!scale.IsNull()) data.fontScale = std::clamp(scale.Int(), 80, 200) / 100.0f;
+    data.fontFamily = view[L"candidateFont"].Str();
     const bool converting = view[L"converting"].Bool();
     if (data.candidates.empty() && data.suggestion.empty() && data.typed.empty() && data.hint.empty()) {
         candidates_->Hide();

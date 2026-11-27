@@ -348,7 +348,7 @@ public sealed record ImeShortcut(int Vk, int Modifiers);
 public sealed record ImeOutput(ImeState State, SessionResult Result)
 {
     /// <summary>{"version":…,"state":{…},"result":{…}}。result は <see cref="SessionResult.ToJson"/> と同じ形。</summary>
-    public string ToJson()
+    public string ToJson(int? candidateScalePercent = null, string? candidateFont = null)
     {
         using var stream = new MemoryStream();
         using (var writer = new Utf8JsonWriter(stream))
@@ -358,7 +358,7 @@ public sealed record ImeOutput(ImeState State, SessionResult Result)
             writer.WritePropertyName("state");
             JsonSerializer.Serialize(writer, State, ImeJsonContext.Default.ImeState);
             writer.WritePropertyName("result");
-            writer.WriteRawValue(Result.ToJson(), skipInputValidation: true);
+            writer.WriteRawValue(Result.ToJson(candidateScalePercent, candidateFont), skipInputValidation: true);
             writer.WriteEndObject();
         }
         return Encoding.UTF8.GetString(stream.ToArray());

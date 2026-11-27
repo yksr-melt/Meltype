@@ -550,7 +550,8 @@ internal sealed class TipServer : IDisposable
         if (output.State.HandlesInput && connection.Process is { } process) Greet(process);
         if (output.State.ModeIndicatorMs > 0 && request.Thread != 0)
             _composition.ShowMode(output.State.LanguageMode == ImeLanguageMode.Japanese, output.State.ModeIndicatorMs, request.Thread, request.Anchor);
-        return output.ToJson();
+        var (scalePercent, font) = _composition.TipCandidateAppearance();
+        return output.ToJson(scalePercent, font);
     }
 
     // ---- 左右の Alt (ImeCapture.AltKeys) ----
