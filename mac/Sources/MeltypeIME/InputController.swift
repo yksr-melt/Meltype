@@ -146,7 +146,7 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         // flagsChanged (CapsLock) の isARepeat・characters は例外になる。characters は KeyMapping.text が読まない
         var key: [String: Any] = ["vk": KeyMapping.virtualKey(for: event),
                                   "shift": flags.contains(.shift), "ctrl": flags.contains(.control),
-                                  "alt": flags.contains(.option), "command": flags.contains(.command), "repeat": event.type == .keyDown && event.isARepeat]
+                                  "alt": flags.contains(.option), "command": flags.contains(.command), "capsLock": flags.contains(.capsLock), "repeat": event.type == .keyDown && event.isARepeat]
         // event.characters は「見た目の 1 文字」で、UTF-16 要素が複数のことがある
         // (補助面の文字・結合文字・ZWJ 絵文字・異体字セレクター)。1 スカラーならそのコードポイント、複数ならそのまま渡す
         let text = KeyMapping.text(for: event)
@@ -316,7 +316,8 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         } else {
             addMark(kTSMHiliteRawText, to: text, range: NSRange(location: 0, length: length))
         }
-        client.setMarkedText(NSAttributedString(attributedString: text), selectionRange: NSRange(location: length, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
+        let caret = max(0, length - view.caretBack)
+        client.setMarkedText(NSAttributedString(attributedString: text), selectionRange: NSRange(location: caret, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
         hasMarkedText = length > 0
         showCompositionPanel(view, markedText: view.text as NSString, client: client)
     }
