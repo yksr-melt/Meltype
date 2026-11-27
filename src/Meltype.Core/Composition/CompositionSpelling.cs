@@ -12,12 +12,12 @@ namespace Meltype.Composition;
 internal static class CompositionSpelling
 {
     internal static (int Start, int End, Misspelling Misspelling)? FindMisspelling(CompositionInput input, CompositionEnv env) =>
-        env.Services.Misspellings is { } dictionary ? CompositionText.FindMisspelling(input.Text, env, dictionary) : null;
+        env.Services.Misspellings is { } dictionary ? CompositionText.FindMisspelling(CompositionText.Typed(CompositionText.Unsettled(input.Text), env), env, dictionary) : null;
 
-    internal static void FixMisspelling(CompositionInput input, (int Start, int End, Misspelling Misspelling) typo)
+    internal static void FixMisspelling(CompositionInput input, CompositionEnv env, (int Start, int End, Misspelling Misspelling) typo)
     {
         Diagnostics.Log.Decision($"もしかして: {Diagnostics.Log.Text(typo.Misspelling.Wrong)}→{Diagnostics.Log.Text(typo.Misspelling.Right)}に直しました。");
-        CompositionText.ReplaceReading(input.Text, typo.Start, typo.End, typo.Misspelling.Right);
+        input.Text = CompositionText.ReplaceReading(input.Text, env, typo.Start, typo.End, typo.Misspelling.Right);
     }
 
     /// <summary>「もしかして」の案内。変換ボックスの、打った文字のすぐ下に出す (書き間違いが無ければ null)。</summary>
@@ -26,7 +26,7 @@ internal static class CompositionSpelling
     internal static void RecordCorrection(CompositionScene.WithInput scene, CompositionEnv env, string text, string suffix)
     {
         var typed = scene.Input.Text;
-        if (env.Corrected is null || CompositionText.Raw(typed).Length == 0 || !CompositionText.Raw(typed).Any(char.IsAsciiLetter)) return;
+        if (env.Corrected is null || CompositionText.Raw(CompositionText.Read(typed, env)).Length == 0 || !CompositionText.Raw(CompositionText.Read(typed, env)).Any(char.IsAsciiLetter)) return;
         string shown;
         if (scene is CompositionScene.Converting { Conversion.Clauses: var clauses })
         {
@@ -38,14 +38,11 @@ internal static class CompositionSpelling
         else
         {
             if (typed.Mode == DisplayMode.Auto) return;
-            var (mode, letterCase) = (typed.Mode, typed.Case);
-            typed.Mode = DisplayMode.Auto;
-            shown = CompositionText.Display(typed, env, final: true);
-            (typed.Mode, typed.Case) = (mode, letterCase);
+            shown = CompositionText.Display(CompositionText.Read(CompositionText.Automatic(typed), env), env, final: true);
         }
         if (shown == text) return;
         var before = env.Context().PrecedingText ?? "";
-        env.Corrected.Invoke(new Correction(CompositionText.Raw(typed), shown, text, suffix.Contains(' ') ? "Space (変換)" : "Enter (確定)",
+        env.Corrected.Invoke(new Correction(CompositionText.Raw(CompositionText.Read(typed, env)), shown, text, suffix.Contains(' ') ? "Space (変換)" : "Enter (確定)",
             before.Length > 20 ? before[^20..] : before, DateTime.Now));
     }
 }

@@ -32,6 +32,8 @@ Linux・macOS では `native/mozc/build-mozc-helper.sh` でビルドします (m
 
 Meltype は Mozc に学習させません。Mozc のユーザーデータの場所 (OS ごとの Meltype データフォルダーの `mozc/`) から、Meltype は起動のたびに学習データ (`boundary.db`・`segment.db`) だけを消します。データフォルダーの場所は [共通の使い方](../../docs/USAGE.md#データと学習) を参照してください。
 
+ヘルパーは、Mozc の設定を操作する候補 (`COMMAND_CANDIDATE`) を変換結果から除外します。「シークレットモードをオン」などは入力する文字ではなく、Meltype ではその操作も実行しないためです。
+
 ## Mozc-UT の辞書を使う (任意)
 
 [Mozc-UT](https://github.com/utuhiro78/merge-ut-dictionaries) の辞書 (`mozcdic-ut.txt`) を、変換の候補に足せます。

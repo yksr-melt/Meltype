@@ -85,6 +85,41 @@ internal static class NotationTests
     }
 
     [Test]
+    public static void Spaces_AreNotAddedInsideEnglishAndProtectedSpans()
+    {
+        var settings = new Settings { SpaceAroundEnglish = true, SpaceAroundNumbers = true };
+        foreach (var (text, expected) in new (ComposedText, string)[]
+                 {
+                     // 保護区間の中の日本語と英字の間には入れない。前後の日本語との間には、区間の端が英数字なら入れる
+                     (Text(J("見て"), P("~/資料abc/x.md"), J("です")), "見て~/資料abc/x.md です"),
+                     (Text(J("ここ"), P("https://x.com/日本3"), J("に")), "ここ https://x.com/日本3 に"),
+                     (Text(E("Hello."), J("今日は")), "Hello.今日は"),
+                     (Text(J("今日は"), E("GitHub"), J("に3回")), "今日は GitHub に 3 回"),
+                 })
+        {
+            Assert.Equal(expected, NotationRules.Commit(text, null, null, settings).Text, expected);
+        }
+        // 保護区間のすぐ後ろの日本語の区間の数字は、保護区間の語に含めない。英語の区間と、日本語で始まる保護区間の間にも入れる
+        foreach (var (text, english, numbers, expected) in new (ComposedText, bool, bool, string)[]
+                 {
+                     (Text(J("は"), P("https://a.jp/資料"), J("3つ")), false, true, "はhttps://a.jp/資料 3 つ"),
+                     (Text(J("は"), P("https://a.jp/資料"), J("3つ")), true, false, "は https://a.jp/資料3つ"),
+                     (Text(J("は"), E("x"), P("資料"), J("に")), true, false, "は x 資料に"),
+                     (Text(J("今日は"), E("GitHub"), P("資料"), J("です")), true, false, "今日は GitHub 資料です"),
+                 })
+        {
+            Assert.Equal(expected, NotationRules.Commit(text, null, null, new Settings { SpaceAroundEnglish = english, SpaceAroundNumbers = numbers }).Text, expected);
+        }
+        // 区切りの記号だけの英語の区間 (, / !) をまたいで語をつながない。3 は数字だけの語
+        foreach (var mark in new[] { ",", "/", "!" })
+        {
+            Assert.Equal($"GitHub{mark}3 かい", NotationRules.Commit(Text(E("GitHub"), E(mark), J("3かい")), null, null, new Settings { SpaceAroundNumbers = true }).Text, mark);
+        }
+        // 英語の区間は 1 語。英字があれば、数字で始まっても英単語の設定に従う (3,000en を 3 と 000en に分けない)
+        Assert.Equal("今日は 3,000en", NotationRules.Commit(Text(J("今日は"), E("3,000en")), null, null, new Settings { SpaceAroundEnglish = true }).Text);
+    }
+
+    [Test]
     public static void Punctuation_IsWrittenOnlyInTypedMarks_AndReadBack()
     {
         foreach (var (style, written) in new[]

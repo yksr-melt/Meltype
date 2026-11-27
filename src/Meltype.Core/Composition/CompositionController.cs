@@ -24,16 +24,16 @@ internal static class CompositionController
         CompositionDirectInput.Tick(state, env, key.TimeMs);
         env = env.WaitingForInput();
         var consumed = CompositionKeys.Handle(state, env, key);
-        if (!releaseFollows) CompositionKeys.HandleRelease(state, env, key.Vk);
+        if (!releaseFollows) CompositionKeys.HandleRelease(state, env, key.Vk, key.Position);
         Settle(state, env);
         return Result(state, env, consumed);
     }
 
     /// <summary>ワークアラウンド: releaseFollows を付けて押したキーを離した (親指シフトの親指キー・中指NICOLA のシフトのキー)。</summary>
-    public static SessionResult Release(CompositionState state, CompositionEnv env, int vk)
+    public static SessionResult Release(CompositionState state, CompositionEnv env, int vk, int position)
     {
         CompositionOutput.Begin(state.Out);
-        CompositionKeys.HandleRelease(state, env, vk);
+        CompositionKeys.HandleRelease(state, env, vk, position);
         Settle(state, env);
         // 離したことはフロントが押下のとおりに通す。Consumed が false なら、離したことで今のキーの働きをした (文字に使わずに離した親指キー)
         return Result(state, env, consumed: true);
@@ -97,6 +97,7 @@ internal static class CompositionController
         CompositionOutput.Begin(state.Out);
         if (state.Scene is CompositionScene.Typing { Input: var input } && CompositionPresentation.CurrentPredictions(input, env) is var predictions && index >= 0 && index < predictions.Count)
         {
+            input.Text = CompositionText.MergeTail(input.Text);
             CompositionCommit.CommitPrediction(state, input, env, predictions[index]);
             CompositionPresentation.UpdateView(state, env);
         }
@@ -117,14 +118,15 @@ internal static class CompositionController
     private static void CommitAll(CompositionState state, CompositionEnv env, bool preserveLatinRaw, bool preserveText)
     {
         env = env.WaitingForInput();
+        if (state.Scene is CompositionScene.WithInput { Input: var editing }) editing.Text = CompositionText.MergeTail(editing.Text);
         if (state.Scene is CompositionScene.Judging) CompositionDirectInput.ReleaseAsEnglish(state);
         // e + 結合アクセントを「え + アクセント」にしない。明示した表示モード・候補・かな入力は尊重する。
         // ASCII 英字だけの原文に Latin アクセントが続く場合に限り、変換や学習を経由せず確定する。
         if (preserveLatinRaw && state.Scene is CompositionScene.Typing { Input: { Reconversion: null, Text: { KanaInput: false, Mode: DisplayMode.Auto or DisplayMode.HalfWidthAlphanumeric } text } } &&
-            CompositionText.Raw(text).All(char.IsAsciiLetter))
+            CompositionText.Raw(CompositionText.Read(text, env)).All(char.IsAsciiLetter))
         {
             state.Correctable.Clear();
-            CompositionCommit.CommitText(state, env, ComposedText.English(CompositionText.Raw(text)), english: true, preserveText: true, rule: "英字にアクセント記号が続くので打ったまま");
+            CompositionCommit.CommitText(state, env, ComposedText.English(CompositionText.Raw(CompositionText.Read(text, env))), english: true, preserveText: true, rule: "英字にアクセント記号が続くので打ったまま");
         }
         else CompositionCommit.CommitIfAny(state, env, preserveText);
         CompositionPresentation.UpdateView(state, env);

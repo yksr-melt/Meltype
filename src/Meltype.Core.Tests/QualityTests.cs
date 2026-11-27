@@ -460,7 +460,7 @@ Dictionary<string, (int Pass, int Total)> ByCategory, List<string> Failures, Lis
         // コードの行
         foreach (var (line, expected) in CodeLines)
         {
-            var actual = LineContext.Classify(line);
+            var actual = LineContext.Classify(line, new Config.Settings());
             Score("コードの行", actual == expected, $"「{line}」→ {actual} (期待: {expected})");
         }
         foreach (var (process, name, className, expected) in Focuses)
