@@ -19,6 +19,7 @@ internal sealed class CompositionService : IDisposable
     private readonly Control _invoker;
     private readonly CompositionWindow _window = new();
     private readonly ModeIndicatorWindow _indicator = new();
+    private readonly SmoothCaretWindow _smoothCaret;
     private readonly Func<Config.Settings> _settings;
     private readonly KeyInjector _injector = new();
 
@@ -29,6 +30,13 @@ internal sealed class CompositionService : IDisposable
         _invoker = invoker;
         Runtime = runtime;
         _settings = settings;
+        _smoothCaret = new SmoothCaretWindow(() => Focus.CaretBounds());
+        _smoothCaret.SetEnabled(settings().SmoothCaret);
+        runtime.SettingsChanged += loaded =>
+        {
+            if (!_invoker.IsDisposed && _invoker.IsHandleCreated)
+                _invoker.BeginInvoke(() => _smoothCaret.SetEnabled(loaded.SmoothCaret));
+        };
         // Mozc (同梱の mozc\meltype_mozc_helper.exe) と Zenzai (zenzai\)
         runtime.StartConverter(AppContext.BaseDirectory);
         runtime.ConversionReady += () => ConversionReady?.Invoke();
@@ -70,12 +78,14 @@ internal sealed class CompositionService : IDisposable
         if (!paste)
         {
             SendText(count, text);
+            _smoothCaret.NotifyActivity();
             return;
         }
         DeleteBackward(count);
         if (TryPaste(text.ReplaceLineEndings("\r\n")))
         {
             Diagnostics.Log.Info($"確定した文字を貼り付けで入力しました ({text.Length} 文字)。");
+            _smoothCaret.NotifyActivity();
             return;
         }
         Diagnostics.Log.Warn("貼り付けられなかったので、1 文字ずつ送ります (改行は Shift+Enter)。");
@@ -84,6 +94,7 @@ internal sealed class CompositionService : IDisposable
             if (i > 0) KeyInjector.SendShortcut(VirtualKeys.Shift, VirtualKeys.Return);
             SendText(0, line);
         }
+        _smoothCaret.NotifyActivity();
     }
 
     private static void SendText(int count, string text)
@@ -334,6 +345,10 @@ internal sealed class CompositionService : IDisposable
 
     public void Show(CompositionView view)
     {
+        var smooth = _settings().SmoothCaret;
+        _window.SetSmoothCaret(smooth);
+        _smoothCaret.SetEnabled(smooth);
+        _smoothCaret.SetSuppressed(true);
         if (_window.Visible)
         {
             // Windows の検索の画面の横に出しているときは、確定しても動かさない。左なら右の端を、上なら下の端をそろえる (広がっても検索の画面の裏に入らないように)
@@ -478,6 +493,8 @@ internal sealed class CompositionService : IDisposable
         _committedWhileVisible = "";
         _beside = BesideSearch.None;
         if (_window.Visible) _window.Hide();
+        _smoothCaret.SetSuppressed(false);
+        _smoothCaret.NotifyActivity();
     }
 
     // Windows の検索・スタートメニューの画面のプロセス (Windows 10 / 11)
@@ -596,6 +613,7 @@ internal sealed class CompositionService : IDisposable
     {
         // 変換エンジン (Mozc・Zenzai) は作った MeltypeRuntime が止める
         Focus.Dispose();
+        _smoothCaret.Dispose();
         _window.Dispose();
         _indicator.Dispose();
     }

@@ -482,6 +482,10 @@ public sealed class Settings
      Description("打ったキーを小さく出します。Meltype キーボードでは変換ボックスの文字の下に、Meltype IME では候補の一覧の上に出します。「打ったキー」はローマ字のまま (kyouhagoogle) で、打ち間違いに気づきやすくなります。「漢字変換前」は英語と日本語に分けたあと・漢字にする前の形 (きょうはgoogle) で、ライブ変換の前に何と読んだかを確かめられます。")]
     public TypedKeysStyle TypedKeys { get; set; } = TypedKeysStyle.Keys;
 
+    [Category("9. 表示"), DisplayName("カーソルを滑らかに動かす (スムースカーソル)"), Platforms(Platform.Windows),
+     Description("入力や矢印キーでテキストカーソルが動くとき、Word のようにふわっと滑らかに追従するオーバーレイアニメーションを表示します。動きが止まると元のカーソルへ自然に溶け込んで消えます。変換ボックス内のカーソルも滑らかに動きます。既定は OFF です。")]
+    public bool SmoothCaret { get; set; }
+
     [Browsable(false), DisplayName("固定の操作ガイドを表示"),
      Description("変換中の表示に Space 変換・F7 カタカナ などの固定ガイドを表示します。OFF でも英字・予測・訂正の提案は表示します。")]
     public bool ShowGuide { get; set; } = true;

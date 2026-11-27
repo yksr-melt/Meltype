@@ -76,6 +76,59 @@ internal sealed class CompositionWindow : PopupForm
     private float _monitorScale = 1F;
     private string _family = DefaultFamily;
     private string? _requestedFamily;
+    private bool _smoothCaret;
+    private bool _caretInitialized;
+    private float _caretX;
+    private float _caretTargetX;
+    private System.Windows.Forms.Timer? _caretTimer;
+
+    /// <summary>変換ボックス内のカーソルを滑らかに動かすか。</summary>
+    public void SetSmoothCaret(bool enabled)
+    {
+        if (_smoothCaret == enabled) return;
+        _smoothCaret = enabled;
+        if (!enabled)
+        {
+            _caretTimer?.Stop();
+            _caretInitialized = false;
+        }
+    }
+
+    private void UpdateSmoothCaret(float targetX)
+    {
+        _caretTargetX = targetX;
+        if (!_caretInitialized)
+        {
+            _caretInitialized = true;
+            _caretX = targetX;
+            return;
+        }
+        if (MathF.Abs(_caretTargetX - _caretX) < 0.5f)
+        {
+            _caretX = _caretTargetX;
+            return;
+        }
+        if (_caretTimer is null)
+        {
+            _caretTimer = new System.Windows.Forms.Timer { Interval = 16 };
+            _caretTimer.Tick += (_, _) =>
+            {
+                if (!Visible || !_smoothCaret)
+                {
+                    _caretTimer.Stop();
+                    return;
+                }
+                _caretX += (_caretTargetX - _caretX) * 0.35f;
+                if (MathF.Abs(_caretTargetX - _caretX) < 0.5f)
+                {
+                    _caretX = _caretTargetX;
+                    _caretTimer.Stop();
+                }
+                Invalidate();
+            };
+        }
+        if (!_caretTimer.Enabled) _caretTimer.Start();
+    }
 
     /// <summary>文字の大きさの倍率 (1 = 打った文字が 13pt)。変わったときだけ作り直す。</summary>
     public void SetScale(float scale)
@@ -365,9 +418,23 @@ internal sealed class CompositionWindow : PopupForm
             if (view.CaretBack > 0 && view.CaretBack <= view.Text.Length)
             {
                 // 読みの途中を直している間は、カーソルの位置に縦線を引く
-                var caretX = 10 + TextRenderer.MeasureText(g, view.Text[..^view.CaretBack], _textFont, Size.Empty, TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding).Width;
+                var targetX = 10 + TextRenderer.MeasureText(g, view.Text[..^view.CaretBack], _textFont, Size.Empty, TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding).Width;
+                var drawX = targetX;
+                if (_smoothCaret)
+                {
+                    UpdateSmoothCaret(targetX);
+                    drawX = (int)MathF.Round(_caretX);
+                }
                 using var caret = new Pen(Accent, 2);
-                g.DrawLine(caret, caretX, y, caretX, y + _textFont.Height);
+                g.DrawLine(caret, drawX, y, drawX, y + _textFont.Height);
+            }
+            else if (_smoothCaret)
+            {
+                var targetX = 10 + TextRenderer.MeasureText(g, view.Text, _textFont, Size.Empty, TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding).Width;
+                UpdateSmoothCaret(targetX);
+                var drawX = (int)MathF.Round(_caretX);
+                using var caret = new Pen(Accent, 2);
+                g.DrawLine(caret, drawX, y, drawX, y + _textFont.Height);
             }
             y += _textFont.Height;
             using (var underline = new Pen(_palette.Text, 1) { DashStyle = DashStyle.Dot })
@@ -527,6 +594,7 @@ internal sealed class CompositionWindow : PopupForm
             _hintFont.Dispose();
             _color.Dispose();
             _meaningTimer.Dispose();
+            _caretTimer?.Dispose();
             _meaningPopup?.Dispose();
         }
         base.Dispose(disposing);
