@@ -348,7 +348,9 @@ public sealed record ImeShortcut(int Vk, int Modifiers);
 public sealed record ImeOutput(ImeState State, SessionResult Result)
 {
     /// <summary>{"version":…,"state":{…},"result":{…}}。result は <see cref="SessionResult.ToJson"/> と同じ形。</summary>
-    public string ToJson(int? candidateScalePercent = null, string? candidateFont = null)
+    public string ToJson() => ToJson(null, null);
+
+    public string ToJson(int? candidateScalePercent, string? candidateFont)
     {
         using var stream = new MemoryStream();
         using (var writer = new Utf8JsonWriter(stream))
