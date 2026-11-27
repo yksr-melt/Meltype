@@ -328,14 +328,16 @@ internal sealed class ZenzaiConverter : IKanjiConverter, IDisposable
         _ => c,
     };
 
-    /// <summary>生成された文字列から、終わりの記号 (EOS や U+EE0x) 以降と前後の空白を取り除く。空なら null。</summary>
+    /// <summary>
+    /// 生成された文字列から、終わりの記号 (EOS や U+EE0x) 以降と前後の空白を取り除く。
+    /// 空のとき、または入力欄に確定できない文字 (制御文字・書式文字・私用領域・未割り当て・行/段落区切り・置換文字) を含むときは null。
+    /// </summary>
     internal static string? Clean(string? content)
     {
         if (content is null) return null;
         var end = content.AsSpan().IndexOfAny(OutputBoundaries);
         if (end >= 0) content = content[..end];
         content = content.Replace("</s>", "").Replace("<s>", "").Trim();
-        // 変換結果は入力欄に確定される 1 行の文字列。モデルから混入した制御文字・未定義の符号・置換文字は候補にしない。
         if (content.Length == 0) return null;
         foreach (var rune in content.EnumerateRunes())
         {
