@@ -58,3 +58,6 @@ dice die dies died
 issue issues
 # へれ・へろ は 減る の活用 (readings.txt) だが、日本語で打つことはまず無い
 here hero
+
+# 英字で書く技術用語
+chezmoi cuda paru

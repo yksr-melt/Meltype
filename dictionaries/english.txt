@@ -72,6 +72,9 @@ copy paste cut undo redo save open close exit quit new edit view help about home
 submit cancel confirm delete remove add create update upload download share send receive reply forward
 select deselect enable disable enabled disabled toggle check uncheck on off yes no ok okay
 ping pong
+archlinux worktree worktrees dotfiles chezmoi
+hyprctl wlroots xdg flatpak appimage makepkg paru shadcn
+gguf ggml lora qlora vllm safetensors onnx cuda vulkan
 
 # --- ローマ字としても読めてしまう一般的な英単語 ---
 a an and are as at be been but by can do does done did go goes going gone get got give given
@@ -202,6 +205,7 @@ token tokens prompt prompts model models agent agents tool tools server servers 
 
 # --- 話し言葉の英語 (歌詞・チャット) ---
 outta gonna wanna gotta kinda sorta lotta dunno gimme lemme ya yeah nope yep hey oh baby tonight
+wtf stfu gtfo lmao lmfao rofl omfg ikr imho smh irl ngl tbh idk bruh noob noobs nerf nerfed goat sus douchebag douchebags
 # --- 感動詞 (Ah! Ooh, Wow) ---
 ah ooh wow oops yay huh ugh aww hmm whoa yo
 # --- 言語の名前 (English、Japanese。スペルチェッカーは大文字で始まる形しか知らない) ---

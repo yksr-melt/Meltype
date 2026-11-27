@@ -5840,6 +5840,75 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void EnglishSlangAndToolNames_StayInLatinLetters()
+    {
+        var words = new[]
+        {
+            "fuck", "fucking", "fucked", "fucker", "fuckers", "motherfucker", "shits", "shitty", "shitting", "bullshit",
+            "asshole", "assholes", "cunt", "bastard", "piss", "pissed", "slut", "whore", "dick", "cock", "pussy", "douchebag", "scumbag",
+            "wtf", "stfu", "gtfo", "lmao", "lmfao", "rofl", "omfg", "ikr", "imho", "smh", "irl", "ngl", "tbh", "idk",
+            "bruh", "noob", "noobs", "nerf", "nerfed", "goat", "sus", "af",
+            "hyprland", "wayland", "devin", "Zenzai", "mergify", "sideload", "assignee", "kitty",
+        };
+        AssertCommitted([.. words.Select(word => (word, word))]);
+        AssertCommitted(("cachyos", "CachyOS"), ("nixos", "NixOS"),
+            ("majidefuck", "まじでfuck"));
+    }
+
+    [Test]
+    public static void EnglishDictionaryAdditions_KeepJapaneseReadings()
+    {
+        AssertCommitted(
+            ("shita", "した"), ("ashitaha", "あしたは"), ("shitara", "したら"), ("fuku", "ふく"), ("fukka", "ふっか"),
+            ("issune", "いっすね"), ("zenzen", "ぜんぜん"), ("kamo", "かも"), ("zenzaiwotaberu", "ぜんざいをたべる"),
+            ("afoo", "あふぉお"), ("afureta", "あふれた"), ("imo", "いも"),
+            ("susume", "すすめ"), ("kitte", "きって"), ("kittiya", "きっちや"), ("cudasai", "ください"),
+            ("shitmeasu", "してます"));
+    }
+
+    [Test]
+    public static void EnglishWordsBeforeKana_AreNotCorrectedAsTypos()
+    {
+        AssertCommitted(
+            ("napshita", "napした"), ("capsuru", "capする"), ("hugshita", "hugした"),
+            ("idolmade", "idolまで"), ("raidmade", "raidまで"), ("maidkudasai", "maidください"),
+            ("dieddesu", "diedです"), ("diessuru", "diesする"), ("diestai", "diesたい"));
+    }
+
+    [Test]
+    public static void EnglishDictionaryAdditions_KeepJapaneseSokuon()
+    {
+        AssertCommitted(
+            ("shittori", "しっとり"), ("shittorishita", "しっとりした"),
+            ("shittosuru", "しっとする"), ("shittoga", "しっとが"),
+            ("shitto", "しっと"), ("shittai", "しったい"),
+            ("shitty", "shitty"), ("shitting", "shitting"));
+    }
+
+    [Test]
+    public static void EnglishPredictions_ExcludeOffensiveDictionaryAdditions()
+    {
+        Assert.True(!Predictor.PredictEnglish("nigg").Contains("niggers"), "nigg");
+        Assert.True(!Predictor.PredictEnglish("wetb").Any(word => word.StartsWith("wetback", StringComparison.Ordinal)), "wetb");
+        Assert.True(Predictor.PredictEnglish("decis").Contains("decision"), "decis");
+    }
+
+    [Test]
+    public static void ToolNames_AppearInKanaConversionCandidates()
+    {
+        foreach (var (typed, name) in new[]
+        {
+            ("haipa-rando", "Hyprland"), ("weirando", "Wayland"), ("kyatti-o-esu", "CachyOS"), ("nikkusuo-esu", "NixOS"),
+            ("dhi-pushi-ku", "DeepSeek"), ("ko-dekkusu", "Codex"), ("debin", "Devin"), ("zenzai", "Zenzai"),
+        })
+        {
+            var k = new Keyboard();
+            k.Type(typed + " ");
+            Assert.True(k.Host.View!.Candidates.Contains(name), typed);
+        }
+    }
+
+    [Test]
     public static void EnglishWords_AreShownAsEnglish()
     {
         foreach (var (word, expected) in new[] { ("github", "GitHub"), ("hello", "hello"), ("typescript", "TypeScript"), ("npm", "npm"), ("localhost", "localhost"), ("zoom", "zoom"), ("git", "git"), ("test", "test"), ("iphone", "iPhone"), ("stackoverflow", "stackoverflow") })

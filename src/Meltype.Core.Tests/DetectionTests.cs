@@ -3,6 +3,7 @@
 
 using Meltype.Config;
 using Meltype.Detection;
+using Meltype.Ime;
 using static Meltype.Tests.TestSupport;
 
 namespace Meltype.Tests;
@@ -44,6 +45,16 @@ internal static class DetectionTests
         {
             foreach (var word in line.Split(' ')) ExpectNotJapanese(word);
         }
+    }
+
+    [Test]
+    public static void EnglishSlangAndToolNames_AreNotJapanese()
+    {
+        ExpectNotJapanese("fuck", "fucking", "bullshit", "wtf", "lmao", "stfu",
+            "hyprland", "wayland", "cachyos", "nixos", "devin", "mergify", "sideload", "assignee");
+
+        var settings = DefaultSettings();
+        Assert.Equal(Verdict.Japanese, MeltypeRuntime.ClassifyDirect(Engine, "shita", final: true, settings));
     }
 
     [Test] public static void Design_UnknownStaysUnchanged() => ExpectNotJapanese("test");
