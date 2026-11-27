@@ -54,7 +54,7 @@ kyouhagoogledekensaku  →  今日はgoogleで検索
 
 確定した後でも、続きを打つと直ることがあります (`i` → `want` と打つと「I want」)。
 
-`/review`・`$skill`・`@src/app.ts` のように `/` `$` `@` で始まる語は、そのまま入ります。
+`/review`・`$skill`・`@src/app.ts` のように `/` `$` `@` で始まる語は、そのまま入ります。Discord などの絵文字コード (例: `:pregnant_man:`) も打ったまま入ります。
 
 <a name="自動判定を使わない"></a>
 
