@@ -27,8 +27,8 @@ internal static class CompositionConversion
     /// </summary>
     private const int LiveConversionMinLength = 2;
 
-    internal static bool HasRegisteredReading(CompositionInput input, CompositionEnv env) =>
-        !input.Text.KanaInput && input.Text.Mode == DisplayMode.Auto && CompositionText.Raw(input.Text) is { Length: >= 2 } raw && raw.All(char.IsAsciiLetter) &&
+    internal static bool HasRegisteredReading(CompositionTextState text, CompositionEnv env) =>
+        !text.KanaInput && text.Mode == DisplayMode.Auto && CompositionText.Raw(CompositionText.Read(text, env)) is { Length: >= 2 } raw && raw.All(char.IsAsciiLetter) &&
         (env.Services.UserDictionary?.Lookup(raw.ToLowerInvariant()) is { Count: > 0 } ||
          env.Settings.ConsonantAbbreviations && env.Services.Candidates?.Lookup(raw.ToLowerInvariant()) is { Count: > 0 });
 
@@ -50,8 +50,7 @@ internal static class CompositionConversion
             return;
         }
         var input = CompositionLifecycle.Begin(state, env, reconversion: selection);
-        foreach (var c in converted) CompositionText.AppendKana(input.Text, c, c);
-        input.Text.Mode = DisplayMode.Hiragana;
+        input.Text = CompositionText.AppendReading(input.Text, converted) with { Mode = DisplayMode.Hiragana };
         CompositionLifecycle.Convert(state, input, new Conversion([new Clause(converted, false, [converted, selection.Text])], ConversionTrigger.Other, preferJapanese: false));
     }
 
@@ -69,11 +68,9 @@ internal static class CompositionConversion
         {
             // 前の語が日本語でも「日本語の続き」とはしない (空白で区切って打った語なので、語の途中ではない)。
             // 英語の語が 2 語以上続いた後は、打つときと同じく英文の続き (this is + a)
-            CompositionTextState typed = new CompositionTextState();
             var context = TextContext.None with { PrecedingEnglish = englishWords > 0 ? true : null, PrecedingEnglishSentence = englishWords >= 2 };
             var typedEnv = CompositionText.FragmentEnv(env) with { Context = () => context };
-            foreach (var c in word) CompositionText.Append(typed, typedEnv, c);
-            var segments = CompositionText.Segments(typed, typedEnv);
+            var segments = CompositionText.Segments(CompositionText.Typed(CompositionText.OfLetters(word), typedEnv), typedEnv);
             var shown = CompositionText.TypedSpans(segments, env);
             for (var i = 0; i < segments.Count; i++)
             {
@@ -106,13 +103,13 @@ internal static class CompositionConversion
     internal static Conversion? BuildConversion(CompositionInput input, CompositionEnv env, ConversionTrigger trigger, bool preferJapanese)
     {
         var asKana = input.Text.Mode is DisplayMode.Hiragana or DisplayMode.Katakana or DisplayMode.HalfWidthKatakana;
-        var segments = asKana ? CompositionText.AllJapaneseSegments(input.Text, env) : CompositionText.ConversionSegments(input.Text, env);
+        var segments = asKana ? CompositionText.AllJapaneseSegments(CompositionText.Read(input.Text, env), env) : CompositionText.ConversionSegments(CompositionText.Read(input.Text, env), env);
         var utility = Utilities(input, env, segments);
         if (utility is { Placement: UtilityPlacement.Replace })
         {
-            var fixedClause = new Clause(utility.Reading ?? CompositionText.Raw(input.Text), utility.Reading is null, [.. utility.Candidates])
+            var fixedClause = new Clause(utility.Reading ?? CompositionText.Raw(CompositionText.Read(input.Text, env)), utility.Reading is null, [.. utility.Candidates])
             {
-                Raw = CompositionText.Raw(input.Text),
+                Raw = CompositionText.Raw(CompositionText.Read(input.Text, env)),
                 Expanded = true,
                 Fixed = true,
                 Notes = utility.Notes,
@@ -125,9 +122,9 @@ internal static class CompositionConversion
         }
         // 打った英字全体がユーザー辞書の読み (helloworld → 登録した語) か子音の略入力の読み (ast → 明日。issue #62) なら、
         // 区間に分けずに 1 つの文節にして、その語を候補の先頭にする。ローマ字として読めれば、その読みの漢字も出す (go → 後・語・碁)
-        if (HasRegisteredReading(input, env))
+        if (HasRegisteredReading(input.Text, env))
         {
-            var typedRaw = CompositionText.Raw(input.Text);
+            var typedRaw = CompositionText.Raw(CompositionText.Read(input.Text, env));
             var lower = typedRaw.ToLowerInvariant();
             List<string> registered = [.. env.Services.UserDictionary?.Lookup(lower) ?? [], .. env.Settings.ConsonantAbbreviations ? env.Services.Candidates?.Lookup(lower) ?? [] : []];
             var reading = RomajiReading(env, typedRaw);
@@ -138,7 +135,7 @@ internal static class CompositionConversion
                 : Distinct([.. registered, .. english, .. romaji])) { Raw = typedRaw, Kana = reading }], trigger, preferJapanese);
         }
         // 区切りの別案があれば、別案ごとに変換した文を 1 つの文節の候補にする (issue #1737)
-        var alternatives = utility is null && !asKana ? CompositionText.ConversionSegmentAlternatives(input.Text, env, MaxSegmentationAlternatives) : [segments];
+        var alternatives = utility is null && !asKana ? CompositionText.ConversionSegmentAlternatives(CompositionText.Read(input.Text, env), env, MaxSegmentationAlternatives) : [segments];
         var clauses = BuildClauses(input, env, alternatives[0], preferJapanese, zenzai: true);
         if (clauses.Count == 0) return null;
         if (alternatives.Count > 1 && WholeSentenceClause(input, env, [clauses, .. OtherAlternatives(input, env, alternatives, preferJapanese)]) is { } whole)
@@ -148,7 +145,7 @@ internal static class CompositionConversion
         foreach (var clause in clauses)
             if (input.KeptChoices.TryGetValue(clause.Reading, out var kept) && clause.Candidates.Contains(kept)) Prefer(clause, kept);
         // 打ち始めの ・ は、Space で / にする。
-        if (CompositionText.IsSlashAtStart(input.Text) && clauses is [var slash]) Prefer(slash, "/");
+        if (CompositionText.IsSlashAtStart(CompositionText.Read(input.Text, env)) && clauses is [var slash]) Prefer(slash, "/");
         return new Conversion(clauses, trigger, preferJapanese) { Selected = InitialClause(env, clauses.Count) };
     }
 
@@ -193,7 +190,7 @@ internal static class CompositionConversion
                 var clause = new Clause(segment.Raw, true, preferJapanese && romaji.Count > 0
                     ? Distinct([.. romaji, .. english, .. katakana])
                     : Distinct([.. english, .. romaji, .. katakana]))
-                { Kana = CompositionText.KanaForSegment(input.Text, env, segments, s) };
+                { Kana = CompositionText.KanaForSegment(CompositionText.Read(input.Text, env), env, segments, s) };
                 // カタカナ表記を選んでも、英語の綴りは日本語の読みでないので、その語を日本語として覚えない (覚えると次から export が えxぽrt になる)
                 clause.NotLearned.UnionWith(katakana);
                 clauses.Add(clause);
@@ -205,7 +202,7 @@ internal static class CompositionConversion
             var offset = 0;
             foreach (var clause in japanese)
             {
-                clause.Raw = CompositionText.RawForReading(input.Text, env, segments, s, offset, clause.Reading.Length);
+                clause.Raw = CompositionText.RawForReading(CompositionText.Read(input.Text, env), env, segments, s, offset, clause.Reading.Length);
                 offset += clause.Reading.Length;
                 AddCandidates(env, clause);
                 AddOldKana(clause);
@@ -234,7 +231,7 @@ internal static class CompositionConversion
         var texts = new Dictionary<string, List<Clause>>(StringComparer.Ordinal);
         foreach (var clauses in alternatives) texts.TryAdd(string.Concat(clauses.Select(c => c.Text)), clauses);
         if (texts.Count < 2) return null;
-        var whole = new Clause(CompositionText.AllKana(input.Text, env, final: true), false, [.. texts.Keys]) { Raw = CompositionText.Raw(input.Text), Alternatives = texts };
+        var whole = new Clause(CompositionText.AllKana(CompositionText.Read(input.Text, env), env, final: true), false, [.. texts.Keys]) { Raw = CompositionText.Raw(CompositionText.Read(input.Text, env)), Alternatives = texts };
         AddSingleClauseCandidates(whole);
         return whole;
     }
@@ -296,7 +293,7 @@ internal static class CompositionConversion
     {
         var reading = segments is [{ IsEnglish: false, Kana.Length: > 0 } only] ? only.Kana : null;
         var context = new UtilityContext(env.Settings, env.Services.Now(), env.Clipboard, env.NowPlaying, env.Services.GitHubTitles(), env.OtherTipVersion);
-        return UtilityConversions.Convert(new UtilityInput(input.Text, reading, input.Direct, context));
+        return UtilityConversions.Convert(new UtilityInput(CompositionText.Read(input.Text, env), reading, input.Direct, context));
     }
 
     /// <summary>
@@ -327,7 +324,7 @@ internal static class CompositionConversion
 
     private static Clause WholeClause(CompositionInput input, CompositionEnv env, List<Clause> clauses, string reading)
     {
-        var clause = new Clause(reading, false, JapaneseCandidates(env, reading, string.Concat(clauses.Select(c => c.Text)), null, zenzai: true)) { Raw = CompositionText.Raw(input.Text) };
+        var clause = new Clause(reading, false, JapaneseCandidates(env, reading, string.Concat(clauses.Select(c => c.Text)), null, zenzai: true)) { Raw = CompositionText.Raw(CompositionText.Read(input.Text, env)) };
         // 文の中の文節と同じく、文脈の手がかりか、前に選び直した語を最初の候補にする (ConvertWithEngine)
         var surrounding = CueBefore(env) + EnglishInComposition(input, env) + (env.Context().FollowingText ?? "");
         if ((env.Services.ContextRules?.Choose(reading, surrounding, clause.Text, text => Standalone(env, text)) ?? env.Learning.LearnedConversion(reading)) is { } preferred)
@@ -365,9 +362,8 @@ internal static class CompositionConversion
     /// <summary>打った英字を英語寄りに区切り直して、英語と日本語が混ざる形 (midiか) になれば返す。</summary>
     private static string? EnglishSplit(CompositionEnv env, string raw)
     {
-        CompositionTextState typed = new CompositionTextState();
         var typedEnv = CompositionText.FragmentEnv(env);
-        foreach (var c in raw) CompositionText.Append(typed, typedEnv, c);
+        var typed = CompositionText.Typed(CompositionText.OfLetters(raw), typedEnv);
         if (CompositionText.Pending(typed).Length > 0) return null;
         var segments = env.Detector.SegmentLeaningEnglish(CompositionText.LearnedLanguages(env), TypedMarks.Read(typed, typedEnv), env.Settings.JapanesePunctuationAfterEnglish);
         if (!segments.Any(s => s.IsEnglish) || segments.All(s => s.IsEnglish)) return null;
@@ -386,7 +382,7 @@ internal static class CompositionConversion
         }
         // 入力中の表示が半角の記号 (* が 2 個以上・---) のときは、最初の候補も同じ半角にする。
         if (input.Text.Mode == DisplayMode.Auto && clause.Candidates.Count > 0 &&
-            CompositionText.AsDisplayedHalfWidth(input.Text, clause.Candidates[0], clause.Raw) is var shown && shown != clause.Candidates[0])
+            CompositionText.AsDisplayedHalfWidth(CompositionText.Read(input.Text, env), clause.Candidates[0], clause.Raw) is var shown && shown != clause.Candidates[0])
         {
             clause.Candidates.Remove(shown);
             clause.Candidates.Insert(0, shown);
@@ -530,7 +526,7 @@ internal static class CompositionConversion
     /// </summary>
     private static void KeepTypedSymbols(CompositionInput input, IReadOnlyList<Clause> clauses, string reading)
     {
-        if (!CompositionText.Raw(input.Text).Any(char.IsLetterOrDigit)) return;
+        if (!input.Text.TypedRaw.Any(char.IsLetterOrDigit)) return;
         var typed = reading.Where(IsSymbol).ToList();
         if (clauses.Sum(c => c.Text.Count(IsSymbol)) != typed.Count) return;
         var next = 0;
@@ -850,7 +846,7 @@ internal static class CompositionConversion
     private static void RestoreRaw(CompositionInput input, List<Clause> clauses, CompositionEnv env)
     {
         if (clauses.Any(c => c.IsEnglish && c.Kana is null)) return;
-        var raws = CompositionText.RawForKanas(input.Text, env, [.. clauses.Select(c => c.IsEnglish ? c.Kana! : c.Reading)]);
+        var raws = CompositionText.RawForKanas(CompositionText.Read(input.Text, env), env, [.. clauses.Select(c => c.IsEnglish ? c.Kana! : c.Reading)]);
         for (var i = 0; i < clauses.Count; i++)
         {
             if (!clauses[i].IsEnglish) clauses[i].Raw = raws[i];
@@ -920,7 +916,7 @@ internal static class CompositionConversion
     /// 続いた英字の区間 (gra|ph) は 1 語のままにし、日本語の区間を空白にする (英字の手がかりは英単語の境界で当てるため)。
     /// </summary>
     private static string EnglishInComposition(CompositionInput input, CompositionEnv env) =>
-        string.Concat(CompositionText.ConversionSegments(input.Text, env).Select(s => s.IsEnglish ? s.Raw : " "));
+        string.Concat(CompositionText.ConversionSegments(CompositionText.Read(input.Text, env), env).Select(s => s.IsEnglish ? s.Raw : " "));
 
     /// <summary>
     /// ライブ変換: Space を押したときと同じく、文脈・手がかり辞書・学習を使って文節ごとに変換した結果を見せる。
