@@ -35,7 +35,7 @@ internal sealed class MeltypeEngine : IDisposable
     /// <summary>Ctrl + 半角/全角 が押された (フックのスレッドから呼ばれる。受け取った側で UI スレッドに移して切り替える)。</summary>
     public event Action? ToggleRequested;
 
-    /// <summary>スムースカーソル有効時に物理キー押下を知らせる (フックのスレッドから呼ばれる)。</summary>
+    /// <summary>スムーズカーソル有効時に物理キー押下を知らせる (フックのスレッドから呼ばれる)。</summary>
     public event Action? CaretActivity;
 
     private readonly HashSet<int> _toggleKeyDown = [];

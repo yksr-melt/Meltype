@@ -10,7 +10,7 @@ internal static class SmoothCaretTests
     [Test]
     public static void SmoothCaret_DefaultSettingIsOffAndOnlyActiveInTsfWhenEnabled()
     {
-        Assert.True(!new Settings().SmoothCaret, "スムースカーソルは既定で OFF");
+        Assert.True(!new Settings().SmoothCaret, "スムーズカーソルは既定で OFF");
         Assert.True(!new Settings().UsesSmoothCaret, "既定では無効");
 
         var tsf = new Settings { SmoothCaret = true, Mode = InputMode.Tsf, Enabled = true };

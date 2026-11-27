@@ -66,7 +66,7 @@ internal sealed class CompositionService : IDisposable
 
     public FocusInspector Focus { get; } = new();
 
-    /// <summary>TSF 等からの入力・キャレット移動を受けてスムースカーソルを追従させる。</summary>
+    /// <summary>TSF 等からの入力・キャレット移動を受けてスムーズカーソルを追従させる。</summary>
     public void NotifyCaretActivity()
     {
         if (!_settings().UsesSmoothCaret) return;
