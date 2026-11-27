@@ -90,8 +90,8 @@ function Invoke-Elevated([string]$Source, [string]$Mode) {
 }
 
 # 一覧に Meltype だけを足す・外す (input.dll の InstallLayoutOrTip)。
-# Get-WinUserLanguageList → Set-WinUserLanguageList で一覧ごと書き戻すと、Get-WinUserLanguageList が読めなかった
-# ほかの IME (Google 日本語入力など) が一覧から消える (#470)
+# Get-WinUserLanguageList → Set-WinUserLanguageList で一覧ごと書き戻すと、ユーザーの言語の一覧に無い (TSF では有効な)
+# ほかの IME (Google 日本語入力など) が無効にされる (HKCU の CTF\TIP に Enable=0 が書かれ、入れ直しても戻らない: #470)
 function Invoke-InstallLayoutOrTip([switch]$Uninstall) {
     if (-not ('Meltype.InputDll' -as [type])) {
         Add-Type -Namespace Meltype -Name InputDll -MemberDefinition '[DllImport("input.dll", CharSet = CharSet.Unicode)] public static extern bool InstallLayoutOrTip(string psz, uint dwFlags);'
