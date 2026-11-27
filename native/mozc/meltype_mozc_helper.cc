@@ -1,5 +1,5 @@
 // Meltype 用の Mozc 変換ヘルパー。
-// Copyright (C) 2026 Yukishiro. Mozc 本体は Google LLC の BSD-3-Clause ライセンス。
+// Copyright (C) 2026 Meltype Contributors. Mozc 本体は Google LLC の BSD-3-Clause ライセンス。
 //
 // 標準入力から 1 行に 1 つの要求を受け取り、標準出力に 1 行で答える (UTF-8)。
 //   C<TAB>前の文字列<TAB>読み
