@@ -491,17 +491,18 @@ internal static class CodeProfileTests
     [Test]
     public static void LineContext_MultiLineStringsAndComments()
     {
+        var settings = new Settings();
         // Python の """ の中の行 (本文) で日本語が打てなかった
-        Assert.Equal(LineKind.String, LineContext.ClassifyText("def f():\n    \"\"\"\n    "));
-        Assert.Equal(LineKind.String, LineContext.ClassifyText("x = '''\nほん"));
-        Assert.Equal(LineKind.Comment, LineContext.ClassifyText("/*\n  説明"));
-        Assert.Equal(LineKind.Comment, LineContext.ClassifyText("<!--\n"));
+        Assert.Equal(LineKind.String, LineContext.ClassifyText("def f():\n    \"\"\"\n    ", settings));
+        Assert.Equal(LineKind.String, LineContext.ClassifyText("x = '''\nほん", settings));
+        Assert.Equal(LineKind.Comment, LineContext.ClassifyText("/*\n  説明", settings));
+        Assert.Equal(LineKind.Comment, LineContext.ClassifyText("<!--\n", settings));
         // 閉じた後はコード
-        Assert.Equal(LineKind.Code, LineContext.ClassifyText("\"\"\"\ndoc\n\"\"\"\nx = "));
-        Assert.Equal(LineKind.Code, LineContext.ClassifyText("/* a */\nint x = "));
+        Assert.Equal(LineKind.Code, LineContext.ClassifyText("\"\"\"\ndoc\n\"\"\"\nx = ", settings));
+        Assert.Equal(LineKind.Code, LineContext.ClassifyText("/* a */\nint x = ", settings));
         // コメント・1 行の文字列の中の """ /* は数えない
-        Assert.Equal(LineKind.Code, LineContext.ClassifyText("# \"\"\" in comment\nx = "));
-        Assert.Equal(LineKind.Code, LineContext.ClassifyText("s = \"/*\"\nx = "));
+        Assert.Equal(LineKind.Code, LineContext.ClassifyText("# \"\"\" in comment\nx = ", settings));
+        Assert.Equal(LineKind.Code, LineContext.ClassifyText("s = \"/*\"\nx = ", settings));
     }
 
     [Test]
