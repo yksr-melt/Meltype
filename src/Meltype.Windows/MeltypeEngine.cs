@@ -29,6 +29,9 @@ internal sealed class MeltypeEngine : IDisposable
     /// <summary>動かしている設定 (<see cref="Running"/>) が変わった (前と後)。どのスレッドからも呼ばれる。受け取った側で UI スレッドに移して <see cref="OnSettingsChanged"/> を呼ぶ。</summary>
     public event Action<Settings, Settings>? SettingsChanged;
 
+    /// <summary>動作モードに Meltype IME を選んだが、使えないので Meltype キーボードで動かしている。どのスレッドからも呼ばれる。</summary>
+    public event Action? TsfUnavailable;
+
     /// <summary>Ctrl + 半角/全角 が押された (フックのスレッドから呼ばれる。受け取った側で UI スレッドに移して切り替える)。</summary>
     public event Action? ToggleRequested;
 
@@ -47,8 +50,11 @@ internal sealed class MeltypeEngine : IDisposable
         runtime.SettingsChanged += next =>
         {
             if (_running is not { } previous) return;
+            // 使えなければ Running は Meltype キーボードになるので、選んだかは config.json の設定で比べる
+            var choseTsf = SwitchesToTsf(_settings.Mode, next.Mode);
             Load(next);
             SettingsChanged?.Invoke(previous, _running);
+            if (choseTsf && _running.Mode != InputMode.Tsf) TsfUnavailable?.Invoke();
         };
         Load(runtime.Settings.Current);
         _monitor = new KeyboardMonitor(OnKey, OnMouseButton, OnForegroundChanged, OnFocusChanged);

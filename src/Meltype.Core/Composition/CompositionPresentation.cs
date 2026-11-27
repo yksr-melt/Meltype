@@ -112,9 +112,11 @@ internal static class CompositionPresentation
     }
 
     /// <summary>文節 clause の候補 candidate の文字。文全体の文節の案は、確定と同じく案の文節から作る (<see cref="CompositionConversion.SplitWholeSentence"/>)。</summary>
+    /// <remarks>英語の文節のかな・漢字の入った候補 (ハロー・midiか) は日本語の区間にする (英単語の前後の空白は、日本語の区間の中の英字の並びの前後に入る)。</remarks>
     internal static ComposedText Candidate(Clause clause, string candidate) =>
         clause.Alternatives?.TryGetValue(candidate, out var clauses) == true ? Composed(clauses)
-        : clause.IsEnglish ? ComposedText.English(candidate)
+        : clause.IsEnglish && !NotationRules.HasJapanese(candidate) ? ComposedText.English(candidate)
+        : clause.IsEnglish ? ComposedText.Of(SpanKind.Japanese, candidate)
         : ComposedText.Converted(clause.Reading, candidate);
 
     /// <summary>書き間違いの修正の案内 (もしかして)。</summary>

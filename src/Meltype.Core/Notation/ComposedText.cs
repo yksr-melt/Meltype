@@ -79,28 +79,5 @@ internal sealed class ComposedText
     /// <summary>区間ごとに、長さを変えずに文字を置き換える (＊ → *)。</summary>
     public ComposedText MapChars(Func<string, string> map) => new([.. Spans.Select(s => s with { Text = map(s.Text) })]);
 
-    /// <summary>
-    /// <see cref="Text"/> に空白を足した spaced (英単語の前後の空白) にする。足した空白は前の文字の区間に入れる (先頭なら英字の区間)。
-    /// spaced が <see cref="Text"/> に空白を足しただけのものでなければ例外。
-    /// </summary>
-    public ComposedText WithSpaces(string spaced)
-    {
-        if (spaced == Text) return this;
-        var kinds = Spans.SelectMany(s => Enumerable.Repeat(s.Kind, s.Text.Length)).ToList();
-        var spans = new List<TextSpan>();
-        var at = 0;
-        foreach (var c in spaced)
-        {
-            SpanKind kind;
-            if (at < Text.Length && Text[at] == c) kind = kinds[at++];
-            else if (c == ' ') kind = spans.Count > 0 ? spans[^1].Kind : SpanKind.English;
-            else throw new ArgumentException($"空白を足しただけの文字ではない: {Text} → {spaced}", nameof(spaced));
-            if (spans.Count > 0 && spans[^1].Kind == kind) spans[^1] = spans[^1] with { Text = spans[^1].Text + c };
-            else spans.Add(new TextSpan(kind, c.ToString()));
-        }
-        if (at != Text.Length) throw new ArgumentException($"空白を足しただけの文字ではない: {Text} → {spaced}", nameof(spaced));
-        return new(spans);
-    }
-
     public override string ToString() => Text;
 }

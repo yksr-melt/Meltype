@@ -478,7 +478,10 @@ public:
         const auto states = key.states();
         // Shift を離したことが伝わらず shiftHeld が残っていても、Space 以外には付けない (Tab や矢印が Shift 付きにならないように)
         const bool shift = states.test(fcitx::KeyState::Shift) || (vk == 0x20 && state->shiftHeld);
-        const std::string fields = std::string(",\"key\":{\"vk\":") + std::to_string(vk) + ",\"ch\":" + std::to_string(character) +
+        // code() は XKB のキーコード (evdev のキーコード + 8)。ソフトが送ったキーは 0
+        const int code = event.rawKey().code();
+        const std::string physical = code > 8 ? ",\"physical\":{\"type\":\"Evdev\",\"code\":" + std::to_string(code - 8) + "}" : "";
+        const std::string fields = std::string(",\"key\":{\"vk\":") + std::to_string(vk) + ",\"ch\":" + std::to_string(character) + physical +
             ",\"shift\":" + boolean(shift) + ",\"ctrl\":" + boolean(states.test(fcitx::KeyState::Ctrl)) +
             ",\"alt\":" + boolean(states.test(fcitx::KeyState::Alt)) + ",\"command\":" + boolean(states.test(fcitx::KeyState::Super)) +
             ",\"capsLock\":" + boolean(event.rawKey().states().test(fcitx::KeyState::CapsLock)) +
