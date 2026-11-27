@@ -86,16 +86,6 @@ internal sealed class KanaLayoutEngine(KanaLayout layout)
 
     public const int LeftThumb = 0x1D, RightThumb = 0x1C;
 
-    // 刻印 (表の打つキーの書き方) と仮想キー (日本語 106/109 キーボード)。数字の段・Q の段・A の段・Z の段
-    private const string Names = "1234567890-^\\qwertyuiop@[asdfghjkl;:]zxcvbnm,./_";
-    private static readonly int[] Keys =
-    [
-        0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x30, 0xBD, 0xDE, 0xDC,
-        0x51, 0x57, 0x45, 0x52, 0x54, 0x59, 0x55, 0x49, 0x4F, 0x50, 0xC0, 0xDB,
-        0x41, 0x53, 0x44, 0x46, 0x47, 0x48, 0x4A, 0x4B, 0x4C, 0xBB, 0xBA, 0xDD,
-        0x5A, 0x58, 0x43, 0x56, 0x42, 0x4E, 0x4D, 0xBC, 0xBE, 0xBF, 0xE2,
-    ];
-
     private static readonly Lazy<Dictionary<KanaLayout, Table>> Tables = new(() =>
         Table.Load(DictionarySource.ReadEmbedded("kana-layouts.txt") + "\n" + DictionarySource.ReadEmbedded("kana-layouts-shingetsu.txt")));
 
@@ -134,7 +124,7 @@ internal sealed class KanaLayoutEngine(KanaLayout layout)
         {
             "L" => LeftThumb,
             "R" => RightThumb,
-            _ when name.Length == 1 && Names.IndexOf(name[0], StringComparison.Ordinal) is >= 0 and var index => Keys[index],
+            _ when name.Length == 1 && JisKeys.Names.IndexOf(name[0], StringComparison.Ordinal) is >= 0 and var index => JisKeys.Vks[index],
             _ => throw new FormatException($"kana-layouts.txt: 知らないキー {name}"),
         };
     }
@@ -189,7 +179,7 @@ internal sealed class KanaLayoutEngine(KanaLayout layout)
     public KanaStroke Down(int vk, bool shift, long time)
     {
         // 表の段のキーと親指キーのほか (BackSpace・Enter・Esc・Space など) は、ふつうのキー
-        if (_table is null || shift || Array.IndexOf(Keys, vk) < 0 && !IsThumb(vk)) return KanaStroke.NotHandled;
+        if (_table is null || shift || Array.IndexOf(JisKeys.Vks, vk) < 0 && !IsThumb(vk)) return KanaStroke.NotHandled;
         if (_held.FirstOrDefault(key => key.Vk == vk) is { } repeated)
         {
             // シフト自身のリピートは止める。文字の長押しは押したままの親指の面で繰り返す。

@@ -35,6 +35,7 @@ flowchart TD
 | Windows ポータブル | `Meltype-<版>-windows-portable.zip` | 展開して起動。データは exe の隣 |
 | Windows 互換 zip | `Meltype-<版>-windows.zip` | 1.6.0 以前の自動更新用。setup.exe と実行用 install.ps1 |
 | Mac (Apple シリコン) | `Meltype-<版>-mac.zip` | 入力ソースと設定アプリ |
+| Mac DMG (Apple シリコン) | `Meltype-<版>-mac.dmg` | インストーラー (Install Meltype) 入りのディスクイメージ |
 | Linux x86_64 / ARM64 | `Meltype-<版>-linux.zip` / `Meltype-<版>-linux-arm64.zip` | ビルド済みのフォルダー |
 | Debian 系 amd64 / arm64 | `meltype_<版>_amd64.deb` / `meltype_<版>_arm64.deb` | IBus・fcitx5 用のパッケージ |
 | Fedora・RHEL 9 系 | `meltype-<版>-1.x86_64.rpm` / `meltype-<版>-1.aarch64.rpm` | 本体。RHEL 9 系は IBus |

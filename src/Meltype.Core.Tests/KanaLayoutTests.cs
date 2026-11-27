@@ -441,7 +441,6 @@ internal static class KanaLayoutTests
         k.Key(NonConvert, up: true);
         k.TypeKanaKeys("s");
         Assert.Equal("し", k.Showing);
-        // 無変換はアプリに渡したいが、Meltype キーボードは離したときの応答 (consumed: false) を見ないので、アプリに届かない
     }
 
     [Test]

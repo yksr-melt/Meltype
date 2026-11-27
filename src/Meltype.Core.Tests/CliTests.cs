@@ -29,7 +29,7 @@ internal static class CliTests
     {
         // --learn の手順で選んだ変換を覚えてから打つ。打つ入力欄は覚えたものを読むだけで、覚えない
         var history = new Meltype.Learning.ConversionHistory(null);
-        CompositionTests.Keyboard Create() => new(live: true, history: history) { Learning = false };
+        CompositionTests.Keyboard Create() => new(live: true, history: history) { Private = true };
         var learned = Repro.Learn(Create, [Repro.Lesson.Parse("hashiwo → 箸を")]);
         Assert.Equal("箸を", string.Join(",", learned ?? []), "手順で確定したもの");
         var result = Repro.Run(Create, "hashiwo", "enter", convert: true);
@@ -38,7 +38,7 @@ internal static class CliTests
         Assert.Equal(1, history.Count, "打った入力欄は覚えない");
 
         Assert.True(Repro.Learn(Create, []) is null, "手順が無ければ学習を出さない");
-        var fresh = Repro.Run(() => new CompositionTests.Keyboard(live: true) { Learning = false }, "hashiwo", "space", convert: true);
+        var fresh = Repro.Run(() => new CompositionTests.Keyboard(live: true) { Private = true }, "hashiwo", "space", convert: true);
         Assert.True(fresh.Converted != "箸を", "覚えていなければ変換エンジンの最初の候補: " + fresh.Converted);
     }
 

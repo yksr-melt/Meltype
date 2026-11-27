@@ -5,7 +5,7 @@ import { defineConfig } from '@playwright/test';
 import base from './playwright.config';
 
 if (process.platform !== 'linux' || !process.env.MELTYPE_IME_SESSION)
-  throw new Error('実IME試験はnpm run test:ime:linux:ciから専用Linuxセッションで起動してください');
+  throw new Error('実IME試験はpnpm run test:ime:linux:ciから専用Linuxセッションで起動してください');
 
 export default defineConfig({
   ...base,

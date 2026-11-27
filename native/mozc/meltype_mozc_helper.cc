@@ -82,9 +82,12 @@ class Helper {
       if (i > 0) out += kRecordSeparator;
       out += segment.key();
       for (size_t j = 0; j < segment.candidates_size(); ++j) {
+        const auto& candidate = segment.candidate(j);
+        // Mozc の設定を切り替える候補は入力する文字ではないので、Core に渡さない (#2442)。
+        if (candidate.attributes & mozc::converter::Attribute::COMMAND_CANDIDATE) continue;
         out += kUnitSeparator;
-        if (segment.candidate(j).attributes & mozc::converter::Attribute::USER_DICTIONARY) out += kUserDictionaryMark;
-        out += segment.candidate(j).value;
+        if (candidate.attributes & mozc::converter::Attribute::USER_DICTIONARY) out += kUserDictionaryMark;
+        out += candidate.value;
       }
     }
     return out;
