@@ -39,6 +39,8 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
     private readonly HashSet<int> _held = [];
     // 単独で押された最初のキー。押したままかと、監視を本体から頼まれたかを _gate でそろえる。
     private HeldPress? _pendingHold;
+    // 英数へ戻したキーは、次の物理押下からゲームに渡す。解放まではリピートも止める。_gate で守る。
+    private int? _gameHoldUntilRelease;
     // 本体が使った押下 (離したこともアプリに通さない)。_gate で守る
     private readonly HashSet<int> _consumed = [];
     // ワークアラウンド (ImeEvent.KeyReleased): 離したことも本体に送る押下。_gate で守る
@@ -152,7 +154,18 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         if (altRelease) _alt = 0;
         lock (_gate)
         {
+            if (_gameHoldUntilRelease == e.PhysicalId)
+            {
+                if (repeat) return true;
+                _gameHoldUntilRelease = null;
+                if (e.IsUp)
+                {
+                    _consumed.Remove(e.PhysicalId);
+                    return true;
+                }
+            }
             if ((!repeat && e.IsDown) || (e.IsUp && _pendingHold?.Key.PhysicalId == e.PhysicalId)) _pendingHold = null;
+            if (repeat && _pendingHold is { Revision: > 0 } pending && pending.Key.PhysicalId == e.PhysicalId) return true;
             if (altRelease) return Enqueue(input with { AltRelease = new ImeKeyRelease(e.Vk, _altInterrupted) });
             if (_waiting > 0 || _busy || _composing || e.IsUp && _releaseFollows.Contains(e.PhysicalId)) return EnqueueKey(input);
             if (e.IsUp) return UpOutside(e);
@@ -423,25 +436,15 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
 
     private void ProcessHeldKey(HeldPress hold)
     {
+        if (hold.Window == IntPtr.Zero || Native.GetForegroundWindow() != hold.Window) return;
         lock (_gate)
         {
             if (!ReferenceEquals(hold, _pendingHold)) return;
             _pendingHold = null;
+            // ゲームが送り直した押下を物理キーの解放と同じキーとして扱うとは限らない (#2248)。
+            _gameHoldUntilRelease = hold.Key.PhysicalId;
         }
-        if (hold.Window == IntPtr.Zero || Native.GetForegroundWindow() != hold.Window) return;
-        var output = Send(new ImeEvent.KeyHeld(hold.Revision), readField: false);
-        if (!output.ReplayHeldKey || Native.GetForegroundWindow() != hold.Window) return;
-        // 終わるまで後ろの打鍵 (解放も含む) は Pump の並びに入る。押下に成功したら解放もアプリに通す。
-        if (_injector.Inject([hold.Key]))
-        {
-            lock (_gate) _consumed.Remove(hold.Key.PhysicalId);
-        }
-        else if (Native.GetForegroundWindow() == hold.Window)
-        {
-            // 送り直せなかったときは、元の入力欄に打ちかけの文字を戻す。
-            Send(new ImeEvent.JapaneseModeSelected(), readField: false);
-            Send(new ImeEvent.KeyPressed(hold.Press), readField: false);
-        }
+        Send(new ImeEvent.KeyHeld(hold.Revision), readField: false);
     }
 
     /// <summary>出来事を送り、返ってきた確定・表示・入力モードを反映する。</summary>
@@ -675,6 +678,8 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
     /// <summary>Meltype キーボードを使わなくなった・終了するとき (UI スレッド)。未確定の内容を確定し、並んでいた入力をそのままアプリに通す。</summary>
     public void Stop()
     {
+        // ほかの入力方式に切り替えると、押したキーを離した通知がここに届かないことがある。
+        lock (_gate) _gameHoldUntilRelease = null;
         if (_composing) Send(new ImeEvent.CommitRequested());
         _composing = false;
         _composition.Hide();

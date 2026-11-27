@@ -354,9 +354,6 @@ public sealed record ImeOutput(ImeState State, SessionResult Result)
     /// <summary>同じプロセスで動く Meltype キーボード向け。今回受け取ったキーがこの時間 (ms) 経っても離されなければ KeyHeld を送る。0 なら待たない。</summary>
     public int GameKeyHoldMs { get; init; }
 
-    /// <summary>同じプロセスで動く Meltype キーボード向け。KeyHeld で日本語入力を取り消し、押したままのキーの押下をゲームに送る。</summary>
-    public bool ReplayHeldKey { get; init; }
-
     /// <summary>{"version":…,"state":{…},"result":{…}}。result は <see cref="SessionResult.ToJson"/> と同じ形。</summary>
     public string ToJson()
     {

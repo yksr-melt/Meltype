@@ -692,7 +692,7 @@ internal static class ImeContractTests
     }
 
     [Test]
-    public static void Keyboard_GameHoldCancelsOnlyTheFirstCharacterAndReturnsItToTheGame()
+    public static void Keyboard_GameHoldCancelsOnlyTheFirstCharacterAndReturnsToAlphanumeric()
     {
         var front = new Front { InputMethod = InputMode.Keyboard };
         front.Settings.Mode = InputMode.Keyboard;
@@ -707,9 +707,11 @@ internal static class ImeContractTests
         Assert.Equal(250, press.GameKeyHoldMs, "最初のキーは長押しを待つ");
         Send(new ImeEvent.ConversionFinished());
         var held = Send(new ImeEvent.KeyHeld(press.State.Revision));
-        Assert.True(held.ReplayHeldKey && held.State.LanguageMode == ImeLanguageMode.Alphanumeric, "押下をゲームに送り、英数に戻す");
+        Assert.True(held.State.LanguageMode == ImeLanguageMode.Alphanumeric, "英数に戻す");
         Assert.True(held.Result.View is null && held.Result.Commits.Count == 0, "打ちかけはゲームに確定しない");
-        Assert.True(!held.State.Capture.PrintableAscii && !Send(new ImeEvent.KeyHeld(press.State.Revision)).ReplayHeldKey, "押下は一度だけ渡し、次の移動キーは横取りしない");
+        Assert.True(!held.State.Capture.PrintableAscii, "次の移動キーは横取りしない");
+        var nextPress = Send(new ImeEvent.KeyPressed(new ImeKey { Vk = 'I', Ch = 'i' }));
+        Assert.True(!nextPress.Result.Consumed && nextPress.State.LanguageMode == ImeLanguageMode.Alphanumeric, "押し直したキーをゲームに通す");
     }
 
     [Test]
@@ -726,13 +728,13 @@ internal static class ImeContractTests
         var next = Send(new ImeEvent.KeyPressed(new ImeKey { Vk = 'A', Ch = 'a' }));
         Assert.Equal(0, next.GameKeyHoldMs, "打ちかけがあるときは待たない");
         var held = Send(new ImeEvent.KeyHeld(press.State.Revision));
-        Assert.True(!held.ReplayHeldKey && held.State.LanguageMode == ImeLanguageMode.Japanese, "次のキーを打った後に古い押下を渡さない");
+        Assert.True(held.State.LanguageMode == ImeLanguageMode.Japanese, "次のキーを打った後は英数に戻さない");
         var commit = Send(new ImeEvent.KeyPressed(new ImeKey { Vk = VirtualKeys.Return }));
         Assert.Equal("か", commit.Result.Commits.Single().Text, "続けて打った文字は通常どおり確定する");
 
         press = Send(new ImeEvent.KeyPressed(new ImeKey { Vk = 'A', Ch = 'a' }));
         Send(new ImeEvent.CaretMoved(new ImeCaret { FocusLeft = true }));
-        Assert.True(!Send(new ImeEvent.KeyHeld(press.State.Revision)).ReplayHeldKey, "フォーカスが移った後は押下を渡さない");
+        Assert.True(Send(new ImeEvent.KeyHeld(press.State.Revision)).State.LanguageMode == ImeLanguageMode.Japanese, "フォーカスが移った後は英数に戻さない");
         Send(new ImeEvent.CommitRequested());
         field = new ImeField { App = "notepad.exe" };
         press = Send(new ImeEvent.KeyPressed(new ImeKey { Vk = 'A', Ch = 'a' }));

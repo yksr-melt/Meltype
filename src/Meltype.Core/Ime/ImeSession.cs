@@ -136,7 +136,7 @@ internal static class ImeSession
         var wasJapanese = ShowsJapanese(state, before, settings);
         var composing = IsComposing(state);
         var gameKeyboard = active && game && env.Environment.InputMethod == InputMode.Keyboard;
-        var replayHeldKey = gameKeyboard && wasJapanese && composing && holdRevision != 0 &&
+        var returnToGame = gameKeyboard && wasJapanese && composing && holdRevision != 0 &&
             e is ImeEvent.KeyHeld held && held.PressRevision == holdRevision && string.Equals(previousApp, field?.App, StringComparison.OrdinalIgnoreCase);
         // view が null だと、フロントは変換中の表示を消す。表示を変えない出来事は今の表示を返す
         var handled = e.Match(new ImeEvent.Cases<Handled>
@@ -145,7 +145,7 @@ internal static class ImeSession
             KeyReleased = released => !active ? Unchanged(state, env)
                 : released.Key.Vk is VirtualKeys.LMenu or VirtualKeys.RMenu ? AltReleased(state, env, released.Key, before, settings)
                 : HandleKeyUp(state, env, ToggleShortcut.NormalizeKey(released.Key.Vk)),
-            KeyHeld = _ => replayHeldKey ? ReturnToGame(state, env, before) : Unchanged(state, env),
+            KeyHeld = _ => returnToGame ? ReturnToGame(state, env, before) : Unchanged(state, env),
             ModeToggleRequested = _ => active ? Switch(state, env, !wasJapanese, before, toggle: true) : Unchanged(state, env),
             JapaneseModeSelected = _ => active ? Switch(state, env, true, before, toggle: false) : Unchanged(state, env),
             AlphanumericModeSelected = _ => active ? Switch(state, env, false, before, toggle: false) : Unchanged(state, env),
@@ -191,7 +191,6 @@ internal static class ImeSession
         }, result)
         {
             GameKeyHoldMs = watchHold ? GameKeyHoldMs : 0,
-            ReplayHeldKey = replayHeldKey,
         };
     }
 
