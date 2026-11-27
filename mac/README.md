@@ -93,6 +93,8 @@ swift test --package-path mac
 node --test mac/Tests/scripts.test.ts
 ```
 
+`mac/Tests/scripts.test.ts` (インストールのスクリプトのテスト) は、`.ts` をそのまま実行できる Node.js 22.18 以降で動かします (CI は Node.js 24)。
+
 `--check-inputs` と `--self-test` は、空の一時ディレクトリをデータの保存先にして実行します。利用者の Meltype の設定・学習データ・ユーザー辞書は読み書きせず、検査が終わると一時ディレクトリを削除します。
 
 `--self-test` は、同梱の変換エンジンを実際に使い、日本語と英語の混ざった入力・候補の選択・確定・直接入力の切り替え・絵文字の候補・綴りの提案・入力ソースの重複の整理・plist の辞書の読み込みを確かめます。Chrome・VS Code などの IMK クライアントでの動きや、OS の入力ソースの切り替えは確かめないので、実機で確認してください。
