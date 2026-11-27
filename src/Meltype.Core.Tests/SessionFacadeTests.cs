@@ -892,6 +892,148 @@ internal static class SessionFacadeTests
     }
 
     [Test]
+    public static void CodeInput_CommentSettingsControlEachMarker()
+    {
+        (Action<Settings, bool> Set, string[] Prefixes)[] comments =
+        [
+            ((s, on) => s.CodeCommentSlash = on, ["// ", "kome // "]),
+            ((s, on) => s.CodeCommentHash = on, ["# ", "kome # "]),
+            ((s, on) => s.CodeCommentDash = on, ["-- ", "kome -- "]),
+            ((s, on) => s.CodeCommentBlock = on, ["/* ", "/* a\n ", "/* a\r\n * ", " * "]),
+            ((s, on) => s.CodeCommentHtml = on, ["<!-- ", "<!--\n "]),
+            ((s, on) => s.CodeCommentRem = on, ["REM ", "  rem "]),
+        ];
+        foreach (var terminal in new[] { false, true })
+            foreach (var enabled in new[] { false, true })
+                foreach (var (set, prefixes) in comments)
+                    foreach (var prefix in prefixes)
+                    {
+                        var settings = new Settings { LiveConversion = false };
+                        set(settings, enabled);
+                        var session = new TestSession(() => settings) { CodeInput = true, CodeTerminal = terminal };
+                        session.HandleKey(VirtualKeys.Shift, null, true, false, false, false, prefix);
+                        Assert.Equal(!enabled, session.CodeEnglishAt(prefix), $"{prefix}, ON: {enabled}, terminal: {terminal}");
+                        var field = new Field(prefix);
+                        var results = Type(session, "ima", field);
+                        if (enabled) Assert.Equal("いま", results[^1].View?.Text, prefix);
+                        else
+                        {
+                            Assert.True(results.All(r => !r.Consumed && r.View is null && r.Commits.Count == 0), prefix);
+                            Assert.Equal(prefix + "ima", field.Text, prefix);
+                        }
+                    }
+
+        // ほかを OFF にしても、選んだ記号だけでコメントを書ける。
+        foreach (var (set, prefixes) in comments)
+        {
+            var settings = WithoutCodeComments();
+            set(settings, true);
+            var session = new TestSession(() => settings) { CodeInput = true };
+            Assert.Equal("いま", Type(session, "ima", new Field(prefixes[0]))[^1].View?.Text, prefixes[0]);
+        }
+    }
+
+    [Test]
+    public static void CodeInput_DisabledDashCommentsPassCommandArguments()
+    {
+        // 引数の区切りの -- と、その後ろのファイル名・オプションを、Enter まで直接入力する。
+        foreach (var command in new[] { "git checkout -- src/main.c", "npm run build -- --watch" })
+        {
+            var settings = new Settings { CodeCommentDash = false };
+            var session = new TestSession(() => settings) { CodeInput = true, CodeTerminal = true };
+            var field = new Field();
+            Assert.True(Type(session, command + "\n", field).All(r => !r.Consumed && r.View is null && r.Commits.Count == 0), command);
+            Assert.Equal(command + "\n", field.Text);
+        }
+    }
+
+    [Test]
+    public static void CodeInput_CommentSettingsPreserveStringsPromptsAndManualJapanese()
+    {
+        var settings = WithoutCodeComments();
+        foreach (var prefix in new[] { "x = \"", "x = '", "echo `", "x = \"\"\"\n", "x = '''\n", "> ", "│ > ", "› ", "// \"" })
+        {
+            var session = new TestSession(() => settings) { CodeInput = true, CodeTerminal = true };
+            session.HandleKey(VirtualKeys.Shift, null, true, false, false, false, prefix);
+            Assert.True(!session.CodeEnglishAt(prefix), prefix);
+            Assert.Equal("いま", Type(session, "ima", new Field(prefix))[^1].View?.Text, prefix);
+        }
+        foreach (var quote in new[] { '"', '\'', '`' })
+        {
+            var session = new TestSession(() => settings) { CodeInput = true };
+            var field = new Field("x = " + quote);
+            Type(session, "ima", field);
+            Assert.True(!Type(session, quote.ToString(), field).Single().Consumed, "閉じる引用符はアプリへ渡す");
+            Assert.Equal("x = " + quote + "いま" + quote, field.Text);
+            Assert.True(session.CodeEnglishAt(field.Text), "閉じた後は英数");
+        }
+        var manual = new TestSession(() => settings) { CodeInput = true };
+        var comment = new Field("// ");
+        manual.HandleKey(VirtualKeys.Shift, null, true, false, false, false, comment.Text);
+        Assert.True(manual.CodeEnglishAt(comment.Text), "全 OFF でもコメントをコードとして扱う");
+        manual.Toggle(comment.Text);
+        Type(manual, "ima\n", comment);
+        Assert.Equal("// いま", comment.Text, "手動で日本語にして入力できる");
+        manual.CaretMoved(VirtualKeys.Left);
+        Assert.True(manual.CodeEnglishAt(comment.Text), "キャレットを移動すると英数に戻る");
+    }
+
+    [Test]
+    public static void CodeInput_CommentSettingsApplyWithoutRefocusing()
+    {
+        var settings = new Settings { LiveConversion = false };
+        var session = new TestSession(() => settings) { CodeInput = true };
+        session.HandleKey(VirtualKeys.Shift, null, true, false, false, false, "// ");
+        Assert.True(!session.CodeEnglishAt("// "), "既定は日本語");
+        settings = settings.Clone();
+        settings.CodeCommentSlash = false;
+        Assert.True(session.CodeEnglishAt("// "), "設定を変えると表示も英数に変わる");
+        var field = new Field("// ");
+        Assert.True(Type(session, "ima", field).All(r => !r.Consumed), "入力も直接通す");
+        settings.CodeCommentSlash = true;
+        Assert.True(!session.CodeEnglishAt(field.Text), "ON に戻すと同じ入力欄で日本語に戻る");
+        Assert.Equal("いま", Type(session, "ima", field)[^1].View?.Text);
+    }
+
+    [Test]
+    public static void CodeInput_CommentSettingsKeepOtherMarkersAndBlockBoundaries()
+    {
+        // OFF の記号の後ろでも、別の ON の記号や文字列を調べる。
+        // 次の行も、前の行の OFF の記号の後ろで開いた /* … */ の中 (ターミナルの /* は後に本文が要る)。
+        foreach (var terminal in new[] { false, true })
+            foreach (var prefix in new[] { "// /* a\n", "# /* a\n", "-- /* a\n", "REM /* a\n", "<!-- /* a\n" })
+            {
+                var settings = WithoutCodeComments();
+                settings.CodeCommentBlock = true;
+                var session = new TestSession(() => settings) { CodeInput = true, CodeTerminal = terminal };
+                Assert.Equal("いま", Type(session, "ima", new Field(prefix))[^1].View?.Text, $"{prefix}, terminal: {terminal}");
+            }
+        foreach (var prefix in new[] { "/* */ ", "/*\n */ ", "<!-- --> ", "<!--\n --> " })
+        {
+            var session = Create();
+            session.CodeInput = true;
+            Assert.True(Type(session, "ima", new Field(prefix)).All(r => !r.Consumed), "閉じた後は英数: " + prefix);
+        }
+        foreach (var prefix in new[] { "curl https://x/*\n", "bazel build //src/work/*\n" })
+        {
+            var settings = new Settings { CodeCommentSlash = false };
+            var session = new TestSession(() => settings) { CodeInput = true, CodeTerminal = true };
+            Assert.True(Type(session, "ima", new Field(prefix)).All(r => !r.Consumed), "引数の /* は次の行のコメントを始めない: " + prefix);
+        }
+    }
+
+    private static Settings WithoutCodeComments() => new()
+    {
+        LiveConversion = false,
+        CodeCommentSlash = false,
+        CodeCommentHash = false,
+        CodeCommentDash = false,
+        CodeCommentBlock = false,
+        CodeCommentHtml = false,
+        CodeCommentRem = false,
+    };
+
+    [Test]
     public static void CodeInput_SlashCommentBodyWithoutSpace()
     {
         foreach (var prefix in new[] { "", " ", "\t", "kome", "kome " })

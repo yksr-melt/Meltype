@@ -56,7 +56,7 @@ internal static partial class CompositionText
             // 数字のすぐ後ろの単位 (10|mm|で) は打ち間違いではない
             var unitAfterNumber = start > 0 && state.Units[start - 1].Raw is [var digit] && char.IsAsciiDigit(digit) &&
                 UnitWords.Any(u => letters.StartsWith(u, StringComparison.OrdinalIgnoreCase));
-            if (!unitAfterNumber && letters.All(char.IsAsciiLetterLower) && !env.Detector.IsKnownEnglishWord(LearnedLanguages(env), letters) &&
+            if (!unitAfterNumber && letters.All(char.IsAsciiLetterLower) && !env.Detector.Words.IsKnownEnglishWord(LearnedLanguages(env), letters) &&
                 corrector.FirstUnreadable(letters, final: true) is var first and > 0 &&
                 !(runOffset + first < shownEnglish.Count && shownEnglish[runOffset + first] && (firmEnglish[runOffset + first] || !CompositionText.FixesIntoLongWord(state, env, corrector, letters, first))) &&
                 // 数字のすぐ前の短い英字 (kaibunsyo|rta|2026 の rta) は略語。打ち間違いとして直さない
@@ -133,7 +133,7 @@ internal static partial class CompositionText
         {
             letters = state.Units[i].Raw + letters;
             var runStart = i == 0 || !IsLetters(state.Units[i - 1]);
-            if (letters.Length >= 3 && (runStart ? env.Detector.IsKnownEnglishWord(LearnedLanguages(env), letters) : env.Detector.IsListedEnglishWord(LearnedLanguages(env), letters.ToLowerInvariant()))) return end;
+            if (letters.Length >= 3 && (runStart ? env.Detector.Words.IsKnownEnglishWord(LearnedLanguages(env), letters) : env.Detector.Words.IsListedEnglishWord(LearnedLanguages(env), letters.ToLowerInvariant()))) return end;
         }
         state.Units.RemoveRange(start, end - start);
         if (withPending) state.Pending.Clear();
@@ -170,11 +170,11 @@ internal static partial class CompositionText
             // 5 文字以上の知っている語 (meeting) か、同梱の英語の辞書の 2〜4 文字の語 (user・rta・av)
             // 4 文字の知っている語で、ローマ字として読めないもの (help・milk) も英語 (help|pe-ji → へおっぺーじ にしない)
             var lower = segment.Raw.ToLowerInvariant();
-            var listed = segment.IsEnglish && segment.Raw.Length is >= 2 and <= 4 && env.Detector.IsListedEnglishWord(LearnedLanguages(env), lower);
-            var word = segment.IsProtected || listed || segment.IsEnglish && (segment.Raw.Length >= 5 && env.Detector.IsKnownEnglishWord(LearnedLanguages(env), segment.Raw) ||
-                segment.Raw.Length == 4 && env.Detector.IsKnownEnglishWord(LearnedLanguages(env), lower) && !env.Detector.Romaji.Analyze(lower).IsValid ||
+            var listed = segment.IsEnglish && segment.Raw.Length is >= 2 and <= 4 && env.Detector.Words.IsListedEnglishWord(LearnedLanguages(env), lower);
+            var word = segment.IsProtected || listed || segment.IsEnglish && (segment.Raw.Length >= 5 && env.Detector.Words.IsKnownEnglishWord(LearnedLanguages(env), segment.Raw) ||
+                segment.Raw.Length == 4 && env.Detector.Words.IsKnownEnglishWord(LearnedLanguages(env), lower) && !env.Detector.Romaji.Analyze(lower).IsValid ||
                 // 3 文字のよく使う英単語で、最後の子音がかなにならないもの (tab|de の b)。表示で英字にしたものを、確定で打ち間違いとして たべ に直さない (issue #220)
-                segment.Raw.Length == 3 && lower.All(char.IsAsciiLetterLower) && CompositionDetector.IsCommonEnglishWord(lower) && env.Detector.Romaji.AnalyzeFragment(lower).Partial.Length > 0);
+                segment.Raw.Length == 3 && lower.All(char.IsAsciiLetterLower) && WordJudge.IsCommonEnglishWord(lower) && env.Detector.Romaji.AnalyzeFragment(lower).Partial.Length > 0);
             for (var i = 0; i < segment.Raw.Length; i++)
             {
                 mask.Add(word);
@@ -210,8 +210,8 @@ internal static partial class CompositionText
             for (var e = Math.Min(letters.Length, s + 16); e > first; e--)
             {
                 var word = letters[s..e];
-                if (s == 0 && word.Length >= 5 && env.Detector.IsKnownEnglishWord(LearnedLanguages(env), word)) return true;
-                if ((s == 0 || word.Length >= 5) && env.Detector.IsListedEnglishWord(LearnedLanguages(env), word)) return true;
+                if (s == 0 && word.Length >= 5 && env.Detector.Words.IsKnownEnglishWord(LearnedLanguages(env), word)) return true;
+                if ((s == 0 || word.Length >= 5) && env.Detector.Words.IsListedEnglishWord(LearnedLanguages(env), word)) return true;
             }
         }
         return false;

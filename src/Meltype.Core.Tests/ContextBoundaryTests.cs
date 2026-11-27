@@ -12,7 +12,6 @@ internal static class ContextBoundaryTests
     private static (CompositionTextState Text, CompositionEnv Env) Create(string before = "", bool manual = false, LanguageMemory? memory = null)
     {
         var detector = CompositionDetector.CreateDefault();
-        detector.IsCommonJapanese = RomajiTypoCorrector.Load(detector.Romaji).IsCommonJapanese;
         var context = TextContext.None with
         {
             PrecedingEnglish = before.Length == 0 ? null : true,
