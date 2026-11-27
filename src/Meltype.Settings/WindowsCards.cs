@@ -164,7 +164,13 @@ internal static class WindowsCards
             var start = new ProcessStartInfo(MeltypeExe, ["--open", window.ToString()]) { UseShellExecute = false };
             using var process = Process.Start(start)!;
             await process.WaitForExitAsync();
-            if (process.ExitCode != 0) Pages.Show(message, "Meltype が動いていません。スタートメニューの「Meltype」を開き直してから、もう一度押してください。", error: true);
+            switch (process.ExitCode)
+            {
+                case 0: break;
+                case 1: Pages.Show(message, "Meltype が動いていません。スタートメニューの「Meltype」を開き直してから、もう一度押してください。", error: true); break;
+                // Meltype.exe と設定アプリの版が違う (Meltype.exe がこの画面を知らない)
+                default: Pages.Show(message, $"Meltype.exe がこの画面を開けませんでした (終了コード {process.ExitCode})。Meltype を入れ直してください。", error: true); break;
+            }
         }
         catch (Win32Exception ex)
         {

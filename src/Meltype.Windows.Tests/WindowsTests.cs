@@ -311,6 +311,15 @@ internal static class WindowsTests
     }
 
     [Test]
+    public static void OpenArgument_AcceptsOnlyWindowNames()
+    {
+        // 設定アプリが渡す名前だけを受け取り、ほかは終了コード 2 にする (Meltype.exe --open)
+        Assert.Equal(AppWindow.Log, AppSignal.ParseWindow("Log"));
+        foreach (var name in new[] { null, "", "log", "3", " 3", "Nope" })
+            Assert.True(AppSignal.ParseWindow(name) is null, $"「{name}」");
+    }
+
+    [Test]
     public static void StartupTask_IsLogonTriggerWithoutDelayAndAdmin()
     {
         // #283: サインインしたらすぐ起動するタスク。& などを含むユーザー名・パスでも XML として読める

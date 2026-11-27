@@ -64,6 +64,9 @@ internal sealed class AppSignal : NativeWindow, IDisposable
         return true;
     }
 
+    /// <summary>--open の引数の画面の名前 (<see cref="AppWindow"/> の名前と完全に一致するものだけ。数字・大文字小文字の違いは受け取らない)。</summary>
+    public static AppWindow? ParseWindow(string? name) => Enum.GetNames<AppWindow>().Contains(name) ? Enum.Parse<AppWindow>(name!) : null;
+
     /// <summary>動いている Meltype に画面を開く合図を送る。送れたら true (動いていなければ false)。</summary>
     public static bool SendOpen(AppWindow open)
     {
