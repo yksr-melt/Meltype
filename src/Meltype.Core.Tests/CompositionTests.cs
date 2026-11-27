@@ -2660,6 +2660,23 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void RepeatedPeriods_OfferOneJapaneseStopPerKey()
+    {
+        foreach (var (count, style, period) in new[] { (3, PunctuationStyle.Japanese, '。'), (4, PunctuationStyle.Japanese, '。'), (6, PunctuationStyle.Japanese, '。'), (4, PunctuationStyle.FullWidthCommaPeriod, '．') })
+        {
+            var raw = new string('.', count);
+            var expected = new string(period, count);
+            var keyboard = new Keyboard { Punctuation = style };
+            keyboard.Type(raw + " ");
+            var candidates = keyboard.Host.View!.Candidates;
+            Assert.True(candidates.Contains(raw) && candidates.Contains(expected), string.Join(", ", candidates));
+            keyboard.SelectCandidate(candidates.ToList().IndexOf(expected));
+            keyboard.Type("\n");
+            Assert.Equal(expected, keyboard.Host.Document);
+        }
+    }
+
+    [Test]
     public static void Issue495_MoreThanThreeSlashesExtendTheEllipsis()
     {
         var expected = new[] { (3, "…"), (4, "……"), (6, "……"), (7, "………") };
