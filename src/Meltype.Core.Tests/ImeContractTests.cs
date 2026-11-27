@@ -484,6 +484,18 @@ internal static class ImeContractTests
     }
 
     [Test]
+    public static void LangKeys_SelectJapaneseOrAlphanumeric()
+    {
+        var front = new Front();
+        front.Type("ka");
+        Assert.True(Consumed(front.Key(VirtualKeys.ImeOn)) && front.Open && front.Document == "", front.Trace);
+        front.Key(VirtualKeys.ImeOff);
+        Assert.True(!front.Open && front.Document == "か", front.Trace);
+        Assert.True(Consumed(front.Key(VirtualKeys.ImeOff)) && !front.Open, front.Trace);
+        Assert.True(Consumed(front.Key(VirtualKeys.ImeOn)) && front.Open, front.Trace);
+    }
+
+    [Test]
     public static void ConvertKeys_SetTheMode()
     {
         var front = new Front();

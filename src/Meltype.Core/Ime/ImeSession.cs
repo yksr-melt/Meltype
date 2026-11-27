@@ -389,6 +389,11 @@ internal static class ImeSession
             AltPressed(state, key, vk);
             return PassThrough(state, env);
         }
+        if (plain && vk is VirtualKeys.ImeOn or VirtualKeys.ImeOff)
+        {
+            var japanese = vk == VirtualKeys.ImeOn;
+            return key.Repeat || japanese && ShowsJapanese(state, before, settings) ? Consumed : Switch(state, env, japanese, before, toggle: false);
+        }
         var toggle = settings.EffectiveToggleShortcuts.Any(shortcut => shortcut.Matches(vk, modifiers));
         // 押しっぱなしで、入力モードを何度も切り替えない
         if (key.Repeat && (toggle || plain && vk is ToggleShortcut.Hankaku or VirtualKeys.OemAttn or VirtualKeys.Kana)) return Consumed;
@@ -600,9 +605,9 @@ internal static class ImeSession
     /// <summary>英語の語の続きとして、英数のままアプリに通す文字。</summary>
     private const string EnglishWordCharacters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@_";
 
-    /// <summary>設定によらず受け取る、モードを切り替えるキー (半角/全角 の 3 つのキーコード・英数・かな・変換・無変換)。</summary>
+    /// <summary>設定によらず受け取る、モードを切り替えるキー (半角/全角 の 3 つのキーコード・英数・かな・変換・無変換・ImeOn・ImeOff)。</summary>
     private static readonly int[] ModeKeys =
-        [ToggleShortcut.Hankaku, VirtualKeys.OemAuto, VirtualKeys.OemEnlw, VirtualKeys.OemAttn, VirtualKeys.Kana, VirtualKeys.Convert, VirtualKeys.NonConvert];
+        [ToggleShortcut.Hankaku, VirtualKeys.OemAuto, VirtualKeys.OemEnlw, VirtualKeys.OemAttn, VirtualKeys.Kana, VirtualKeys.Convert, VirtualKeys.NonConvert, VirtualKeys.ImeOn, VirtualKeys.ImeOff];
 
     private static SessionResult Pass => new(false, [], null);
 
