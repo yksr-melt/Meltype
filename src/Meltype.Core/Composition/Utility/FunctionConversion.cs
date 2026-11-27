@@ -5,7 +5,7 @@ namespace Meltype.Composition.Utility;
 
 /// <summary>
 /// 関数記法 (名前(引数)) のユーティリティ変換 (hex(dadada) → #dadada、uuid() → 新しい UUID)。
-/// 打った英字の全体が関数記法のとき、英語と判定した入力でも Space で変換を始める。
+/// 打った英字の全体が関数記法のとき、英語と判定した入力でも Space・Tab で変換を始める。
 /// 足すときは、このファイルの隣に 1 つ実装して <see cref="UtilityConversions.Functions"/> に入れる。
 /// </summary>
 internal interface IFunctionConversion
