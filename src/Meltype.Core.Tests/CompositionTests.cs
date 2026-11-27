@@ -4764,6 +4764,9 @@ internal static class CompositionTests
             ["wakatte.tv"] = "wakatte.tv",
             ["wakatte.tvdemiru"] = "wakatte.tvでみる",
             ["wakatte."] = "わかって。",
+            ["youtu.be"] = "youtu.be",
+            ["youtu.bedemiru"] = "youtu.beでみる",
+            ["arigatou.benkyouninarimasu"] = "ありがとう。べんきょうになります",
             // 版の番号のプレリリースの名前は英字。x.y.z でない数字の後ろの - は のばす音
             ["ver1.4.1-pre.1"] = "ver1.4.1-pre.1",
             ["v1.10.0-rc.1"] = "v1.10.0-rc.1",
