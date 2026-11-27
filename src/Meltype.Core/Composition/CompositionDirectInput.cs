@@ -76,8 +76,8 @@ internal static class CompositionDirectInput
         var input = CompositionLifecycle.BeginFromJudging(state, judging, env);
         foreach (var (c, position) in judging.Letters.ToString().Zip(judging.Positions))
         {
-            if (input.Text.KanaInput && Detection.KanaDetector.KanaForKey(position, char.IsAsciiLetterUpper(c)) is { } kana) CompositionText.AppendKana(input.Text, c, kana);
-            else CompositionText.Append(input.Text, env, c);
+            input.Text = input.Text.KanaInput && Detection.KanaDetector.KanaForKey(position, char.IsAsciiLetterUpper(c)) is { } kana
+                ? CompositionText.AppendKana(input.Text, c, kana) : CompositionText.Append(input.Text, c);
         }
     }
 
