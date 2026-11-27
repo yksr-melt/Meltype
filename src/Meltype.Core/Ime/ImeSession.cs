@@ -73,16 +73,22 @@ internal static class ImeSession
             !IsPassword(field) && !traits.Contains(ImeTrait.Email) && !traits.Contains(ImeTrait.Numeric) && !traits.Contains(ImeTrait.Unreachable) &&
             !(settings.ExcludeFullscreen && traits.Contains(ImeTrait.Fullscreen)) &&
             !(settings.JapaneseKeyboardOnly && traits.Contains(ImeTrait.OtherLanguage)) &&
-            !(traits.Contains(ImeTrait.NonText) && !settings.TreatsAsTextInput(app) && !(app is not null && LineContext.TerminalProcesses.Contains(app))) &&
+            !(traits.Contains(ImeTrait.NonText) && !IsGameChat(settings, field) && !settings.TreatsAsTextInput(app) && !(app is not null && LineContext.TerminalProcesses.Contains(app))) &&
             settings.IsAppEnabled(app) && !(environment.InputMethod == InputMode.Keyboard && IsGame(settings, field));
     }
 
     /// <summary>
-    /// ゲームか。Meltype キーボードはゲームでは止めて、チャットは Windows の IME で打ってもらう。
+    /// ゲームで、チャット欄が開いていないか。Meltype キーボードはゲームでは止める (チャット欄が開いている間 (IsGameChat) だけ受け持つ)。
     /// Meltype IME・macOS・Linux のフロントは OS の IME そのものなので、止めるとチャットで日本語を打てなくなる (#1805)。
     /// 受け持ったまま英数で始め、英数ではキーを横取りしない (自動判定もしない) ので、操作のキーはそのままゲームに届く。
     /// </summary>
-    public static bool IsGame(Settings settings, ImeField? field) =>
+    public static bool IsGame(Settings settings, ImeField? field) => IsGameApp(settings, field) && !IsGameChat(settings, field);
+
+    /// <summary>ゲームで、チャット欄が開いている (ImeTrait.ImeContext)。Meltype IME・macOS・Linux のフロントは ImeContext を送らないので、false。</summary>
+    public static bool IsGameChat(Settings settings, ImeField? field) =>
+        IsGameApp(settings, field) && field?.Traits.Contains(ImeTrait.ImeContext) == true;
+
+    private static bool IsGameApp(Settings settings, ImeField? field) =>
         settings.IsGame(field?.App, field?.Traits.Contains(ImeTrait.Game) == true);
 
     public static ImeOutput Handle(ImeSessionState state, ImeEnv env, ImeEvent e, long rev)
@@ -117,7 +123,9 @@ internal static class ImeSession
         ApplyFacts(state, e, settings);
         // ゲームに入ったら英数にする (IsGame)
         var game = IsGame(all, state.Field);
+        // チャット欄を開いたら日本語、閉じたら (上の行で) 英数にする
         if (game && !state.Game) CompositionController.SetDirect(state.Composition, true);
+        else if (state.Game && IsGameChat(all, state.Field)) CompositionController.SetDirect(state.Composition, false);
         state.Game = game;
         var before = LineBefore(state, e.Field);
         var (fieldModes, fieldKey) = FieldModeOf(env, state.Field);
