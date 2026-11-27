@@ -25,10 +25,6 @@ internal sealed class UuidConversion : IUtilityConversion
         return null;
     }
 
-    /// <summary>予測変換 (Tab) 用: 関数記法に一致したときだけ候補を返す。</summary>
-    internal static IReadOnlyList<string>? PredictionCandidates(string raw, DateTime now) =>
-        TryGenerate(raw, now);
-
     /// <summary>関数記法に一致するか (Space での変換開始判定用)。</summary>
     internal static bool Matches(string raw) =>
         ParseFunction(raw) is not null;

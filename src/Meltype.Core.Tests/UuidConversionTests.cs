@@ -28,6 +28,24 @@ internal static class UuidConversionTests
     }
 
     [Test]
+    public static void Uuid_PlainEnglishAndInSentenceRemainUnchanged()
+    {
+        var kUuid = new Keyboard(now: () => FixedUtcNow);
+        kUuid.Type("uuid");
+        kUuid.Press(VirtualKeys.Return);
+        Assert.Equal("uuid", kUuid.Host.Document, "uuid を Enter で確定したときはそのまま uuid になる");
+
+        var kGuid = new Keyboard(now: () => FixedUtcNow);
+        kGuid.Type("guid");
+        kGuid.Press(VirtualKeys.Return);
+        Assert.Equal("guid", kGuid.Host.Document, "guid を Enter で確定したときはそのまま guid になる");
+
+        var kSentence = new Keyboard(now: () => FixedUtcNow);
+        kSentence.Type("uuidwotukau ");
+        Assert.Equal("uuidをつかう", kSentence.Host.View!.Text, "文中の uuidwotukau はそのまま通常の文として変換される");
+    }
+
+    [Test]
     public static void Uuid_FunctionGeneratesUuidsAndIsNotLearned()
     {
         var history = new ConversionHistory(null);
@@ -48,7 +66,7 @@ internal static class UuidConversionTests
     }
 
     [Test]
-    public static void Uuid_SupportsVersionArgumentsAndTabPrediction()
+    public static void Uuid_SupportsVersionArgumentsAndDoesNotGenerateInPredictions()
     {
         var k7 = new Keyboard(now: () => FixedUtcNow);
         k7.Type("UUID(v7) ");
@@ -58,12 +76,8 @@ internal static class UuidConversionTests
         kn.Type("guid(n) ");
         Assert.True(Guid.TryParseExact(kn.Host.View!.Text, "N", out _), "guid(n) はハイフンなしを先頭にする");
 
-        var kTab = new Keyboard(predictor: new Predictor(null, () => [], null), now: () => FixedUtcNow);
-        kTab.Type("uuid()");
-        kTab.Press(VirtualKeys.Tab);
-        var predicted = kTab.Host.View!.Text;
-        Assert.True(Guid.TryParseExact(predicted, "D", out var g4) && g4.Version == 4, "Tab 予測でも UUID を選べる");
-        kTab.Press(VirtualKeys.Return);
-        Assert.Equal(predicted, kTab.Host.Document);
+        var kNoPred = new Keyboard(predictor: new Predictor(null, () => [], null), now: () => FixedUtcNow);
+        kNoPred.Type("uuid()");
+        Assert.True(kNoPred.Host.View?.Predictions is null or { Count: 0 }, "予測変換では UUID を生成しない");
     }
 }

@@ -150,8 +150,6 @@ internal static class CompositionPresentation
         var raw = CompositionText.Raw(CompositionText.Read(input.Text, env));
         if (!input.Text.KanaInput && Utility.ColorConversion.CandidatesWithColors(raw) is { Count: > 0 } colorCandidates)
             return colorCandidates.Select(c => new Prediction(c.Text, "", raw, c.Color)).ToList();
-        if (!input.Text.KanaInput && Utility.UuidConversion.PredictionCandidates(raw, env.Services.Now()) is { Count: > 0 } uuidCandidates)
-            return uuidCandidates.Select(c => new Prediction(c, "", raw)).ToList();
         if (env.Services.Predictor is not { } predictor) return [];
         IEnumerable<string> PredictEnglish() => Predictor.PredictEnglish(raw).Select(w => NotationRules.Word(w, env.ProperNoun));
         if (CompositionText.IsAlphanumeric(CompositionText.Read(input.Text, env), env))
