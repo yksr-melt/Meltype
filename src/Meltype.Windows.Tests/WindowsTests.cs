@@ -222,6 +222,17 @@ internal static class WindowsTests
         Assert.True(Keyboard.KeyboardFront.ModifierAfterPendingKeys(left.Vk, false, [left]), "OS に見えない保留中の押下も使う");
         Assert.True(Keyboard.KeyboardFront.ModifierAfterPendingKeys(right.Vk, true, [left, leftUp]), "左を離しても押したままの右を保持する");
         Assert.True(Keyboard.KeyboardFront.ModifierAfterPendingKeys(left.Vk, true, [leftUp, right, left]), "再押下が解放より後なら押下中");
+
+        var genericRightUp = right with { Vk = VirtualKeys.Shift, IsUp = true };
+        Assert.True(!Keyboard.KeyboardFront.ModifierAfterPendingKeys(right.Vk, true, [genericRightUp]), "汎用 Shift の解放もスキャンコードで右に反映する");
+        Assert.True(Keyboard.KeyboardFront.ModifierAfterPendingKeys(left.Vk, true, [genericRightUp]), "右の汎用 Shift を離しても左は押下中");
+        var genericLeftDown = left with { Vk = VirtualKeys.Shift, Scan = 0 };
+        Assert.True(Keyboard.KeyboardFront.ModifierAfterPendingKeys(left.Vk, false, [genericLeftDown]), "スキャンコードのない汎用 Shift は左として扱う");
+
+        var ctrl = new KeyEvent(VirtualKeys.Control, 0x1D, true, false, true, 0);
+        var alt = new KeyEvent(VirtualKeys.Menu, 0x38, false, false, true, 0);
+        Assert.True(Keyboard.KeyboardFront.ModifierAfterPendingKeys(VirtualKeys.RControl, false, [ctrl]), "拡張フラグのある汎用 Ctrl は右");
+        Assert.True(Keyboard.KeyboardFront.ModifierAfterPendingKeys(VirtualKeys.LMenu, false, [alt]), "拡張フラグのない汎用 Alt は左");
     }
 
     [Test]

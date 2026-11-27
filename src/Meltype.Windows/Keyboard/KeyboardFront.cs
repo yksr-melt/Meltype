@@ -498,9 +498,18 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
     internal static bool ModifierAfterPendingKeys(int vk, bool down, IEnumerable<KeyEvent?> pending)
     {
         foreach (var key in pending)
-            if (key is { } modifier && modifier.Vk == vk) down = modifier.IsDown;
+            if (key is { } modifier && ModifierSide(modifier) == vk) down = modifier.IsDown;
         return down;
     }
+
+    // 一部の注入打鍵は汎用の仮想キーを含む。Shift はスキャンコード、Ctrl と Alt は拡張フラグで左右を区別する。
+    private static int ModifierSide(KeyEvent key) => key.Vk switch
+    {
+        VirtualKeys.Shift => key.Scan == 0x36 ? VirtualKeys.RShift : VirtualKeys.LShift,
+        VirtualKeys.Control => key.Extended ? VirtualKeys.RControl : VirtualKeys.LControl,
+        VirtualKeys.Menu => key.Extended ? VirtualKeys.RMenu : VirtualKeys.LMenu,
+        _ => key.Vk,
+    };
 
     /// <summary>左右を区別する修飾キーの、区別しない仮想キー (修飾キーでなければ 0)。</summary>
     private static int GenericModifier(int vk) => vk switch
