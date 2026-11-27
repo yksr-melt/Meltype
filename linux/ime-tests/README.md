@@ -6,8 +6,8 @@ Playwright Testで、製品IME(Meltype)を通したブラウザー入力を検�
 
 | 種類 | 確認すること | IME | コマンド |
 | --- | --- | --- | --- |
-| 基盤テスト | 型検査、記録処理、テストページの動作 | 不要 | `npm run test:ci` |
-| 実IMEテスト | 製品IME経由の入力結果 | 必要(Linuxのみ) | `npm run test:ime:linux:ci` |
+| 基盤テスト | 型検査、記録処理、テストページの動作 | 不要 | `pnpm run test:ci` |
+| 実IMEテスト | 製品IME経由の入力結果 | 必要(Linuxのみ) | `pnpm run test:ime:linux:ci` |
 
 実IMEテストの入口は`test:ime:<OS>:<実行環境>`の形式で指定します。OS名だけの指定はありません。
 `linux:ci`は、専用のXvfbとIBusのセッションを自前で起動して実行します。CIと同じ構成なので、ローカルのLinuxでも使えます。
@@ -18,16 +18,16 @@ Node.js 22.xを用意し、リポジトリのルートから実行します。
 
 ```bash
 cd linux/ime-tests
-npm ci
-npx playwright install chromium
-npm run test:ci
+pnpm install
+pnpm exec playwright install chromium
+pnpm run test:ci
 ```
 
-> Linuxでブラウザーの共有ライブラリも入れる場合は、`npx playwright install --with-deps chromium`を使います。
+> Linuxでブラウザーの共有ライブラリも入れる場合は、`pnpm exec playwright install --with-deps chromium`を使います。
 
 `test:ci`は型検査と基盤自身のテストです。実IMEを使うテストは含まれません。
 
-> 画面用サーバーはテスト時に自動で起動します。手動で起動した`npm run dev`は、先に停止してください。
+> 画面用サーバーはテスト時に自動で起動します。手動で起動した`pnpm run dev`は、先に停止してください。
 
 ## Linuxの実IMEテストを実行する
 
@@ -51,11 +51,11 @@ linux/build.sh
 # 2. テストを実行する
 cd linux/ime-tests
 python3 scripts/test_linux_ime.py
-MELTYPE_PACKAGE_DIR="$PWD/../../linux/build/Meltype-linux" npm run test:ime:linux:ci
+MELTYPE_PACKAGE_DIR="$PWD/../../linux/build/Meltype-linux" pnpm run test:ime:linux:ci
 ```
 
 - `python3 scripts/test_linux_ime.py`: IMEの起動とキー入力の制御を検査します。
-- `npm run test:ime:linux:ci`: 製品IMEによる入力結果を検査します。
+- `pnpm run test:ime:linux:ci`: 製品IMEによる入力結果を検査します。
 
 ### 実行時の注意
 
@@ -157,25 +157,25 @@ type Target = {
 ### 追加後の確認
 
 ```bash
-npm run test:ci
-npm run test:ime:linux:ci
+pnpm run test:ci
+pnpm run test:ime:linux:ci
 ```
 
 絞り込みや部分実行には、次のコマンドを使えます。
 
 | 目的 | コマンド |
 | --- | --- |
-| 基盤の記録処理だけ実行 | `npm run test:unit` |
-| テストページだけ実行 | `npm run test:page` |
-| テストページをブラウザー表示で実行 | `npm run test:page -- --headed` |
-| テスト名で絞り込む | `npm run test:ime:linux:ci -- --grep 'テスト名'` |
+| 基盤の記録処理だけ実行 | `pnpm run test:unit` |
+| テストページだけ実行 | `pnpm run test:page` |
+| テストページをブラウザー表示で実行 | `pnpm run test:page -- --headed` |
+| テスト名で絞り込む | `pnpm run test:ime:linux:ci -- --grep 'テスト名'` |
 
 ## 失敗を確認する
 
 コンソールには、失敗したテスト名、アサーションのファイルと行番号、期待値と実際の値が表示されます。詳しく調べるには、実行後にHTMLレポートを開きます。
 
 ```bash
-npm run report
+pnpm run report
 ```
 
 レポートから失敗したテストを選ぶと、該当コードと差分を確認できます。

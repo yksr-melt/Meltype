@@ -39,12 +39,12 @@ internal static class Program
                 {
                     var text = new Composition.CompositionTextState();
                     var env = TestSupport.Env(CompositionTests.Detector);
-                    foreach (var c in args.ElementAtOrDefault(1) ?? "") Composition.CompositionText.Append(text, env, c);
+                    foreach (var c in args.ElementAtOrDefault(1) ?? "") text = Composition.CompositionText.Append(text, c);
                     Console.OutputEncoding = new System.Text.UTF8Encoding(false);
-                    Console.WriteLine("units: " + string.Join(" ", Composition.TypedMarks.Read(text, env).Select(u => $"{u.Raw}={u.Kana}")) + (Composition.CompositionText.Pending(text).Length > 0 ? $" +{Composition.CompositionText.Pending(text)}" : ""));
-                    CompositionTests.Detector.LatticeTrace = Console.WriteLine;
-                    var segments = Composition.CompositionText.Segments(text, env);
-                    CompositionTests.Detector.LatticeTrace = null;
+                    Console.WriteLine("units: " + string.Join(" ", Composition.TypedMarks.Read(Composition.CompositionText.Read(text, env), env).Select(u => $"{u.Raw}={u.Kana}")) + (Composition.CompositionText.Pending(Composition.CompositionText.Read(text, env)).Length > 0 ? $" +{Composition.CompositionText.Pending(Composition.CompositionText.Read(text, env))}" : ""));
+                    CompositionTests.Detector.Lattice.LatticeTrace = Console.WriteLine;
+                    var segments = Composition.CompositionText.Segments(Composition.CompositionText.Read(text, env), env);
+                    CompositionTests.Detector.Lattice.LatticeTrace = null;
                     Console.WriteLine("segments: " + string.Join(" | ", segments.Select(s => (s.IsEnglish ? "EN:" : "JA:") + s.Raw)));
                 }
                 return 0;
