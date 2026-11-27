@@ -491,17 +491,18 @@ internal static class CodeProfileTests
     [Test]
     public static void LineContext_MultiLineStringsAndComments()
     {
+        var settings = new Settings();
         // Python の """ の中の行 (本文) で日本語が打てなかった
-        Assert.Equal(LineKind.String, LineContext.ClassifyText("def f():\n    \"\"\"\n    "));
-        Assert.Equal(LineKind.String, LineContext.ClassifyText("x = '''\nほん"));
-        Assert.Equal(LineKind.Comment, LineContext.ClassifyText("/*\n  説明"));
-        Assert.Equal(LineKind.Comment, LineContext.ClassifyText("<!--\n"));
+        Assert.Equal(LineKind.String, LineContext.ClassifyText("def f():\n    \"\"\"\n    ", settings));
+        Assert.Equal(LineKind.String, LineContext.ClassifyText("x = '''\nほん", settings));
+        Assert.Equal(LineKind.Comment, LineContext.ClassifyText("/*\n  説明", settings));
+        Assert.Equal(LineKind.Comment, LineContext.ClassifyText("<!--\n", settings));
         // 閉じた後はコード
-        Assert.Equal(LineKind.Code, LineContext.ClassifyText("\"\"\"\ndoc\n\"\"\"\nx = "));
-        Assert.Equal(LineKind.Code, LineContext.ClassifyText("/* a */\nint x = "));
+        Assert.Equal(LineKind.Code, LineContext.ClassifyText("\"\"\"\ndoc\n\"\"\"\nx = ", settings));
+        Assert.Equal(LineKind.Code, LineContext.ClassifyText("/* a */\nint x = ", settings));
         // コメント・1 行の文字列の中の """ /* は数えない
-        Assert.Equal(LineKind.Code, LineContext.ClassifyText("# \"\"\" in comment\nx = "));
-        Assert.Equal(LineKind.Code, LineContext.ClassifyText("s = \"/*\"\nx = "));
+        Assert.Equal(LineKind.Code, LineContext.ClassifyText("# \"\"\" in comment\nx = ", settings));
+        Assert.Equal(LineKind.Code, LineContext.ClassifyText("s = \"/*\"\nx = ", settings));
     }
 
     [Test]
@@ -1239,8 +1240,8 @@ internal static class LanguageLearningTests
             {
                 var text = new Composition.CompositionTextState();
                 var env = TestSupport.Env(detector);
-                foreach (var c in "game") CompositionText.Append(text, env, c);
-                return string.Join("|", CompositionText.Segments(text, env).Select(s => (s.IsEnglish ? "EN:" : "JA:") + s.Raw));
+                foreach (var c in "game") text = CompositionText.Append(text, c);
+                return string.Join("|", CompositionText.Segments(CompositionText.Read(text, env), env).Select(s => (s.IsEnglish ? "EN:" : "JA:") + s.Raw));
             }
             Assert.Equal("EN:game", Segments(CompositionDetector.CreateDefault(directory)));
             File.WriteAllText(Path.Combine(directory, "japanese.txt"), "game\n");
@@ -1254,8 +1255,8 @@ internal static class LanguageLearningTests
             {
                 var text = new Composition.CompositionTextState();
                 var env = TestSupport.Env(registered);
-                foreach (var c in typed) CompositionText.Append(text, env, c);
-                Assert.Equal(expected, CompositionText.Display(text, env, true), typed);
+                foreach (var c in typed) text = CompositionText.Append(text, c);
+                Assert.Equal(expected, CompositionText.Display(CompositionText.Read(text, env), env, true), typed);
             }
         }
         finally

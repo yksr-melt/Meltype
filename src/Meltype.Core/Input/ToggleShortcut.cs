@@ -82,6 +82,7 @@ public sealed record ToggleShortcut
         Hankaku => "半角/全角",
         Grave => "` (バッククォート)",
         CapsLock => "CapsLock",
+        VirtualKeys.OemAttn => "英数",
         VirtualKeys.Kana => "カタカナ/ひらがな",
         0x1C => "変換",
         0x1D => "無変換",
@@ -93,7 +94,7 @@ public sealed record ToggleShortcut
 
     /// <summary>設定画面で選べるキー (上の名前を付けたもの)。</summary>
     public static IReadOnlyList<int> SelectableKeys { get; } =
-        [Hankaku, Grave, CapsLock, VirtualKeys.Kana, 0x1C, 0x1D, 0x20, .. Enumerable.Range(0x41, 26), .. Enumerable.Range(0x30, 10), .. Enumerable.Range(0x70, 24)];
+        [Hankaku, Grave, CapsLock, VirtualKeys.OemAttn, VirtualKeys.Kana, 0x1C, 0x1D, 0x20, .. Enumerable.Range(0x41, 26), .. Enumerable.Range(0x30, 10), .. Enumerable.Range(0x70, 24)];
 
     // デフォルトの切り替えキー
     public static List<ToggleShortcut> Defaults() =>
