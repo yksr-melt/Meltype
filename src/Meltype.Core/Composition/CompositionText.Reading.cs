@@ -86,7 +86,7 @@ internal static partial class CompositionText
         if (CompositionText.UnitIndexAt(state, start) is int first && CompositionText.UnitIndexAt(state, Math.Min(end, unitsEnd)) is int last)
         {
             foreach (var unit in TypedMarks.Read(state, env).Take(first..last)) builder.Append(unit.Kana);
-            if (end > unitsEnd) builder.Append(CompositionText.PendingText(state, env, final: true));
+            builder.Append(CompositionText.PendingText(state, env, start, end, final: true));
         }
         else
         {
@@ -165,7 +165,7 @@ internal static partial class CompositionText
             }
             var isLast = i == segments.Count - 1;
             var kana = segment.Kana;
-            var pending = isLast ? CompositionText.PendingText(state, env, final) : "";
+            var pending = isLast ? CompositionText.PendingText(state, env, segment, final) : "";
             if (final && isLast && pending == "ん")
             {
                 kana += pending;

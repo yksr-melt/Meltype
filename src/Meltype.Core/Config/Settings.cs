@@ -283,12 +283,37 @@ public sealed class Settings
     public bool AutoCorrectAfterCommit { get; set; } = true;
 
     [Category("4. 判定"), DisplayName("英数状態でもローマ字を検知"),
-     Description("英数状態でも単語の打ち始めを判定し、ローマ字 (日本語) なら自動で日本語入力に戻します。Mac 版では使えません。")]
-    public bool DirectModeAutoDetect { get; set; } = true;
+     Description("ON にすると、英数状態で単語の打ち始めがローマ字 (日本語) なら自動で日本語入力に戻します。OFF では英数状態を維持します。Mac 版では使えません。")]
+    public bool DirectModeAutoDetect { get; set; }
 
     [Category("4. 判定"), DisplayName("/ $ @ で始まる語はそのまま入力"),
      Description("Keyboard モードで、入力欄・行の先頭か空白の直後に打った / $ @ と、続く名前 (空白まで) は変換せず、打つたびにそのままアプリに渡します (AI エージェントの /command・$skill・@ファイル名 の補完を選びやすく)。名前の後に空白を打つと、普通の自動判定に戻ります。文章の入力欄 (コードエディターのコード以外) の / は「・」として入り、Space で / にしてから名前を打つと、名前はそのまま渡します。")]
     public bool SigilWordsDirect { get; set; } = true;
+
+    // コード入力のコメントの記号は、設定画面でこの順に並ぶ。言語ごとに探せるよう、組で使う // と /* を並べ、使う人の少ない REM を最後にする
+    [Category("4. 判定"), DisplayName("コード入力の // コメント"),
+     Description("アプリの種類「コード」で、// の後ろを日英判定します (C・Java・JavaScript・Go・Rust など)。")]
+    public bool CodeCommentSlash { get; set; } = true;
+
+    [Category("4. 判定"), DisplayName("コード入力の /* … */ コメント"),
+     Description("アプリの種類「コード」で、/* … */ の中と、行頭の * に続く本文を日英判定します (C・Java・JavaScript・CSS・SQL など)。")]
+    public bool CodeCommentBlock { get; set; } = true;
+
+    [Category("4. 判定"), DisplayName("コード入力の # コメント"),
+     Description("アプリの種類「コード」で、# の後ろを日英判定します (Python・シェル・Ruby・YAML など)。#include・#region などの指令はコメントとみなしません。")]
+    public bool CodeCommentHash { get; set; } = true;
+
+    [Category("4. 判定"), DisplayName("コード入力の -- コメント"),
+     Description("アプリの種類「コード」で、-- の後ろを日英判定します (SQL・Lua・Haskell など)。ターミナルでは git checkout -- や npm run build -- のような引数の区切りの後ろも日英判定するので、SQL・Lua などを書かなければ OFF にすると英数のまま打てます。")]
+    public bool CodeCommentDash { get; set; } = true;
+
+    [Category("4. 判定"), DisplayName("コード入力の <!-- … --> コメント"),
+     Description("アプリの種類「コード」で、<!-- … --> の中を日英判定します (HTML・XML・Markdown など)。")]
+    public bool CodeCommentHtml { get; set; } = true;
+
+    [Category("4. 判定"), DisplayName("コード入力の REM コメント"),
+     Description("アプリの種類「コード」で、行頭の REM と空白の後ろを日英判定します (Windows のバッチファイル)。")]
+    public bool CodeCommentRem { get; set; } = true;
 
     [Category("6. 候補"), DisplayName("定型文を出す記号"),
      Description("Keyboard モードで、入力欄・行の先頭か空白の直後にこの記号と名前を打って Space / Tab を押すと、トレイの「定型文...」で登録した文に置き換えます (;sig + Space → 署名)。名前が登録したものでなければ何もしません。置き換えた直後に Esc を押すと、打った ;名前 に戻します。空にすると使いません。定型文を 1 つも登録していなければ、記号は今までどおり入力します。")]
@@ -804,7 +829,7 @@ public sealed class Settings
             if (profile is not null) InitializeToggleShortcuts(profile.Values, profile.Name, report);
     }
 
-    public const int CurrentVersion = 13;
+    public const int CurrentVersion = 14;
 
     [Category("10. 学習"), DisplayName("ユーザー学習を使う"),
      Description("OFF にすると、選び直した変換・英字 / かなに直した語・予測変換の語句・選んだ英訳を新しく覚えず、今まで覚えた分も使いません。今まで覚えた分は消えず、ON に戻すとまた使います。消すときは、設定の「学習データ」を使います。")]
@@ -1041,6 +1066,7 @@ public sealed class Settings
         // v9: Zenzai を既定 ON にした。プロファイルの値にも効くよう、読み込む前の JSON で移す (MigrateToV9)。
         // v11: GitHubIssueCandidates を消した。プロファイルの値にも効くよう、読み込む前の JSON で移す (MigrateToV11)。
         // v13: ShowTypedKeys (真偽値) を TypedKeys (選択肢) にした。読み込む前の JSON で移す (MigrateToV13)。
+        // v14: コード入力のコメントの記号を 1 つずつ ON / OFF にする設定を足した。既定は今までの動きと同じすべて ON なので、移す値は無い。
         SettingsVersion = CurrentVersion;
         return true;
     }

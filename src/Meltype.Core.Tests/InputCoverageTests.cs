@@ -14,8 +14,8 @@ internal static class InputCoverageTests
     [Test]
     public static void SpaceAroundEnglish_SeparatesEnglishFromJapanese()
     {
-        Assert.Equal("今日は google で検索", EnglishSpacing.Spaced("今日はgoogleで検索", null, null));
-        Assert.Equal("今日は google で検索", EnglishSpacing.Spaced("今日は google で検索", null, null));
+        Assert.Equal("今日は google で検索", EnglishSpacing.Apply(ComposedText.Of(SpanKind.Japanese, "今日はgoogleで検索"), null, null, english: true, numbers: false).Text);
+        Assert.Equal("今日は google で検索", EnglishSpacing.Apply(ComposedText.Of(SpanKind.Japanese, "今日は google で検索"), null, null, english: true, numbers: false).Text);
     }
 
     [Test]

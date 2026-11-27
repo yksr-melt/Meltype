@@ -14,5 +14,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["mac/Tests"]
+  "include": ["mac/Tests", "android/tools"]
 }

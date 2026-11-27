@@ -213,6 +213,45 @@ internal static class WindowsTests
     }
 
     [Test]
+    public static void ModifierState_UsesTheLatestPendingTransitionForThatSide()
+    {
+        var left = new KeyEvent(VirtualKeys.LShift, 0x2A, false, false, false, 0);
+        var right = new KeyEvent(VirtualKeys.RShift, 0x36, false, false, false, 0);
+        var leftUp = left with { IsUp = true };
+        Assert.True(!Keyboard.KeyboardFront.ModifierAfterPendingKeys(left.Vk, true, [leftUp]), "OS が押下中でも、保留した解放を優先する");
+        Assert.True(Keyboard.KeyboardFront.ModifierAfterPendingKeys(left.Vk, false, [left]), "OS に見えない保留中の押下も使う");
+        Assert.True(Keyboard.KeyboardFront.ModifierAfterPendingKeys(right.Vk, true, [left, leftUp]), "左を離しても押したままの右を保持する");
+        Assert.True(Keyboard.KeyboardFront.ModifierAfterPendingKeys(left.Vk, true, [leftUp, right, left]), "再押下が解放より後なら押下中");
+
+        var genericRightUp = right with { Vk = VirtualKeys.Shift, IsUp = true };
+        Assert.True(!Keyboard.KeyboardFront.ModifierAfterPendingKeys(right.Vk, true, [genericRightUp]), "汎用 Shift の解放もスキャンコードで右に反映する");
+        Assert.True(Keyboard.KeyboardFront.ModifierAfterPendingKeys(left.Vk, true, [genericRightUp]), "右の汎用 Shift を離しても左は押下中");
+        var genericLeftDown = left with { Vk = VirtualKeys.Shift, Scan = 0 };
+        Assert.True(Keyboard.KeyboardFront.ModifierAfterPendingKeys(left.Vk, false, [genericLeftDown]), "スキャンコードのない汎用 Shift は左として扱う");
+
+        var ctrl = new KeyEvent(VirtualKeys.Control, 0x1D, true, false, true, 0);
+        var alt = new KeyEvent(VirtualKeys.Menu, 0x38, false, false, true, 0);
+        Assert.True(Keyboard.KeyboardFront.ModifierAfterPendingKeys(VirtualKeys.RControl, false, [ctrl]), "拡張フラグのある汎用 Ctrl は右");
+        Assert.True(Keyboard.KeyboardFront.ModifierAfterPendingKeys(VirtualKeys.LMenu, false, [alt]), "拡張フラグのない汎用 Alt は左");
+    }
+
+    [Test]
+    public static void SettingsChange_ReportsTsfUnavailableOnlyWhenChosen()
+    {
+        // 設定アプリで動作モードを Meltype IME にしても、使えなければ Running は Meltype キーボードになる。
+        // Running で比べていたので、登録を聞けなかった
+        // 動作モードの既定は Meltype IME なので、Meltype キーボードから選び直す
+        using var engine = new MeltypeEngine(TestRuntime.Create(new Settings { Mode = InputMode.Keyboard }));
+        var reported = 0;
+        engine.TsfUnavailable += () => reported++;
+        engine.EditSettings(settings => settings.Mode = InputMode.Tsf);
+        var expected = Tip.TipServer.IsUsable ? 0 : 1;
+        Assert.Equal(expected, reported, "Meltype IME を選んだ");
+        engine.EditSettings(settings => settings.AutoDetection = !settings.AutoDetection);
+        Assert.Equal(expected, reported, "ほかの設定を変えただけでは知らせ直さない");
+    }
+
+    [Test]
     public static void AltTap_ReleaseIsSentAfterMaskKey()
     {
         // 右 Alt (拡張キー) の単独押しの解放: 0xE8 の押下・解放のあとに、解放をそのまま送り直す (先に解放が届くとメニューバーに移る)
@@ -468,5 +507,36 @@ internal static class WindowsTests
         var off = UI.TrayApplicationContext.UpdateReadyMessage("1.2.3", autoUpdate: false);
         Assert.True(!off.Contains("サインイン"), "OFF はサインイン時に更新しない");
         Assert.True(off.Contains("「Meltype 1.2.3 に更新して再起動」"), "OFF はトレイのメニューの項目名で案内する");
+    }
+
+    [Test]
+    public static void ColorSwatch_IsDrawnForColorCandidates()
+    {
+        using var window = new CompositionWindow();
+        var view = new CompositionView("#3b82f6", [], -1, false, "Tab 予測の候補を選ぶ",
+            Predictions: ["rgb(59, 130, 246)", "hsl(217, 91%, 60%)"],
+            Colors: ["#3b82f6ff", "#3c83f6ff"]);
+        window.ShowView(view, new Point(-5000, -5000));
+        using var bmp = new Bitmap(window.Width, window.Height);
+        window.DrawToBitmap(bmp, new Rectangle(0, 0, window.Width, window.Height));
+        Assert.True(ContainsColor(bmp, 59, 130, 246), $"色見本 (59, 130, 246) が描画されている ({bmp.Width}x{bmp.Height})");
+
+        // Core から Colors が渡されていない候補には、文字が #3b82f6 でも色見本を描かない
+        var plainView = new CompositionView("#3b82f6", ["#3b82f6", "＃３ｂ８２ｆ６"], 0, true, "");
+        window.ShowView(plainView, new Point(-5000, -5000));
+        using var plainBmp = new Bitmap(window.Width, window.Height);
+        window.DrawToBitmap(plainBmp, new Rectangle(0, 0, window.Width, window.Height));
+        Assert.True(!ContainsColor(plainBmp, 59, 130, 246), "Colors が null なら色見本を描画しない");
+
+        static bool ContainsColor(Bitmap image, byte r, byte g, byte b)
+        {
+            for (var x = 0; x < image.Width; x++)
+                for (var y = 0; y < image.Height; y++)
+                {
+                    var p = image.GetPixel(x, y);
+                    if (p.R == r && p.G == g && p.B == b) return true;
+                }
+            return false;
+        }
     }
 }

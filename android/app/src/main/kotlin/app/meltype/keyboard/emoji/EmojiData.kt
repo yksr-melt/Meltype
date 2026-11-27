@@ -24,7 +24,7 @@ enum class EmojiCategory(val title: String, val unicodeGroup: String?, val tabEm
     }
 }
 
-/** アプリに入れてある絵文字の一覧（assets/emoji.txt。tools/make-emoji-asset.py が作る）の読み取り。 */
+/** アプリに入れてある絵文字の一覧（assets/emoji.txt。tools/make-emoji-asset.ts が作る）の読み取り。 */
 object EmojiData {
     /**
      * 一覧を種類ごとに分ける。種類の中の並びは、一覧の順のまま。肌の色の違いは外す。

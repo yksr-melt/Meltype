@@ -263,7 +263,7 @@ internal static partial class CompositionText
         var result = segments.ToList();
         if (result.Count > 0 && !result[^1].IsEnglish)
         {
-            result[^1] = result[^1] with { Kana = result[^1].Kana + CompositionText.PendingText(state, env, final: true) };
+            result[^1] = result[^1] with { Kana = result[^1].Kana + CompositionText.PendingText(state, env, result[^1], final: true) };
         }
         return result;
     }

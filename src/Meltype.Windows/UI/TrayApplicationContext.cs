@@ -173,6 +173,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
         // 動作モードが Meltype IME なのに、登録済みの impl がこの Meltype.exe と別ビルドで、Meltype キーボードで動いている
         // (登録した人が別の版の Meltype に更新した・同じ PC のほかのユーザーが別の版を入れた)。聞いたことは覚えず、起動のたびに聞く
         if (CanRegisterTsf && _engine.Settings.Mode == InputMode.Tsf && Tip.TipServer.IsOtherBuildRegistered) _invoker.BeginInvoke(OfferTsfUpdate);
+        // 起動中の IntroduceTsf で Meltype IME を使えなかったときは、上で聞く。ここより前に受け取り始めると 2 回聞く
+        _engine.TsfUnavailable += OnTsfUnavailable;
         // 起動時の設定反映が終わってから、読み込み中に蓄積した除外をまとめて通知する。
         Diagnostics.ShortcutExclusions.Added += OnShortcutExcluded;
         OnShortcutExcluded();
@@ -410,6 +412,21 @@ internal sealed class TrayApplicationContext : ApplicationContext
         if (_invoker.IsHandleCreated && !_invoker.IsDisposed) _invoker.BeginInvoke(UpdateStatus);
     }
 
+    // 設定アプリ・config.json の書き換えで動作モードを Meltype IME にしたが、Windows に登録されていない。MeltypeRuntime のタイマーのスレッドからも呼ばれる
+    private void OnTsfUnavailable()
+    {
+        if (!CanRegisterTsf) return;
+        try
+        {
+            _invoker.BeginInvoke(() => EnableTsf("Meltype IME を Windows に登録しますか？\n\n" +
+                "Meltype IME は Windows の IME として、打った文字を入力欄に直接入れます。登録するまでは Meltype キーボード (変換ボックスで入力) で動きます。"));
+        }
+        catch (InvalidOperationException)
+        {
+            // 終了してハンドルを破棄した
+        }
+    }
+
     // MeltypeRuntime のタイマーのスレッドからも呼ばれる
     private void OnEngineSettingsChanged(Settings previous, Settings next)
     {
@@ -419,10 +436,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
             {
                 _engine.OnSettingsChanged(previous, next);
                 UpdateStatus();
-                // 設定アプリで動作モードを Meltype IME にしたが、Windows に登録されていない (Meltype キーボードで動く)
-                if (previous.Mode != InputMode.Tsf && next.Mode == InputMode.Tsf && CanRegisterTsf && !Tip.TipServer.IsUsable)
-                    EnableTsf("Meltype IME を Windows に登録しますか？\n\n" +
-                        "Meltype IME は Windows の IME として、打った文字を入力欄に直接入れます。登録するまでは Meltype キーボード (変換ボックスで入力) で動きます。");
             });
         }
         catch (InvalidOperationException)
@@ -632,6 +645,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _exiting = true;
         Diagnostics.ShortcutExclusions.Added -= OnShortcutExcluded;
         _engine.SettingsChanged -= OnEngineSettingsChanged;
+        _engine.TsfUnavailable -= OnTsfUnavailable;
         _engine.ToggleRequested -= OnToggleRequested;
         _tipServer.Dispose();
         _engine.Keyboard = null;
