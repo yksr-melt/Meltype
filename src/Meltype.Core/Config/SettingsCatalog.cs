@@ -7,11 +7,11 @@ using System.Reflection;
 
 namespace Meltype.Config;
 
-/// <summary>設定画面に出す 1 項目。Category は番号を除いた分類の名前 ("1. 全般" → "全般")。</summary>
+/// <summary>設定画面に出す 1 項目。Category は分類の名前 (Settings のプロパティの Category)。</summary>
 public sealed record SettingItem(PropertyInfo Property, string Title, string Description, string Category);
 
 /// <summary>
-/// 設定画面に出す項目を、この OS で使うものだけ分類の順に並べる。
+/// 設定画面に出す項目を、この OS で使うものだけ分類ごとにまとめる (分類の中は Settings に書いた順)。
 /// 名前・説明・分類は Settings のプロパティの属性 (DisplayName・Description・Category) から読み、
 /// Browsable(false) と、ほかの OS だけで使う項目 (Platforms) は出さない。
 /// </summary>
@@ -29,12 +29,11 @@ public static class SettingsCatalog
             .Where(p => !AppPaths.IsPortable || p.Name != nameof(Settings.Mode))
             .Select(p => (Property: p, Category: p.GetCustomAttribute<CategoryAttribute>()?.Category ?? ""))
             .GroupBy(p => p.Category)
-            .OrderBy(g => CategoryNumber(g.Key))
-            .Select(g => (Name(g.Key), (IReadOnlyList<SettingItem>)g.Select(p => new SettingItem(
+            .Select(g => (g.Key, (IReadOnlyList<SettingItem>)g.Select(p => new SettingItem(
                 p.Property,
                 p.Property.GetCustomAttribute<DisplayNameAttribute>()?.DisplayName ?? p.Property.Name,
                 AppPaths.WithDataDirectory(p.Property.GetCustomAttribute<DescriptionAttribute>()?.Description ?? ""),
-                Name(g.Key))).ToList()))
+                g.Key)).ToList()))
             .ToList();
     }
 
@@ -44,18 +43,5 @@ public static class SettingsCatalog
     {
         var name = Enum.GetName(enumType, value) ?? value.ToString() ?? "";
         return enumType.GetField(name)?.GetCustomAttribute<DescriptionAttribute>()?.Description ?? name;
-    }
-
-    // 分類は "1. 全般" のように番号から始まり、番号の順に並べる。番号の無い分類は最後
-    private static int CategoryNumber(string category)
-    {
-        var dot = category.IndexOf(". ", StringComparison.Ordinal);
-        return dot > 0 && int.TryParse(category[..dot], out var number) ? number : int.MaxValue;
-    }
-
-    private static string Name(string category)
-    {
-        var dot = category.IndexOf(". ", StringComparison.Ordinal);
-        return category.Length == 0 ? "その他" : dot > 0 && int.TryParse(category[..dot], out _) ? category[(dot + 2)..] : category;
     }
 }

@@ -21,7 +21,7 @@ internal static class SettingsSchemaTests
         Assert.Equal("句読点", properties["Punctuation"]!["title"]?.GetValue<string>(), "設定画面の名前を title に出す");
         Assert.True(properties["AutoDetection"]!["description"]?.GetValue<string>().Length > 0, "設定画面の説明を description に出す");
         Assert.Equal("Japanese", properties["Punctuation"]!["default"]?.GetValue<string>(), "既定値を default に出す");
-        Assert.Equal("4. 判定", properties["AutoDetection"]!["x-category"]?.GetValue<string>(), "設定画面の分類を x-category に出す");
+        Assert.Equal("英語 / 日本語の判定", properties["AutoDetection"]!["x-category"]?.GetValue<string>(), "設定画面の分類を x-category に出す");
         string Platforms(string key) => string.Join(",", properties[key]!["x-platforms"]!.AsArray().Select(n => n!.GetValue<string>()));
         Assert.Equal("Windows", Platforms("CompositionTheme"), "一部の OS でしか使わない項目に、使う OS を x-platforms に出す");
         Assert.True(properties["AutoDetection"]!["x-platforms"] is null, "どの OS でも使う項目には出さない");
