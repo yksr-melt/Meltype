@@ -28,9 +28,11 @@ internal sealed class SmoothCaretWindow : PopupForm
     private IntPtr _lastForeground;
     private int _uiaQueryRunning;
 
-    public SmoothCaretWindow(Func<Rectangle?> uiaCaretProvider)
+    public SmoothCaretWindow(Control invoker, Func<Rectangle?> uiaCaretProvider)
     {
+        _invoker = invoker;
         _uiaCaretProvider = uiaCaretProvider;
+        MinimumSize = new Size(1, 1);
         BackColor = Color.FromArgb(24, 24, 24);
         Size = new Size(2, 18);
         Opacity = 0.0;
@@ -38,6 +40,8 @@ internal sealed class SmoothCaretWindow : PopupForm
         _pollTimer.Tick += (_, _) => PollCaret();
         _animTimer.Tick += (_, _) => OnAnimationTick();
     }
+
+    private readonly Control _invoker;
 
     protected override bool ClickThrough => true;
 
@@ -57,7 +61,16 @@ internal sealed class SmoothCaretWindow : PopupForm
     }
 
     /// <summary>キー入力・確定・矢印移動の直後にキャレット位置を即座に追従する (TSF / UI Automation 対応)。</summary>
-    public void NotifyActivity() => PollCaret();
+    public void NotifyActivity(Point? anchor = null)
+    {
+        if (!_enabled || _suppressed || IsDisposed) return;
+        if (anchor is { X: var ax, Y: var ay } && (ax != 0 || ay != 0))
+        {
+            ApplyCaretTarget(new Rectangle(ax, ay, 2, 20));
+            return;
+        }
+        PollCaret();
+    }
 
     private void PollCaret()
     {
@@ -70,9 +83,10 @@ internal sealed class SmoothCaretWindow : PopupForm
             try
             {
                 var bounds = _uiaCaretProvider();
-                if (bounds is { Width: > 0, Height: > 0 and < 200 } rect && !IsDisposed && IsHandleCreated)
+                if (bounds is { Width: >= 0, Height: > 0 and < 200 } rect && (rect.X != 0 || rect.Y != 0) &&
+                    !IsDisposed && !_invoker.IsDisposed && _invoker.IsHandleCreated)
                 {
-                    BeginInvoke(() =>
+                    _invoker.BeginInvoke(() =>
                     {
                         if (_enabled && !_suppressed && !IsDisposed)
                             ApplyCaretTarget(rect);

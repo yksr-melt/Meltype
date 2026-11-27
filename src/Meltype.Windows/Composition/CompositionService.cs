@@ -30,7 +30,7 @@ internal sealed class CompositionService : IDisposable
         _invoker = invoker;
         Runtime = runtime;
         _settings = settings;
-        _smoothCaret = new SmoothCaretWindow(() => Focus.CaretBounds());
+        _smoothCaret = new SmoothCaretWindow(invoker, () => Focus.CaretBounds());
         _smoothCaret.SetEnabled(settings().SmoothCaret);
         runtime.SettingsChanged += loaded =>
         {
@@ -67,10 +67,10 @@ internal sealed class CompositionService : IDisposable
     public FocusInspector Focus { get; } = new();
 
     /// <summary>TSF 等からの入力・キャレット移動を受けてスムースカーソルを追従させる。</summary>
-    public void NotifyCaretActivity()
+    public void NotifyCaretActivity(Point? anchor = null)
     {
         if (!_invoker.IsDisposed && _invoker.IsHandleCreated)
-            _invoker.BeginInvoke(_smoothCaret.NotifyActivity);
+            _invoker.BeginInvoke(() => _smoothCaret.NotifyActivity(anchor));
     }
 
     /// <summary>
