@@ -44,7 +44,7 @@ public abstract record PhysicalKey
     }
 
     /// <summary>US 配列などにある、1 の左のバッククォートの位置。JIS 配列では同じ位置に半角/全角キーがある。</summary>
-    public bool IsGravePosition => this is Evdev { Code: 41 } or Mac { KeyCode: 0x32 } or Windows { Scan: 0x29, Extended: false };
+    internal bool IsGravePosition => this is Evdev { Code: 41 } or Mac { KeyCode: 0x32 } or Windows { Scan: 0x29, Extended: false };
 
     // JisKeys.Names の順。evdev と Windows のスキャンコードは、¥ と ろ のほかは同じ値
     private static readonly int[] EvdevCodes =
