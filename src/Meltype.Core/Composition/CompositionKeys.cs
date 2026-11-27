@@ -257,7 +257,9 @@ internal static class CompositionKeys
                 // 関数形式の色変換 (hex(dadada)・rgb(59,130,246) など) なら、英語と判定しても変換する
                 if (CompositionConversion.HasRegisteredReading(input.Text, env) ||
                     (!input.Text.KanaInput && input.Text.Mode == DisplayMode.Auto &&
-                     Utility.ColorConversion.Matches(CompositionText.Raw(CompositionText.Read(input.Text, env)))))
+                     CompositionText.Raw(CompositionText.Read(input.Text, env)) is var raw &&
+                     (Utility.ColorConversion.Matches(raw) || Utility.TimestampConversion.IsName(raw) ||
+                      Utility.TimestampConversion.FromFunction(raw, env.Services.Now()) is not null)))
                 {
                     CompositionConversion.StartConversion(state, input, env, ConversionTrigger.Space);
                 }

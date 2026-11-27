@@ -1260,6 +1260,25 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void UnixTimestampFunctions_WorkInCandidatesAndPredictions()
+    {
+        foreach (var digits in new[] { "1795782215", "1795782215000", "1795782215000000", "1795782215000000000" })
+        {
+            var k = new Keyboard();
+            k.Type($"unix({digits}) ");
+            Assert.True(k.Host.View!.Candidates.Contains("2026-11-27T12:23:35Z"), digits);
+        }
+        var iso = new Keyboard();
+        iso.Type("unix(2026-11-27t12:23:35z) ");
+        Assert.True(iso.Host.View!.Candidates.Contains("1795782215"), string.Join(", ", iso.Host.View.Candidates));
+
+        var now = new DateTime(2026, 11, 27, 12, 23, 35, DateTimeKind.Utc);
+        var current = new Keyboard(predictor: new Predictor(null, null, null), now: () => now);
+        current.Type("iso()");
+        Assert.True(current.Host.View!.Predictions!.Contains("2026-11-27T12:23:35Z"), "予測候補でも現在時刻を選べる");
+    }
+
+    [Test]
     public static void TypedDate_OffersSlashForms()
     {
         // #294: 打った日付 (10がつ9にち) にも 10/9 の形を候補に出す。いつもの候補 (変換エンジンの結果) は最初のまま。
