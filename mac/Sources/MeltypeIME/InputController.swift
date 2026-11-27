@@ -87,22 +87,27 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
     private static func isPasswordInput(app: String) -> Bool {
         // SecurityAgent では通常自動で入るユーザー名も含めて通す。
         if authenticationApps.contains(app) { return true }
+        guard let front = NSWorkspace.shared.frontmostApplication, front.bundleIdentifier == app else { return false }
         let secureEventInput = IsSecureEventInputEnabled()
-        let front = NSWorkspace.shared.frontmostApplication
-        let frontmost = front?.bundleIdentifier == app
-        let usingABC = frontmost && secureEventInput && ModeServices.currentInputSourceID() == "com.apple.keylayout.ABC"
+        let usingABC = secureEventInput && ModeServices.currentInputSourceID() == "com.apple.keylayout.ABC"
         // 同じ入力欄でも password と通常テキストを切り替えられるため、打鍵ごとに読み直す。
-        let secureField = frontmost && AXIsProcessTrusted() ? front.flatMap { focusedFieldIsSecure($0.processIdentifier) } : nil
-        return protectsInput(app: app, frontmost: frontmost,
-                             secureField: secureField, secureEventInput: secureEventInput, usingABC: usingABC)
+        let secureField = AXIsProcessTrusted() ? focusedFieldIsSecure(front.processIdentifier) : nil
+        let secureInputOwnedByApp = secureField == nil && secureEventInput && safariApps.contains(app) &&
+            secureInputOwner() == front.processIdentifier
+        return protectsInput(app: app, secureField: secureField, secureInputOwnedByApp: secureInputOwnedByApp, usingABC: usingABC)
     }
 
-    static func protectsInput(app: String, frontmost: Bool, secureField: Bool?, secureEventInput: Bool, usingABC: Bool) -> Bool {
+    private static func secureInputOwner() -> pid_t? {
+        // Secure Event Input はシステム全体の状態。所有元が分かる場合だけ、Safari の現在の欄の手がかりにする。
+        let session = CGSessionCopyCurrentDictionary() as? [String: Any]
+        return (session?["kCGSSessionSecureInputPID"] as? NSNumber)?.int32Value
+    }
+
+    static func protectsInput(app: String, secureField: Bool?, secureInputOwnedByApp: Bool, usingABC: Bool) -> Bool {
         // ABC への切り替え後にも IMK がこのコントローラーに打鍵を届ける場合がある (#1932)。
         if usingABC { return true }
         if let secureField { return secureField }
-        // Secure Event Input はシステム全体の値。AX で欄を確認できない場合の Safari の手がかりに限る (#1931)。
-        return frontmost && secureEventInput && safariApps.contains(app)
+        return secureInputOwnedByApp && safariApps.contains(app)
     }
 
     private static func focusedFieldIsSecure(_ pid: pid_t) -> Bool? {

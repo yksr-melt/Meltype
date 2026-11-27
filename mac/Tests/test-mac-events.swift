@@ -80,13 +80,13 @@ struct EventTests {
    let safari = "com.apple.Safari"
    let appKit = "local.meltype.event-client"
    let protects = MeltypeInputController.protectsInput
-   precondition(protects(safari, true, nil, true, false), "Safari works without AX")
-   precondition(!protects(safari, true, false, true, false), "AX regular field overrides global secure input")
-   precondition(!protects(safari, false, nil, true, false), "global secure input is not a background Safari signal")
-   precondition(!protects(appKit, true, nil, true, false), "global secure input alone does not identify an AppKit field")
-   precondition(protects(appKit, true, true, false, false), "AX identifies a secure AppKit field")
-   precondition(protects(appKit, true, nil, true, true), "ABC secure input bypasses a stale controller")
-   precondition(!protects(appKit, true, false, false, false), "regular input resumes after focus changes")
+   precondition(protects(safari, nil, true, false), "Safari's secure input works without AX")
+   precondition(!protects(safari, false, true, false), "AX regular field overrides the fallback")
+   precondition(!protects(safari, nil, false, false), "another process's secure input does not bypass Safari")
+   precondition(!protects(appKit, nil, true, false), "secure input alone does not identify an AppKit field")
+   precondition(protects(appKit, true, false, false), "AX identifies a secure AppKit field")
+   precondition(protects(appKit, nil, false, true), "ABC secure input bypasses a stale controller")
+   precondition(!protects(appKit, false, false, false), "regular input resumes after focus changes")
   }
   check("bracket commit consumes Return with caret movement enabled") { controller,client in
    precondition(key(controller,client,"[",code:UInt16(kVK_ANSI_LeftBracket)))
