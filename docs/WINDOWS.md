@@ -133,6 +133,8 @@ Meltype キーボードのときは、Windows の IME (Microsoft IME・Google �
 
 アプリ別設定の「種類」を **コード** にしたアプリ (既定で VS Code・Cursor・Visual Studio・JetBrains の IDE・Sublime Text・Notepad++・Windows Terminal・PowerShell・コマンドプロンプトなど) では、基本は英数のまま通し、日本語を書く場所だけ判定します。Meltype IME でも Meltype キーボードでも同じです。
 
+Notepad++ など、入力欄が Windows の旧来の IME インターフェイス (IMM32) を使うアプリでは、キャレットの直前の文字を Meltype が読めないことがあります。その場合、コメントや文字列を期待どおりに判定できないことがあります。
+
 どこで日本語を判定するか、コメントの記号の設定、コードの行で日本語を打つ方法は、[共通の使い方](USAGE.md#コードエディターとターミナル) にあります。
 
 <a name="変換ボックス"></a>
