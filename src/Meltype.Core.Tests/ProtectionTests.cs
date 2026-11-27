@@ -270,16 +270,16 @@ internal static class ProtectionTests
         {
             var text = new Composition.CompositionTextState();
             var env = TestSupport.Env(CompositionTests.Detector);
-            foreach (var c in "kyouha「" + token + "」ashita") CompositionText.Append(text, env, c);
+            foreach (var c in "kyouha「" + token + "」ashita") text = CompositionText.Append(text, c);
             var calls = new List<string>();
-            var shown = CompositionText.Display(text, env, final: true, convert: (kana, _, _) =>
+            var shown = CompositionText.Display(CompositionText.Read(text, env), env, final: true, convert: (kana, _, _) =>
             {
                 calls.Add(kana);
                 return kana.Replace("きょうは", "今日は").Replace("あした", "明日");
             });
             Assert.Equal("今日は「" + token + "」明日", shown, token);
             Assert.True(calls.All(kana => !kana.Contains(token)), "保護原文を漢字変換へ渡さない");
-            Assert.Equal(token, CompositionText.ConversionSegments(text, env).Single(s => s.IsProtected).Raw);
+            Assert.Equal(token, CompositionText.ConversionSegments(CompositionText.Read(text, env), env).Single(s => s.IsProtected).Raw);
         }
     }
 

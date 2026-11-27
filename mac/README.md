@@ -90,8 +90,10 @@ bash mac/update.sh
 mac/build/Meltype.app/Contents/MacOS/Meltype --check-inputs mac/Resources/InputChecks.tsv
 mac/build/Meltype.app/Contents/MacOS/Meltype --self-test
 swift test --package-path mac
-sbcl --script tests/test_mac_scripts.lisp
+node --test mac/Tests/scripts.test.ts
 ```
+
+`mac/Tests/scripts.test.ts` (インストールのスクリプトのテスト) は、`.ts` をそのまま実行できる Node.js 22.18 以降で動かします (CI は Node.js 24)。
 
 `--check-inputs` と `--self-test` は、空の一時ディレクトリをデータの保存先にして実行します。利用者の Meltype の設定・学習データ・ユーザー辞書は読み書きせず、検査が終わると一時ディレクトリを削除します。
 
