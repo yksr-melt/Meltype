@@ -221,15 +221,43 @@ public sealed class UserDictionary
         reading = reading.Trim();
         word = word.Trim();
         category = category.Trim();
-        if (reading.Length < MinRegisteredReadingLength) return "読みを入力してください。";
-        if (word.Length == 0) return "単語を入力してください。";
+        if (Invalid(reading, word) is { } error) return error;
         // CR・ESC などは確定するとアプリにキー操作として届く
-        if (reading.Any(char.IsControl) || word.Any(char.IsControl) || category.Any(char.IsControl)) return "タブ・改行などの制御文字は使えません。";
+        if (category.Any(char.IsControl)) return "タブ・改行などの制御文字は使えません。";
         // 外で書き換えた語の上に足す
         if (!Refresh()) return Unreadable;
         if (_words.Any(w => w.Reading == reading && w.Word == word)) return null;
         _words.Add(new UserWord(reading, word, Category: category));
         Changed();
+        return null;
+    }
+
+    /// <summary>登録した語 <paramref name="target"/> の読みと単語を直す。品詞と並びの位置はそのまま。直せなければ理由を返す。</summary>
+    public string? Edit(UserWord target, string reading, string word)
+    {
+        reading = reading.Trim();
+        word = word.Trim();
+        if (Invalid(reading, word) is { } error) return error;
+        if (!Refresh()) return Unreadable;
+        var index = _words.IndexOf(target);
+        if (index < 0) return "直す語が見つかりません。ほかの画面で変えられたかもしれません。";
+        var edited = target with { Reading = reading, Word = word };
+        if (edited == target) return null;
+        if (_words.Where((w, i) => i != index).Any(w => w.Reading == reading && w.Word == word)) return "同じ読みと単語は、もう登録しています。";
+        _words[index] = edited;
+        Changed();
+        return null;
+    }
+
+    /// <summary>登録・直すときに、読み・単語を使えない理由。使えれば null。</summary>
+    private static string? Invalid(string reading, string word)
+    {
+        if (reading.Length < MinRegisteredReadingLength) return "読みを入力してください。";
+        if (word.Length == 0) return "単語を入力してください。";
+        // CR・ESC などは確定するとアプリにキー操作として届く
+        if (reading.Any(char.IsControl) || word.Any(char.IsControl)) return "タブ・改行などの制御文字は使えません。";
+        // # から始まる行は userdict.txt のコメントなので、保存しても次に読むときに消える
+        if (reading.StartsWith('#')) return "読みの先頭に # は使えません。";
         return null;
     }
 
@@ -240,7 +268,7 @@ public sealed class UserDictionary
         var added = 0;
         foreach (var word in words)
         {
-            if (word.Reading.Length < MinRegisteredReadingLength || word.Word.Length == 0 || word.Reading.Any(char.IsControl) || word.Word.Any(char.IsControl)) continue;
+            if (Invalid(word.Reading, word.Word) is not null) continue;
             if (_words.Any(w => w.Reading == word.Reading && w.Word == word.Word)) continue;
             _words.Add(word);
             added++;
