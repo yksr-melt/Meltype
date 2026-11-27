@@ -65,6 +65,10 @@ internal sealed partial class CompositionLearning(CompositionServices services, 
         {
             services.TranslationHistory?.Remember(clause.Reading, clause.Text);
         }
+        foreach (var clause in clauses)
+        {
+            if (clause.UtilityRankingKeys.TryGetValue(clause.Text, out var key)) services.TranslationHistory?.RememberUtility(key);
+        }
         if (services.History is not { } history) return;
         foreach (var clause in clauses.Where(c => !c.IsEnglish && c.Changed && ConversionHistory.IsLearnableReading(c.Reading)))
         {

@@ -12,10 +12,10 @@ internal sealed class NowConversion : IUtilityConversion
     public UtilityCandidates? Convert(UtilityInput input)
     {
         if (input.Reading is not ("いま" or "なう")) return null;
-        var times = Times(input.Context.Now);
+        var times = UtilityCandidates.Rankable("now-time", Times(input.Context.Now));
         if (input.Reading == "なう" && input.Context.Settings.NowPlayingCandidates && Songs(input.Context.NowPlaying()) is { Count: > 0 } songs)
-            return new([.. songs, .. times], UtilityPlacement.Append);
-        return new(times, UtilityPlacement.Append);
+            return times with { Candidates = [.. songs, .. times.Candidates] };
+        return times;
     }
 
     private static string[] Times(DateTime now)

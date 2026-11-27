@@ -117,6 +117,13 @@ internal sealed class TranslationDictionary
 /// </summary>
 internal sealed class TranslationHistory
 {
+    // 英訳とは別の名前で、書式の固定 ID と選んだ回数だけを同じファイルに保存する。
+    private const string Utilities = "\0utility";
+
+    public void RememberUtility(string key) => Remember(Utilities, key);
+
+    public IReadOnlyList<(string Word, int Count)> UtilityChoices() => Get(Utilities);
+
     private readonly string? _path;
     // 読み直すときは、中身を書き換えずに丸ごと差し替える (Get は入力のスレッドから lock を取らずに読む)
     private Dictionary<string, Dictionary<string, int>> _counts;

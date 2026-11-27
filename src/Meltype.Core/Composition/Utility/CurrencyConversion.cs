@@ -31,7 +31,7 @@ internal sealed partial class CurrencyConversion : IUtilityConversion
         if (input.Reading is not { } reading || Parse(reading) is not { } parsed) return null;
         if (ExchangeRates.Bundled is not { } rates) return null;
         var candidates = Candidates(parsed.Amount, parsed.From, parsed.To, rates);
-        return candidates.Count > 0 ? new(candidates, UtilityPlacement.Append) : null;
+        return candidates.Count > 0 ? UtilityCandidates.Rankable($"currency-{parsed.From.Code}-{parsed.To?.Code ?? "default"}", candidates) : null;
     }
 
     /// <summary>金額と通貨の読みなら、金額・換算元・換算先 (決めていなければ null)。読みが合わなければ null。</summary>

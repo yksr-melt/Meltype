@@ -1141,6 +1141,62 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void UtilityRanking_RemembersTheTimeFormatAndDoesNotReplaceTheFirstCandidate()
+    {
+        var history = new TranslationHistory(null);
+        var ordinary = new ConversionHistory(null);
+        var converter = new SplitConverter(new() { ["いま"] = [new("いま", "今")] });
+        for (var i = 0; i < 2; i++)
+        {
+            var k = new Keyboard(history: ordinary, translationHistory: history, converter: converter, now: () => new DateTime(2026, 10, 8, 17, 22, 0));
+            k.Type("ima ");
+            for (var n = 0; n < 30 && k.Showing != "17:22"; n++) k.Press(VirtualKeys.Space);
+            Assert.Equal("17:22", k.Showing);
+            k.Type("\n");
+        }
+        Assert.True(ordinary.Get("いま") is null, "時刻の文字列は変換履歴に入らない");
+        var next = new Keyboard(translationHistory: history, converter: converter, now: () => new DateTime(2026, 10, 8, 18, 5, 0),
+            moreCandidates: _ => ["居間"]);
+        next.Type("ima ");
+        Assert.Equal("今", next.Showing);
+        Assert.Equal("18:05", next.Host.View!.Candidates[1]);
+        next.Press(VirtualKeys.Space);
+        Assert.Equal("18:05", next.Showing, "候補一覧を展開しても2番目");
+        Assert.True(!next.Host.View!.Candidates.Contains("17:22"), "古い時刻が出ない");
+    }
+
+    [Test]
+    public static void UtilityRanking_RelatedTermsAreNeverFirst()
+    {
+        foreach (var (typed, preferred, related) in new[]
+        {
+            ("jakushadansei", "弱者男性", "ふにゃオス"),
+            ("funyaosu", "ふにゃオス", "弱者男性"),
+        })
+        {
+            var history = new TranslationHistory(null);
+            Keyboard Open() => new(translationHistory: history, converter: new SplitConverter(new()
+            {
+                ["じゃくしゃだんせい"] = [new("じゃくしゃだんせい", "弱者男性")],
+                ["ふにゃおす"] = [new("ふにゃおす", "ふにゃオス")],
+            }));
+            for (var i = 0; i < 2; i++)
+            {
+                var k = Open();
+                k.Type(typed + " ");
+                Assert.Equal(preferred, k.Showing);
+                for (var n = 0; n < 30 && k.Showing != related; n++) k.Press(VirtualKeys.Space);
+                Assert.Equal(related, k.Showing);
+                k.Type("\n");
+            }
+            var next = Open();
+            next.Type(typed + " ");
+            Assert.Equal(preferred, next.Showing);
+            Assert.Equal(related, next.Host.View!.Candidates[1]);
+        }
+    }
+
+    [Test]
     public static void Now_ChosenTimeIsNotLearned()
     {
         // いま → 17:22 を選んで確定しても覚えない (覚えると、次の いま で古い時刻が最初に出る)
@@ -2353,14 +2409,12 @@ internal static class CompositionTests
     [Test]
     public static void DictionaryAdditions_CandidatesAndBrandNames()
     {
-        // #1445・#1651・#1924: 変換の候補に出す語
+        // #1445・#1651: 変換の候補に出す語
         var candidates = CandidateDictionary.Load(null);
         Assert.True(candidates.Lookup("おねしょた").Contains("おねショタ"), "#1445 おねしょた");
         Assert.True(candidates.Lookup("ちゅうに").Contains("厨二"), "#1651 ちゅうに");
         Assert.True(candidates.Lookup("きめつ").Contains("鬼滅"), "#1651 きめつ");
         Assert.True(candidates.Lookup("おしのこ").Contains("推しの子"), "#1651 おしのこ");
-        Assert.True(candidates.Lookup("じゃくしゃだんせい").Contains("ふにゃオス"), "#1924 じゃくしゃだんせい");
-        Assert.True(candidates.Lookup("ふにゃおす").Contains("弱者男性"), "#1924 ふにゃおす");
 
         // #1548・#1490・#1460: 読みで英字の名前を出す
         Assert.True(Predictor.PredictEnglishNames("ぜんざい").Contains("Zenzai"), "#1548 ぜんざい");

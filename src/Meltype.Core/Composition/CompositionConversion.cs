@@ -314,6 +314,20 @@ internal static class CompositionConversion
         {
             if (clause.Candidates.Contains(text)) continue;
             clause.Candidates.Insert(at++, text);
+            if (utility.RankingKeys.TryGetValue(text, out var key)) clause.UtilityRankingKeys.Add(text, key);
+        }
+        if (clause.UtilityRankingKeys.Count > 0 && env.Services.TranslationHistory is { } history)
+        {
+            foreach (var (key, count) in history.UtilityChoices())
+            {
+                if (count < 2) break;
+                var ranked = clause.UtilityRankingKeys.FirstOrDefault(pair => pair.Value == key).Key;
+                if (ranked is null) continue;
+                clause.Candidates.Remove(ranked);
+                clause.Candidates.Insert(1, ranked);
+                clause.Leading = 2;
+                break;
+            }
         }
         if (utility.Placement == UtilityPlacement.Prepend)
         {
@@ -881,6 +895,8 @@ internal static class CompositionConversion
         clause.Expanded = false;
         clause.Raw = null;
         clause.Translations.Clear();
+        clause.UtilityRankingKeys.Clear();
+        clause.Leading = 0;
         if (env.Learning.LearnedConversion(clause.Reading) is { } learned) Prefer(clause, learned);
         KeepTypedSymbols(input, [clause], clause.Reading);
     }

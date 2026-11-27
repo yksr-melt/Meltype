@@ -22,11 +22,11 @@ internal sealed partial class TypedDateConversion : IUtilityConversion
         if (input.Reading is not { } reading) return null;
         if (DateReading().Match(reading) is { Success: true } date)
             return Dates(UtilityConversions.Number(date.Groups["m"].Value), UtilityConversions.Number(date.Groups["d"].Value), input.Context.Now) is { } dates
-                ? new(dates, UtilityPlacement.Append) : null;
+                ? UtilityCandidates.Rankable("typed-date", dates) : null;
         if (ClockReading().Match(reading) is not { Success: true } clock) return null;
         var (hour, minute) = (UtilityConversions.Number(clock.Groups["h"].Value), UtilityConversions.Number(clock.Groups["m"].Value));
         if (hour > 23 || minute > 59) return null;
-        return new([$"{hour}:{minute:D2}", $"{hour:D2}:{minute:D2}"], UtilityPlacement.Append);
+        return UtilityCandidates.Rankable("typed-time", [$"{hour}:{minute:D2}", $"{hour:D2}:{minute:D2}"]);
     }
 
     /// <summary>

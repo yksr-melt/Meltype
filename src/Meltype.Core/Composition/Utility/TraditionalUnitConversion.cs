@@ -22,7 +22,7 @@ internal sealed partial class TraditionalUnitConversion : IUtilityConversion
     private static partial Regex UnitReading();
 
     public UtilityCandidates? Convert(UtilityInput input) =>
-        input.Reading is { } reading && Candidates(reading) is { } candidates ? new(candidates, UtilityPlacement.Append) : null;
+        input.Reading is { } reading && Candidates(reading) is { } candidates ? UtilityCandidates.Rankable("traditional-unit", candidates) : null;
 
     /// <summary>尺貫法の読みでなければ null。</summary>
     internal static string[]? Candidates(string reading)

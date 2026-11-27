@@ -65,6 +65,18 @@ internal sealed record UtilityCandidates(IReadOnlyList<string> Candidates, Utili
     /// <summary>選んだら学習してよいか。時刻・設定・外の値で変わらない候補 (漢数字) だけ true にする。</summary>
     public bool Learnable { get; init; }
 
+    /// <summary>候補の文字と、選び方だけを覚えるための固定 ID。時刻や版番号などの候補の文字は保存しない。</summary>
+    public IReadOnlyDictionary<string, string> RankingKeys { get; init; } = new Dictionary<string, string>();
+
+    /// <summary>通常の候補の後ろに足す、書式が一定のユーティリティ変換。書式の番号は学習データに残るので、並びを維持する。</summary>
+    public static UtilityCandidates Rankable(string id, IReadOnlyList<string> candidates)
+    {
+        var keys = new Dictionary<string, string>(StringComparer.Ordinal);
+        for (var i = 0; i < candidates.Count; i++)
+            keys.TryAdd(candidates[i], id + ":" + i.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        return new(candidates, UtilityPlacement.Append) { RankingKeys = keys };
+    }
+
     /// <summary>選んでも学習しない候補。</summary>
     public IReadOnlyList<string> NotLearned
     {
@@ -93,6 +105,7 @@ internal static class UtilityConversions
         new CurrencyConversion(),
         new ClipboardConversion(),
         new VersionConversion(),
+        new RelatedTermsConversion(),
         new KanjiPartsConversion(),
     ];
 
@@ -109,6 +122,7 @@ internal static class UtilityConversions
         {
             Reading = replace?.Reading,
             NotLearned = matches.SelectMany(m => m.NotLearned).ToList(),
+            RankingKeys = matches.SelectMany(m => m.RankingKeys).DistinctBy(pair => pair.Key).ToDictionary(),
         };
     }
 
@@ -117,4 +131,15 @@ internal static class UtilityConversions
     /// <summary>全角の数字を半角にして数にする。</summary>
     internal static int Number(string digits) =>
         int.Parse(new string(digits.Select(c => c is >= '０' and <= '９' ? (char)(c - '０' + '0') : c).ToArray()), System.Globalization.CultureInfo.InvariantCulture);
+}
+
+/// <summary>異なる呼び方を通常の候補の後ろに足す。選び続けても、変換エンジンの最初の候補を残す。</summary>
+internal sealed class RelatedTermsConversion : IUtilityConversion
+{
+    public UtilityCandidates? Convert(UtilityInput input) => input.Reading switch
+    {
+        "じゃくしゃだんせい" => UtilityCandidates.Rankable("related-jakushadansei", ["ふにゃオス"]),
+        "ふにゃおす" => UtilityCandidates.Rankable("related-funyaosu", ["弱者男性"]),
+        _ => null,
+    };
 }

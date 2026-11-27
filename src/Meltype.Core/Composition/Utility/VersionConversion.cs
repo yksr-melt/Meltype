@@ -13,7 +13,7 @@ namespace Meltype.Composition.Utility;
 internal sealed class VersionConversion : IUtilityConversion
 {
     public UtilityCandidates? Convert(UtilityInput input) =>
-        input.Reading == "ばーじょん" ? new([Candidate(input.Context.Settings, input.Context.OtherTipVersion())], UtilityPlacement.Append) : null;
+        input.Reading == "ばーじょん" ? UtilityCandidates.Rankable("version", [Candidate(input.Context.Settings, input.Context.OtherTipVersion())]) : null;
 
     internal static string Candidate(Settings settings, string? otherTipVersion) =>
         Text(ProjectInfo.WithCommit(ProjectInfo.CoreVersion), Front(settings), settings.UseZenzai, otherTipVersion);
