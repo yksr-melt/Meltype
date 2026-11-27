@@ -443,7 +443,7 @@ internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
     /// <summary>和語で っ の後ろに来ない音 (濁音・な行・あ行など)。</summary>
     private const string NoSokuonBefore = "あいうえおがぎぐげござじずぜぞだぢづでどなにぬねのばびぶべぼまみむめもやゆよらりるれろわをん";
 
-    private static readonly HashSet<string> NounParticles = ["が", "を", "に", "で", "と", "の", "は", "も", "へ", "や", "から", "まで", "より", "って", "だ", "です"];
+    private static readonly HashSet<string> NounParticles = ["が", "を", "に", "で", "と", "の", "は", "も", "へ", "や", "から", "まで", "より", "って", "だ", "です", "では"];
 
     /// <summary>
     /// 動詞・形容詞の活用形の後ろにしか付かない、1 文字の付属語 (名詞や英単語の後ろには付かない)。
