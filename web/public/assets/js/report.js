@@ -15,6 +15,7 @@ const body = root.querySelector("[data-form-body]");
 const note = root.querySelector("[data-form-note]");
 const requiredBox = root.querySelector("[data-required]");
 const optionalBox = root.querySelector("[data-optional]");
+const attachments = root.querySelectorAll("[data-attachments]");
 const fileInput = root.querySelector("[data-file-input]");
 const dropzone = root.querySelector("[data-dropzone]");
 const fileList = root.querySelector("[data-file-list]");
@@ -140,12 +141,16 @@ function fillValues(form) {
   updateCounters();
 }
 
+function acceptsAttachments() {
+  return state.form?.id !== SETTINGS_SURVEY && !root.hasAttribute("data-no-attachments");
+}
+
 function selectForm(id, focus) {
   const form = formById(id);
   if (!form) return;
   if (state.sending) return;
   state.form = form;
-  root.querySelector("[data-attachments]").hidden = form.id === SETTINGS_SURVEY || root.hasAttribute("data-no-attachments");
+  for (const element of attachments) element.hidden = !acceptsAttachments();
   const radio = picker.querySelector(`input[value="${id}"]`);
   if (radio) radio.checked = true;
   note.innerHTML = `${icon("info")}<span>${escapeHtml(form.note)}</span>`;
@@ -268,7 +273,7 @@ function renderFiles() {
 
 function addFiles(list) {
   // 添付を受け付けていないとき (R2 が無い) は何もしない
-  if (state.form?.id === SETTINGS_SURVEY || root.hasAttribute("data-no-attachments")) return;
+  if (!acceptsAttachments()) return;
   const problems = [];
   for (const original of list) {
     let file = original;
@@ -322,7 +327,7 @@ function initFiles() {
     if (event.dataTransfer && event.dataTransfer.files.length) addFiles([...event.dataTransfer.files]);
   });
   document.addEventListener("paste", (event) => {
-    if (!state.form || state.sending) return;
+    if (!state.form || state.sending || !acceptsAttachments()) return;
     const files = [...(event.clipboardData ? event.clipboardData.files : [])];
     if (!files.length) return;
     event.preventDefault();
@@ -413,7 +418,7 @@ async function submit(event) {
     if (first) first.focus();
     return;
   }
-  const files = state.form.id === SETTINGS_SURVEY ? [] : state.files;
+  const files = acceptsAttachments() ? state.files : [];
   state.sending = true;
   submitButton.disabled = true;
   setStatus("info", files.length ? "送っています。添付の大きさによっては少し時間がかかります" : "送っています");
