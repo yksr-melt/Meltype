@@ -251,8 +251,11 @@ internal static class CompositionKeys
                 // 英語と判定した語で終わっているなら、変換ではなく確定して空白を入れる
                 // (日本語の部分は、ライブ変換が ON なら漢字にして、OFF なら見えているかなのまま確定)。
                 // 数字だけ (1、12) は、前が英文なら確定して空白 (I have 2 cats)。それ以外は変換して ① 一 Ⅰ などの候補を出す。
-                // 打った英字全体を読みとして登録した語 (ユーザー辞書の zh → ←、略入力の ast → 明日) があれば、英語と判定しても変換する
-                if (CompositionConversion.HasRegisteredReading(input.Text, env))
+                // 打った英字全体を読みとして登録した語 (ユーザー辞書の zh → ←、略入力の ast → 明日) か、
+                // 関数形式の色変換 (hex(dadada)・rgb(59,130,246) など) なら、英語と判定しても変換する
+                if (CompositionConversion.HasRegisteredReading(input.Text, env) ||
+                    (!input.Text.KanaInput && input.Text.Mode == DisplayMode.Auto &&
+                     Utility.ColorConversion.Matches(CompositionText.Raw(CompositionText.Read(input.Text, env)))))
                 {
                     CompositionConversion.StartConversion(state, input, env, ConversionTrigger.Space);
                 }

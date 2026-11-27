@@ -7,19 +7,20 @@ using System.Text.RegularExpressions;
 namespace Meltype.Composition.Utility;
 
 /// <summary>
-/// HEX・RGB・HSL のカラー表記を相互変換して候補に出す (#3b82f6 ↔ rgb(59, 130, 246) ↔ hsl(217, 91%, 60%))。
-/// 打った表記を先頭に残し、別形式を後ろに並べる。各候補の色見本 (#rrggbbaa) も Core で決めて返す。
+/// 関数形式のカラー表記 (hex(dadada)・rgb(59,130,246)・hsl(217,91%,60%)) を相互変換して候補に出す。
+/// 未確定の原文全体が 関数名(引数) に一致し、引数を色として解釈できたときだけ反応する。
+/// 各候補の色見本 (#rrggbbaa) も Core で決めて返す。
 /// </summary>
 internal sealed partial class ColorConversion : IUtilityConversion
 {
-    [GeneratedRegex(@"^#(?<hex>[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")]
-    private static partial Regex HexPattern();
+    [GeneratedRegex(@"^#?(?<hex>[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")]
+    private static partial Regex HexArgsPattern();
 
-    [GeneratedRegex(@"^rgba?\(\s*(?<r>\d{1,3})\s*(?:,\s*|\s+)(?<g>\d{1,3})\s*(?:,\s*|\s+)(?<b>\d{1,3})(?:\s*(?:,|/)\s*(?<a>\d+(?:\.\d+)?%?|\.\d+%?))?\s*\)$", RegexOptions.IgnoreCase)]
-    private static partial Regex RgbPattern();
+    [GeneratedRegex(@"^(?<r>\d{1,3})\s*(?:,\s*|\s+)(?<g>\d{1,3})\s*(?:,\s*|\s+)(?<b>\d{1,3})(?:\s*(?:,|/)\s*(?<a>\d+(?:\.\d+)?%?|\.\d+%?))?$")]
+    private static partial Regex RgbArgsPattern();
 
-    [GeneratedRegex(@"^hsla?\(\s*(?<h>-?\d+(?:\.\d+)?)\s*(?:,\s*|\s+)(?<s>\d+(?:\.\d+)?)%\s*(?:,\s*|\s+)(?<l>\d+(?:\.\d+)?)%(?:\s*(?:,|/)\s*(?<a>\d+(?:\.\d+)?%?|\.\d+%?))?\s*\)$", RegexOptions.IgnoreCase)]
-    private static partial Regex HslPattern();
+    [GeneratedRegex(@"^(?<h>-?\d+(?:\.\d+)?)\s*(?:,\s*|\s+)(?<s>\d+(?:\.\d+)?)%\s*(?:,\s*|\s+)(?<l>\d+(?:\.\d+)?)%(?:\s*(?:,|/)\s*(?<a>\d+(?:\.\d+)?%?|\.\d+%?))?$")]
+    private static partial Regex HslArgsPattern();
 
     public UtilityCandidates? Convert(UtilityInput input)
     {
@@ -27,46 +28,69 @@ internal sealed partial class ColorConversion : IUtilityConversion
         if (input.Text.KanaInput || input.Text.Mode != DisplayMode.Auto) return null;
         var pairs = CandidatesWithColors(raw);
         if (pairs.Count == 0) return null;
-        return new(pairs.Select(p => p.Text).ToList(), UtilityPlacement.Replace)
+        var candidates = pairs.Select(p => p.Text).ToList();
+        var colors = pairs.Select(p => (string?)p.Color).ToList();
+        if (!candidates.Contains(raw))
         {
-            Colors = pairs.Select(p => (string?)p.Color).ToList(),
-        };
+            candidates.Add(raw);
+            colors.Add(null);
+        }
+        return new(candidates, UtilityPlacement.Replace) { Colors = colors };
     }
+
+    /// <summary>原文全体が有効な色変換の関数呼び出しに一致するか。</summary>
+    internal static bool Matches(string raw) => CandidatesWithColors(raw).Count > 0;
 
     internal static List<string> Candidates(string raw) =>
         CandidatesWithColors(raw).Select(p => p.Text).ToList();
 
     internal static List<(string Text, string Color)> CandidatesWithColors(string raw)
     {
-        if (TryParseHex(raw, out var hexColor))
-        {
-            var results = new List<(string Text, string Color)>();
-            var hexRgba = FormatRgbaHex(hexColor.R, hexColor.G, hexColor.B, ToAlphaByte(hexColor.Alpha));
-            AddUnique(results, raw, hexRgba);
-            AddFormattedCandidates(results, hexColor.R, hexColor.G, hexColor.B, hexColor.Alpha, includeHex: true, includeRgb: true, includeHsl: true);
-            return results;
-        }
+        if (!TrySplitFunctionCall(raw, out var name, out var args)) return [];
 
-        if (TryParseRgb(raw, out var rgbColor))
+        switch (name)
         {
-            var results = new List<(string Text, string Color)>();
-            var rgbRgba = FormatRgbaHex(rgbColor.R, rgbColor.G, rgbColor.B, ToAlphaByte(rgbColor.Alpha));
-            AddUnique(results, raw, rgbRgba);
-            AddFormattedCandidates(results, rgbColor.R, rgbColor.G, rgbColor.B, rgbColor.Alpha, includeHex: true, includeRgb: false, includeHsl: true);
-            return results;
+            case "hex" when TryParseHexArgs(args, out var hexColor):
+                {
+                    var results = new List<(string Text, string Color)>();
+                    var exactColor = FormatRgbaHex(hexColor.R, hexColor.G, hexColor.B, ToAlphaByte(hexColor.Alpha));
+                    if (hexColor.RawHex.Length is 3 or 4)
+                        AddUnique(results, "#" + hexColor.RawHex.ToLowerInvariant(), exactColor);
+                    AddFormattedCandidates(results, hexColor.R, hexColor.G, hexColor.B, hexColor.Alpha, includeHex: true, includeRgb: true, includeHsl: true);
+                    return results;
+                }
+            case "rgb" or "rgba" when TryParseRgbArgs(args, out var rgbColor):
+                {
+                    var results = new List<(string Text, string Color)>();
+                    AddFormattedCandidates(results, rgbColor.R, rgbColor.G, rgbColor.B, rgbColor.Alpha, includeHex: true, includeRgb: true, includeHsl: true);
+                    return results;
+                }
+            case "hsl" or "hsla" when TryParseHslArgs(args, out var hslColor):
+                {
+                    var (r, g, b) = HslToRgb(hslColor.H, hslColor.S, hslColor.L);
+                    var results = new List<(string Text, string Color)>();
+                    AddFormattedCandidates(results, r, g, b, hslColor.Alpha, includeHex: true, includeRgb: true, includeHsl: true);
+                    return results;
+                }
+            default:
+                return [];
         }
+    }
 
-        if (TryParseHsl(raw, out var hslColor))
+    private static bool TrySplitFunctionCall(string raw, out string name, out string args)
+    {
+        name = "";
+        args = "";
+        if (raw.Length < 4 || !raw.EndsWith(')')) return false;
+        var open = raw.IndexOf('(');
+        if (open <= 0) return false;
+        for (var i = 0; i < open; i++)
         {
-            var (r, g, b) = HslToRgb(hslColor.H, hslColor.S, hslColor.L);
-            var results = new List<(string Text, string Color)>();
-            var hslRgba = FormatRgbaHex(r, g, b, ToAlphaByte(hslColor.Alpha));
-            AddUnique(results, raw, hslRgba);
-            AddFormattedCandidates(results, r, g, b, hslColor.Alpha, includeHex: true, includeRgb: true, includeHsl: false);
-            return results;
+            if (!char.IsAsciiLetter(raw[i])) return false;
         }
-
-        return [];
+        name = raw[..open].ToLowerInvariant();
+        args = raw[(open + 1)..^1].Trim();
+        return args.Length > 0;
     }
 
     private static void AddFormattedCandidates(List<(string Text, string Color)> results, byte r, byte g, byte b, double? alpha, bool includeHex, bool includeRgb, bool includeHsl)
@@ -114,36 +138,34 @@ internal sealed partial class ColorConversion : IUtilityConversion
     private static byte ToAlphaByte(double? alpha) =>
         alpha is { } a ? (byte)Math.Round(a * 255.0, MidpointRounding.AwayFromZero) : (byte)255;
 
-    private static bool TryParseHex(string raw, out (byte R, byte G, byte B, double? Alpha) color)
+    private static bool TryParseHexArgs(string args, out (string RawHex, byte R, byte G, byte B, double? Alpha) color)
     {
         color = default;
-        if (HexPattern().Match(raw) is not { Success: true } match) return false;
+        if (HexArgsPattern().Match(args) is not { Success: true } match) return false;
         var hex = match.Groups["hex"].Value;
-        // #123・#2422・#123456 のような数字だけの Issue 番号をカラーコードとして誤判定しない
-        if (!hex.Any(c => c is (>= 'a' and <= 'f') or (>= 'A' and <= 'F'))) return false;
         switch (hex.Length)
         {
             case 3:
-                color = (ExpandNibble(hex[0]), ExpandNibble(hex[1]), ExpandNibble(hex[2]), null);
+                color = (hex, ExpandNibble(hex[0]), ExpandNibble(hex[1]), ExpandNibble(hex[2]), null);
                 return true;
             case 4:
-                color = (ExpandNibble(hex[0]), ExpandNibble(hex[1]), ExpandNibble(hex[2]), ExpandNibble(hex[3]) / 255.0);
+                color = (hex, ExpandNibble(hex[0]), ExpandNibble(hex[1]), ExpandNibble(hex[2]), ExpandNibble(hex[3]) / 255.0);
                 return true;
             case 6:
-                color = (ParseHexByte(hex[..2]), ParseHexByte(hex[2..4]), ParseHexByte(hex[4..6]), null);
+                color = (hex, ParseHexByte(hex[..2]), ParseHexByte(hex[2..4]), ParseHexByte(hex[4..6]), null);
                 return true;
             case 8:
-                color = (ParseHexByte(hex[..2]), ParseHexByte(hex[2..4]), ParseHexByte(hex[4..6]), ParseHexByte(hex[6..8]) / 255.0);
+                color = (hex, ParseHexByte(hex[..2]), ParseHexByte(hex[2..4]), ParseHexByte(hex[4..6]), ParseHexByte(hex[6..8]) / 255.0);
                 return true;
             default:
                 return false;
         }
     }
 
-    private static bool TryParseRgb(string raw, out (byte R, byte G, byte B, double? Alpha) color)
+    private static bool TryParseRgbArgs(string args, out (byte R, byte G, byte B, double? Alpha) color)
     {
         color = default;
-        if (RgbPattern().Match(raw) is not { Success: true } match) return false;
+        if (RgbArgsPattern().Match(args) is not { Success: true } match) return false;
         if (!int.TryParse(match.Groups["r"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var r) || r > 255 ||
             !int.TryParse(match.Groups["g"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var g) || g > 255 ||
             !int.TryParse(match.Groups["b"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var b) || b > 255)
@@ -160,10 +182,10 @@ internal sealed partial class ColorConversion : IUtilityConversion
         return true;
     }
 
-    private static bool TryParseHsl(string raw, out (double H, double S, double L, double? Alpha) color)
+    private static bool TryParseHslArgs(string args, out (double H, double S, double L, double? Alpha) color)
     {
         color = default;
-        if (HslPattern().Match(raw) is not { Success: true } match) return false;
+        if (HslArgsPattern().Match(args) is not { Success: true } match) return false;
         if (!double.TryParse(match.Groups["h"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var h) ||
             !double.TryParse(match.Groups["s"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var s) || s is < 0 or > 100 ||
             !double.TryParse(match.Groups["l"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var l) || l is < 0 or > 100)

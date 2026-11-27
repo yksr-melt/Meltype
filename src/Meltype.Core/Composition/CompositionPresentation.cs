@@ -146,8 +146,8 @@ internal static class CompositionPresentation
     {
         if (!env.Settings.PredictiveCandidates || input.Text.Mode != DisplayMode.Auto) return [];
         var raw = CompositionText.Raw(CompositionText.Read(input.Text, env));
-        if (!input.Text.KanaInput && Utility.ColorConversion.CandidatesWithColors(raw) is { Count: > 1 } colorCandidates)
-            return colorCandidates.Skip(1).Select(c => new Prediction(c.Text, "", raw, c.Color)).ToList();
+        if (!input.Text.KanaInput && Utility.ColorConversion.CandidatesWithColors(raw) is { Count: > 0 } colorCandidates)
+            return colorCandidates.Select(c => new Prediction(c.Text, "", raw, c.Color)).ToList();
         if (env.Services.Predictor is not { } predictor) return [];
         IEnumerable<string> PredictEnglish() => Predictor.PredictEnglish(raw).Select(w => NotationRules.Word(w, env.ProperNoun));
         if (CompositionText.IsAlphanumeric(CompositionText.Read(input.Text, env), env))
