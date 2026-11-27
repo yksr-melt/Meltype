@@ -189,28 +189,44 @@ internal static partial class CompositionText
     // [ ] は日本語の入力では「」なので、英語の前後でも半角にしない
     private static readonly Dictionary<string, string> Openers = new() { ["("] = ")", ["{"] = "}", ["\""] = "\"", ["'"] = "'", ["`"] = "`" };
 
+    /// <summary>語の頭に付ける記号 (--expect のオプション、/repro のコマンド)。</summary>
+    // 語の途中の - (こーひー|shop) と、かなの後ろの / (設定「かなの後ろの /」) は対象にしない
+    private static readonly HashSet<string> WordPrefixes = ["-", "/"];
+
     /// <summary>
     /// 開きの記号 (「(」「"」) は打った時点ではまだ後ろが分からないので全角になる。後ろが分かったら、
     /// すぐ後ろが英語 ((Ooh) か、対になる閉じの記号が半角 ("…Go Through!") なら、開きの記号も半角にする。半角にする単位の番号を返す。
     /// ("打ち上げ話はGo Through!" の最初の " だけ全角 ” になっていた、(Ooh … wow…) の ( だけ全角 （ になっていた)
+    /// 語の頭に付ける記号 (- /) も、続けて打った同じ記号ごと、すぐ後ろが英語なら半角にする (ーーexpect: issue #1544、・repro: issue #1736)。
     /// </summary>
     private static HashSet<int> HalfWidthOpeners(TextReading state, IReadOnlyList<CompositionSegment> segments)
     {
-        if (state.KanaInput || !state.Units.Any(u => Openers.ContainsKey(u.Raw) && u.Kana != u.Raw)) return [];
+        if (state.KanaInput || !state.Units.Any(u => (Openers.ContainsKey(u.Raw) || WordPrefixes.Contains(u.Raw)) && u.Kana != u.Raw)) return [];
         // 打った英字の 1 文字ずつが英語の区間か
         var english = new List<bool>();
         foreach (var segment in segments) foreach (var _ in segment.Raw) english.Add(segment.IsEnglish);
         var offsets = new int[state.Units.Count];
         for (int i = 0, offset = 0; i < state.Units.Count; offset += state.Units[i].Raw.Length, i++) offsets[i] = offset;
         bool IsHalf(int i) => state.Units[i].Kana == state.Units[i].Raw || (offsets[i] < english.Count && english[offsets[i]]);
+        bool IsWordPrefix(int i) => WordPrefixes.Contains(state.Units[i].Raw) && state.Units[i].Kana != state.Units[i].Raw && (i == 0 || state.Units[i - 1].Raw == " ");
+        // i 番目の単位 (最後の単位の後ろなら入力途中の子音) が英語の区間の英字で始まるか
+        bool StartsEnglish(int i) => i < state.Units.Count ? offsets[i] < english.Count && english[offsets[i]] && char.IsAsciiLetter(state.Units[i].Raw[0])
+            : CompositionText.Pending(state).Length > 0 && segments.Count > 0 && segments[^1].IsEnglish;
 
         var halfWidth = new HashSet<int>();
         for (var i = 0; i < state.Units.Count; i++)
         {
+            if (IsWordPrefix(i))
+            {
+                var next = i + 1;
+                while (next < state.Units.Count && state.Units[next].Raw == state.Units[i].Raw) next++;
+                if (StartsEnglish(next)) halfWidth.UnionWith(Enumerable.Range(i, next - i));
+                i = next - 1;
+                continue;
+            }
             if (!Openers.TryGetValue(state.Units[i].Raw, out var closer) || state.Units[i].Kana == state.Units[i].Raw) continue;
             if (state.FullWidthParentheses && state.Units[i].Raw == "(") continue; // 設定「カッコを全角で入力」: 英語のそばでも全角のまま
-            var nextIsEnglish = i + 1 < state.Units.Count ? offsets[i + 1] < english.Count && english[offsets[i + 1]] && char.IsAsciiLetter(state.Units[i + 1].Raw[0])
-                : CompositionText.Pending(state).Length > 0 && segments.Count > 0 && segments[^1].IsEnglish;
+            var nextIsEnglish = StartsEnglish(i + 1);
             var closing = Enumerable.Range(i + 1, state.Units.Count - i - 1).FirstOrDefault(k => state.Units[k].Raw == closer, -1);
             // 閉じの記号が英語の語のすぐ後ろ (間の記号 ! . は飛ばす: …Through!") なら、閉じも、間の記号も半角にする
             var afterEnglish = -1;
@@ -247,7 +263,7 @@ internal static partial class CompositionText
         var result = segments.ToList();
         if (result.Count > 0 && !result[^1].IsEnglish)
         {
-            result[^1] = result[^1] with { Kana = result[^1].Kana + CompositionText.PendingText(state, env, final: true) };
+            result[^1] = result[^1] with { Kana = result[^1].Kana + CompositionText.PendingText(state, env, result[^1], final: true) };
         }
         return result;
     }

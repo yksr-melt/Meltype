@@ -240,8 +240,11 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
             command = IsDown(VirtualKeys.LWin) || IsDown(VirtualKeys.RWin);
         }
         var ch = !ctrl && !alt && !command && KeyText.CharFromKey(e.Vk, e.Scan, shift) is { } c && !char.IsControl(c) ? c : 0;
-        return new ImeKey { Vk = e.ShortcutKey, Ch = ch, Shift = shift, Ctrl = ctrl, Alt = alt, Command = command, CapsLock = KeyText.CapsLockOn, Repeat = repeat };
+        return new ImeKey { Vk = e.ShortcutKey, Ch = ch, Physical = Physical(e), Shift = shift, Ctrl = ctrl, Alt = alt, Command = command, CapsLock = KeyText.CapsLockOn, Repeat = repeat };
     }
+
+    // ほかのソフトが送り込んだキー (SendInput) はスキャンコードが 0 のことがある。VK_PACKET (0xE7) のスキャンコードは、送り込んだ文字の UTF-16
+    private static PhysicalKey.Windows? Physical(KeyEvent e) => e.Scan != 0 && e.Vk != 0xE7 ? new PhysicalKey.Windows(e.Scan, e.Extended) : null;
 
     // ---- UI スレッド ----
 
@@ -318,7 +321,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         if (input.Key is not { } e) return;
         if (input.Event is not { } key)
         {
-            // 離したキー: 本体が使った押下なら通さない
+            // 離したキーはふつう押下に合わせる。親指キーを単独で離して本体が通したら、保留した押下も一緒に送る (#2103)。
             bool consumed, follows;
             lock (_gate)
             {
@@ -326,8 +329,10 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
                 follows = _releaseFollows.Remove(e.PhysicalId);
             }
             // 変換していないときは入力欄を読まない (離すたびに UI Automation で読むと打鍵が遅れる)
-            if (follows) Send(new ImeEvent.KeyReleased(new ImeKeyRelease(e.ShortcutKey)), readField: _composing);
-            if (!consumed && e.IsUp) _composition.Replay(e);
+            var released = follows ? Send(new ImeEvent.KeyReleased(new ImeKeyRelease(e.ShortcutKey, Physical: Physical(e))), readField: _composing) : null;
+            if (!consumed) _composition.Replay(e);
+            else if (released is { State.HandlesInput: true, Result.Consumed: false })
+                _injector.Inject([e with { IsUp = false }, e]);
             return;
         }
         if (_state.Capture.KeyReleases && !VirtualKeys.IsModifier(e.Vk))

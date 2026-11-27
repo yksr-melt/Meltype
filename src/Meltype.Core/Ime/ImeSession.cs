@@ -136,7 +136,7 @@ internal static class ImeSession
             KeyPressed = pressed => active ? HandleKey(state, env, pressed.Key, e.Field, before, settings, lastSnippet) : Leave(state, env),
             KeyReleased = released => !active ? Unchanged(state, env)
                 : released.Key.Vk is VirtualKeys.LMenu or VirtualKeys.RMenu ? AltReleased(state, env, released.Key, before, settings)
-                : HandleKeyUp(state, env, ToggleShortcut.NormalizeKey(released.Key.Vk)),
+                : HandleKeyUp(state, env, ToggleShortcut.NormalizeKey(released.Key.Vk), released.Key.Physical),
             ModeToggleRequested = _ => active ? Switch(state, env, !wasJapanese, before, toggle: true) : Unchanged(state, env),
             JapaneseModeSelected = _ => active ? Switch(state, env, true, before, toggle: false) : Unchanged(state, env),
             AlphanumericModeSelected = _ => active ? Switch(state, env, false, before, toggle: false) : Unchanged(state, env),
@@ -386,7 +386,7 @@ internal static class ImeSession
         if (key.Repeat && (toggle || plain && vk is ToggleShortcut.Hankaku or VirtualKeys.OemAttn or VirtualKeys.Kana)) return Consumed;
         if (toggle && !composing) return Switch(state, env, !ShowsJapanese(state, before, settings), before, toggle: true);
         // 入力中は変換ボックスの英字表示の切り替え。変換中は変換ボックスのキーとして使う (Shift+Space は「前の候補へ」)
-        if (toggle && !IsConverting(state)) return ComposeKey(state, env, VirtualKeys.Kanji, null, false, false, false, false);
+        if (toggle && !IsConverting(state)) return ComposeKey(state, env, VirtualKeys.Kanji, VirtualKeys.Kanji, null, false, false, false, false);
         // ロックのキーは文字を入れないので、打ちかけに触らずにアプリに通す (切り替えキーに登録したものは、上で切り替えに使った)
         if (IsLockKey(vk)) return PassThrough(state, env);
         if (vk == ToggleShortcut.Hankaku && !key.Ctrl && !key.Alt && !composing) return Consumed;
@@ -418,7 +418,7 @@ internal static class ImeSession
             return CommitCombiningForPassThrough(state, env, preserveLatinRaw: key.Ch is >= 0x0300 and <= 0x036F);
         // 補助面の文字 (絵文字など) は char に入らないので、未確定の内容を確定してからアプリに通す
         if (key.Ch >= 0x10000) return CommitForPassThrough(state, env);
-        var result = ComposeKey(state, env, vk, key.Ch > 0 ? (char)key.Ch : null, key.Shift, key.Ctrl, key.Alt, key.Command, key.ReleaseFollows);
+        var result = ComposeKey(state, env, vk, Position(vk, key.Physical), key.Ch > 0 ? (char)key.Ch : null, key.Shift, key.Ctrl, key.Alt, key.Command, key.ReleaseFollows);
         // アプリに通したキーはキャレットを動かすかもしれない (Core が通すと決めたので、フロントからは送られてこない)
         if (!result.Consumed) CaretMoved(state, vk, key.Ctrl);
         return result;
@@ -723,15 +723,16 @@ internal static class ImeSession
     /// <summary>変換して候補を選んでいるか。</summary>
     public static bool IsConverting(ImeSessionState state) => CompositionController.IsConverting(state.Composition);
 
-    /// <summary>入力中に Ctrl と一緒に押すと、変換ボックスで使う英字のキー。</summary>
+    /// <summary>入力中に Ctrl と一緒に押すと、変換ボックスで使うキー。</summary>
     public static IReadOnlyList<int> ComposingControlKeys(ImeSessionState state, ImeEnv env) => CompositionController.ComposingControlKeys(state.Composition, Env(state, env));
 
     /// <summary>
     /// キーを 1 つ処理する。before / after は入力欄のキャレットの前後の文字列 (分かれば。英語とも日本語とも読める語の判定と変換の文脈に使う)。
     /// 入力モードを切り替えるキーの意味は ImeSession が決めるので、ここでは見ない。
     /// </summary>
+    /// <param name="position">押したキーの位置 (<see cref="KeyPress.Position"/>)。</param>
     /// <param name="releaseFollows">ワークアラウンド (ImeEvent.KeyReleased): 離したことは <see cref="HandleKeyUp"/> で届く。false なら押した直後に離したとみなす。</param>
-    public static SessionResult ComposeKey(ImeSessionState state, ImeEnv env, int vk, char? ch, bool shift, bool control, bool alt, bool command, bool releaseFollows = false)
+    public static SessionResult ComposeKey(ImeSessionState state, ImeEnv env, int vk, int position, char? ch, bool shift, bool control, bool alt, bool command, bool releaseFollows = false)
     {
         var settings = env.App;
         var before = LineBefore(state, state.Field);
@@ -783,7 +784,7 @@ internal static class ImeSession
             state.UserDictionaryCheckedMs = now;
             env.UserDictionary?.Refresh();
         }
-        var result = CompositionController.Press(state.Composition, Env(state, env) with { SlashAtStart = slashAtStart }, new KeyPress(vk, ch, shift, control, alt, command, now), releaseFollows);
+        var result = CompositionController.Press(state.Composition, Env(state, env) with { SlashAtStart = slashAtStart }, new KeyPress(vk, position, ch, shift, control, alt, command, now), releaseFollows);
         // アプリに渡したキー (変換していないときの BackSpace・矢印・Enter など) はキャレットを動かすかもしれない。
         // 前に確定した語を確定し直さない (消す位置がずれて関係ない文字を消さないように)
         if (!result.Consumed && !CompositionController.IsComposing(state.Composition)) ForgetLastCommit(state);
@@ -792,9 +793,17 @@ internal static class ImeSession
 
     /// <summary>
     /// ワークアラウンド (ImeEvent.KeyReleased): releaseFollows を付けて押したキーを離した。親指シフトの親指キー・中指NICOLA のシフトのキーを離したことを、
-    /// かな配列に伝える (文字に使わずに離した親指キーは、もとの変換・無変換をする)。離したことをアプリに通すかはフロントが押下のとおりに決める。
+    /// かな配列に伝える (文字に使わずに離した親指キーは、もとの変換・無変換をする)。
+    /// 本体が受け持っている間に Consumed が false なら、保留していた押下と解放をアプリに渡す。
     /// </summary>
-    public static SessionResult HandleKeyUp(ImeSessionState state, ImeEnv env, int vk) => CompositionController.Release(state.Composition, Env(state, env), vk);
+    public static SessionResult HandleKeyUp(ImeSessionState state, ImeEnv env, int vk, PhysicalKey? physical) =>
+        CompositionController.Release(state.Composition, Env(state, env), vk, Position(vk, physical));
+
+    /// <summary>
+    /// キーの位置 (<see cref="KeyPress.Position"/>)。物理キーが分からないフロント (端末・Android) と文字の無いキーは、仮想キーコードの位置のキーとみなす
+    /// (Vk を文字から決めたなら、QWERTY のキーボードでその文字を打つキー)。
+    /// </summary>
+    private static int Position(int vk, PhysicalKey? physical) => physical?.JisPosition() ?? vk;
 
     /// <summary>
     /// 変換・無変換・ひらがな/カタカナ キー。設定「入力中のキーの役割を分ける」が ON (無変換は「無変換でカタカナを切り替える」が ON でもよい) で入力中なら、変換ボックスで処理する (issue #199)。
@@ -807,7 +816,7 @@ internal static class ImeSession
         var settings = env.App;
         if (!(settings.SeparateKeyRoles || vk == VirtualKeys.NonConvert && settings.NonConvertCyclesKana)) return null;
         if (!CompositionController.IsComposing(state.Composition) || Direct(state)) return null;
-        return ComposeKey(state, env, vk, null, false, false, false, false);
+        return ComposeKey(state, env, vk, vk, null, false, false, false, false);
     }
 
     /// <summary>

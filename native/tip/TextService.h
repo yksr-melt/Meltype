@@ -12,6 +12,7 @@
 
 #include <future>
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "CandidateWindow.h"
@@ -45,6 +46,7 @@ struct ServerState {
 
 class TextService final : public ITfTextInputProcessorEx,
                           public ITfThreadMgrEventSink,
+                          public ITfThreadFocusSink,
                           public ITfKeyEventSink,
                           public ITfCompositionSink,
                           public ITfDisplayAttributeProvider,
@@ -69,7 +71,11 @@ public:
     STDMETHODIMP OnUninitDocumentMgr(ITfDocumentMgr*) override { return S_OK; }
     STDMETHODIMP OnSetFocus(ITfDocumentMgr* focus, ITfDocumentMgr* previous) override;
     STDMETHODIMP OnPushContext(ITfContext*) override { return S_OK; }
-    STDMETHODIMP OnPopContext(ITfContext*) override { return S_OK; }
+    STDMETHODIMP OnPopContext(ITfContext* context) override;
+
+    // ITfThreadFocusSink (別アプリへの移動は、文書フォーカスが null になっただけでは区別できない)
+    STDMETHODIMP OnSetThreadFocus() override;
+    STDMETHODIMP OnKillThreadFocus() override;
 
     // ITfKeyEventSink
     STDMETHODIMP OnSetFocus(BOOL foreground) override;
@@ -106,7 +112,7 @@ private:
     // Meltype.exe が、文字に関係なく受け取るように言ったキー (capture.keys) か
     bool CapturesKey(UINT vk, LPARAM lParam) const;
     // listed: capture.keys のキー (入力モードを表示する位置も送る)。repeat: 押したままの自動の繰り返し
-    void HandleKey(ITfContext* context, UINT vk, wchar_t ch, bool repeat, bool listed);
+    void HandleKey(ITfContext* context, UINT vk, LPARAM lParam, wchar_t ch, bool repeat, bool listed);
     // 左右の Alt (VK_LMENU / VK_RMENU) の押下・解放を本体に送る (ImeCapture.AltKeys)。キーのシンクには Alt (WM_SYSKEYDOWN) が届かないので、
     // Meltype.exe の低レベルフックが見て kAltKey で知らせる (TipServer.OnKey)。単独押しかは本体が決め、解放は Meltype.exe が送り直す
     void HandleAltKey(UINT vk, UINT flags);
@@ -167,8 +173,10 @@ private:
     void CommittedOutside(const std::string& field = {});
     // パスワード欄に変わったとき、表示済みの文字を確定して属性を通知する。
     void FinishPasswordTransition(TfEditCookie ec, ITfContext* context);
-    // 変換を切り離し、表示済みの文字を残して TSF の変換だけを非同期で終える。
-    void EndCompositionAsync();
+    // 変換を切り離し、TSF の変換だけを非同期で終える。commit があれば、終えるときに表示済みの文字をそれに置き換える。
+    void EndCompositionAsync(std::optional<std::wstring> commit = std::nullopt);
+    // 確定の応答から、旧欄に入れる文字を取り出す。入れるものが無い・決められなければ nullopt
+    static std::optional<std::wstring> CommitText(const JsonValue& result);
     void ResumeOrCommit(ITfContext* context);
     void SelectCandidate(int index);
     // キャレットの前を読めたら true (読めなければ before は空のまま。読めない入力欄を調べられるように、変わったときだけ tip-log に書く)
@@ -177,6 +185,10 @@ private:
     // 選択範囲の画面上の位置 (入力モードの表示に使う)。分からなければ空
     RECT CaretRect(TfEditCookie ec, ITfContext* context);
     bool ContextDisabled(ITfContext* context);
+    bool ContextHasFocus(ITfContext* context);
+    HRESULT SelectionInComposition(TfEditCookie ec, ITfContext* context, bool& inside);
+    void PrepareComposition(TfEditCookie ec, ITfContext* context);
+    void CommitOnFocusLoss();
     void AdviseTextEditSink(ITfDocumentMgr* documentMgr);
     void UnadviseTextEditSink();
     enum class FieldScope { Regular, Private, Password, Unreadable };
@@ -188,11 +200,14 @@ private:
     void UpdateLangBar();
     bool ForgetAbandoned(ITfComposition* composition);
     void EndAbandonedNow();
+    // context に残した前の変換を、この編集セッションで確定の文字に置き換えて終える (新しい入力より先に)。
+    void FinishAbandonedIn(TfEditCookie ec, ITfContext* context);
 
     LONG refs_ = 1;
     ITfThreadMgr* threadMgr_ = nullptr;
     TfClientId clientId_ = TF_CLIENTID_NULL;
     DWORD threadMgrCookie_ = TF_INVALID_COOKIE;
+    DWORD threadFocusCookie_ = TF_INVALID_COOKIE;
     DWORD compartmentCookie_ = TF_INVALID_COOKIE;
     ITfContext* editSinkContext_ = nullptr;
     DWORD editSinkCookie_ = TF_INVALID_COOKIE;
@@ -233,14 +248,15 @@ private:
     Microsoft::WRL::ComPtr<ITfContext> resumeContext_;
     std::wstring resumeText_;
     bool lastConverting_ = false;  // 最後に置いた変換中の文字が、変換した状態か (打っている途中なら false)
-    int staleCommitTries_ = 0;     // 前の入力欄に残った変換中の文字を確定しようとした回数 (打鍵ごとに 1 回)
-    UINT staleVk_ = 0;             // OnTestKeyDown で数えたキーと時刻 (続く OnKeyDown で数え直さない)
-    ULONGLONG staleTime_ = 0;
     struct Abandoned {
         Microsoft::WRL::ComPtr<ITfComposition> composition;
         Microsoft::WRL::ComPtr<ITfContext> context;
+        std::wstring shown;                  // 手放したときに表示していた文字
+        std::optional<std::wstring> commit;  // Core が確定した文字 (無ければ表示のまま終える)
     };
-    std::vector<Abandoned> abandoned_;  // 手放した前の入力欄の変換中の文字 (あとで下線を消して終える)
+    static void FinishAbandoned(TfEditCookie ec, const Abandoned& item);
+    std::vector<Abandoned> abandoned_;  // 手放した前の入力欄の変換中の文字 (あとで確定の文字を入れ、下線を消して終える)
+    std::wstring compositionText_;      // 最後に変換中の範囲へ置いた文字
     UINT reinjectGuardVk_ = 0;     // 同じキーを続けて送り直した回数 (送り直しが止まらなくなるのを防ぐ)
     ULONGLONG reinjectGuardTime_ = 0;
     int reinjectGuardCount_ = 0;
