@@ -2,7 +2,6 @@
 // Copyright (C) 2026 Konayukiw
 
 // アプリとサイトのアイコン (雪の結晶 + M) を public/favicon.svg から作る。
-//   npm i --no-save playwright-core
 //   node scripts/make-icons.mjs            (Chrome / Edge / Chromium の場所は CHROMIUM_PATH で指定できる)
 // 作るもの:
 //   web/public/apple-touch-icon.png  180x180、明るい背景で余白を付ける (角は iOS が丸める)
