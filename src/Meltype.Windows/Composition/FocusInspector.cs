@@ -6,7 +6,7 @@ using System.Collections.Concurrent;
 namespace Meltype.Composition;
 
 /// <summary>フォーカスのある要素の情報。</summary>
-public sealed record FocusInfo(bool IsTextInput, bool IsPassword, Rectangle? Bounds, string Description, string Name = "", string ClassName = "");
+public sealed record FocusInfo(bool IsTextInput, bool IsPassword, Rectangle? Bounds, string Description, string Name = "", string ClassName = "", bool IsPrivate = false);
 
 /// <summary>
 /// フォーカスのある要素を UI Automation で調べる。
@@ -23,7 +23,7 @@ public sealed class FocusInspector : IDisposable
     private readonly Thread _thread;
     private long _focusSequence;
     private long _resolvedSequence = -1;
-    private sealed record FocusState(FocusInfo Info, IntPtr AffinityWindow = default);
+    private sealed record FocusState(FocusInfo Info, IntPtr AffinityWindow = default, IntPtr Foreground = default);
     private volatile FocusState _state = new(new FocusInfo(false, false, null, "未確認"));
     private FocusInfo _info => _state.Info;
     private string? _loggedDescription;
@@ -129,6 +129,36 @@ public sealed class FocusInspector : IDisposable
     }
 
     public FocusInfo Current => _info;
+
+    public bool IsPrivateInput(IntPtr window, string process)
+    {
+        if (!IsBrowserWithPrivacyMarker(process)) return false;
+        var snapshot = _state;
+        // 新しいウィンドウへ移ったときは、前のウィンドウの結果で学習を始めない。
+        return snapshot.Foreground != window || snapshot.Info.IsPrivate;
+    }
+
+    private static bool IsBrowserWithPrivacyMarker(string? process) =>
+        process?.ToUpperInvariant() is "FIREFOX.EXE" or "CHROME.EXE" or "CHROMIUM.EXE" or "MSEDGE.EXE" or "BRAVE.EXE";
+
+    internal static bool IsPrivateBrowserWindow(string? process, string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name) || !IsBrowserWithPrivacyMarker(process)) return false;
+        var title = name.TrimEnd();
+        // Firefox はウィンドウのタイトルに、Chromium 系はアクセシビリティ用の名前にモードを足す。
+        if (string.Equals(process, "firefox.exe", StringComparison.OrdinalIgnoreCase))
+            return title.EndsWith("Firefox Private Browsing", StringComparison.OrdinalIgnoreCase) ||
+                title.EndsWith("Firefox (Private Browsing)", StringComparison.OrdinalIgnoreCase) ||
+                title.EndsWith("Firefox プライベートブラウジング", StringComparison.Ordinal) ||
+                title.EndsWith("Firefox (プライベートブラウジング)", StringComparison.Ordinal);
+        return title.EndsWith(" (Incognito)", StringComparison.OrdinalIgnoreCase) ||
+            title.EndsWith(" (InPrivate)", StringComparison.OrdinalIgnoreCase) ||
+            title.EndsWith(" (Private)", StringComparison.OrdinalIgnoreCase) ||
+            title.EndsWith(" (Private Window)", StringComparison.OrdinalIgnoreCase) ||
+            title.EndsWith(" (シークレット モード)", StringComparison.Ordinal) ||
+            title.EndsWith(" (シークレット)", StringComparison.Ordinal) ||
+            title.EndsWith("（シークレット モード）", StringComparison.Ordinal);
+    }
 
     /// <summary>最新のフォーカスを調べ終わっているか (移った直後で、まだ調べている最中なら false)。</summary>
     public bool Resolved => Interlocked.Read(ref _resolvedSequence) == Interlocked.Read(ref _focusSequence);
@@ -347,12 +377,25 @@ public sealed class FocusInspector : IDisposable
         // 連続したフォーカス変更は、最新の 1 回だけ調べる。
         if (sequence != Interlocked.Read(ref _focusSequence)) return;
         var info = Inspect(out var affinityWindow);
+        var process = ForegroundProcessName?.Invoke();
+        var window = _inspectedForeground;
+        // プライベートモードはウィンドウ単位。フォーカスの再確認で名前が読めなかったときも、同じウィンドウの判定を使う。
+        var previous = _state;
+        if (window == previous.Foreground && previous.Info.IsPrivate) info = info with { IsPrivate = true };
+        else if (info.IsTextInput && !info.IsPassword && window == Native.GetForegroundWindow() && IsBrowserWithPrivacyMarker(process))
+        {
+            var title = Input.KeyText.WindowTitle(window);
+            info = info with
+            {
+                IsPrivate = IsPrivateBrowserWindow(process, title) || IsPrivateBrowserWindow(process, Automation()?.WindowName(window)),
+            };
+        }
         ApplyFocus(sequence, info, affinityWindow);
     }
 
     private void ApplyFocus(long sequence, FocusInfo info, IntPtr affinityWindow)
     {
-        _state = new FocusState(info, affinityWindow);
+        _state = new FocusState(info, affinityWindow, _inspectedForeground);
         // 調べている間にまたフォーカスが変わっていたら、この結果は採用しない (次の要求で調べ直す)。
         if (sequence == Interlocked.Read(ref _focusSequence)) Interlocked.Exchange(ref _resolvedSequence, sequence);
 
