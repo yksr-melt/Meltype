@@ -163,6 +163,8 @@ pkill -f ibus-engine-meltype || true
 /opt/meltype/ibus-engine-meltype
 ```
 
+「Meltype の設定」が開かないときは、`~/.local/share/Meltype/crash.log` の内容を送ってください。
+
 fcitx5 では、ログアウト・ログイン後も動かなければ、fcitx5 の設定に Meltype が追加されているか、IBus と fcitx5 を同時に使っていないかを確かめてください。
 
 入れた後に入力ソースの一覧に Meltype が出てこないときは、いったんログアウトしてログインし直してください。
