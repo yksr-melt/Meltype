@@ -2660,6 +2660,23 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void RepeatedPeriods_OfferOneJapaneseStopPerKey()
+    {
+        foreach (var (count, style, period) in new[] { (3, PunctuationStyle.Japanese, '。'), (4, PunctuationStyle.Japanese, '。'), (6, PunctuationStyle.Japanese, '。'), (4, PunctuationStyle.FullWidthCommaPeriod, '．') })
+        {
+            var raw = new string('.', count);
+            var expected = new string(period, count);
+            var keyboard = new Keyboard { Punctuation = style };
+            keyboard.Type(raw + " ");
+            var candidates = keyboard.Host.View!.Candidates;
+            Assert.True(candidates.Contains(raw) && candidates.Contains(expected), string.Join(", ", candidates));
+            keyboard.SelectCandidate(candidates.ToList().IndexOf(expected));
+            keyboard.Type("\n");
+            Assert.Equal(expected, keyboard.Host.Document);
+        }
+    }
+
+    [Test]
     public static void Issue495_MoreThanThreeSlashesExtendTheEllipsis()
     {
         var expected = new[] { (3, "…"), (4, "……"), (6, "……"), (7, "………") };
@@ -3055,6 +3072,21 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void BoundControlKey_ConfirmsCompositionWithoutSendingEnter()
+    {
+        var k = new Keyboard { ControlKeyBindings = "J=Enter" };
+        k.Type("nihongo ");
+        Assert.True(k.Host.View?.Converting == true, "変換から確定する");
+        var candidate = k.Showing;
+        k.Key(VirtualKeys.LControl);
+        k.Press('J');
+        k.Key(VirtualKeys.LControl, up: true);
+        Assert.Equal(candidate, k.Host.Document, "選んだ候補だけを入力欄へ渡す");
+        Assert.True(!k.Host.Events.Any(e => e is "down:4A" or "down:0D"), "Ctrl+J も Enter もアプリへ渡さない");
+        Assert.True(k.Showing is null, "変換を終える");
+    }
+
+    [Test]
     public static void Issue63_ControlKeysCanBeBound()
     {
         var k = new Keyboard { ControlKeyBindings = "T=F7; Y=F6" };
@@ -3091,6 +3123,26 @@ internal static class CompositionTests
         k = new Keyboard();
         k.Type("1");
         Assert.True(k.Captured, "上の段の数字");
+    }
+
+    [Test]
+    public static void HalfWidthBinding_ChoosesKanaOrAlphanumericFromTheDisplayedText()
+    {
+        foreach (var (raw, display, expected) in new[] {
+            ("birudhingu", VirtualKeys.F7, "ﾋﾞﾙﾃﾞｨﾝｸﾞ"),
+            ("123", VirtualKeys.F9, "123"),
+            ("meltype", VirtualKeys.F9, "meltype"),
+            ("soudesune.", VirtualKeys.F6, "ｿｳﾃﾞｽﾈ｡"),
+        })
+        {
+            var k = new Keyboard { ControlKeyBindings = "O=HalfWidth" };
+            k.Type(raw);
+            k.Press(display);
+            k.Key(VirtualKeys.LControl);
+            k.Press('O');
+            k.Key(VirtualKeys.LControl, up: true);
+            Assert.Equal(expected, k.Showing, raw);
+        }
     }
 
     [Test]
@@ -3549,6 +3601,13 @@ internal static class CompositionTests
         k.Type("\n");
         Assert.Equal("すしww", shown, "表示");
         Assert.Equal("すしww", k.Host.Document, "確定");
+    }
+
+    [Test]
+    public static void DehaRemainsACompleteParticleAfterAnEnglishWord()
+    {
+        AssertCommitted(("dokkanoverdeha", "どっかのverでは"), ("watashideha", "わたしでは"),
+            ("verdekara", "verdeから"), ("googledeha", "googleでは"));
     }
 
     [Test]
@@ -4755,6 +4814,13 @@ internal static class CompositionTests
             k.Type(typed + "\n");
             Assert.Equal(committed, k.Host.Document, $"「{typed}」+ Enter");
         }
+    }
+
+    [Test]
+    public static void N8n_IsKeptBeforeJapanese()
+    {
+        AssertCommitted(("n8n", "n8n"), ("n8nwotukau", "n8nをつかう"), ("n8nnitunagu", "n8nにつなぐ"),
+            ("8nin", "8にん"));
     }
 
     [Test]
