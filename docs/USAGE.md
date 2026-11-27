@@ -56,6 +56,8 @@ kyouhagoogledekensaku  →  今日はgoogleで検索
 
 `/review`・`$skill`・`@src/app.ts` のように `/` `$` `@` で始まる語は、そのまま入ります。
 
+日本語の名前をメンションするときは、設定の「/ $ @ で始まる語はそのまま入力」を OFF にし、`@tanaka` のように打って <kbd>Shift</kbd> + <kbd>Space</kbd> を押すと、`@` 付きの日本語の候補を選べます。
+
 <a name="自動判定を使わない"></a>
 
 ### 自動判定を使わない

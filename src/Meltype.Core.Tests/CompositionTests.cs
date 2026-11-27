@@ -5315,6 +5315,25 @@ internal static class CompositionTests
 
 
     [Test]
+    public static void MentionsCanBeExplicitlyConvertedToJapanese()
+    {
+        var converter = new SplitConverter(new() { ["たなか"] = [new("たなか", "田中")] });
+        var k = new Keyboard(converter: converter) { SigilWords = false };
+        k.Type("@tanaka");
+        k.Key(VirtualKeys.LShift);
+        k.Press(VirtualKeys.Space);
+        k.Key(VirtualKeys.LShift, up: true);
+        Assert.Equal("@田中", k.Showing);
+        Assert.True(k.Host.View?.Candidates.Contains("@tanaka") == true, "打ったままの名前も選べる");
+        k.Type("\n");
+        Assert.Equal("@田中", k.Host.Document, "選んだ日本語の名前を確定する");
+        var ordinary = new Keyboard();
+        ordinary.Type("@tanaka");
+        Assert.Equal("@tanaka", ordinary.Host.Document, "英字のメンションはそのまま入力欄に届く");
+        AssertCommitted(("tanaka@example.com", "tanaka@example.com"));
+    }
+
+    [Test]
     public static void UserDictionary_ReadingThatStaysAscii_IsUsed()
     {
         // zh → ← のように、ローマ字として読めずに英字のまま残る読みを登録しても、変換で使われていなかった

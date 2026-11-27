@@ -172,6 +172,17 @@ internal static class CompositionConversion
                     clauses.Add(new Clause(segment.Raw, true, [segment.Raw]));
                     continue;
                 }
+                // LINE WORKS などでは、メンションの宛先が日本語の名前になる。明示的に変換したときは @ を残して後ろだけを読む。
+                if (preferJapanese && segment.IsProtected && segment.Raw.StartsWith('@') && segment.Raw.Skip(1).All(char.IsAsciiLetter) &&
+                    RomajiReading(env, segment.Raw[1..], allowFinalN: true) is { } mention)
+                {
+                    var names = JapaneseCandidates(env, mention, null, SegmentBefore(env, string.Concat(clauses.Select(c => c.Text))), zenzai);
+                    var mentionCandidates = Distinct([.. names.Select(name => "@" + name), segment.Raw]);
+                    var mentionClause = new Clause(segment.Raw, false, mentionCandidates) { Raw = segment.Raw, Expanded = true, Fixed = true };
+                    mentionClause.NotLearned.UnionWith(mentionCandidates);
+                    clauses.Add(mentionClause);
+                    continue;
+                }
                 var english = Distinct([.. env.Services.UserDictionary?.Lookup(segment.Raw.ToLowerInvariant()) ?? [], .. EnglishCandidates(env, segment.Raw, typed[s].Text)]);
                 // 子音の略入力 (ast → 明日): 英字のまま見える語にも、candidates.txt の英字の読みの候補を足す (issue #62)
                 if (env.Settings.ConsonantAbbreviations && segment.Raw.Length >= 2 && segment.Raw.All(char.IsAsciiLetter) && env.Services.Candidates is { } abbreviations)
@@ -698,10 +709,10 @@ internal static class CompositionConversion
     }
 
     /// <summary>英語と判定した語を、ローマ字として読んだかな (go → ご)。読み切れなければ null。</summary>
-    private static string? RomajiReading(CompositionEnv env, string raw)
+    private static string? RomajiReading(CompositionEnv env, string raw, bool allowFinalN = false)
     {
         // 大文字だけで打った語 (TEN) は、最後の n を ん と読む (TEN → てん: issue #833)。小文字の英文の中の語 (pen) は日本語にしない
-        var finalN = raw.All(char.IsAsciiLetterUpper);
+        var finalN = allowFinalN || raw.All(char.IsAsciiLetterUpper);
         if (env.Detector.Romaji.AnalyzeFragment(raw.ToLowerInvariant()) is not { IsValid: true } analysis || analysis.Partial != "" && !(finalN && analysis.Partial == "n") ||
             analysis.Kana.Length == 0 && analysis.Partial.Length == 0) return null;
         return analysis.Kana + (analysis.Partial == "n" ? "ん" : "");
