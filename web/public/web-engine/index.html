@@ -1,0 +1,244 @@
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Copyright (C) 2026 hisiragi -->
+
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Web エンジン | Meltype</title>
+  <meta name="description" content="ウェブページの入力欄で Meltype を使うためのエンジン。ローマ字のまま打つと、日本語と英語を分けて変換します。すべてブラウザーの中で動きます。">
+  <meta name="theme-color" content="#3aaee8">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Meltype">
+  <meta property="og:url" content="/web-engine/">
+  <meta property="og:title" content="Web エンジン | Meltype">
+  <meta property="og:description" content="あなたのサイトの入力欄に、半角/全角のいらない日本語入力を。打った文字はどこにも送りません。">
+  <meta property="og:image" content="/og.png">
+  <meta property="og:locale" content="ja_JP">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="canonical" href="/web-engine/">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&display=swap">
+  <link rel="stylesheet" href="/assets/css/site.css">
+  <script type="module" src="/assets/js/web-engine.js"></script>
+</head>
+<body class="uses-meltype">
+  <a class="skip" href="#main">本文へ移動</a>
+
+  <header class="site-header" data-header>
+    <div class="header-inner">
+      <a class="brand" href="/" aria-label="Meltype のトップ">
+        <img src="/assets/img/logo-small.png" alt="" width="120" height="60">
+      </a>
+      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav" data-nav-toggle>
+        <svg class="ic"><use href="/assets/img/icons.svg#i-menu"/></svg>
+        <span class="sr-only">メニュー</span>
+      </button>
+      <nav class="site-nav" id="site-nav" aria-label="サイト内の移動" data-nav>
+        <a href="/#features">できること</a>
+        <a href="/#install">インストール</a>
+        <a href="/guide/">使い方ガイド</a>
+        <a href="/typing/">タイピング</a>
+        <a class="nav-report" href="/report/">問題を報告する</a>
+        <a class="btn btn-small" href="https://github.com/yksr-melt/Meltype/releases/latest">
+          <svg class="ic"><use href="/assets/img/icons.svg#i-download"/></svg>ダウンロード
+        </a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="page-hero" aria-labelledby="engine-title">
+      <div class="wrap">
+        <h1 id="engine-title">Web エンジン</h1>
+        <p>あなたのサイトの入力欄に、半角/全角のいらない日本語入力を。ローマ字のまま打つだけで、日本語と英語を Meltype が見分けて変換します。判定も漢字変換もブラウザーの中で動くので、サーバーは要りません。</p>
+        <ul class="points">
+          <li><svg class="ic"><use href="/assets/img/icons.svg#i-lock"/></svg>打った文字はどこにも送りません</li>
+          <li><svg class="ic"><use href="/assets/img/icons.svg#i-code"/></svg>2 行で組み込めます</li>
+          <li><svg class="ic"><use href="/assets/img/icons.svg#i-download"/></svg>最初に 20 MB ほど読み込みます</li>
+        </ul>
+        <div class="codebox is-block engine-hero-code"><code>&lt;script src="/meltype/meltype.js"&gt;&lt;/script&gt;
+&lt;script&gt;Meltype.attach(document.querySelector("textarea"));&lt;/script&gt;</code></div>
+      </div>
+    </section>
+
+    <section class="section" id="demo" aria-labelledby="demo-title">
+      <div class="wrap">
+        <h2 class="sec-title" id="demo-title">デモ</h2>
+        <div class="card engine-demo">
+          <div class="engine-demo-head">
+            <p class="hint" data-demo-hint>エンジンは、押したときに読み込みます (20 MB ほど)。</p>
+            <button class="btn btn-small" type="button" data-demo-start>
+              <svg class="ic"><use href="/assets/img/icons.svg#i-download"/></svg>デモを読み込む
+            </button>
+          </div>
+          <div class="engine-progress" hidden data-progress><div class="engine-progress-bar" data-progress-bar></div></div>
+          <p class="engine-status" role="status" data-status></p>
+          <textarea class="textarea engine-field" id="engine-text" placeholder="kyouhagooglede kensakusita" spellcheck="false" autocomplete="off" disabled aria-label="デモの入力欄"></textarea>
+          <ul class="engine-samples" aria-label="例を打たせる" data-samples></ul>
+          <p class="hint"><kbd>Space</kbd> 変換・次の候補　<kbd>Enter</kbd> 確定　<kbd>Esc</kbd> 戻る　<kbd>←</kbd><kbd>→</kbd> 文節を移る　<kbd>1</kbd>〜<kbd>9</kbd> 候補を選ぶ</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section is-tinted" id="engine-features" aria-labelledby="features-title">
+      <div class="wrap">
+        <h2 class="sec-title" id="features-title">できること</h2>
+        <ul class="engine-features">
+          <li class="card">
+            <svg class="ic"><use href="/assets/img/icons.svg#i-wand"/></svg>
+            <h3>打つだけで日本語と英語を分ける</h3>
+            <p><code>kyouhagooglede kensakusita</code> は「今日はgoogleで検索した」に。半角/全角を切り替えずに、英単語もそのまま打てます。</p>
+          </li>
+          <li class="card">
+            <svg class="ic"><use href="/assets/img/icons.svg#i-shield"/></svg>
+            <h3>ブラウザーの中だけで動く</h3>
+            <p>Meltype の判定と Mozc の漢字変換を WebAssembly で動かします。サーバーは要らず、打った文字は外に送りません。</p>
+          </li>
+          <li class="card">
+            <svg class="ic"><use href="/assets/img/icons.svg#i-sparkle"/></svg>
+            <h3>アプリと同じ Meltype</h3>
+            <p>Windows・Mac・Linux 版と同じ判定と辞書を使います。英単語の予測や、候補の英訳・全角・半角も出ます。</p>
+          </li>
+          <li class="card">
+            <svg class="ic"><use href="/assets/img/icons.svg#i-keyboard"/></svg>
+            <h3>スマートフォンでも</h3>
+            <p>指で操作する端末では、端末のキーボードの代わりに画面の下にキーボードを出します。長押しで続けて消せて、押すと短く震えます。</p>
+          </li>
+          <li class="card">
+            <svg class="ic"><use href="/assets/img/icons.svg#i-refresh"/></svg>
+            <h3>使うほど賢く</h3>
+            <p>選んだ変換を覚え、そのブラウザーの中に残します。次に開いたときも、前に選んだ変換が先に出ます。</p>
+          </li>
+          <li class="card">
+            <svg class="ic"><use href="/assets/img/icons.svg#i-palette"/></svg>
+            <h3>どの入力欄にも</h3>
+            <p><code>&lt;textarea&gt;</code>・<code>&lt;input&gt;</code>・<code>contenteditable</code> に付けられます。候補の欄は Shadow DOM の中に描くのでサイトの CSS と混ざらず、色と字は CSS の変数で変えられます。</p>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="section" id="engine-install" aria-labelledby="install-title">
+      <div class="wrap">
+        <h2 class="sec-title" id="install-title">インストール</h2>
+        <p class="callout is-warn engine-callout"><svg class="ic"><use href="/assets/img/icons.svg#i-alert"/></svg><span>npm にはまだ公開していません。公開するまでは、「ソースから作る」の手順で作ったものを使ってください。</span></p>
+
+        <div class="os-tabs" role="tablist" aria-label="入れ方を選ぶ" data-tabs>
+          <button class="os-tab card" role="tab" id="tab-npm" aria-controls="panel-npm" aria-selected="true" type="button">
+            <svg class="ic"><use href="/assets/img/icons.svg#i-braces"/></svg>
+            <span><b>npm</b><small>ビルドの仕組みがあるサイト</small></span>
+          </button>
+          <button class="os-tab card" role="tab" id="tab-script" aria-controls="panel-script" aria-selected="false" tabindex="-1" type="button">
+            <svg class="ic"><use href="/assets/img/icons.svg#i-code"/></svg>
+            <span><b>&lt;script&gt;</b><small>ファイルを置くだけ</small></span>
+          </button>
+          <button class="os-tab card" role="tab" id="tab-source" aria-controls="panel-source" aria-selected="false" tabindex="-1" type="button">
+            <svg class="ic"><use href="/assets/img/icons.svg#i-terminal"/></svg>
+            <span><b>ソースから作る</b><small>.NET 10 SDK</small></span>
+          </button>
+        </div>
+
+        <div class="os-panel engine-panel" role="tabpanel" id="panel-npm" aria-labelledby="tab-npm">
+          <div class="codebox"><code>npm install meltype-web-engine</code><button class="copy" type="button" data-copy="npm install meltype-web-engine"><svg class="ic"><use href="/assets/img/icons.svg#i-copy"/></svg><span class="sr-only">コピー</span></button></div>
+          <div class="codebox is-block"><code>import { attach } from "meltype-web-engine";
+
+await attach(document.querySelector("textarea"));</code><button class="copy" type="button" data-copy='import { attach } from "meltype-web-engine";&#10;&#10;await attach(document.querySelector("textarea"));'><svg class="ic"><use href="/assets/img/icons.svg#i-copy"/></svg><span class="sr-only">コピー</span></button></div>
+          <p class="hint">本体 (<code>_framework/</code>・<code>mozc/</code>) は <code>index.mjs</code> の隣から読みます。まとめるツール (バンドラー) が <code>index.mjs</code> だけを別の場所に移すときは、パッケージのフォルダーを丸ごと公開する場所に写し、<code>load({ baseUrl })</code> でその場所を指定します。</p>
+        </div>
+
+        <div class="os-panel engine-panel" role="tabpanel" id="panel-script" aria-labelledby="tab-script" hidden>
+          <p>パッケージの中身をサイトに置き、<code>meltype.js</code> を読みます。本体は <code>meltype.js</code> の隣から読みます。</p>
+          <div class="codebox is-block"><code>&lt;textarea id="text"&gt;&lt;/textarea&gt;
+&lt;script src="/meltype/meltype.js"&gt;&lt;/script&gt;
+&lt;script&gt;
+  Meltype.attach(document.getElementById("text"));
+&lt;/script&gt;</code><button class="copy" type="button" data-copy='&lt;textarea id="text"&gt;&lt;/textarea&gt;&#10;&lt;script src="/meltype/meltype.js"&gt;&lt;/script&gt;&#10;&lt;script&gt;&#10;  Meltype.attach(document.getElementById("text"));&#10;&lt;/script&gt;'><svg class="ic"><use href="/assets/img/icons.svg#i-copy"/></svg><span class="sr-only">コピー</span></button></div>
+        </div>
+
+        <div class="os-panel engine-panel" role="tabpanel" id="panel-source" aria-labelledby="tab-source" hidden>
+          <p>Mozc (漢字変換) を作るには、初回は 30 分以上かかります。作らなければ、かなのまま確定する版になります。</p>
+          <div class="codebox is-block"><code>git clone https://github.com/yksr-melt/Meltype.git
+cd Meltype
+dotnet workload install wasm-tools
+native/mozc/build-mozc-wasm.sh
+web-engine/build.sh</code><button class="copy" type="button" data-copy="git clone https://github.com/yksr-melt/Meltype.git&#10;cd Meltype&#10;dotnet workload install wasm-tools&#10;native/mozc/build-mozc-wasm.sh&#10;web-engine/build.sh"><svg class="ic"><use href="/assets/img/icons.svg#i-copy"/></svg><span class="sr-only">コピー</span></button></div>
+          <p class="hint"><code>web-engine/dist/</code> ができます。これがそのまま npm のパッケージで、<code>&lt;script&gt;</code> で使うときもこのフォルダーを置きます。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section is-tinted" id="engine-api" aria-labelledby="api-title">
+      <div class="wrap">
+        <h2 class="sec-title" id="api-title">API</h2>
+        <div class="engine-table">
+          <table>
+            <thead><tr><th scope="col">関数</th><th scope="col">内容</th></tr></thead>
+            <tbody>
+              <tr><td><code>attach(element, options)</code></td><td>入力欄に付けます。本体をまだ読んでいなければ読みます。返す物の <code>detach()</code> で外します</td></tr>
+              <tr><td><code>load(options)</code></td><td>本体だけを先に読みます。返す物 (<code>Engine</code>) の <code>attach()</code> は待たずに付けられます</td></tr>
+              <tr><td><code>engine.clearLearning()</code></td><td>覚えたことを消します</td></tr>
+              <tr><td><code>loadCore(options)</code></td><td>判定・変換・学習だけを読みます。拡張機能のページなど、ほかの場所で動かして <code>load({ core })</code> で渡すときに使います</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="engine-table">
+          <table>
+            <thead><tr><th scope="col">設定</th><th scope="col">既定</th><th scope="col">内容</th></tr></thead>
+            <tbody>
+              <tr><td><code>keyboard</code></td><td><code>"auto"</code></td><td>画面のキーボードを出すか。<code>"auto"</code> は指で操作する端末だけ、<code>"always"</code>・<code>"never"</code></td></tr>
+              <tr><td><code>persist</code></td><td><code>true</code></td><td>覚えたことを残すか</td></tr>
+              <tr><td><code>storage</code></td><td>IndexedDB</td><td>覚えたことの置き場 (<code>{ get(), set(json), clear() }</code>)</td></tr>
+              <tr><td><code>onCommit(text)</code></td><td></td><td>確定した文字を入力欄に入れたとき</td></tr>
+              <tr><td><code>onProgress(p)</code></td><td></td><td>読み込みの進み具合。<code>p.phase</code> は <code>"core"</code>・<code>"dictionary"</code>・<code>"ready"</code></td></tr>
+              <tr><td><code>baseUrl</code></td><td>スクリプトの隣</td><td>本体を置いた場所</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3 class="engine-sub">見た目を変える</h3>
+        <div class="codebox is-block"><code>:root {
+  --meltype-accent: #e8590c;
+  --meltype-font: "Zen Maru Gothic", sans-serif;
+}</code></div>
+      </div>
+    </section>
+
+    <section class="section" id="engine-notes" aria-labelledby="notes-title">
+      <div class="wrap">
+        <h2 class="sec-title" id="notes-title">組み込むときに</h2>
+        <dl class="engine-notes">
+          <div class="card"><dt>CSP</dt><dd>WebAssembly を動かすため、<code>script-src</code> に <code>'wasm-unsafe-eval'</code> が要ります。本体を別のドメインに置くときは、そのドメインも <code>script-src</code>・<code>connect-src</code> に入れます。</dd></div>
+          <div class="card"><dt>配り方</dt><dd><code>.wasm</code> は <code>application/wasm</code> で配ります。別のドメインに置くときは、<code>Access-Control-Allow-Origin</code> を返します。</dd></div>
+          <div class="card"><dt>大きさ</dt><dd>最初に 20 MB ほど (圧縮後) 読み込みます。入力欄を使うページでだけ読むか、押したときに <code>load()</code> を呼ぶと、ほかのページを重くしません。</dd></div>
+          <div class="card"><dt>ライセンス</dt><dd>GPL-3.0-or-later です。エンジンはページを開いた人のブラウザーに配られるので、組み込んだサイトは、このエンジンについて GPL の条件 (ソースを手に入れられるようにするなど) を守ります。Mozc は BSD-3-Clause です。</dd></div>
+          <div class="card"><dt>アプリとの違い</dt><dd>AI の変換 (Zenzai) はありません。設定は初期値のままです。Mozc が覚えたこと (漢字の候補の順番) はページを閉じると忘れます。</dd></div>
+        </dl>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap footer-inner">
+      <div class="footer-brand">
+        <img src="/assets/img/logo-small.png" alt="Meltype" width="120" height="60">
+        <p>雪解けのように、半角/全角の壁を溶かす日本語入力。</p>
+      </div>
+      <ul class="footer-links">
+        <li><a href="https://github.com/yksr-melt/Meltype">GitHub</a></li>
+        <li><a href="https://github.com/yksr-melt/Meltype/releases">Releases</a></li>
+        <li><a href="https://discord.gg/y44wBbBgHt">Discord</a></li>
+        <li><a href="https://github.com/sponsors/yksr-melt">応援する</a></li>
+        <li><a href="/playground/">ブラウザーで試す</a></li>
+        <li><a href="/web-engine/">Web エンジン</a></li>
+        <li><a href="/typing/">タイピング</a></li>
+        <li><a href="/report/">問題を報告する</a></li>
+      </ul>
+      <p class="footer-copy">Copyright (C) 2026 雪代 / Yukishiro・GPL-3.0・Logo by <a href="https://github.com/Crysta1221">@Crysta1221</a></p>
+    </div>
+  </footer>
+</body>
+</html>

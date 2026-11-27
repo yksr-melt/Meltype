@@ -1,8 +1,9 @@
+# script-src の 'wasm-unsafe-eval' は、/playground/ と /web-engine/ で Web エンジン (Meltype の Core と Mozc の WebAssembly) を動かすため。
 /*
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=()
-  Content-Security-Policy: default-src 'self'; script-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https://github.com https://avatars.githubusercontent.com https://contrib.rocks https://api.star-history.com https://img.shields.io; media-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https://github.com https://avatars.githubusercontent.com https://contrib.rocks https://api.star-history.com https://img.shields.io; media-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
 
 /assets/css/*
   Cache-Control: public, max-age=0, must-revalidate
@@ -22,4 +23,8 @@
   Cache-Control: no-store
 
 /guide/*
+  Cache-Control: public, max-age=0, must-revalidate
+
+# mozc.wasm などは名前に版が入らないので、毎回確かめる
+/web-engine/engine/*
   Cache-Control: public, max-age=0, must-revalidate

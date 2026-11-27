@@ -15,6 +15,7 @@ namespace Meltype.Ime;
 // 判断がフロントに残っているのは、ImeTrait.Game・NonText の推測と、TSF の DLL のパスワード欄の判定 (打鍵を Meltype.exe に送らない) だけ。
 // JSON の項目名を変えたら、JSON を読む 6 つのフロント (native/tip/TextService.cpp・linux/fcitx5/meltype.cpp・linux/ibus-engine-meltype・
 // mac/Sources/MeltypeIME/NativeCore.swift・android/app/src/main/kotlin/app/meltype/keyboard/core/ImeJson.kt・tui/meltype-tty) を直す (FrontProtocolTests が突き合わせる)。
+// ブラウザー (web-engine/src/meltype.js) も JSON を読むので直す。JS は項目を . で読み、字句ではほかの名前と区別できないので、FrontProtocolTests は突き合わせない。
 
 /// <summary>
 /// フロントが送る出来事。種類ごとの型が、その種類に要る値だけを持つ。JSON の type は型の名前。

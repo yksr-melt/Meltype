@@ -1,0 +1,118 @@
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Copyright (C) 2026 hisiragi -->
+
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ブラウザーで試す | Meltype</title>
+  <meta name="description" content="Meltype をインストールせずに、ブラウザーで試せます。ローマ字のまま打つと、日本語と英語を分けて変換します。">
+  <meta name="theme-color" content="#3aaee8">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Meltype">
+  <meta property="og:url" content="/playground/">
+  <meta property="og:title" content="ブラウザーで試す | Meltype">
+  <meta property="og:description" content="インストールせずに、ブラウザーで Meltype を試せます。打った文字はどこにも送りません。">
+  <meta property="og:image" content="/og.png">
+  <meta property="og:locale" content="ja_JP">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="canonical" href="/playground/">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&display=swap">
+  <link rel="stylesheet" href="/assets/css/site.css">
+  <script type="module" src="/assets/js/playground.js"></script>
+</head>
+<body class="uses-meltype">
+  <a class="skip" href="#main">本文へ移動</a>
+
+  <header class="site-header" data-header>
+    <div class="header-inner">
+      <a class="brand" href="/" aria-label="Meltype のトップ">
+        <img src="/assets/img/logo-small.png" alt="" width="120" height="60">
+      </a>
+      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav" data-nav-toggle>
+        <svg class="ic"><use href="/assets/img/icons.svg#i-menu"/></svg>
+        <span class="sr-only">メニュー</span>
+      </button>
+      <nav class="site-nav" id="site-nav" aria-label="サイト内の移動" data-nav>
+        <a href="/#features">できること</a>
+        <a href="/#install">インストール</a>
+        <a href="/guide/">使い方ガイド</a>
+        <a href="/typing/">タイピング</a>
+        <a class="nav-report" href="/report/">問題を報告する</a>
+        <a class="btn btn-small" href="https://github.com/yksr-melt/Meltype/releases/latest">
+          <svg class="ic"><use href="/assets/img/icons.svg#i-download"/></svg>ダウンロード
+        </a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="page-hero" aria-labelledby="playground-title">
+      <div class="wrap">
+        <h1 id="playground-title">ブラウザーで試す</h1>
+        <p>インストールせずに Meltype を試せます。ローマ字のまま打つと、日本語と英語を分けて変換します。中身はアプリと同じ Meltype と Mozc で、すべてブラウザーの中で動きます。</p>
+        <ul class="points">
+          <li><svg class="ic"><use href="/assets/img/icons.svg#i-lock"/></svg>打った文字はどこにも送りません</li>
+          <li><svg class="ic"><use href="/assets/img/icons.svg#i-download"/></svg>最初に 20 MB ほど読み込みます</li>
+          <li><svg class="ic"><use href="/assets/img/icons.svg#i-keyboard"/></svg>スマートフォンは画面のキーボードで打てます</li>
+        </ul>
+      </div>
+    </section>
+
+    <div class="playground wrap">
+      <section class="card" aria-labelledby="try-title">
+        <h2 class="step-title" id="try-title"><span class="step-no">1</span>打ってみる</h2>
+        <p class="hint">IME をオフ (半角英数) にしてから打ってください。スマートフォン・タブレットでは、画面の下に出るキーボードで打ちます (端末のキーボードの変換と混ざらないように、端末のキーボードは出しません)。</p>
+        <div class="playground-field">
+          <textarea class="textarea" id="playground-text" placeholder="kyouhagooglede kensakusita" spellcheck="false" autocomplete="off" disabled data-field></textarea>
+        </div>
+        <p class="playground-status" role="status" data-status>読み込み中…</p>
+      </section>
+
+      <section class="card" aria-labelledby="samples-title">
+        <h2 class="step-title" id="samples-title"><span class="step-no">2</span>例を打たせる</h2>
+        <p class="hint">押すと、その通りにキーを打ちます。</p>
+        <ul class="chips playground-samples" data-samples></ul>
+        <button class="btn btn-ghost btn-small" type="button" data-clear>
+          <svg class="ic"><use href="/assets/img/icons.svg#i-trash"/></svg>消す
+        </button>
+      </section>
+
+      <section class="card" aria-labelledby="keys-title">
+        <h2 class="step-title" id="keys-title"><span class="step-no">3</span>キー</h2>
+        <ul class="playground-keys">
+          <li><kbd>Space</kbd> 変換・次の候補　<kbd>Enter</kbd> 確定　<kbd>Esc</kbd> 戻る</li>
+          <li><kbd>←</kbd><kbd>→</kbd> 文節を移る　<kbd>Shift</kbd>+<kbd>←</kbd><kbd>→</kbd> 区切りを変える　<kbd>1</kbd>〜<kbd>9</kbd> 候補を選ぶ</li>
+          <li>日本語と英語の切り替えはありません。どちらもそのまま打てます</li>
+        </ul>
+        <p class="hint">覚えたことは、このブラウザーの中に残ります。AI の変換 (Zenzai) はありません。</p>
+      </section>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap footer-inner">
+      <div class="footer-brand">
+        <img src="/assets/img/logo-small.png" alt="Meltype" width="120" height="60">
+        <p>雪解けのように、半角/全角の壁を溶かす日本語入力。</p>
+      </div>
+      <ul class="footer-links">
+        <li><a href="https://github.com/yksr-melt/Meltype">GitHub</a></li>
+        <li><a href="https://github.com/yksr-melt/Meltype/releases">Releases</a></li>
+        <li><a href="https://discord.gg/y44wBbBgHt">Discord</a></li>
+        <li><a href="https://github.com/sponsors/yksr-melt">応援する</a></li>
+        <li><a href="/playground/">ブラウザーで試す</a></li>
+        <li><a href="/web-engine/">Web エンジン</a></li>
+        <li><a href="/typing/">タイピング</a></li>
+        <li><a href="/report/">問題を報告する</a></li>
+      </ul>
+      <p class="footer-copy">Copyright (C) 2026 雪代 / Yukishiro・GPL-3.0・Logo by <a href="https://github.com/Crysta1221">@Crysta1221</a></p>
+    </div>
+  </footer>
+</body>
+</html>
