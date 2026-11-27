@@ -6,12 +6,15 @@ namespace Meltype.Input;
 /// <summary>打鍵が入力する文字 (前面アプリのキーボード配列で)。フックのスレッドからも呼べる。</summary>
 internal static class KeyText
 {
+    public static bool CapsLockOn => (Native.GetKeyState(ToggleShortcut.CapsLock) & 1) != 0;
+
     /// <summary>その打鍵で入力される文字。文字を生まないキーなら null。</summary>
     public static char? CharFromKey(int vk, int scan, bool shift)
     {
-        shift |= (Native.GetAsyncKeyState(VirtualKeys.Shift) & 0x8000) != 0;
         var state = new byte[256];
         if (shift) state[VirtualKeys.Shift] = state[VirtualKeys.LShift] = 0x80;
+        // CapsLock も文字に入れる (日本語入力中に大文字にするかは Core が設定で決める)
+        if (CapsLockOn) state[ToggleShortcut.CapsLock] = 1;
         var foreground = Native.GetForegroundWindow();
         var layout = Native.GetKeyboardLayout(Native.GetWindowThreadProcessId(foreground, out _));
         var buffer = new char[8];

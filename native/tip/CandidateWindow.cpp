@@ -35,6 +35,8 @@ constexpr float kRowHeight = 32;     // 候補の 1 行
 constexpr float kNumberWidth = 26;   // 番号の列
 constexpr float kTextInset = 10;     // 行の左端から番号まで
 constexpr float kNoteGap = 16;       // 候補と注釈の間
+constexpr float kSwatchSize = 14;    // 色見本の大きさ
+constexpr float kSwatchGap = 8;      // 候補と色見本の間
 constexpr float kFooterHeight = 24;  // 「3 / 27」の行
 constexpr float kTypedHeight = 22;   // 打ったキーの行
 constexpr float kCandidateFontSize = 15;
@@ -170,6 +172,60 @@ void FillRounded(ID2D1RenderTarget* target, const D2D1_RECT_F& rect, float radiu
     brush->Release();
 }
 
+void DrawColorSwatch(ID2D1RenderTarget* target, const D2D1_RECT_F& rect, unsigned char r, unsigned char g, unsigned char b, unsigned char a,
+                     const D2D1_COLOR_F& borderColor) {
+    if (a < 255) {
+        float midX = (rect.left + rect.right) * 0.5f;
+        float midY = (rect.top + rect.bottom) * 0.5f;
+        ID2D1SolidColorBrush* light = nullptr;
+        ID2D1SolidColorBrush* dark = nullptr;
+        target->CreateSolidColorBrush(Rgba(255, 255, 255), &light);
+        target->CreateSolidColorBrush(Rgba(204, 204, 204), &dark);
+        if (light && dark) {
+            target->FillRectangle(D2D1::RectF(rect.left, rect.top, midX, midY), light);
+            target->FillRectangle(D2D1::RectF(midX, rect.top, rect.right, midY), dark);
+            target->FillRectangle(D2D1::RectF(rect.left, midY, midX, rect.bottom), dark);
+            target->FillRectangle(D2D1::RectF(midX, midY, rect.right, rect.bottom), light);
+        }
+        if (light) light->Release();
+        if (dark) dark->Release();
+    }
+    ID2D1SolidColorBrush* fill = nullptr;
+    target->CreateSolidColorBrush(Rgba(r, g, b, a / 255.0f), &fill);
+    if (fill) {
+        target->FillRectangle(rect, fill);
+        fill->Release();
+    }
+    ID2D1SolidColorBrush* border = nullptr;
+    target->CreateSolidColorBrush(borderColor, &border);
+    if (border) {
+        target->DrawRectangle(rect, border, 1.0f);
+        border->Release();
+    }
+}
+
+int HexDigit(wchar_t c) {
+    if (c >= L'0' && c <= L'9') return c - L'0';
+    if (c >= L'a' && c <= L'f') return c - L'a' + 10;
+    if (c >= L'A' && c <= L'F') return c - L'A' + 10;
+    return -1;
+}
+
+// Core が決めた色見本 (#rrggbbaa) を RGBA に展開する
+bool DecodeRgbaHex(const std::wstring& hex, unsigned char& outR, unsigned char& outG, unsigned char& outB, unsigned char& outA) {
+    if (hex.size() != 9 || hex[0] != L'#') return false;
+    int d[8] = {};
+    for (size_t i = 0; i < 8; i++) {
+        d[i] = HexDigit(hex[1 + i]);
+        if (d[i] < 0) return false;
+    }
+    outR = static_cast<unsigned char>((d[0] << 4) | d[1]);
+    outG = static_cast<unsigned char>((d[2] << 4) | d[3]);
+    outB = static_cast<unsigned char>((d[4] << 4) | d[5]);
+    outA = static_cast<unsigned char>((d[6] << 4) | d[7]);
+    return true;
+}
+
 void PrepareWindow(HWND hwnd, COLORREF border) {
     // Windows 11: 角丸と縁の色 (Windows 10 では何もしない)
     DWORD corner = 2;  // DWMWCP_ROUND
@@ -236,6 +292,8 @@ struct CandidateWindow::Impl {
         float widest = 0;
         for (size_t i = 0; i < view.candidates.size(); i++) {
             float w = TextWidth(candidate, view.candidates[i]);
+            unsigned char cr = 0, cg = 0, cb = 0, ca = 0;
+            if (i < view.colors.size() && DecodeRgbaHex(view.colors[i], cr, cg, cb, ca)) w += kSwatchGap + kSwatchSize;
             if (i < view.notes.size() && !view.notes[i].empty()) w += kNoteGap + TextWidth(note, view.notes[i]);
             widest = std::max(widest, w);
         }
@@ -319,8 +377,17 @@ struct CandidateWindow::Impl {
                 DrawText(target, note, view.notes[index], D2D1::RectF(row.right - 10 - noteWidth, row.top, row.right - 6, row.bottom), p.secondary);
                 noteWidth += kNoteGap;
             }
-            DrawText(target, candidate, view.candidates[index],
-                     D2D1::RectF(row.left + kTextInset + kNumberWidth, row.top, row.right - 8 - noteWidth, row.bottom), p.text);
+            float textLeft = row.left + kTextInset + kNumberWidth;
+            float maxRight = row.right - 8 - noteWidth;
+            unsigned char cr = 0, cg = 0, cb = 0, ca = 0;
+            if (index < static_cast<int>(view.colors.size()) && DecodeRgbaHex(view.colors[index], cr, cg, cb, ca)) {
+                float candWidth = TextWidth(candidate, view.candidates[index]);
+                float swatchX = std::min(textLeft + candWidth + kSwatchGap, maxRight - kSwatchSize);
+                float swatchY = row.top + (kRowHeight - kSwatchSize) * 0.5f;
+                DrawColorSwatch(target, D2D1::RectF(swatchX, swatchY, swatchX + kSwatchSize, swatchY + kSwatchSize), cr, cg, cb, ca, p.secondary);
+                maxRight = swatchX - kSwatchGap;
+            }
+            DrawText(target, candidate, view.candidates[index], D2D1::RectF(textLeft, row.top, maxRight, row.bottom), p.text);
             y += kRowHeight;
         }
 
