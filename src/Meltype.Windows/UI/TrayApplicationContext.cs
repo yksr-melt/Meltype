@@ -415,9 +415,16 @@ internal sealed class TrayApplicationContext : ApplicationContext
     // 設定アプリ・config.json の書き換えで動作モードを Meltype IME にしたが、Windows に登録されていない。MeltypeRuntime のタイマーのスレッドからも呼ばれる
     private void OnTsfUnavailable()
     {
-        if (!CanRegisterTsf || !_invoker.IsHandleCreated || _invoker.IsDisposed) return;
-        _invoker.BeginInvoke(() => EnableTsf("Meltype IME を Windows に登録しますか？\n\n" +
-            "Meltype IME は Windows の IME として、打った文字を入力欄に直接入れます。登録するまでは Meltype キーボード (変換ボックスで入力) で動きます。"));
+        if (!CanRegisterTsf) return;
+        try
+        {
+            _invoker.BeginInvoke(() => EnableTsf("Meltype IME を Windows に登録しますか？\n\n" +
+                "Meltype IME は Windows の IME として、打った文字を入力欄に直接入れます。登録するまでは Meltype キーボード (変換ボックスで入力) で動きます。"));
+        }
+        catch (InvalidOperationException)
+        {
+            // 終了してハンドルを破棄した
+        }
     }
 
     // MeltypeRuntime のタイマーのスレッドからも呼ばれる
