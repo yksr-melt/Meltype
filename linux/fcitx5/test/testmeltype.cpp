@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Yukishiro
+// Copyright (C) 2026 Meltype Contributors
 //
 // fcitx5 のアドオンを、fcitx5 のテスト用のフロントエンド (testfrontend) で動かして確かめる。
 // 本体 (libMeltypeNative.so) の場所を環境変数 MELTYPE_DIR で渡す (Mozc が無ければ、変換はひらがなのまま)。

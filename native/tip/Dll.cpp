@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 lnkiai
+// Copyright (C) 2026 Meltype Contributors
 //
 // stub (MeltypeTip.dll) のエントリーポイント (COM のクラスファクトリー) と、IME としての登録 (regsvr32)。
 

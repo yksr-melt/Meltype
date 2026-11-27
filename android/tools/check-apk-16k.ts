@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 KoheiTakada
+// Copyright (C) 2026 Meltype Contributors
 //
 // APK に入れた ARM64 の JNI のライブラリが、16 KiB のページで動くかを確かめる。
 //   node android/tools/check-apk-16k.ts <APK>

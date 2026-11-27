@@ -1,6 +1,6 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 aster-void
+# Copyright (C) 2026 Meltype Contributors
 #
 # Linux のフロント (linux/・tui/) が同梱する本体を、指定したフォルダーに組み立てる。
 # 置くもの: libMeltypeNative.so (C#, NativeAOT)、mozc/ (Mozc の変換ヘルパー)、zenzai/ (llama-server とモデル)、LICENSE・THIRD-PARTY-NOTICES.md

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 MuNeNiCK
+// Copyright (C) 2026 Meltype Contributors
 // 実際の Native と公開 frontend で、固定ガイドと入力に応じた提案を区別して確かめる。
 #include <testfrontend_public.h>
 #include <fcitx-utils/eventdispatcher.h>

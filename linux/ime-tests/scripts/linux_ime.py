@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 HarukiKubota
+# Copyright (C) 2026 Meltype Contributors
 """Run the product IBus engine and Chromium in a private Linux desktop session.
 
 The browser creates the input context. Only XTEST sends input; this module never

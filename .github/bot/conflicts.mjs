@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Yukishiro
+// Copyright (C) 2026 Meltype Contributors
 //
 // マージしたあとのコンフリクトの予告 (.github/workflows/conflicts.yml)。開いている Pull Request を全部調べ、
 // 「この Pull Request をマージすると、どの Pull Request がコンフリクトするか」を、その Pull Request にコメントする (マージの順番を決めるときに使う)。

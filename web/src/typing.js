@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
-/* Copyright (C) 2026 Yukishiro */
+/* Copyright (C) 2026 Meltype Contributors */
 
 // タイピング調査 (/typing/) の受付。どのキーが抜けやすいかを調べるため、お手本の文を打ったときの打鍵を集める。
 // ページは誰でも遊べ、打鍵は調査に同意した人のものだけを受け付ける。

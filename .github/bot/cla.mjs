@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Yukishiro
+// Copyright (C) 2026 Meltype Contributors
 //
 // 貢献者ライセンス同意 (CLA) の bot (.github/workflows/cla.yml から呼ぶ)。
 // 初めて Pull Request を出した人に同意の文面を見せ、「CLA に同意します」とコメントしてもらう。

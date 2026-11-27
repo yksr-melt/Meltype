@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 HarukiKubota
+// Copyright (C) 2026 Meltype Contributors
 
 /** Issue全体の再現ではなく、属性・操作ごとの条件を実IMEとブラウザーで部分検査する。 */
 import { test, expect } from './linux-keyboard';

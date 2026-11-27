@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 yksr-melt
+// Copyright (C) 2026 Meltype Contributors
 
 const oneLine = text => String(text ?? '').replace(/\r\n|[\r\n]/g, ' ');
 

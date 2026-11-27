@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
-/* Copyright (C) 2026 Konayukiw */
+/* Copyright (C) 2026 Meltype Contributors */
 
 export function json(data, init = {}) {
   const headers = new Headers(init.headers);

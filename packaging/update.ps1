@@ -1,5 +1,5 @@
 ﻿# SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 Yukishiro
+# Copyright (C) 2026 Meltype Contributors
 
 # Meltype の更新を確認して、新しい版があればダウンロードして展開しておく (Meltype が定期的に呼ぶ)。
 #   update.ps1 -Repository yksr-melt/Meltype -CurrentVersion 0.1.2 -Directory %LOCALAPPDATA%\Meltype\update [-Prerelease]

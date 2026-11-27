@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 hrmcngs
+# Copyright (C) 2026 Meltype Contributors
 #
 # WSL / Linux (Ubuntu・Debian・Fedora) の CLI から Meltype をビルドするための入口。
 #   linux/build-cli.sh --setup --test --package

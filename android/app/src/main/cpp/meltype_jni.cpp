@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 KoheiTakada
+// Copyright (C) 2026 Meltype Contributors
 // Android JNI adapter for the Meltype.Native NativeAOT C ABI (meltype_ime_*).
 #include <jni.h>
 #include <cstdint>

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 aster-void
+// Copyright (C) 2026 Meltype Contributors
 //
 // JMdict (EDRDG、CC BY-SA 4.0) から、カタカナで書く語の読みの一覧 dictionaries/katakana.txt を作る。
 // 日英の区切り (ReadingLattice.cs) で、readings.txt に無いカタカナ語 (ホスティング) を日本語の語として読むのに使う。

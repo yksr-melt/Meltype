@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 aster-void
+// Copyright (C) 2026 Meltype Contributors
 
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;

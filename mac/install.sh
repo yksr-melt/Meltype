@@ -1,6 +1,6 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 Yukishiro
+# Copyright (C) 2026 Meltype Contributors
 #
 # Meltype.app を ~/Library/Input Methods に入れる。DMG のインストーラーと ZIP の両方から使う。
 # 設定アプリ (Meltype Settings.app) は ~/Applications に入れる (install-settings-app.sh)。

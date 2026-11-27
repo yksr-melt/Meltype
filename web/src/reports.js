@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
-/* Copyright (C) 2026 Konayukiw */
+/* Copyright (C) 2026 Meltype Contributors */
 
 import { LIMITS, formById, titleFor, validateFields, validateFiles } from "../public/assets/js/report-schema.js";
 import { error, json, now, randomToken, readJson, sha256Hex } from "./http.js";

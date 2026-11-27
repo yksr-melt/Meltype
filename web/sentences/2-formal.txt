@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 Yukishiro
+# Copyright (C) 2026 Meltype Contributors
 # タイピング (/typing/) のお手本。
 # 1 行に 1 文、「表示する文|読み」の形で書く。一度出した行は消さず、やめるときは頭に「出さない:」を付ける (決まりは web/README.md の「タイピング」)
 種類: 硬めの文

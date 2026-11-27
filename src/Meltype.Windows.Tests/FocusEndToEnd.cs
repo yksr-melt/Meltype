@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 TakeMoriXX
+// Copyright (C) 2026 Meltype Contributors
 
 using System.Diagnostics;
 using Meltype.Composition;

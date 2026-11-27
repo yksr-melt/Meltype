@@ -1,5 +1,5 @@
 ﻿# SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 Yukishiro
+# Copyright (C) 2026 Meltype Contributors
 
 # ソースからビルドしたインストーラーで Meltype を入れる。配布するものと同じインストーラー (Build-Package.ps1 → packaging\Meltype.iss) を使う。
 # アンインストールは、ふつうに入れたときと同じ (トレイの「アンインストール...」か、Windows の「設定」→「アプリ」)。

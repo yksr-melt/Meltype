@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 Yukishiro
+# Copyright (C) 2026 Meltype Contributors
 """meltype-tty の、端末のバイト列をキーに分ける処理と重ねる表示を、共有ライブラリなしで確かめる。"""
 
 import importlib.machinery

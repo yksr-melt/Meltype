@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Yukishiro
+// Copyright (C) 2026 Meltype Contributors
 //
 // JMdict (EDRDG、CC BY-SA 4.0) から、よく使う語の英訳の表 dictionaries/translations.txt を作る。
 //   node tools/make-translations.mjs JMdict_e.xml > dictionaries/translations.txt

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 lnkiai
+// Copyright (C) 2026 Meltype Contributors
 //
 // 候補の一覧。Windows 11 の Microsoft IME に寄せた見た目:
 //   角丸 (DWM)、ライト / ダークは Windows の設定に合わせる、縦 1 列で番号 + 候補、

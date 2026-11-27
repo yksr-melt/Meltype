@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 0924haruto12
+# Copyright (C) 2026 Meltype Contributors
 """Test packaged Meltype through a private IBus daemon and synthetic input context.
 
 Run inside an existing isolated Xvfb and D-Bus session:

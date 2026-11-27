@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Konayukiw
+// Copyright (C) 2026 Meltype Contributors
 
 // アプリとサイトのアイコン (雪の結晶 + M) を public/favicon.svg から作る。
 //   node scripts/make-icons.mjs            (Chrome / Edge / Chromium の場所は CHROMIUM_PATH で指定できる)

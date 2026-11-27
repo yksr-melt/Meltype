@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
-/* Copyright (C) 2026 Yukishiro */
+/* Copyright (C) 2026 Meltype Contributors */
 
 // タイピングの 1 文の打鍵から、打った文字を組み立てて採点し、お手本と関係ない入力 (名前など) が続いていないかを見る。
 // ページとサーバー (src/typing.js) で同じものを使う。

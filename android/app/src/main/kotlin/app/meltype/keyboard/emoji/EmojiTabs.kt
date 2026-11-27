@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 ninjin0802
+// Copyright (C) 2026 Meltype Contributors
 package app.meltype.keyboard.emoji
 
 /** 絵文字の画面に出すタブと、開いたときに選んでおくタブ（spec 04「種類」「最近使ったもの」）。 */

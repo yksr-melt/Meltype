@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
-/* Copyright (C) 2026 Konayukiw */
+/* Copyright (C) 2026 Meltype Contributors */
 
 import { detectOs, escapeHtml, formatDate, formatNumber, getJson, icon, initCopyButtons, initHeader, prefersReducedMotion } from "./common.js";
 import { formatBytes } from "./report-schema.js";

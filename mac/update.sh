@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 hrmcngs
+# Copyright (C) 2026 Meltype Contributors
 
 # Run from any directory:
 #   bash "$HOME/Documents/github/other/Meltype/mac/update.sh"

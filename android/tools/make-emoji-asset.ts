@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 ninjin0802
+// Copyright (C) 2026 Meltype Contributors
 //
 // Unicode の emoji-test.txt から、アプリに入れる絵文字の一覧 (app/src/main/assets/emoji.txt) を作る。
 //   curl -LO https://unicode.org/Public/18.0.0/emoji/emoji-test.txt

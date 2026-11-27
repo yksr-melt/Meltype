@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 KoheiTakada
+// Copyright (C) 2026 Meltype Contributors
 package app.meltype.keyboard.core
 
 /** An item of the Core's one list (view.candidates). A tap sends CandidateClicked with [nativeIndex]. */

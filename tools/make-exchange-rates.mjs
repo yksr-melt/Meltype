@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Yukishiro
+// Copyright (C) 2026 Meltype Contributors
 //
 // 欧州中央銀行 (ECB) の参照レート (eurofxref-daily.xml) から、通貨の換算に使う表 dictionaries/exchange-rates.txt を作る
 // (100どる → 約1.6万円 の候補。issue #342)。Meltype は使うときにネットにつながず、リリースのときに作った表を同梱する。

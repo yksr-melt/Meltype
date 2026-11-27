@@ -1,5 +1,5 @@
 ﻿# SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 Raptor-zip
+# Copyright (C) 2026 Meltype Contributors
 
 # 完成したフォルダーと ZIP を検査し、検出・検査不能なら公開を止める。
 param([string[]]$Path)

@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
-/* Copyright (C) 2026 Konayukiw */
+/* Copyright (C) 2026 Meltype Contributors */
 
 import { escapeHtml, getJson, icon, initHeader } from "./common.js";
 import { FILE_ACCEPT, FORMS, LIMITS, fileTypeOf, formById, formByTemplate, formatBytes, maxLength, validateFields } from "./report-schema.js";

@@ -1,6 +1,6 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 Yukishiro
+# Copyright (C) 2026 Meltype Contributors
 #
 # Mozc の変換ヘルパー (meltype_mozc_helper) を Linux・macOS 用にビルドする (Windows 版は Build-MozcHelper.ps1)。
 #   native/mozc/build-mozc-helper.sh [Mozc を置く場所 (既定: ~/mozc)] [Bazel のディスクキャッシュ]

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 yksr-melt
+// Copyright (C) 2026 Meltype Contributors
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { decision, excessPulls, githubApi, Labels, runPolicy, WaitMs } from './policy.mjs';

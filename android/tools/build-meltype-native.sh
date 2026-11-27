@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 KoheiTakada
+# Copyright (C) 2026 Meltype Contributors
 set -euo pipefail
 
 # Builds the SAME C# shared Core used by the Mac/Linux front ends for Android.

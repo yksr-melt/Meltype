@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 HarukiKubota
+// Copyright (C) 2026 Meltype Contributors
 
 /** OSに依存しないブラウザー上の観測処理。 */
 import { expect, type Locator, type Page } from '@playwright/test';

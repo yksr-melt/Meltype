@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Yukishiro
+// Copyright (C) 2026 Meltype Contributors
 //
 // README の「寄付してくださった方々」を、GitHub Sponsors の一覧から作り直す (.github/workflows/sponsors.yml から呼ぶ)。
 //   - 名前を公開にしてくださった方 (privacyLevel が PUBLIC) だけを載せる。非公開の方は載せない

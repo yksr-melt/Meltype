@@ -1,5 +1,5 @@
 ; SPDX-License-Identifier: GPL-3.0-or-later
-; Copyright (C) 2026 Yukishiro
+; Copyright (C) 2026 Meltype Contributors
 ;
 ; Meltype の Windows インストーラー (Inno Setup 6)。Build-Package.ps1 が dist\Meltype\app から作る。管理者権限は不要。
 ; 新規インストール・アプリ内の自動更新 (/VERYSILENT)・winget・Install-Meltype.ps1 のどれもこのインストーラーで入れる。

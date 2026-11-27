@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 aster-void
+// Copyright (C) 2026 Meltype Contributors
 //
 // SKK 辞書 SKK-JISYO.jinmei (GPL-2.0-or-later) から、日本人の姓・名の読みの一覧 dictionaries/names.txt を作る。
 // 日英の区切り (ReadingLattice.cs) で、大文字で始めてローマ字で打った日本人名 (Takahashi) を 1 つの英語の語にするのに使う。

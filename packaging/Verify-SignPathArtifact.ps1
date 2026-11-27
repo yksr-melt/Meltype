@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 yksr-melt
+# Copyright (C) 2026 Meltype Contributors
 # PowerShell 7 / Windows 用。SignPath で署名した成果物を確かめる。
 # テスト署名では、SHA-256 で固定した自己署名証明書を実行中だけ LocalMachine Root に登録し、必ず削除する。
 # CurrentUser Root への追加は Windows が確認ダイアログを出し、人のいない runner では止まったままになるため、管理者で動く runner の LocalMachine を使う。

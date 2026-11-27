@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Yukishiro
+// Copyright (C) 2026 Meltype Contributors
 //
 // SCOWL (Spell Checker Oriented Word Lists、Kevin Atkinson) から、よく使う英単語の一覧 dictionaries/english-words.txt を作る。
 // 全 OS で、英単語 (meeting) を知るのに使う。

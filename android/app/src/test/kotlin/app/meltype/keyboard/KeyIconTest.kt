@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 KoheiTakada
+// Copyright (C) 2026 Meltype Contributors
 package app.meltype.keyboard
 
 import app.meltype.keyboard.input.EnterKind

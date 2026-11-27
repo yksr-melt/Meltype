@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 lnkiai
+// Copyright (C) 2026 Meltype Contributors
 //
 // タスクバーの入力モードの表示 (「あ」= 日本語 /「A」= 英数)。クリックで切り替える。
 

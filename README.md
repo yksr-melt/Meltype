@@ -135,7 +135,7 @@ even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE
 General Public License for more details.
 ```
 
-ソースファイルには `SPDX-License-Identifier: GPL-3.0-or-later` を付けています。
+ソースファイルには `SPDX-License-Identifier: GPL-3.0-or-later` を付けています。ファイルごとの著作権表示は [COPYRIGHT.md](COPYRIGHT.md) にあります。
 同梱している .NET ランタイム (MIT) と、使っている Windows の機能については [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) を見てください。
 ロゴ ([docs/meltype.jpg](docs/meltype.jpg)・[docs/images/logo.png](docs/images/logo.png)) は [@Crysta1221](https://github.com/Crysta1221) さんに描いていただきました。
 

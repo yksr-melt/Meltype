@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 aster-void
-// Copyright (C) 2026 yksr-melt
+// Copyright (C) 2026 Meltype Contributors
 
 using Meltype.Diagnostics;
 using Meltype.Dictionary;

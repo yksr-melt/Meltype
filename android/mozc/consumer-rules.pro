@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 ninjin0802
+# Copyright (C) 2026 Meltype Contributors
 # libmozc.so は、このクラスとメソッドを名前で探す（initialize は記号の名前、残りは RegisterNatives）。
 -keep class com.google.android.apps.inputmethod.libs.mozc.session.MozcJni { *; }
 

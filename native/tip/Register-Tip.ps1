@@ -1,5 +1,5 @@
 ﻿# SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 lnkiai
+# Copyright (C) 2026 Meltype Contributors
 #
 # Meltype IME (TSF の DLL) を Windows に登録する / 登録を外す。管理者権限が要る (IME の登録は PC 全体の設定のため)。
 #   powershell -ExecutionPolicy Bypass -File Register-Tip.ps1 -Source <x64・arm64・x86 のフォルダーがある所>

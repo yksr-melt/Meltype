@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 HarukiKubota
+// Copyright (C) 2026 Meltype Contributors
 
 /** Linux固有のOS入力だけを提供する。製品結果のアサーションはspecに置く。 */
 import { test as base, expect } from '@playwright/test';

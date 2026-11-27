@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Yukishiro
+// Copyright (C) 2026 Meltype Contributors
 //
 // Meltype.app を macOS に登録し直し、入力メニューの再起動を要求する小さな道具 (#134)。
 // install-app.sh が Meltype.app を入れ替えたあとに呼ぶ。

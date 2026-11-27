@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 0924haruto12
+# Copyright (C) 2026 Meltype Contributors
 """NativeAOT の C ABI を検証する。変換コールバックはスタブ、設定・学習は一時ディレクトリ。
 
 python3 src/Meltype.Core.CApi/tests/test-native-boundaries.py path/to/MeltypeNative.dylib

@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Yukishiro
-// Copyright (C) 2026 aster-void
+// Copyright (C) 2026 Meltype Contributors
 //
 // Meltype の fcitx5 のアドオン (issue #99)。fcitx5 から読んだ事実 (キー・キャレットの前後の文字・入力欄の種類) を
 // 本体 (libMeltypeNative.so の ImeHost) に渡し、返ってきた指示 (確定・変換中の表示・候補・入力モードの表示) を入力欄に出す。

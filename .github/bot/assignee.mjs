@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Yukishiro
+// Copyright (C) 2026 Meltype Contributors
 // PR の作者が、本文の「Fixes #123」などで閉じる Issue の担当 (Assignees) に入っていなければ、PR を Draft にする (issue #1208)。
 // 担当のいない Issue・関連 Issue の書かれていない PR はそのまま。メンテナー (OWNER / MEMBER / COLLABORATOR) の PR も対象にしない。
 // 定期実行・手動の実行で、開いているすべての PR を確かめる。

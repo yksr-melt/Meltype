@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 HarukiKubota
+// Copyright (C) 2026 Meltype Contributors
 
 /** テストページ自身の契約。製品IMEの回帰試験には数えない。 */
 import { test, expect } from '@playwright/test';

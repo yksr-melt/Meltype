@@ -1,5 +1,5 @@
 ﻿# SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 lnkiai
+# Copyright (C) 2026 Meltype Contributors
 #
 # Meltype IME (TSF の DLL) をビルドする。Visual Studio Build Tools (C++) が要る。
 #   powershell -ExecutionPolicy Bypass -File native\tip\build.ps1 [-Configuration Release|Debug]

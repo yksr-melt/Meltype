@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 ninjin0802
+# Copyright (C) 2026 Meltype Contributors
 #
 # Mozc（かな漢字変換）の JNI ライブラリと辞書をビルドして :mozc モジュールに置く。
 #

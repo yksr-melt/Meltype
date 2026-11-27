@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 MuNeNiCK
-// Copyright (C) 2026 aster-void
+// Copyright (C) 2026 Meltype Contributors
 // Exercise terminal composition through Fcitx5's public frontend interface.
 // コードの行かは、入力欄が渡す周りの文字 (surrounding text) だけで決まる。渡さない端末 (foot の TUI など) では、
 // コードの行として英数のまま通し、日本語にするのは 半角/全角 などで明示したときだけ。

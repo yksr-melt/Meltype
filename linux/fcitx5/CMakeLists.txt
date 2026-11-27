@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 Yukishiro
+# Copyright (C) 2026 Meltype Contributors
 #
 # Meltype の fcitx5 のアドオン。linux/build.sh が fcitx5 の開発用のパッケージ (fcitx5-modules-dev) があるときにビルドする。
 #   cmake -S linux/fcitx5 -B build/fcitx5 -DMELTYPE_DIR=/opt/meltype && cmake --build build/fcitx5

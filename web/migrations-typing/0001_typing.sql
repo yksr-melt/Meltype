@@ -1,5 +1,5 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
--- Copyright (C) 2026 Yukishiro
+-- Copyright (C) 2026 Meltype Contributors
 
 -- タイピング調査 (/typing/) のデータベース (TYPING_DB)。報告 (DB) と分け、タイピングのデータで容量が埋まっても報告を受け付けられるようにする。
 -- 参加者は名前も IP も残さず、参加ごとのランダムな番号で分ける。

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 Yukishiro
+# Copyright (C) 2026 Meltype Contributors
 #
 # 公開版のリリースを winget (microsoft/winget-pkgs) に出す (issue #367)。
 # インストーラー (Meltype-<版>-setup.exe) から新しい版のマニフェストを作り、winget-pkgs に Pull Request を出す。

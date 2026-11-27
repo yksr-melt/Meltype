@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Yukishiro
+// Copyright (C) 2026 Meltype Contributors
 //
 // dictionaries/*.txt の形式を確かめる (Pull Request のチェック「辞書の形式」で使う)。
 //   node tools/check-dictionaries.mjs [ファイル …]   … 省略するとすべての辞書

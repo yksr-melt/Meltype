@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 0924haruto12
+# Copyright (C) 2026 Meltype Contributors
 """Compare the full synthetic key/session/JSON loop against a local baseline checkout.
 
 No input method is installed. AOT is the default; --jit uses the release JIT.

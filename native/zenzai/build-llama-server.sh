@@ -1,6 +1,6 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 aster-void
+# Copyright (C) 2026 Meltype Contributors
 #
 # Linux 版に同梱する llama.cpp の llama-server (CPU 版) を、native/zenzai/zenzai.env の版のソースからビルドする。
 #   native/zenzai/build-llama-server.sh

@@ -1,6 +1,6 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 Yukishiro
+# Copyright (C) 2026 Meltype Contributors
 #
 # Meltype の Mac 版をビルドして ~/Library/Input Methods にインストールする。
 #   ./build.sh            ビルドしてインストール

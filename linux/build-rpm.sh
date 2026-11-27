@@ -1,6 +1,6 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 aster-void
+# Copyright (C) 2026 Meltype Contributors
 #
 # linux/build.sh で組み立てたもの (または Meltype-<版>-linux.zip を展開したフォルダー) から、
 # Fedora・RHEL 9 系の .rpm パッケージ (meltype と、fcitx5 のアドオンがあれば meltype-fcitx5) を作る。

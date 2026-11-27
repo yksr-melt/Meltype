@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Yukishiro
+// Copyright (C) 2026 Meltype Contributors
 //
 // Unicode CLDR の英語の国・地域名 (common/main/en.xml の territories。別名を含む) から、
 // 英語として扱う国名の語の一覧 dictionaries/countries.txt を作る (#1615・#1650)。

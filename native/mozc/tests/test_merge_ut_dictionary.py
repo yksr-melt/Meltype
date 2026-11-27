@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 souta
+# Copyright (C) 2026 Meltype Contributors
 """native/mozc/merge-ut-dictionary.py のテスト。
 
 Mozc の代わりに、id.def と辞書だけを持つ小さな偽の Mozc を git で作り、そこで統合を試す。

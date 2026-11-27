@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Yukishiro
+// Copyright (C) 2026 Meltype Contributors
 //
 // 公開版のリリースから、パッケージマネージャーに出すマニフェストを作る (winget・Homebrew)。
 //   node packaging/make-manifests.mjs <版> [Mac の zip] [Windows のインストーラー (setup.exe)]

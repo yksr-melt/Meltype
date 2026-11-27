@@ -1,6 +1,6 @@
 // swift-tools-version:6.1
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Yukishiro
+// Copyright (C) 2026 Meltype Contributors
 //
 // Meltype の Mac 版 (Input Method Kit の IME)。ビルドとインストールは build.sh で行う。
 // 英語 / 日本語の判定・漢字変換 (Mozc の変換ヘルパーを起動する) などの本体は、C# の Meltype.Core を NativeAOT で

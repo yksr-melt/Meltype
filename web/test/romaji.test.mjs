@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
-/* Copyright (C) 2026 Yukishiro */
+/* Copyright (C) 2026 Meltype Contributors */
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";

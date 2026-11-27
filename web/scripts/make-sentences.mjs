@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /* SPDX-License-Identifier: GPL-3.0-or-later */
-/* Copyright (C) 2026 Yukishiro */
+/* Copyright (C) 2026 Meltype Contributors */
 
 // sentences/*.txt (タイピングのお手本) から public/assets/js/typing-sentences.js を作る。
 // お手本は txt だけを直す (typing-sentences.js は作るたびに書き直すので、コミットしない)。
@@ -80,7 +80,7 @@ export function readSentences() {
 
 function render({ kinds, sentences }) {
   return `/* SPDX-License-Identifier: GPL-3.0-or-later */
-/* Copyright (C) 2026 Yukishiro */
+/* Copyright (C) 2026 Meltype Contributors */
 
 // scripts/make-sentences.mjs が sentences/*.txt から作る。手で直さない。
 export const KINDS = ${JSON.stringify(kinds, null, 2)};

@@ -1,6 +1,5 @@
 ﻿# SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 penta2himajin
-# Copyright (C) 2026 aster-void
+# Copyright (C) 2026 Meltype Contributors
 
 # インストーラー (packaging/Meltype.iss) を、ダミーの Meltype.exe で作り、インストール → 自動更新 → 1.6.0 以前の自動更新 (互換の zip の install.ps1)
 # → アンインストールの順に通す。場面ごとに前の場面の状態を引き継ぐ。Meltype IME (管理者権限が要る) は入れない。

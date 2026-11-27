@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Yukishiro
+// Copyright (C) 2026 Meltype Contributors
 //
 // ソースファイルの先頭のライセンス・著作権の表記を確かめるチェック (.github/workflows/lint.yml の license-header から呼ぶ)。
-//   - Pull Request で新しく足したソースファイルに `SPDX-License-Identifier` と `Copyright (C) <年> <名前>` があるか
-//   - 作者 (yksr-melt) 以外の人が、Yukishiro (雪代) の名義で著作権の行を書いていないか
-//     (貢献の著作権は貢献した人に残る: CONTRIBUTING.md の CLA。自分の名前で書いてもらう)
+// Pull Request で新しく足したソースファイルの先頭に、ライセンスと Meltype Contributors の表示があるか確かめる。
 // 見つけたらファイルに注釈 (annotation) を付け、Summary に直し方を出して、チェックを失敗にする。
 // GitHub の API で、変更 (patch) の足された行を文字列として読むだけ (書き込みの権限は要らない)。
 import fs from 'node:fs';
@@ -13,12 +11,10 @@ const api = process.env.GITHUB_API_URL ?? 'https://api.github.com';
 const repo = process.env.GITHUB_REPOSITORY;
 const token = process.env.GITHUB_TOKEN;
 
-/** Yukishiro 名義で書いてよい人 (作者)。 */
-const Owners = ['yksr-melt'];
 /** 先頭に表記を書くソースファイル。辞書・文書・設定ファイル・画像は見ない。 */
 const SourceFile = /\.(cs|swift|ps1|psm1|sh|py|cpp|c|h|hpp|m|mm|mjs|js|ts|lisp|iss)$/i;
-/** Yukishiro の名義 */
-const OwnerName = /yukishiro|雪代|ゆきしろ|yksr/i;
+/** 年は追加した年。名前はプロジェクト内で共通。 */
+const ProjectCopyright = /^Copyright \(C\) \d{4} Meltype Contributors$/;
 /** 先頭の何行の中に表記があればよいか (shebang やエンコーディングの行の後に書くこともあるので少し余裕を持たせる) */
 const HeaderLines = 8;
 
@@ -50,30 +46,18 @@ const addedLines = patch => (patch ?? '').split('\n').filter(l => l.startsWith('
 /** コードスパン。ファイル名・著作権の行は PR の作者が書けるので、バッククォートで抜けられないようにする (meltype-bot.mjs と同じ)。 */
 const code = text => '`' + String(text ?? '').replace(/`/g, 'ˋ') + '`';
 
-const copyrightOf = line => /copyright\s*(\(c\)|©)?\s*\d{4}/i.test(line) ? line.replace(/^[\s#/;*!<>-]*(rem\s+)?/i, '').trim() : null;
+const commentText = line => line.replace(/^[\s#/;*!<>-]*(rem\s+)?/i, '').replace(/\s*(?:\*\/|-->)$/, '').trim();
 
-function check(files, author) {
+function check(files) {
   const findings = [];
-  const isOwner = Owners.some(o => o.toLowerCase() === author.toLowerCase());
   for (const file of files) {
-    if (!SourceFile.test(file.filename)) continue;
-    const added = addedLines(file.patch);
-    if (file.status === 'added') {
-      // patch が大きすぎると GitHub は patch を返さない。そのときは見ない
-      if (!file.patch) continue;
-      const head = added.slice(0, HeaderLines);
-      const problems = [];
-      if (!head.some(l => l.includes('SPDX-License-Identifier'))) problems.push('`SPDX-License-Identifier: GPL-3.0-or-later` がありません');
-      const copyright = head.map(copyrightOf).find(c => c);
-      if (!copyright) problems.push('`Copyright (C) <年> <あなたの名前>` がありません');
-      else if (!isOwner && OwnerName.test(copyright)) problems.push(`著作権の行が作者の名義になっています (${code(copyright)})。あなたの名前にしてください`);
-      if (problems.length) findings.push({ file: file.filename, problems });
-    }
-    else if (!isOwner) {
-      // 既存のファイルに、作者の名義の著作権の行を足していないか
-      const copyright = added.map(copyrightOf).find(c => c && OwnerName.test(c));
-      if (copyright) findings.push({ file: file.filename, problems: [`作者の名義の著作権の行を足しています (${code(copyright)})。あなたが書いた部分なら、あなたの名前の行を足してください`] });
-    }
+    // patch が大きすぎると GitHub は patch を返さない。そのときは見ない
+    if (file.status !== 'added' || !file.patch || !SourceFile.test(file.filename)) continue;
+    const head = addedLines(file.patch).slice(0, HeaderLines).map(commentText);
+    const problems = [];
+    if (!head.includes('SPDX-License-Identifier: GPL-3.0-or-later')) problems.push('`SPDX-License-Identifier: GPL-3.0-or-later` がありません');
+    if (!head.some(line => ProjectCopyright.test(line))) problems.push('`Copyright (C) <年> Meltype Contributors` がありません');
+    if (problems.length) findings.push({ file: file.filename, problems });
   }
   return findings;
 }
@@ -86,11 +70,11 @@ function message(findings, author) {
     list,
     '',
     '新しく作ったソースファイルの先頭には、次の 2 行を入れてください (コメントの記号はファイルに合わせてください)。',
-    '貢献の著作権は書いた人に残るので ([CLA](https://github.com/yksr-melt/Meltype/blob/main/CONTRIBUTING.md) の 3)、名前は **あなたの名前** (GitHub のユーザー名など) にしてください。',
+    'ソースファイルの表示は Meltype Contributors にそろえます。',
     '',
     '```',
     '// SPDX-License-Identifier: GPL-3.0-or-later',
-    '// Copyright (C) 2026 あなたの名前',
+    '// Copyright (C) 2026 Meltype Contributors',
     '```',
     '',
     '直して push すると、このチェックが通ります。',
@@ -105,7 +89,7 @@ async function main() {
   const event = JSON.parse(fs.readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'));
   const pr = event.pull_request;
   const author = pr.user.login;
-  const findings = check(await changedFiles(pr.number), author);
+  const findings = check(await changedFiles(pr.number));
   if (!findings.length) return;
   for (const f of findings) {
     for (const problem of f.problems) console.log(`::error file=${escapeProperty(f.file)},line=1::${escapeData(problem)}`);
@@ -117,19 +101,20 @@ async function main() {
 /** node .github/bot/license-header.mjs --self-test: 判定だけを確かめる (GitHub には何も書かない)。 */
 function selfTest() {
   const file = (filename, status, lines) => ({ filename, status, patch: lines.map(l => `+${l}`).join('\n') });
+  const license = '// SPDX-License-Identifier: GPL-3.0-or-later';
+  const copyright = '// Copyright (C) 2026 Meltype Contributors';
   const cases = [
-    ['他の人が Yukishiro 名義', [file('a.cs', 'added', ['// SPDX-License-Identifier: GPL-3.0-or-later', '// Copyright (C) 2026 Yukishiro'])], 'someone', 1],
-    ['他の人が自分の名前', [file('a.cs', 'added', ['// SPDX-License-Identifier: GPL-3.0-or-later', '// Copyright (C) 2026 someone'])], 'someone', 0],
-    ['作者が Yukishiro 名義', [file('a.cs', 'added', ['// SPDX-License-Identifier: GPL-3.0-or-later', '// Copyright (C) 2026 Yukishiro'])], 'yksr-melt', 0],
-    ['表記が無い', [file('b.sh', 'added', ['#!/bin/bash', 'echo hi'])], 'yksr-melt', 1],
-    ['shebang の後に表記', [file('b.sh', 'added', ['#!/bin/bash', '# SPDX-License-Identifier: GPL-3.0-or-later', '# Copyright (C) 2026 someone'])], 'someone', 0],
-    ['ソースでないファイル', [file('docs/a.md', 'added', ['# title'])], 'someone', 0],
-    ['既存のファイルに Yukishiro 名義を足した', [file('c.ps1', 'modified', ['# Copyright (C) 2026 Yukishiro'])], 'someone', 1],
-    ['雪代 の名義', [file('d.swift', 'added', ['// SPDX-License-Identifier: GPL-3.0-or-later', '// Copyright (C) 2026 雪代'])], 'someone', 1],
+    ['共通の表記', file('a.cs', 'added', [license, copyright]), 0],
+    ['個人名の表記', file('a.cs', 'added', [license, '// Copyright (C) 2026 someone']), 1],
+    ['表記が無い', file('b.sh', 'added', ['#!/bin/bash', 'echo hi']), 1],
+    ['shebang の後に表記', file('b.sh', 'added', ['#!/bin/bash', '# SPDX-License-Identifier: GPL-3.0-or-later', '# Copyright (C) 2026 Meltype Contributors']), 0],
+    ['ブロックコメントの表記', file('a.css.js', 'added', ['/* SPDX-License-Identifier: GPL-3.0-or-later */', '/* Copyright (C) 2027 Meltype Contributors */']), 0],
+    ['ソースでないファイル', file('docs/a.md', 'added', ['# title']), 0],
+    ['既存のファイルを編集', file('a.cs', 'modified', ['// 別の行']), 0],
   ];
   let failed = 0;
-  for (const [name, files, author, expected] of cases) {
-    const actual = check(files, author).length;
+  for (const [name, input, expected] of cases) {
+    const actual = check([input]).length;
     const ok = actual === expected;
     if (!ok) failed++;
     console.log(`${ok ? 'PASS' : 'FAIL'}  ${name} (指摘 ${actual} 件、期待 ${expected} 件)`);

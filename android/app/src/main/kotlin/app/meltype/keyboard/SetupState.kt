@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 ninjin0802
+// Copyright (C) 2026 Meltype Contributors
 package app.meltype.keyboard
 
 enum class SetupStep { ENABLE, SELECT, DONE }

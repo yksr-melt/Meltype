@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 cet-t
+// Copyright (C) 2026 Meltype Contributors
 
 // 実際の TSF コンパートメントと入力欄で、自動開閉・明示的な切り替え・タスクバーのメニューへのキーの受け渡しを確かめる。
 // タスクバーはテストのプロセスに同じクラス名のウィンドウを作って再現する。パイプだけを記録用に置き換え、

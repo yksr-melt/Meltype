@@ -1,5 +1,5 @@
 ﻿# SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 lnkiai
+# Copyright (C) 2026 Meltype Contributors
 #
 # Meltype IME (Windows の IME として入力欄に直接入力する。native\tip) を入れる / 外す。setup-ime.ps1 から読み込んで使う。
 #   . .\meltype-ime.ps1

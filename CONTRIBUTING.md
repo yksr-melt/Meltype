@@ -124,11 +124,11 @@ Pull Request を作ると、チェックが流れたあとに bot がこの文�
 <img src="docs/images/headings/contributing/s01.svg" alt="ソースファイルの先頭の表記" height="40">
 
 
-新しく作ったソースファイルの先頭には、ライセンスと著作権の行を入れてください。著作権は書いた人に残るので (上の 3)、名前は **自分の名前** (GitHub のユーザー名など) にしてください。既存のファイルをまねて作者の名前 (Yukishiro) のままにしないよう気をつけてください。
+新しく作ったソースファイルの先頭には、ライセンスと著作権の行を入れてください。ファイルごとの表記には共通の名義 `Meltype Contributors` を使います。貢献の著作権は書いた人に残ります (上の 3)。従来の個別の表記は [COPYRIGHT.md](COPYRIGHT.md) にあります。
 
 ```
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 あなたの名前
+// Copyright (C) 2026 Meltype Contributors
 ```
 
 Pull Request を作ると「license-header」のチェックが確かめます。

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Yukishiro
+// Copyright (C) 2026 Meltype Contributors
 //
 // JMdict (EDRDG、CC BY-SA 4.0) から、英字で書く語 (Ｌｉｎｕｘ、ＧＨＱ) とそのカタカナの読みの表
 // dictionaries/loanwords.txt を作る。リナックス を変換したとき、候補に Linux を出すのに使う。

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Yukishiro
+// Copyright (C) 2026 Meltype Contributors
 //
 // JMdict (EDRDG、CC BY-SA 4.0) から、よく使う語の読みの一覧 dictionaries/readings.txt を作る。
 // ローマ字の打ち間違い (shimsu → shimasu) を直すとき、直した読みが日本語らしいかを調べるのに使う。

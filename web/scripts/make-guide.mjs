@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Yukishiro
+// Copyright (C) 2026 Meltype Contributors
 // docs/ の利用者向けの文書 (使い方・OS ごとの説明) から、公式サイトの使い方ガイド (public/guide/) を作る。
 // 文書は docs/ の Markdown だけを直す (public/guide/ は作るたびに消して作り直すので、コミットしない)。
 //   node scripts/make-guide.mjs

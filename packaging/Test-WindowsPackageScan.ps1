@@ -1,5 +1,5 @@
 ﻿# SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 Raptor-zip
+# Copyright (C) 2026 Meltype Contributors
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'Scan-WindowsPackage.ps1')

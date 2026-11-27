@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 HarukiKubota
+# Copyright (C) 2026 Meltype Contributors
 """Platform-independent checks for the Linux runner's input and isolation boundary."""
 
 from pathlib import Path

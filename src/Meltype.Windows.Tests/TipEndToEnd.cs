@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 lnkiai
+// Copyright (C) 2026 Meltype Contributors
 
 using System.Globalization;
 using System.Runtime.InteropServices;

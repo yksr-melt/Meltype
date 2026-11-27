@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 lnkiai
+// Copyright (C) 2026 Meltype Contributors
 //
 // 変換の候補の一覧 (Windows 11 の Microsoft IME に近い見た目)。アプリのプロセスの中に出す、フォーカスを奪わないウィンドウ。
 // 候補を自分で描くアプリ (UILess。ゲームなど) には、TSF の UI Element (ITfCandidateListUIElement) として候補を渡し、窓は出さない。

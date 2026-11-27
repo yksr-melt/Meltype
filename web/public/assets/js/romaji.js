@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
-/* Copyright (C) 2026 Yukishiro */
+/* Copyright (C) 2026 Meltype Contributors */
 
 // タイピング調査用のローマ字→ひらがな。打った人に今の入力を見せることと、結果の採点に使う。
 // 集めたデータには打ったローマ字をそのまま残すので、ここで読み替えを変えても過去のデータは作り直せる。

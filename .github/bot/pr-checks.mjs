@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Yukishiro
+// Copyright (C) 2026 Meltype Contributors
 //
 // Pull Request のチェック (.github/workflows/core.yml・pr-expectations.yml) の補助。結果は GitHub の「Summary」に表で出す。
 //   node pr-checks.mjs cases <出力ファイル>        … Pull Request の「期待する打鍵と変換」から、確かめる例を集める

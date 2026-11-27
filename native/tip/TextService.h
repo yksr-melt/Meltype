@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 lnkiai
-// Copyright (C) 2026 aster-void
+// Copyright (C) 2026 Meltype Contributors
 //
 // Meltype IME のテキストサービス本体。TSF から読んだ事実 (キー・キャレットの前後の文字・入力欄の種類・IME の開閉) を
 // Meltype.exe (TipServer の ImeHost) に渡し、返ってきた指示 (確定する文字・未確定の文字・候補・IME の開閉) を入力欄に反映する。

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 cet-t
+# Copyright (C) 2026 Meltype Contributors
 # Build only. Run ../bin/tests/InputEvents.exe to briefly show the test window.
 $ErrorActionPreference = 'Stop'
 $nativeDir = Split-Path $PSScriptRoot -Parent

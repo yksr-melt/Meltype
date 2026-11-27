@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Konayukiw
+// Copyright (C) 2026 Meltype Contributors
 
 // リンクを貼ったときの画像 (public/og.png) を scripts/og.html から作る。
 // Windows 以外でも作れるように、PowerShell ではなくブラウザーで描いて撮る。

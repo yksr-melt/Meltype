@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 Yukishiro
+# Copyright (C) 2026 Meltype Contributors
 #
 # Meltype の端末版。pty を挟んでシェル (や指定したコマンド) を子プロセスとして動かし、端末から読んだキーを
 # 本体 (libMeltypeNative.so の ImeHost) に渡す。本体が受け取らなかったキーは、読んだバイト列のまま子に送る。

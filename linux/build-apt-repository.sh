@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 Yukishiro
+# Copyright (C) 2026 Meltype Contributors
 #
 # Build a signed, single-version apt repository for GitHub Pages.
 # Usage: APT_SIGNING_KEY_B64=... APT_SIGNING_KEY_PASSPHRASE=... \

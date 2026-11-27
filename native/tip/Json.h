@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 lnkiai
+// Copyright (C) 2026 Meltype Contributors
 //
 // Meltype.exe から返ってくる JSON を読むための小さなパーサー (外部のライブラリに頼らない)。
 

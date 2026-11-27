@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 hrmcngs
+// Copyright (C) 2026 Meltype Contributors
 //
 // mac/ のスクリプトのテスト。偽のコマンドを PATH の先頭に置いて動かし、インストール済みの入力メソッドには触らない。
 //   node --test mac/Tests/scripts.test.ts

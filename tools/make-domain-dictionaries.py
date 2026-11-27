@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 Yukishiro
+# Copyright (C) 2026 Meltype Contributors
 #
 # 分野ごとの辞書 dictionaries/domain-*.txt を、外部の辞書から作る (#1650)。
 # 形式は「読み<Tab>表記<Tab>表記 …」(読みはひらがな、1 つの読みは 1 行)。出典とライセンスはファイルの先頭のコメントに書く。

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 souta
+# Copyright (C) 2026 Meltype Contributors
 """Mozc-UT の辞書 (mozcdic-ut.txt) を、ビルドする Mozc の辞書に統合する。
 
 Mozc-UT の辞書は、そのままでは Mozc の辞書と同じ形 (読み<Tab>lid<Tab>rid<Tab>コスト<Tab>表記) だが、

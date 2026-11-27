@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 aster-void
+// Copyright (C) 2026 Meltype Contributors
 //
 // ロードする impl は、stub と同じフォルダーの MeltypeTipImpl.dll.sha256 (impl の SHA-256) で決まり、
 // impl は impl\<SHA-256>\MeltypeTipImpl.dll にある (どちらも Register-Tip.ps1 が配置する)。Meltype.exe からは指定させない

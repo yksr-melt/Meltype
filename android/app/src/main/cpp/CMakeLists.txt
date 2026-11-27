@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 KoheiTakada
+# Copyright (C) 2026 Meltype Contributors
 cmake_minimum_required(VERSION 3.22.1)
 project(meltype_android_bridge LANGUAGES C CXX)
 

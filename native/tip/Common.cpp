@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 lnkiai
+// Copyright (C) 2026 Meltype Contributors
 //
 // stub (MeltypeTip.dll) と impl (MeltypeTipImpl.dll) の両方にリンクする、文字コードの変換とログ。
 

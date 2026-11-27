@@ -1,5 +1,5 @@
 ﻿# SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 aster-void
+# Copyright (C) 2026 Meltype Contributors
 
 # 1.6.0 以前の Meltype の自動更新用 (Build-Package.ps1 の「互換の zip」)。前の版の Meltype は、リリースの Meltype-<版>-windows.zip を
 # 展開してこのスクリプトを実行する。同じフォルダーのインストーラーを、今の版の自動更新 (Updater.Apply) と同じ引数で実行する。

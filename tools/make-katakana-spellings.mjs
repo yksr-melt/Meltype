@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Yukishiro
+// Copyright (C) 2026 Meltype Contributors
 //
 // JMdict (EDRDG、CC BY-SA 4.0) から、英単語とそのカタカナ表記の表 dictionaries/katakana-spellings.txt を作る。
 // 英語と判定した語 (export) を変換したとき、候補にカタカナ表記 (エクスポート) を出すのに使う。

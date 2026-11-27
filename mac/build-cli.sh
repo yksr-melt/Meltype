@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 hrmcngs
+# Copyright (C) 2026 Meltype Contributors
 #
 # Mac の CLI から Meltype をテスト・ビルド・インストールする入口。
 #   mac/build-cli.sh --setup --test --install

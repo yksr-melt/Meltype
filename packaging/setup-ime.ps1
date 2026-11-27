@@ -1,5 +1,5 @@
 ﻿# SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 MuNeNICK
+# Copyright (C) 2026 Meltype Contributors
 #
 # Meltype IME を登録する / 登録を外す。元のユーザーの権限で実行する (PC 全体への登録だけ meltype-ime.ps1 が昇格する)。
 #   setup-ime.ps1 -Source <tip フォルダー> [-Explain]   setup.exe (PrepareToInstall)・Meltype.exe (トレイの「Meltype IME」)

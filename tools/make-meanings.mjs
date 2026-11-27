@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Yukishiro
+// Copyright (C) 2026 Meltype Contributors
 //
 // ウィクショナリー日本語版 (CC BY-SA 4.0) から、よく使う語の日本語の意味の表 dictionaries/meanings.txt を作る。
 // 変換中に候補で止まったとき、その候補の意味を出すのに使う (箸 → 食物を挟む二本一組の棒 …)。

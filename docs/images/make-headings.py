@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 Yukishiro
+# Copyright (C) 2026 Meltype Contributors
 # README などの見出しの画像 (ロゴに合わせたステッカー風の SVG) を作り直す。
 # Markdown の中の <img src=".../images/headings/....svg" alt="見出し"> を探し、alt の文字で画像を作る
 # (見出しの文言は Markdown の alt を直せばよい)。ファイル名が title で始まるものは文書の題名用の大きな画像、

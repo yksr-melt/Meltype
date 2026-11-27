@@ -1,6 +1,6 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 aster-void
+# Copyright (C) 2026 Meltype Contributors
 #
 # 端末版 (meltype-tty) を、本体・Mozc の変換ヘルパー・Zenzai を同梱した 1 つのフォルダーに組み立てる。できたものは tui/build/Meltype-tty/ に置く。
 # IBus・fcitx5 の版 (linux/) とは本体を共有しない。フォルダーをどこに置いても動き、meltype-tty への symlink から起動してもよい。

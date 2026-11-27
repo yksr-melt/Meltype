@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 lnkiai
+// Copyright (C) 2026 Meltype Contributors
 //
 // Meltype.exe (TipServer) との名前付きパイプ。1 要求 1 応答で、待つのは決まった時間まで。
 

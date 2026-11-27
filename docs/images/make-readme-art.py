@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 Yukishiro
+# Copyright (C) 2026 Meltype Contributors
 # README の飾りの画像を作り直す。
 #   docs/images/demo.svg     … kyouhagoogledekensaku を打って「今日はgoogleで検索」になるまでの動き (ライブ変換。SMIL のアニメーション)
 #   docs/images/features.svg … できること のカード 3 枚

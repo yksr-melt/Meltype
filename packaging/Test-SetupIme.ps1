@@ -1,5 +1,5 @@
 ﻿# SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 MuNeNICK
+# Copyright (C) 2026 Meltype Contributors
 
 # setup-ime.ps1 が、meltype-ime.ps1 の結果を終了コードで返すか (setup.exe は、登録済みの Meltype IME を更新できなければ本体を入れ替えない)。
 # meltype-ime.ps1 は、引数と結果を確かめるダミーにする。

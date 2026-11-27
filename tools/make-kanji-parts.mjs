@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Yukishiro
+// Copyright (C) 2026 Meltype Contributors
 //
 // KRADFILE (漢字 → 構成要素) と KANJIDIC2 (使われる頻度・画数) から、漢字の構成要素の表 dictionaries/kanji-parts.txt を作る (#345)。
 // 「ごんべんにふるとり」のような部首の説明から漢字を探すのに使う。

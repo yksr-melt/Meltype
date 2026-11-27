@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 0924haruto12
+# Copyright (C) 2026 Meltype Contributors
 """Swift の実際のラッパーを NativeAOT と接続して検証する。IME はインストールしない。
 
 python3 mac/Tests/test-mac-boundaries.py path/to/MeltypeNative.dylib
