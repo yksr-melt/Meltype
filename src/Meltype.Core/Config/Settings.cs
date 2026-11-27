@@ -483,7 +483,7 @@ public sealed class Settings
     public TypedKeysStyle TypedKeys { get; set; } = TypedKeysStyle.Keys;
 
     [Category("9. 表示"), DisplayName("カーソルを滑らかに動かす (スムースカーソル)"), Platforms(Platform.Windows),
-     Description("入力や矢印キーでテキストカーソルが動くとき、Word のようにふわっと滑らかに追従するオーバーレイアニメーションを表示します。動きが止まると元のカーソルへ自然に溶け込んで消えます。変換ボックス内のカーソルも滑らかに動きます。既定は OFF です。")]
+     Description("入力や矢印キーでテキストカーソルが動くとき、ふわっと滑らかに追従するアニメーションを表示します。動きが止まると元のカーソルへ自然に引き継がれます。変換ボックス内のカーソルも滑らかに動きます。既定は OFF です。")]
     public bool SmoothCaret { get; set; }
 
     [Browsable(false), DisplayName("固定の操作ガイドを表示"),
