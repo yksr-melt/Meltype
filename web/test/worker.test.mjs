@@ -386,6 +386,28 @@ describe("レートリミット (#3)", () => {
   });
 });
 
+describe("設定の利用アンケート", () => {
+  it("設定名と利用状況で回答を受け付け、ログインした運営だけが読める", async () => {
+    const form = "settings-survey";
+    const fields = { setting: "ライブ変換", usage: "使っている", "setting-context": "文章を書くとき", contact: "保存しない" };
+    assert.equal((await report({ form, fields: { ...fields, usage: "別の値" } })).status, 422);
+    assert.equal((await report({ form, fields, files: [{ name: "a.png", size: 12 }] })).status, 422);
+    const response = await report({ form, fields });
+    assert.equal(response.status, 201);
+    const { id, title, uploadToken } = await response.json();
+    assert.equal(title, "[アンケート] ライブ変換 — 使っている");
+    assert.equal(uploadToken, null);
+    const path = `/api/dashboard/reports/${id}`;
+    assert.equal((await call(path)).status, 403);
+    const headers = { "Cf-Access-Jwt-Assertion": await jwt(goodClaims()) };
+    const detail = await (await call(path, { headers })).json();
+    assert.deepEqual(detail.fields, { setting: "ライブ変換", usage: "使っている", "setting-context": "文章を書くとき" });
+    assert.equal((await report()).status, 201);
+    assert.equal((await report()).status, 201);
+    assert.equal((await report()).status, 201);
+  });
+});
+
 describe("掃除の Cron (#4)", () => {
   it("受付時間が過ぎて届かなかった添付を消し、報告は本文だけ残す", async () => {
     const response = await report({ form: "idea", fields: { problem: "p", idea: "i", version: "1.4.0" }, files: [{ name: "a.png", size: 12 }] });

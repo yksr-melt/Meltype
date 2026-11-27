@@ -53,6 +53,8 @@ const ENVIRONMENT = {
 
 export const PRIVATE_FIELDS = ["contact", "log", "environment"];
 
+export const SETTINGS_SURVEY = "settings-survey";
+
 export const FORMS = [
   {
     id: "bug",
@@ -142,6 +144,21 @@ export const FORMS = [
       { id: "os", label: "対象の OS", type: "checks" },
     ],
   },
+  {
+    id: SETTINGS_SURVEY,
+    label: "設定の利用アンケート",
+    summary: "今使っている設定や、無くなると困る設定を教えてください",
+    prefix: "アンケート",
+    note: "設定を整理するときの参考にします。1 回につき設定を 1 つ選び、名前を書いてください。回答は運営のダッシュボードに届きます。",
+    required: [
+      { id: "setting", label: "設定の名前", type: "text", placeholder: "例: Shift + Enter で選んだ文節までを確定" },
+      { id: "usage", label: "この設定を使っていますか", type: "select", options: ["使っている", "使っていない", "分からない"] },
+    ],
+    optional: [
+      { id: "frontend", label: "OS・フロントエンド", type: "select", options: [...FRONTENDS.slice(0, -1), "Android", FRONTENDS.at(-1)] },
+      { id: "setting-context", label: "使う場面や、無くなると困ること", type: "textarea", max: 500 },
+    ],
+  },
 ];
 
 export function formById(id) {
@@ -229,6 +246,8 @@ export function titleFor(form, fields) {
       const lines = String(fields.words || "").split("\n").filter((l) => l.trim());
       return `[${form.prefix}] ${firstLine(lines[0])}${lines.length > 1 ? ` ほか ${lines.length - 1} 語` : ""}`;
     }
+    case SETTINGS_SURVEY:
+      return `[${form.prefix}] ${firstLine(fields.setting)} — ${fields.usage}`;
     default:
       return `[${form.prefix}] ${firstLine(fields.problem)}`;
   }

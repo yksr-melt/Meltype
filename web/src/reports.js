@@ -1,12 +1,13 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Copyright (C) 2026 Konayukiw */
 
-import { LIMITS, formById, titleFor, validateFields, validateFiles } from "../public/assets/js/report-schema.js";
+import { LIMITS, SETTINGS_SURVEY, formById, titleFor, validateFields, validateFiles } from "../public/assets/js/report-schema.js";
 import { error, json, now, randomToken, readJson, sha256Hex } from "./http.js";
 
 const DAY = 24 * 60 * 60;
 // 回数制限は種類 (rate_events.kind) ごとに数える
 export const REPORT_RATE = { kind: "report", window: 10 * 60, windowLimit: 3, dayLimit: 10, unit: "件", verb: "送れる" };
+const SURVEY_RATE = { ...REPORT_RATE, kind: "survey" };
 const UPLOAD_WINDOW = 60 * 60;
 const MIN_FILL_MS = 3000;
 const MAX_BODY = 200 * 1024;
@@ -103,6 +104,7 @@ export async function createReport(request, env) {
   if (Object.keys(errors).length) return error(422, "書いていない所か、直してほしい所があります", { fields: errors });
   const checked = validateFiles(body.files);
   if (checked.error) return error(422, checked.error, { files: checked.error });
+  if (form.id === SETTINGS_SURVEY && checked.files.length) return error(422, "アンケートにはファイルを添付できません");
   if (checked.files.length && !env.FILES) return error(422, "いまは添付を受け付けていません。文章だけで送ってください", { files: "いまは添付を受け付けていません" });
   if (!env.IP_HASH_SALT) {
     console.error("IP_HASH_SALT が設定されていないため、報告を受け付けていません");
@@ -113,7 +115,7 @@ export async function createReport(request, env) {
 
   const at = now();
   const ipHash = await hashIp(request, env);
-  const limited = await claimRate(env, ipHash, at);
+  const limited = await claimRate(env, ipHash, at, form.id === SETTINGS_SURVEY ? SURVEY_RATE : REPORT_RATE);
   if (limited) return error(429, limited.message, { retryAfter: limited.retryAfter });
 
   const files = checked.files;

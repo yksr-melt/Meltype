@@ -2,10 +2,10 @@
 /* Copyright (C) 2026 Konayukiw */
 
 import { escapeHtml, getJson, icon, initHeader } from "./common.js";
-import { FILE_ACCEPT, FORMS, LIMITS, fileTypeOf, formById, formByTemplate, formatBytes, maxLength, validateFields } from "./report-schema.js";
+import { FILE_ACCEPT, FORMS, LIMITS, SETTINGS_SURVEY, fileTypeOf, formById, formByTemplate, formatBytes, maxLength, validateFields } from "./report-schema.js";
 
 const DRAFT_KEY = "meltype-report-draft";
-const FORM_ICONS = { bug: "bug", misdetection: "wand", dictionary: "book", idea: "sparkle" };
+const FORM_ICONS = { bug: "bug", misdetection: "wand", dictionary: "book", idea: "sparkle", [SETTINGS_SURVEY]: "file" };
 const GROUP_ICONS = { image: "image", video: "video", text: "file", json: "braces" };
 
 const root = document.querySelector("[data-report]");
@@ -143,7 +143,9 @@ function fillValues(form) {
 function selectForm(id, focus) {
   const form = formById(id);
   if (!form) return;
+  if (state.sending) return;
   state.form = form;
+  root.querySelector("[data-attachments]").hidden = form.id === SETTINGS_SURVEY || root.hasAttribute("data-no-attachments");
   const radio = picker.querySelector(`input[value="${id}"]`);
   if (radio) radio.checked = true;
   note.innerHTML = `${icon("info")}<span>${escapeHtml(form.note)}</span>`;
@@ -266,7 +268,7 @@ function renderFiles() {
 
 function addFiles(list) {
   // 添付を受け付けていないとき (R2 が無い) は何もしない
-  if (root.hasAttribute("data-no-attachments")) return;
+  if (state.form?.id === SETTINGS_SURVEY || root.hasAttribute("data-no-attachments")) return;
   const problems = [];
   for (const original of list) {
     let file = original;
@@ -411,9 +413,10 @@ async function submit(event) {
     if (first) first.focus();
     return;
   }
+  const files = state.form.id === SETTINGS_SURVEY ? [] : state.files;
   state.sending = true;
   submitButton.disabled = true;
-  setStatus("info", state.files.length ? "送っています。添付の大きさによっては少し時間がかかります" : "送っています");
+  setStatus("info", files.length ? "送っています。添付の大きさによっては少し時間がかかります" : "送っています");
   try {
     const result = await getJson("/api/reports", {
       method: "POST",
@@ -421,13 +424,13 @@ async function submit(event) {
       body: JSON.stringify({
         form: state.form.id,
         fields: values,
-        files: state.files.map((entry) => ({ name: entry.file.name, size: entry.file.size })),
+        files: files.map((entry) => ({ name: entry.file.name, size: entry.file.size })),
         website: trap.value,
         elapsed: Math.round(performance.now() - startedAt),
         turnstile: turnstileToken(),
       }),
     });
-    const failed = state.files.length ? await uploadAll(result) : [];
+    const failed = files.length ? await uploadAll(result) : [];
     finish(result, failed);
   } catch (e) {
     state.sending = false;

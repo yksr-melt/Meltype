@@ -2,10 +2,10 @@
 /* Copyright (C) 2026 Konayukiw */
 
 import { copyText, escapeHtml, formatDate, formatNumber, getJson, icon, initHeader, relativeTime, toast } from "./common.js";
-import { FORMS, formById, formatBytes, privateLabels, toMarkdown } from "./report-schema.js";
+import { FORMS, SETTINGS_SURVEY, formById, formatBytes, privateLabels, toMarkdown } from "./report-schema.js";
 
 const REPO = "https://github.com/yksr-melt/Meltype";
-const COLORS = { bug: "is-pink", misdetection: "is-sky", dictionary: "is-peri", idea: "is-sky" };
+const COLORS = { bug: "is-pink", misdetection: "is-sky", dictionary: "is-peri", idea: "is-sky", [SETTINGS_SURVEY]: "is-peri" };
 const LABELS = { bug: "bug", misdetection: "誤判定", dictionary: "辞書", idea: "提案" };
 const STATUS = { new: "届いた", uploading: "添付を送っている途中" };
 const GROUP_ICONS = { image: "image", video: "video", text: "file", json: "braces" };
@@ -185,8 +185,8 @@ function renderDetail(report) {
       <div class="report-sub"><b>#${report.id}</b><span class="badge ${COLORS[report.form]}">${escapeHtml(form ? form.label : report.form)}</span>${status}<span>${escapeHtml(formatDate(report.created_at * 1000, true))}</span></div>
       <h2>${escapeHtml(report.title)}</h2>
       <div class="detail-actions">
-        <button class="btn btn-small" type="button" data-copy-md>${icon("copy")}Issue の形でコピー</button>
-        <a class="btn btn-ghost btn-small" href="${escapeHtml(issueUrl(report))}" target="_blank" rel="noopener">${icon("external")}GitHub で Issue を作る</a>
+        ${report.form === SETTINGS_SURVEY ? "" : `<button class="btn btn-small" type="button" data-copy-md>${icon("copy")}Issue の形でコピー</button>
+        <a class="btn btn-ghost btn-small" href="${escapeHtml(issueUrl(report))}" target="_blank" rel="noopener">${icon("external")}GitHub で Issue を作る</a>`}
         <button class="btn btn-ghost btn-small" type="button" data-copy-link>${icon("link")}この報告へのリンク</button>
       </div>
     </div>
@@ -195,7 +195,7 @@ function renderDetail(report) {
     <div class="detail-section"><h3>${icon("clip")}添付 (${report.attachments.length})</h3>${
       report.attachments.length ? `<div class="attach-grid">${report.attachments.map((a) => attachmentHtml(report, a)).join("")}</div>` : '<p class="small">添付はありません</p>'
     }</div>`;
-  detail.querySelector("[data-copy-md]").addEventListener("click", async () => toast((await copyText(markdownFor(report))) ? "Issue の形でコピーしました" : "コピーできませんでした"));
+  detail.querySelector("[data-copy-md]")?.addEventListener("click", async () => toast((await copyText(markdownFor(report))) ? "Issue の形でコピーしました" : "コピーできませんでした"));
   detail.querySelector("[data-copy-link]").addEventListener("click", async () => toast((await copyText(`${location.origin}/dashboard/?id=${report.id}`)) ? "リンクをコピーしました" : "コピーできませんでした"));
   loadPreviews(report);
 }
