@@ -209,6 +209,9 @@ internal static partial class CompositionText
         for (int i = 0, offset = 0; i < state.Units.Count; offset += state.Units[i].Raw.Length, i++) offsets[i] = offset;
         bool IsHalf(int i) => state.Units[i].Kana == state.Units[i].Raw || (offsets[i] < english.Count && english[offsets[i]]);
         bool IsWordPrefix(int i) => WordPrefixes.Contains(state.Units[i].Raw) && state.Units[i].Kana != state.Units[i].Raw && (i == 0 || state.Units[i - 1].Raw == " ");
+        // i 番目の単位 (最後の単位の後ろなら入力途中の子音) が英語の区間の英字で始まるか
+        bool StartsEnglish(int i) => i < state.Units.Count ? offsets[i] < english.Count && english[offsets[i]] && char.IsAsciiLetter(state.Units[i].Raw[0])
+            : CompositionText.Pending(state).Length > 0 && segments.Count > 0 && segments[^1].IsEnglish;
 
         var halfWidth = new HashSet<int>();
         for (var i = 0; i < state.Units.Count; i++)
@@ -217,16 +220,13 @@ internal static partial class CompositionText
             {
                 var next = i + 1;
                 while (next < state.Units.Count && state.Units[next].Raw == state.Units[i].Raw) next++;
-                var englishAfter = next < state.Units.Count ? offsets[next] < english.Count && english[offsets[next]] && char.IsAsciiLetter(state.Units[next].Raw[0])
-                    : CompositionText.Pending(state).Length > 0 && segments.Count > 0 && segments[^1].IsEnglish;
-                if (englishAfter) halfWidth.UnionWith(Enumerable.Range(i, next - i));
+                if (StartsEnglish(next)) halfWidth.UnionWith(Enumerable.Range(i, next - i));
                 i = next - 1;
                 continue;
             }
             if (!Openers.TryGetValue(state.Units[i].Raw, out var closer) || state.Units[i].Kana == state.Units[i].Raw) continue;
             if (state.FullWidthParentheses && state.Units[i].Raw == "(") continue; // 設定「カッコを全角で入力」: 英語のそばでも全角のまま
-            var nextIsEnglish = i + 1 < state.Units.Count ? offsets[i + 1] < english.Count && english[offsets[i + 1]] && char.IsAsciiLetter(state.Units[i + 1].Raw[0])
-                : CompositionText.Pending(state).Length > 0 && segments.Count > 0 && segments[^1].IsEnglish;
+            var nextIsEnglish = StartsEnglish(i + 1);
             var closing = Enumerable.Range(i + 1, state.Units.Count - i - 1).FirstOrDefault(k => state.Units[k].Raw == closer, -1);
             // 閉じの記号が英語の語のすぐ後ろ (間の記号 ! . は飛ばす: …Through!") なら、閉じも、間の記号も半角にする
             var afterEnglish = -1;
