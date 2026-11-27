@@ -3111,6 +3111,26 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void HalfWidthBinding_ChoosesKanaOrAlphanumericFromTheDisplayedText()
+    {
+        foreach (var (raw, display, expected) in new[] {
+            ("birudhingu", VirtualKeys.F7, "ﾋﾞﾙﾃﾞｨﾝｸﾞ"),
+            ("123", VirtualKeys.F9, "123"),
+            ("meltype", VirtualKeys.F9, "meltype"),
+            ("soudesune.", VirtualKeys.F6, "ｿｳﾃﾞｽﾈ｡"),
+        })
+        {
+            var k = new Keyboard { ControlKeyBindings = "O=HalfWidth" };
+            k.Type(raw);
+            k.Press(display);
+            k.Key(VirtualKeys.LControl);
+            k.Press('O');
+            k.Key(VirtualKeys.LControl, up: true);
+            Assert.Equal(expected, k.Showing, raw);
+        }
+    }
+
+    [Test]
     public static void Issue209_MicrosoftImeControlKeysCanBeBound()
     {
         // #209: 使い方 (docs/USAGE.md) に書いた、Microsoft IME と同じ割り当て。Ctrl+O は「Control キーの割り当て」の F10 より、個別の割り当ての F8 を優先する

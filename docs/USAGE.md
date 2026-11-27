@@ -200,6 +200,8 @@ kyouhagoogledekensaku  →  今日はgoogleで検索
 U=F6;I=F7;O=F8;P=F9;T=F10
 ```
 
+`O=HalfWidth` と書くと、<kbd>Ctrl</kbd> + <kbd>O</kbd> で、かなだけの表示を半角カタカナに、そのほかの表示を半角英数に切り替えられます。
+
 <a name="データと学習"></a>
 
 ## データと学習
