@@ -43,3 +43,6 @@ llama.log
 *.keystore
 *.pfx
 *signing-setup.txt
+
+# Node.js の依存 (型検査)
+node_modules/

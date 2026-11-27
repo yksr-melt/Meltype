@@ -379,6 +379,19 @@ size_t charLength(const std::string &text) {
     return n;
 }
 
+// 末尾から UTF-16 で back 個戻した位置 (UTF-8 のバイト。fcitx::Text のカーソルはバイトの位置)
+int caretByte(const std::string &text, long long back) {
+    size_t position = text.size();
+    while (back > 0 && position > 0) {
+        size_t start = position - 1;
+        while (start > 0 && (static_cast<unsigned char>(text[start]) & 0xC0) == 0x80) start--;
+        // 4 バイトの文字は UTF-16 で 2 つ
+        back -= position - start == 4 ? 2 : 1;
+        position = start;
+    }
+    return static_cast<int>(position);
+}
+
 
 class MeltypeEngine;
 
@@ -465,9 +478,13 @@ public:
         const auto states = key.states();
         // Shift を離したことが伝わらず shiftHeld が残っていても、Space 以外には付けない (Tab や矢印が Shift 付きにならないように)
         const bool shift = states.test(fcitx::KeyState::Shift) || (vk == 0x20 && state->shiftHeld);
-        const std::string fields = std::string(",\"key\":{\"vk\":") + std::to_string(vk) + ",\"ch\":" + std::to_string(character) +
+        // code() は XKB のキーコード (evdev のキーコード + 8)。ソフトが送ったキーは 0
+        const int code = event.rawKey().code();
+        const std::string physical = code > 8 ? ",\"physical\":{\"type\":\"Evdev\",\"code\":" + std::to_string(code - 8) + "}" : "";
+        const std::string fields = std::string(",\"key\":{\"vk\":") + std::to_string(vk) + ",\"ch\":" + std::to_string(character) + physical +
             ",\"shift\":" + boolean(shift) + ",\"ctrl\":" + boolean(states.test(fcitx::KeyState::Ctrl)) +
             ",\"alt\":" + boolean(states.test(fcitx::KeyState::Alt)) + ",\"command\":" + boolean(states.test(fcitx::KeyState::Super)) +
+            ",\"capsLock\":" + boolean(event.rawKey().states().test(fcitx::KeyState::CapsLock)) +
             // key() の修飾キーは正規化されている
             ",\"repeat\":" + boolean(event.rawKey().states().test(fcitx::KeyState::Repeat)) + "}";
         Json output;
@@ -692,7 +709,7 @@ private:
         } else {
             preedit.append(text, fcitx::TextFormatFlag::Underline);
         }
-        preedit.setCursor(static_cast<int>(preedit.toString().size()));
+        preedit.setCursor(caretByte(preedit.toString(), view.integer("caretBack", 0)));
         if (ic->capabilityFlags().test(fcitx::CapabilityFlag::Preedit)) panel.setClientPreedit(preedit);
         else panel.setPreedit(preedit);
         ic->propertyFor(&factory_)->preeditVisible = !text.empty();
