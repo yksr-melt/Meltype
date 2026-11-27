@@ -21,24 +21,16 @@ internal interface IUtilityConversion
 /// 変換を始めたときの入力。Reading は入力の全体が日本語の区間 1 つのときの読み (それ以外は null)。
 /// 打った英字は Text.Raw (かな入力では物理キーの表記)。
 /// </summary>
-internal sealed record UtilityInput(CompositionTextState Text, string? Reading, bool Direct, UtilityContext Context);
+internal sealed record UtilityInput(TextReading Text, string? Reading, bool Direct, UtilityContext Context);
 
 /// <summary>変換を始めたときの設定と、候補に使う外の値。</summary>
 internal sealed record UtilityContext(
     Settings Settings,
     DateTime Now,
-    DateTime UtcNow,
-    TimeZoneInfo LocalTimeZone,
     Func<string?> Clipboard,
     Func<(string Title, string Artist)?> NowPlaying,
     GitHubIssueTitles? GitHubTitles,
-    Func<string?> OtherTipVersion)
-{
-    /// <summary>設定「時計の候補のタイムゾーン」の今の時刻。設定が空ならこの PC の時刻。</summary>
-    public DateTime ClockNow => ClockConversion.Zone(Settings.ClockTimeZone) is { } zone
-        ? TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(UtcNow, DateTimeKind.Utc), zone)
-        : Now;
-}
+    Func<string?> OtherTipVersion);
 
 internal enum UtilityPlacement
 {

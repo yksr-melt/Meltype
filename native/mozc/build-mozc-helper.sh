@@ -75,11 +75,21 @@ if [[ -n "$ut_dictionary" ]]; then
     fi
 fi
 
-# ヘルパーのソースと BUILD の定義を Mozc の converter パッケージに入れる (エンジンを使えるのがこのパッケージのため)。
-cp "$here/meltype_mozc_helper.cc" "$src/converter/"
-if ! grep -q 'name = "meltype_mozc_helper"' "$src/converter/BUILD.bazel"; then
-    printf '\n%s\n' "$(cat "$here/BUILD.fragment")" >> "$src/converter/BUILD.bazel"
+# ヘルパーは、ほかの日本語入力の品詞名を Mozc の品詞に読み替えるのに、Mozc の辞書の取り込み (user_dictionary_importer) を使う。
+# 取り込みは Mozc の設定画面だけに公開されているので、visibility に converter パッケージを足す。
+# 目印は取り込みだけにある textual_hdrs = [":pos_map"] の次の visibility。同じ書き換えを Build-MozcHelper.ps1 も行う。
+dictionary_rules="$src/dictionary/BUILD.bazel"
+perl -0pi -e 's/(textual_hdrs = \[":pos_map"\],\n( *)visibility = \[\n)(?!\2    "\/\/converter:__pkg__",)/$1$2    "\/\/converter:__pkg__",\n/' "$dictionary_rules"
+if ! perl -0ne 'exit(/textual_hdrs = \[":pos_map"\],\n *visibility = \[\n *"\/\/converter:__pkg__",/ ? 0 : 1)' "$dictionary_rules"; then
+    echo "エラー: $dictionary_rules の取り込みの visibility に converter を足せませんでした (Mozc の BUILD.bazel の形が変わった可能性があります)。" >&2
+    exit 1
 fi
+
+# ヘルパーのソースと BUILD の定義を Mozc の converter パッケージに入れる (エンジンを使えるのがこのパッケージのため)。
+# 前に足した定義は消してから足す (BUILD.fragment の変更を反映する。Build-MozcHelper.ps1 と同じ)。
+cp "$here/meltype_mozc_helper.cc" "$src/converter/"
+git -C "$mozc" checkout -q HEAD -- src/converter/BUILD.bazel
+printf '\n%s\n' "$(cat "$here/BUILD.fragment")" >> "$src/converter/BUILD.bazel"
 
 cd "$src"
 options=(build //converter:meltype_mozc_helper --config "$bazel_config" --config release_build)

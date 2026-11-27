@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
 
+using Meltype.Libraries.Lexicon;
+
 namespace Meltype.Input;
 
 /// <summary>かな入力の配列 (issue #1415)。</summary>
@@ -67,287 +69,216 @@ internal readonly record struct KanaStroke(bool Handled, int RemoveLast = 0, str
 internal readonly record struct KanaKeyUp(bool ThumbTap, KanaStroke Stroke);
 
 /// <summary>
-/// JIS かな以外のかな配列 (月・花・NICOLA・中指NICOLA・TRON) で、打鍵をかなにする (issue #1415)。
-/// 前置シフト (月・花) は、シフトのキーを押した次の 1 打鍵をシフト面で読む。
-/// 親指シフト (NICOLA・TRON) は、親指キー (左 = 無変換、右 = 変換) を押している間の文字キー、または文字キーを押してから
-/// <see cref="ChordWindowMs"/> 以内に押した親指キーで、その文字をシフト面で読む (同時打鍵)。
-/// 中指NICOLA は、さらに K を押したままの左手のキーを左シフト面、D を押したままの右手のキーを右シフト面で読む。
-/// ただし文字キーを、D・K より先に離したときだけ (D・K を先に離したら、速く打って重なっただけ: て と は てと のまま)。
-/// 配列の表は benizara (MIT License, k-ayaki) の定義ファイルから取った。
+/// JIS かな以外のかな配列で、打鍵をかなにする (issue #1415)。表は dictionaries/kana-layouts.txt (配列ごとの「打つキー → かな」)。
+/// 打つキーの書き方で、読み方が 2 つある。
+/// <list type="bullet">
+/// <item>並び (d f): 前置シフト。打ったキーの並びが表の並びの途中なら、次のキーを待つ。</item>
+/// <item>同時 (L+f): 押したままのキーと合わせて読む。押したままの親指キー (L・R) とはいつでも、
+/// ほかのキーとは、押してから <see cref="ChordWindowMs"/> 以内に次のキーを押したとき。押したときはシフトなしの文字にしておき、
+/// 組み合わせになったら打ち直す (文字キーの直後に押した親指キーも同時打鍵)。</item>
+/// </list>
+/// 中指NICOLA の D・K のシフトだけは、時間でなく離した順で決める: 文字キーを D・K より先に離したときだけシフトにする
+/// (D・K を先に離したら、速く打って重なっただけ: て と は てと のまま)。
 /// </summary>
 internal sealed class KanaLayoutEngine(KanaLayout layout)
 {
-    /// <summary>文字キーの後に親指キーを押したとき、同時打鍵とみなす時間 (ミリ秒)。</summary>
+    /// <summary>同時打鍵とみなす時間 (ミリ秒)。</summary>
     public const int ChordWindowMs = 100;
 
     public const int LeftThumb = 0x1D, RightThumb = 0x1C;
-    private const int KeyD = 0x44, KeyK = 0x4B;
 
-    // 表の行 (数字の段・Q の段・A の段・Z の段) の仮想キー (日本語 106/109 キーボード)。
-    private static readonly int[][] Rows =
+    // 刻印 (表の打つキーの書き方) と仮想キー (日本語 106/109 キーボード)。数字の段・Q の段・A の段・Z の段
+    private const string Names = "1234567890-^\\qwertyuiop@[asdfghjkl;:]zxcvbnm,./_";
+    private static readonly int[] Keys =
     [
-        [0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x30, 0xBD, 0xDE, 0xDC],
-        [0x51, 0x57, 0x45, 0x52, 0x54, 0x59, 0x55, 0x49, 0x4F, 0x50, 0xC0, 0xDB],
-        [0x41, 0x53, 0x44, 0x46, 0x47, 0x48, 0x4A, 0x4B, 0x4C, 0xBB, 0xBA, 0xDD],
-        [0x5A, 0x58, 0x43, 0x56, 0x42, 0x4E, 0x4D, 0xBC, 0xBE, 0xBF, 0xE2],
+        0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x30, 0xBD, 0xDE, 0xDC,
+        0x51, 0x57, 0x45, 0x52, 0x54, 0x59, 0x55, 0x49, 0x4F, 0x50, 0xC0, 0xDB,
+        0x41, 0x53, 0x44, 0x46, 0x47, 0x48, 0x4A, 0x4B, 0x4C, 0xBB, 0xBA, 0xDD,
+        0x5A, 0x58, 0x43, 0x56, 0x42, 0x4E, 0x4D, 0xBC, 0xBE, 0xBF, 0xE2,
     ];
 
-    // 配列ごとの面。前置シフトの配列は [シフトなし, 1 のシフト, 2 のシフト]、親指シフトの配列は [シフトなし, 左, 右]。
-    // 表の中の "1" "2" は前置シフトのキー。
-    private static readonly Dictionary<KanaLayout, string[][]> Tables = new()
+    private static readonly Lazy<Dictionary<KanaLayout, Table>> Tables = new(() => Table.Load(DictionarySource.ReadEmbedded("kana-layouts.txt")));
+
+    /// <summary>1 つの配列の表。並びは「仮想キーを , でつないだもの」、同時は「押したままのキー (小さい順に +) → 文字キー」。</summary>
+    private sealed class Table
     {
-        [KanaLayout.Nicola] = [
-            [
-                ",,,,,,,,,,ー,,",
-                "。,か,た,こ,さ,ら,ち,く,つ,、,、,゛",
-                "う,し,て,け,せ,は,と,き,い,ん,,",
-                "。,ひ,す,ふ,へ,め,そ,ね,ほ,・,",
-            ],
-            [
-                ",・,,,,,,,,,,,",
-                "ぁ,え,り,ゃ,れ,ぱ,ぢ,ぐ,づ,ぴ,,゜",
-                "を,あ,な,ゅ,も,ば,ど,ぎ,ぽ,,,",
-                "ぅ,ー,ろ,や,ぃ,ぷ,ぞ,ぺ,ぼ,,",
-            ],
-            [
-                ",・,,,,,,,,,,,",
-                ",が,だ,ご,ざ,よ,に,る,ま,ぇ,,゜",
-                "ゔ,じ,で,げ,ぜ,み,お,の,ょ,っ,,",
-                ",び,ず,ぶ,べ,ぬ,ゆ,む,わ,ぉ,",
-            ],
-        ],
-        [KanaLayout.NakayubiNicola] = [
-            [
-                ",,,,,,,,,,ー,,",
-                "。,か,た,こ,さ,ら,ち,く,つ,、,、,゛",
-                "う,し,て,け,せ,は,と,き,い,ん,,",
-                "。,ひ,す,ふ,へ,め,そ,ね,ほ,・,",
-            ],
-            [
-                ",・,,,,,,,,,,,",
-                "ぁ,え,り,ゃ,れ,ぱ,ぢ,ぐ,づ,ぴ,,゜",
-                "を,あ,な,ゅ,も,ば,ど,ぎ,ぽ,,,",
-                "ぅ,ー,ろ,や,ぃ,ぷ,ぞ,ぺ,ぼ,,",
-            ],
-            [
-                ",・,,,,,,,,,,,",
-                ",が,だ,ご,ざ,よ,に,る,ま,ぇ,,゜",
-                "ゔ,じ,で,げ,ぜ,み,お,の,ょ,っ,,",
-                ",び,ず,ぶ,べ,ぬ,ゆ,む,わ,ぉ,",
-            ],
-        ],
-        [KanaLayout.Tron] = [
-            [
-                ",,,,,,,,,,ー,,",
-                "ら,る,こ,は,ょ,き,の,く,あ,れ,ー,",
-                "た,と,か,て,も,を,い,う,し,ん,,",
-                "ま,り,に,さ,な,す,つ,、,。,っ,",
-            ],
-            [
-                ",・,,,,,,,,,,,",
-                "ひ,そ,・,ゃ,ほ,ぎ,げ,ぐ,,ゐ,,",
-                "ぬ,ね,ゅ,よ,ふ,゛,ぢ,ゔ,じ,ゑ,,",
-                "ぇ,ぉ,せ,ゆ,へ,ず,づ,、,。,ゎ,",
-            ],
-            [
-                ",・,,,,,,,,,,,",
-                "び,ぞ,ご,ば,ぼ,え,け,め,む,ろ,,",
-                "だ,ど,が,で,ぶ,お,ち,ー,み,や,,",
-                "ゕ,ゖ,ぜ,ざ,べ,わ,ぃ,ぁ,゜,ぅ,",
-            ],
-        ],
-        [KanaLayout.Tsuki] = [
-            [
-                ",,,,,,,,,,,,",
-                "ゅ,と,し,こ,ょ,つ,ん,い,か,り,ー,",
-                "は,2,1,て,た,く,う,1,2,き,ち,",
-                "す,を,に,な,さ,っ,る,の,も,へ,・",
-            ],
-            [
-                ",,,,,,,,,,,,",
-                "ぁ,ゃ,ね,ら,め,ぬ,む,み,え,ぇ,,",
-                "ぃ,け,、,あ,れ,ま,お,ほ,そ,ろ,,",
-                "ぅ,や,せ,よ,ゆ,ひ,わ,ふ,ぃ,ぉ,",
-            ],
-            [
-                ",,,,,,,,,,,,",
-                ",ど,じ,ご,,づ,ぴ,ぽ,が,,,",
-                "ば,げ,。,で,だ,ぐ,ゔ,ぼ,ぞ,ぎ,ぢ,",
-                "ず,ぱ,ぜ,,ざ,び,ぷ,ぶ,ぺ,べ,",
-            ],
-        ],
-        [KanaLayout.Hana] = [
-            [
-                ",,,,,,,,,,,,ぇ",
-                "ょ,て,と,こ,は,っ,く,う,る,ら,ー,",
-                "す,か,1,き,た,ん,れ,1,゛,ろ,り,",
-                "さ,し,な,の,に,い,つ,。,、,め,え",
-            ],
-            [
-                ",,,,,,,,,,,,え",
-                "ひ,け,ぇ,ほ,へ,ゃ,ま,そ,も,ぃ,,",
-                "ぁ,よ,ゅ,や,゜,・,ふ,ち,む,ぉ,,",
-                "ぅ,せ,あ,わ,ゆ,ね,み,を,お,ぬ,",
-            ],
-        ],
-    };
+        public readonly Dictionary<string, string> Sequences = new(StringComparer.Ordinal);
+        public readonly HashSet<string> Prefixes = new(StringComparer.Ordinal);
+        public readonly Dictionary<(string Shifts, int Key), string> Chords = [];
 
-    private static readonly Dictionary<KanaLayout, Dictionary<int, string>[]> Faces = Tables.ToDictionary(
-        pair => pair.Key,
-        pair => pair.Value.Select(face =>
+        public static Dictionary<KanaLayout, Table> Load(string text)
         {
-            var map = new Dictionary<int, string>();
-            for (var row = 0; row < Rows.Length; row++)
+            var tables = new Dictionary<KanaLayout, Table>();
+            foreach (var line in text.Split('\n'))
             {
-                var cells = face[row].Split(',');
-                for (var column = 0; column < Rows[row].Length && column < cells.Length; column++)
-                    if (cells[column].Length > 0) map[Rows[row][column]] = cells[column];
+                if (line.Length == 0 || line[0] == '#') continue;
+                var cells = line.TrimEnd('\r').Split('\t');
+                var layout = Enum.Parse<KanaLayout>(cells[0]);
+                if (!tables.TryGetValue(layout, out var table)) tables[layout] = table = new Table();
+                if (cells[1].Contains('+'))
+                {
+                    var keys = cells[1].Split('+').Select(KeyOf).ToArray();
+                    table.Chords[(Id(keys[..^1]), keys[^1])] = cells[2];
+                    continue;
+                }
+                var sequence = string.Join(',', cells[1].Split(' ').Select(KeyOf));
+                table.Sequences[sequence] = cells[2];
+                for (var end = sequence.IndexOf(','); end > 0; end = sequence.IndexOf(',', end + 1)) table.Prefixes.Add(sequence[..end]);
             }
-            return map;
-        }).ToArray());
+            return tables;
+        }
 
-    private readonly Dictionary<int, string>[] _faces = layout == KanaLayout.Jis ? [] : Faces[layout];
-    private int _prefix;
-    // 最後に入力した文字キー (後から押した親指キーで打ち直すため)。
-    private int _lastKey;
-    private long _lastTime = long.MinValue;
-    private bool _lastShifted = true;
-    private bool _lastReleased;
-    // 押している最中の親指キー (押したことを、まだ文字に使っていなければ Unused)
-    private int _thumb;
-    private bool _thumbUsed;
-    // 中指NICOLA: 押したままの D / K (シフトに使ったか)
-    private int _middle;
-    private bool _middleUsed;
-    // 中指NICOLA: D / K を押したまま押した文字キー (先に離したらシフト面で打ち直す) とそのシフト面の文字
-    private int _middlePending;
-    private string _middlePendingKana = "";
+        private static int KeyOf(string name) => name switch
+        {
+            "L" => LeftThumb,
+            "R" => RightThumb,
+            _ when name.Length == 1 && Names.IndexOf(name[0], StringComparison.Ordinal) is >= 0 and var index => Keys[index],
+            _ => throw new FormatException($"kana-layouts.txt: 知らないキー {name}"),
+        };
+    }
+
+    private static string Id(IEnumerable<int> keys) => string.Join('+', keys.Order());
+
+    private readonly Table? _table = layout == KanaLayout.Jis ? null : Tables.Value[layout];
+
+    /// <summary>押しているキー。Emitted はそのキーで入れて、まだ打ち直していない文字の数。</summary>
+    private sealed class Held(int vk, long time, int emitted)
+    {
+        public int Vk { get; } = vk;
+        public long Time { get; set; } = time;
+        public int Emitted { get; set; } = emitted;
+        /// <summary>組み合わせのシフトに使った (押している間は連続シフト)。</summary>
+        public bool Shifting { get; set; }
+        /// <summary>組み合わせの文字キーにした (シフトには使わない)。</summary>
+        public bool Target { get; set; }
+        /// <summary>中指NICOLA: D・K より先に離したら打ち直すかなと、そのシフトのキー。</summary>
+        public (string Kana, Held Shift, int RemoveLast)? OnRelease { get; set; }
+    }
+
+    private readonly List<Held> _held = [];
+    // 中指の打ち直しで、シフトキー自身の文字も消せるのは、その文字が直前の出力のときだけ。
+    private Held? _lastOutput;
+    // 前置シフトの並びの打ちかけ (仮想キーを , でつないだもの)
+    private string _sequence = "";
 
     public KanaLayout Layout => layout;
 
-    public bool IsThumbShift => layout is KanaLayout.Nicola or KanaLayout.NakayubiNicola or KanaLayout.Tron;
-    public bool IsPrefixShift => layout is KanaLayout.Tsuki or KanaLayout.Hana;
-
-    /// <summary>JIS かな以外で、その配列が文字を割り当てているキーか (変換ボックスを開くキー)。</summary>
-    public bool IsLayoutKey(int vk) => _faces.Any(face => face.ContainsKey(vk)) || IsThumbShift && vk is LeftThumb or RightThumb;
-
     /// <summary>親指キーを押したままか (離すまで、離したことを受け取る必要がある)。</summary>
-    public bool ThumbHeld => _thumb != 0;
+    public bool ThumbHeld => _held.Any(key => IsThumb(key.Vk));
 
     /// <summary>前置シフトのキーを押して、次のキーを待っているか。</summary>
-    public bool HasPrefix => _prefix > 0;
+    public bool HasPrefix => _sequence.Length > 0;
 
-    /// <summary>左手で打つキー (表の各段の左から 5 つ)。</summary>
-    public static bool IsLeftHand(int vk) => Rows.Any(row => Array.IndexOf(row, vk) is >= 0 and < 5);
+    private static bool IsThumb(int vk) => vk is LeftThumb or RightThumb;
 
-    /// <summary>打ちかけ (前置シフト・押したままの親指キー) を忘れる。入力を確定・取り消したときに呼ぶ。</summary>
+    /// <summary>打ちかけ (前置シフト・同時打鍵の打ち直し) を忘れる。入力を確定・取り消したときに呼ぶ。押したままの親指キーは離すまで覚えておく。</summary>
     public void Reset()
     {
-        _prefix = 0;
-        _lastKey = 0;
-        _lastTime = long.MinValue;
-        _lastShifted = true;
-        _middlePending = 0;
+        _sequence = "";
+        _lastOutput = null;
+        _held.RemoveAll(key => !IsThumb(key.Vk));
     }
 
-    /// <summary>キーを押した。shift は Shift キー (小指シフト) を押しているか。</summary>
+    /// <summary>キーを押した。shift は Shift キー (小指シフト) を押しているか。Shift を押したキーはふつうの英字・記号。</summary>
     public KanaStroke Down(int vk, bool shift, long time)
     {
-        if (layout == KanaLayout.Jis) return KanaStroke.NotHandled;
-        if (IsThumbShift && vk is LeftThumb or RightThumb)
+        // 表の段のキーと親指キーのほか (BackSpace・Enter・Esc・Space など) は、ふつうのキー
+        if (_table is null || shift || Array.IndexOf(Keys, vk) < 0 && !IsThumb(vk)) return KanaStroke.NotHandled;
+        if (_held.FirstOrDefault(key => key.Vk == vk) is { } repeated)
         {
-            // 押したままの親指キーのリピート: 押したことは変えない (文字に使ったかを消さない)
-            if (vk == _thumb) return KanaStroke.Consumed;
-            var face = vk == LeftThumb ? 1 : 2;
-            // 文字キーを押している間 (押してから ChordWindowMs 以内) に押した親指キー: その文字をシフト面で打ち直す。
-            // 文字キーを離してから押した親指キーは同時打鍵ではない
-            if (!_lastShifted && !_lastReleased && time - _lastTime <= ChordWindowMs && _faces[face].TryGetValue(_lastKey, out var shifted))
-            {
-                _lastShifted = true;
-                _thumb = vk;
-                _thumbUsed = true;
-                return new KanaStroke(true, 1, shifted);
-            }
-            _thumb = vk;
-            _thumbUsed = false;
+            // シフト自身のリピートは止める。文字の長押しは押したままの親指の面で繰り返す。
+            if (IsThumb(vk) || repeated.Shifting || layout == KanaLayout.NakayubiNicola && vk is 0x44 or 0x4B) return KanaStroke.Consumed;
+            foreach (var key in _held) key.OnRelease = null;
+            var thumb = _held.FirstOrDefault(key => IsThumb(key.Vk));
+            var kana = thumb is not null ? _table.Chords.GetValueOrDefault(($"{thumb.Vk}", vk)) : _table.Sequences.GetValueOrDefault($"{vk}");
+            repeated.Time = time;
+            repeated.Emitted = kana?.Length ?? 0;
+            repeated.Target = thumb is not null;
+            _lastOutput = repeated;
+            return kana is null ? KanaStroke.Consumed : new KanaStroke(true, 0, kana);
+        }
+        return _table.Chords.Count > 0 ? Chord(vk, time) : Sequence(vk);
+    }
+
+    private KanaStroke Sequence(int vk)
+    {
+        var sequence = _sequence.Length == 0 ? $"{vk}" : $"{_sequence},{vk}";
+        _sequence = "";
+        if (_table!.Prefixes.Contains(sequence))
+        {
+            _sequence = sequence;
             return KanaStroke.Consumed;
         }
-        // Shift (小指シフト) を押しているキーは、ふつうのキー (英字・記号) として扱う
-        if (shift) return KanaStroke.NotHandled;
-        if (!_faces[0].TryGetValue(vk, out var plain) && !(_prefix > 0 && _faces[_prefix].ContainsKey(vk))) return KanaStroke.NotHandled;
+        if (_table.Sequences.TryGetValue(sequence, out var kana)) return new KanaStroke(true, 0, kana);
+        // 前置シフトの次の、表に無いキーは何も入れない。前置シフトでもないキーはふつうのキー
+        return sequence.Contains(',') ? KanaStroke.Consumed : KanaStroke.NotHandled;
+    }
 
-        if (IsPrefixShift)
+    private KanaStroke Chord(int vk, long time)
+    {
+        var table = _table!;
+        if (IsThumb(vk))
         {
-            if (_prefix > 0)
+            // 左右が重なっても、最後に押した親指の面を使う。交代した親指の解放は単独タップにしない。
+            _held.RemoveAll(key => IsThumb(key.Vk));
+            var thumb = new Held(vk, time, 0);
+            _held.Add(thumb);
+            // 文字キーの直後 (押したまま ChordWindowMs 以内) の親指キー: その文字を打ち直す
+            if (_lastOutput is { Target: false, Shifting: false, Emitted: > 0 } last && _held.Contains(last) && time - last.Time <= ChordWindowMs &&
+                table.Chords.TryGetValue(($"{vk}", last.Vk), out var shifted))
             {
-                var face = _faces[_prefix];
-                _prefix = 0;
-                return face.TryGetValue(vk, out var kana) && kana is not ("1" or "2") ? Emit(vk, kana, shifted: true) : KanaStroke.Consumed;
+                var remove = last.Emitted;
+                last.Emitted = shifted.Length;
+                last.Target = true;
+                thumb.Shifting = true;
+                return new KanaStroke(true, remove, shifted);
             }
-            if (plain is "1" or "2")
-            {
-                _prefix = plain[0] - '0';
-                return KanaStroke.Consumed;
-            }
-            return Emit(vk, plain!, shifted: true);
+            return table.Chords.Keys.Any(chord => chord.Shifts == $"{vk}") ? KanaStroke.Consumed : KanaStroke.NotHandled;
         }
-
-        // 親指シフト: 押したままの親指キー
-        var thumb = _thumb;
-        if (thumb != 0)
+        // 押したままの親指キー: その面の文字 (無ければ何も入れない)
+        if (_held.FirstOrDefault(key => IsThumb(key.Vk)) is { } held)
         {
-            _thumbUsed = true;
-            var face = _faces[thumb == LeftThumb ? 1 : 2];
-            return face.TryGetValue(vk, out var kana) ? Emit(vk, kana, shifted: true) : KanaStroke.Consumed;
+            held.Shifting = true;
+            var thumbKana = table.Chords.GetValueOrDefault(($"{held.Vk}", vk));
+            _lastOutput = new Held(vk, time, thumbKana?.Length ?? 0) { Target = true };
+            _held.Add(_lastOutput);
+            return thumbKana is not null ? new KanaStroke(true, 0, thumbKana) : KanaStroke.Consumed;
         }
-        // 中指NICOLA: 押したままの K + 左手のキー → 左シフト、D + 右手のキー → 右シフト。
-        // 押したときはふつうの文字にしておき、D / K より先に離したら打ち直す (Up)。D / K のリピートは無視する
-        if (layout == KanaLayout.NakayubiNicola && vk == _middle) return KanaStroke.Consumed;
-        _middlePending = 0;
-        if (layout == KanaLayout.NakayubiNicola && _middle != 0 && IsLeftHand(vk) == (_middle == KeyK) &&
-            _faces[_middle == KeyK ? 1 : 2].TryGetValue(vk, out var middleKana))
+        var plain = table.Sequences.GetValueOrDefault($"{vk}");
+        // 中指NICOLA: D・K を押したままの文字キーは、ふつうの文字にしておき、先に離したら打ち直す
+        if (layout == KanaLayout.NakayubiNicola)
         {
-            _middlePending = vk;
-            _middlePendingKana = middleKana;
-        }
-        if (layout == KanaLayout.NakayubiNicola && vk is KeyD or KeyK && _middle == 0)
-        {
-            _middle = vk;
-            _middleUsed = false;
+            // 次の文字が入ったら、前の打ち直しはもう末尾ではない。古い削除数で別の文字を消さない。
+            foreach (var key in _held) key.OnRelease = null;
+            // 中指のシフトは最初に押した D・K。重なった文字キーをシフトに選び直さない。
+            var shift = _held.FirstOrDefault(key => key.Vk is 0x44 or 0x4B && !key.Target);
+            var press = new Held(vk, time, plain?.Length ?? 0) { Target = vk is 0x44 or 0x4B && shift is not null };
+            if (shift is not null && table.Chords.TryGetValue(($"{shift.Vk}", vk), out var middle))
+                press.OnRelease = (middle, shift, press.Emitted + (ReferenceEquals(_lastOutput, shift) ? shift.Emitted : 0));
+            _held.Add(press);
+            _lastOutput = press;
+            return plain is null ? KanaStroke.NotHandled : new KanaStroke(true, 0, plain);
         }
         if (plain is null) return KanaStroke.NotHandled;
-        return Emit(vk, plain, shifted: false, time);
+        _lastOutput = new Held(vk, time, plain.Length);
+        _held.Add(_lastOutput);
+        return new KanaStroke(true, 0, plain);
     }
 
     /// <summary>キーを離した。</summary>
     public KanaKeyUp Up(int vk)
     {
-        if (vk == _lastKey) _lastReleased = true;
-        // 中指NICOLA: D / K を押したまま、文字キーを先に離した → シフト面で打ち直す (文字キーと、まだなら D / K の文字を消す)
-        if (vk == _middlePending && _middle != 0)
+        var index = _held.FindIndex(key => key.Vk == vk);
+        if (index < 0) return default;
+        var held = _held[index];
+        _held.RemoveAt(index);
+        // 中指NICOLA: D・K を押したまま、文字キーを先に離した → シフト面で打ち直す (文字キーと、まだなら D・K の文字を消す)
+        if (held.OnRelease is ({ } kana, { } shift, var remove) && _held.Contains(shift))
         {
-            _middlePending = 0;
-            var remove = _middleUsed ? 1 : 2;
-            _middleUsed = true;
-            Emit(vk, _middlePendingKana, shifted: true);
-            return new KanaKeyUp(false, new KanaStroke(true, remove, _middlePendingKana));
+            shift.Emitted = 0;
+            shift.Shifting = true;
+            return new KanaKeyUp(false, new KanaStroke(true, remove, kana));
         }
-        if (vk == _middle)
-        {
-            _middle = 0;
-            _middlePending = 0; // D / K を先に離した: 速く打って重なっただけ
-        }
-        if (vk != _thumb || vk == 0) return default;
-        _thumb = 0;
-        return new KanaKeyUp(!_thumbUsed, KanaStroke.NotHandled);
-    }
-
-    private KanaStroke Emit(int vk, string kana, bool shifted, long time = long.MinValue)
-    {
-        _lastKey = vk;
-        _lastTime = time;
-        _lastShifted = shifted;
-        _lastReleased = false;
-        return new KanaStroke(true, 0, kana);
+        return new KanaKeyUp(IsThumb(vk) && !held.Shifting, KanaStroke.NotHandled);
     }
 }

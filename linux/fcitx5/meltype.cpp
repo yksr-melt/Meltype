@@ -70,6 +70,7 @@ struct Native {
     void *handle = nullptr;
     int (*init)(const char *) = nullptr;
     void (*setConversionReady)(void (*)()) = nullptr;
+    void (*startKeyCount)() = nullptr;
     void *(*create)() = nullptr;
     char *(*handle_)(void *, const char *) = nullptr;
     void (*destroy)(void *) = nullptr;
@@ -85,12 +86,13 @@ struct Native {
         auto sym = [this](const char *name) { return dlsym(handle, name); };
         init = reinterpret_cast<decltype(init)>(sym("meltype_init"));
         setConversionReady = reinterpret_cast<decltype(setConversionReady)>(sym("meltype_set_conversion_ready"));
+        startKeyCount = reinterpret_cast<decltype(startKeyCount)>(sym("meltype_start_key_count"));
         create = reinterpret_cast<decltype(create)>(sym("meltype_ime_create"));
         handle_ = reinterpret_cast<decltype(handle_)>(sym("meltype_ime_handle"));
         destroy = reinterpret_cast<decltype(destroy)>(sym("meltype_ime_destroy"));
         free = reinterpret_cast<decltype(free)>(sym("meltype_free"));
         shutdown = reinterpret_cast<decltype(shutdown)>(sym("meltype_shutdown"));
-        if (!init || !setConversionReady || !create || !handle_ || !destroy || !free || !shutdown) {
+        if (!init || !setConversionReady || !startKeyCount || !create || !handle_ || !destroy || !free || !shutdown) {
             FCITX_ERROR() << "Meltype: libMeltypeNative.so の関数が足りません";
             return false;
         }
@@ -326,6 +328,8 @@ int specialKey(fcitx::KeySym sym) {
     case FcitxKey_Hiragana_Katakana: return 0x15;
     case FcitxKey_Henkan: return 0x1C;
     case FcitxKey_Muhenkan: return 0x1D;
+    // CapsLock (切り替えキーに登録したときだけ本体が使う。ほかはアプリに通す)
+    case FcitxKey_Caps_Lock: return 0x14;
     default: return 0;
     }
 }
@@ -375,6 +379,19 @@ size_t charLength(const std::string &text) {
     return n;
 }
 
+// 末尾から UTF-16 で back 個戻した位置 (UTF-8 のバイト。fcitx::Text のカーソルはバイトの位置)
+int caretByte(const std::string &text, long long back) {
+    size_t position = text.size();
+    while (back > 0 && position > 0) {
+        size_t start = position - 1;
+        while (start > 0 && (static_cast<unsigned char>(text[start]) & 0xC0) == 0x80) start--;
+        // 4 バイトの文字は UTF-16 で 2 つ
+        back -= position - start == 4 ? 2 : 1;
+        position = start;
+    }
+    return static_cast<int>(position);
+}
+
 
 class MeltypeEngine;
 
@@ -420,6 +437,7 @@ public:
             dispatcher_.attach(&instance_->eventLoop());
             s_engine = this;
             native_.setConversionReady(&MeltypeEngine::onConversionReady);
+            native_.startKeyCount();
         }
         instance_->inputContextManager().registerProperty("meltypeState", &factory_);
     }
@@ -427,7 +445,7 @@ public:
     ~MeltypeEngine() override {
         s_engine = nullptr;
         if (host_) native_.destroy(host_);
-        // Zenzai の llama-server を終わらせ、Mozc の学習を保存する (呼ばずに終わると、次に起動した Meltype が終わらせるまで llama-server が残る)
+        // Zenzai の llama-server を含む変換エンジンを止める (呼ばずに終わると、次に起動した Meltype が終わらせるまで llama-server が残る)
         if (loaded_) native_.shutdown();
     }
 
@@ -462,7 +480,10 @@ public:
         const bool shift = states.test(fcitx::KeyState::Shift) || (vk == 0x20 && state->shiftHeld);
         const std::string fields = std::string(",\"key\":{\"vk\":") + std::to_string(vk) + ",\"ch\":" + std::to_string(character) +
             ",\"shift\":" + boolean(shift) + ",\"ctrl\":" + boolean(states.test(fcitx::KeyState::Ctrl)) +
-            ",\"alt\":" + boolean(states.test(fcitx::KeyState::Alt)) + ",\"command\":" + boolean(states.test(fcitx::KeyState::Super)) + "}";
+            ",\"alt\":" + boolean(states.test(fcitx::KeyState::Alt)) + ",\"command\":" + boolean(states.test(fcitx::KeyState::Super)) +
+            ",\"capsLock\":" + boolean(event.rawKey().states().test(fcitx::KeyState::CapsLock)) +
+            // key() の修飾キーは正規化されている
+            ",\"repeat\":" + boolean(event.rawKey().states().test(fcitx::KeyState::Repeat)) + "}";
         Json output;
         // 本体が使わなかったキーは受け取らず、fcitx5 とアプリに任せる
         if (send(ic, "KeyPressed", fields, output) && output.get("result")->flag("consumed")) event.filterAndAccept();
@@ -685,7 +706,7 @@ private:
         } else {
             preedit.append(text, fcitx::TextFormatFlag::Underline);
         }
-        preedit.setCursor(static_cast<int>(preedit.toString().size()));
+        preedit.setCursor(caretByte(preedit.toString(), view.integer("caretBack", 0)));
         if (ic->capabilityFlags().test(fcitx::CapabilityFlag::Preedit)) panel.setClientPreedit(preedit);
         else panel.setPreedit(preedit);
         ic->propertyFor(&factory_)->preeditVisible = !text.empty();

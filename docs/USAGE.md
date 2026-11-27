@@ -1,5 +1,6 @@
 <a name="meltype-の使い方"></a>
-<img src="images/headings/usage/title.svg" alt="Meltype の使い方" height="80">
+
+# Meltype の使い方
 
 英語も日本語も、切り替えずにローマ字で打つだけです。
 
@@ -7,12 +8,11 @@
 kyouhagoogledekensaku  →  今日はgoogleで検索
 ```
 
-インストールと OS ごとの設定は [WINDOWS.md](WINDOWS.md)・[MACOS.md](MACOS.md)・[LINUX.md](LINUX.md)、端末版は [TTY.md](TTY.md) にあります。
-
-<br>
+このページはデスクトップ版の共通操作です。インストールと OS ごとの設定は [Windows](WINDOWS.md)・[Mac](MACOS.md)・[Linux](LINUX.md)、端末版は [TTY](TTY.md)、ソフトウェアキーボードの操作は [Android](ANDROID.md) にあります。文書の一覧は [README.md](README.md) を見てください。
 
 <a name="打ち方の基本"></a>
-<img src="images/headings/usage/01.svg" alt="打ち方の基本" height="53"><br>
+
+## 打ち方の基本
 
 ローマ字で打って、<kbd>Space</kbd> で変換、<kbd>Enter</kbd> で確定します。英単語で終わっているときの <kbd>Space</kbd> はふつうの空白になるので、変換するには <kbd>Shift</kbd> + <kbd>Space</kbd> を押します (`kyouhagoogle` のように英単語で終わる文)。
 
@@ -22,15 +22,19 @@ kyouhagoogledekensaku  →  今日はgoogleで検索
 | 予測変換 | <kbd>Tab</kbd> |
 | 変換する文節を選ぶ | <kbd>←</kbd> <kbd>→</kbd> |
 | 文節の区切りを変える | <kbd>Shift</kbd> + <kbd>←</kbd> <kbd>→</kbd> |
-| ひらがな / カタカナ / 半角英字にする | <kbd>F6</kbd> / <kbd>F7</kbd> / <kbd>F10</kbd> |
+| ひらがな / 全角カタカナ / 半角カタカナ | <kbd>F6</kbd> / <kbd>F7</kbd> / <kbd>F8</kbd> |
+| 全角英字 / 半角英字 | <kbd>F9</kbd> / <kbd>F10</kbd> |
 | 取り消す | <kbd>Esc</kbd> |
+
+設定「Esc で一段ずつ戻す」を ON にすると、<kbd>Esc</kbd> で漢字 → ひらがな → 打ったローマ字の順に戻します。ひらがなに戻した読みは、<kbd>←</kbd> <kbd>→</kbd> <kbd>Home</kbd> <kbd>End</kbd> でカーソルを動かし、途中だけを消して打ち直せます (<kbd>BackSpace</kbd> はカーソルの前、<kbd>Delete</kbd> は後ろを消します)。
+
+設定「変換中の矢印キーを ATOK と同じにする」を ON にすると、<kbd>←</kbd> <kbd>→</kbd> で区切りを変え、<kbd>Shift</kbd> + <kbd>←</kbd> <kbd>→</kbd> で文節を選び、<kbd>↓</kbd> で選んだ文節までを確定します。
 
 ローマ字の綴りは Microsoft IME と同じです。
 
-<br>
-
 <a name="設定の開き方"></a>
-<img src="images/headings/usage/10.svg" alt="設定の開き方" height="53"><br>
+
+## 設定の開き方
 
 | OS | 開き方 |
 | --- | --- |
@@ -38,12 +42,11 @@ kyouhagoogledekensaku  →  今日はgoogleで検索
 | Mac | Launchpad の「Meltype の設定」。メニューバーの入力メニュー →「Meltype の設定…」でも開けます |
 | Linux | アプリの一覧の「Meltype の設定」 |
 
-ユーザー辞書・定型文・学習データ・バックアップも、この「Meltype の設定」で扱います。丸の無い「あ」「A」と Meltype のロゴは Windows の入力モードの表示で、右クリックしても Meltype のメニューは出ません。
-
-<br>
+ユーザー辞書・定型文・学習データ・バックアップも、この「Meltype の設定」で扱います。変えた設定は、下の「入力プレビュー」に打って試せます。丸の無い「あ」「A」と Meltype のロゴは Windows の入力モードの表示で、右クリックしても Meltype のメニューは出ません。
 
 <a name="英語と日本語の判定"></a>
-<img src="images/headings/usage/02.svg" alt="英語と日本語の判定" height="53"><br>
+
+## 英語と日本語の判定
 
 英単語は英字のまま、日本語はかなと漢字になります。
 
@@ -54,14 +57,16 @@ kyouhagoogledekensaku  →  今日はgoogleで検索
 `/review`・`$skill`・`@src/app.ts` のように `/` `$` `@` で始まる語は、そのまま入ります。
 
 <a name="自動判定を使わない"></a>
-<img src="images/headings/usage/s01.svg" alt="自動判定を使わない" height="40">
 
-主に英語を打つなら、設定「英字を主に入力」を ON にします。打った英字はそのまま入り、日本語にしたい語だけ <kbd>変換</kbd> か <kbd>↓</kbd> で変換します。
+### 自動判定を使わない
 
-<br>
+設定「英語 / 日本語を自動で判定する」を OFF にすると、日本語を基本にし、英語の候補は提案から選べます。Shift で打った大文字で始まる語は英字になります。
+
+主に英語を打つなら、設定「英字を主に入力 (変換キー / ↓ で日本語に)」を ON にします。打った英字はそのまま入り、日本語にしたい語だけ <kbd>変換</kbd> か <kbd>↓</kbd> で変換します。
 
 <a name="日本語入力と英数"></a>
-<img src="images/headings/usage/03.svg" alt="日本語入力と英数" height="53"><br>
+
+## 日本語入力と英数
 
 ふだんは日本語入力のままで大丈夫です。英数は、打った文字をそのまま入れたいときに使います。
 
@@ -73,66 +78,73 @@ kyouhagoogledekensaku  →  今日はgoogleで検索
 
 設定「左 Alt で英数 / 右 Alt で日本語」を ON にすると、左右の <kbd>Alt</kbd> だけを押して切り替えられます (Windows・Linux)。
 
+入力欄に入ってまだ何も打たないうちに切り替えると、その入力欄のモードとして覚え、次にその入力欄に入ったときはそのモードで始めます。間違えて覚えたら、入ってすぐに切り替え直してください。
+
+設定「入力モード切り替えキー」に <kbd>CapsLock</kbd>・<kbd>英数</kbd>・<kbd>かな</kbd>・<kbd>変換</kbd>・<kbd>無変換</kbd> を登録すると、そのキーだけで日本語入力 ⇔ 英数を切り替えられます。
+
+日本語入力中は、CapsLock を ON にしたままでも日本語に変換します。CapsLock で大文字を打ちたいときは、設定「CapsLock で大文字を入力」を ON にします。
+
 アプリごとに、動きを 4 つのモードから選べます。設定の「アプリ別設定」の「種類」で変えられます。
 
 | モード | 動き | 最初からこのモードのアプリ |
 | --- | --- | --- |
 | 一般 | この文書のとおりに動きます | ほかのアプリ |
 | コード | コメントと文字列の中だけ日本語になります | コードエディター・ターミナル |
-| ゲーム | 英数で始まります | ゲーム |
+| ゲーム | Windows の Meltype IME は英数で始まり、日本語で確定・取り消しすると英数に戻ります。Meltype キーボードは処理を止め、Windows の IME に任せます | ゲーム |
 | OFF | 何もしません | リモートデスクトップ・仮想マシン |
 
-<br>
-
 <a name="変換"></a>
-<img src="images/headings/usage/04.svg" alt="変換" height="53"><br>
+
+## 変換
 
 選び直した候補は、次から最初に出ます。
 
 英単語は <kbd>Shift</kbd> + <kbd>Space</kbd> か <kbd>変換</kbd> で候補を出すと、最後にカタカナ表記が出ます (export → エクスポート)。
 
-書き間違いには「もしかして」が出ます。<kbd>Tab</kbd> で直ります (ぶれすれっど → ブレスレット)。
+ローマ字の打ち間違いは、設定「打ち間違いを直す」(既定で ON) により、<kbd>Space</kbd>・<kbd>Enter</kbd> で直します。読めない子音が残り、よく使う語の読みになるときに、隣のキーの押し間違い・入れ替わり・抜けを 1 文字だけ補います (`onegaishimsu` で「お願いします」、`sumimasne` で「すみません」)。
 
-句読点 (、。 / ，．) と、英単語の前後の空白は、設定の「全般」で変えられます。
+語そのものの書き間違いには「もしかして」が出ます。<kbd>Tab</kbd> で直ります (ぶれすれっど → ブレスレット)。
 
-<br>
+句読点 (、。 / ，．) と、英単語・数字の前後の空白は、設定の「記号・スペース」で変えられます。
+
+ライブ変換と Zenzai は、デスクトップ版では既定で ON です。Zenzai を使えないときも Mozc で変換します。使い方や負荷に合わせて「変換」の設定で切り替えられます。
 
 <a name="読みで出せる特別な候補"></a>
-<img src="images/headings/usage/05.svg" alt="読みで出せる特別な候補" height="53"><br>
+
+## 読みで出せる特別な候補
 
 次の読みだけを打って変換すると出ます。
 
 | 読み | 候補 |
 | --- | --- |
 | いま | 17:22 |
-| きょう | 2026年10月9日 |
+| きょう | 今日の日付 (例: 2026年11月25日) |
 | なう | 再生中の曲 (Windows) |
-| 100どる | 約1.6万円 |
+| 100どる | 日本円での概算額 (同梱された為替レートによる) |
 | えがお | 😊 |
 | かおもじ | 顔文字 |
 | ごんべんにふるとり | 誰 |
 | ばーじょん | Meltype の版と、使っている入力方式・Zenzai の設定 (不具合の報告に貼ってください) |
 
-<br>
-
 <a name="自分の語を足す"></a>
-<img src="images/headings/usage/06.svg" alt="自分の語を足す" height="53"><br>
 
-**ユーザー辞書**: 「Meltype の設定」の「ユーザー辞書」で登録します。
+## 自分の語を足す
+
+**ユーザー辞書**: 「Meltype の設定」の「ユーザー辞書」で登録します。「個人情報」「配信者」のように分類を付けると、一覧を分類ごとに絞り込めます。取り込むときに分類の欄に名前を入れておくと、取り込んだ語にその分類が付きます。
 
 **定型文**: 「Meltype の設定」の「定型文」で登録して、`;名前` と打って <kbd>Space</kbd> で呼び出します。
 
-<br>
-
 <a name="かな入力とほかの配列-α版"></a>
-<img src="images/headings/usage/07.svg" alt="かな入力とほかの配列 (α版)" height="53"><br>
 
-設定「入力方式」でかな入力 (JIS)、「ローマ字の配列」で SKY 配列を選べます。Windows の Meltype キーボードでは、「かな配列」で月配列・花配列・NICOLA・中指NICOLA・TRON 配列も選べます。どれも試験中です。
+## かな入力とほかの配列 (α版)
 
-<br>
+設定「入力方式」でかな入力 (JIS) を選べます。Windows の Meltype キーボードでは、「ローマ字の配列」で SKY 配列、「かな配列」で月配列・花配列・NICOLA・中指NICOLA・TRON 配列も選べます。SKY 配列は英語の自動判定を使わず、日本語として読みます。どれも試験中です。
+
+ローマ字の綴りを足す場合は、データフォルダーの `dictionaries/romaji.txt` に「綴り<Tab>かな」の形で書き、Meltype を起動し直します。組み込みの綴りより優先します。[AZIK の一部の規則を入れた見本](romaji-azik-sample.txt) もあります。
 
 <a name="ほかの-ime-から移るとき"></a>
-<img src="images/headings/usage/08.svg" alt="ほかの IME から移るとき" height="53"><br>
+
+## ほかの IME から移るとき
 
 <kbd>Ctrl</kbd> + 英字を Microsoft IME と同じにするには、設定「Control キーの個別の割り当て」に次のとおり書きます。
 
@@ -140,17 +152,20 @@ kyouhagoogledekensaku  →  今日はgoogleで検索
 U=F6;I=F7;O=F8;P=F9;T=F10
 ```
 
-<br>
-
 <a name="データと学習"></a>
-<img src="images/headings/usage/09.svg" alt="データと学習" height="53"><br>
+
+## データと学習
 
 設定と学習した語は、この PC の中だけに保存します。
 
 | OS | 場所 |
 | --- | --- |
-| Windows | `%LOCALAPPDATA%\Meltype` |
+| Windows (インストール版) | `%LOCALAPPDATA%\Meltype` |
+| Windows (ポータブル版) | `Meltype.exe` の隣の `data` |
 | Mac | `~/Library/Application Support/Meltype` |
-| Linux | `~/.local/share/Meltype` |
+| Linux・TTY | `~/.local/share/Meltype` (通常。`XDG_DATA_HOME` があればその下の `Meltype`) |
+| Android | アプリ専用の領域。デスクトップ版の設定画面・バックアップとは別に扱います |
 
-学習した語は、「Meltype の設定」の「学習データ」で消せます。
+デスクトップ版では、学習した語は「Meltype の設定」の「学習データ」で消せます。「バックアップ」では設定・辞書・学習データを書き出し、復元できます。TTY には設定画面がありません。
+
+変換は端末内で行います。通信とログの扱いは [SECURITY.md](../SECURITY.md) にあります。

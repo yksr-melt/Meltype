@@ -41,7 +41,7 @@ public static class SelfCheck
             var settings = new Config.Settings();
             var host = new ImeHost(new NoEnvironment(), new SessionParts(CompositionDetector.CreateDefault(), new NoConverter(), new CompositionServices()), () => settings);
             ImeOutput? output = null;
-            foreach (var c in "kyouhagoogle") output = host.Handle(new ImeEvent { Version = ImeHost.Version, Type = ImeEventType.KeyPressed, Key = new ImeKey { Ch = c } });
+            foreach (var c in "kyouhagoogle") output = host.Handle(new ImeEvent.KeyPressed(new ImeKey { Ch = c }));
             return output?.Result.View?.Text ?? "(表示なし)";
         }),
         ("書き間違い辞書", () => MisspellingDictionary.Load(null).Find("ぶれすれっど")?.Right ?? "(見つからない)"),

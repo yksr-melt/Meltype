@@ -499,6 +499,19 @@ class IntegrationTests(unittest.TestCase):
         self.type_text("ka")
         self.assertEqual("ka かかka", self.engine.document)
 
+    def test_held_mode_key_switches_once(self):
+        # 押したままの自動の繰り返しは、間にほかのキーを押して離しても、入力モードを切り替えない (evdev の keycode)
+        press, release = 0, IBus.ModifierType.RELEASE_MASK
+        hankaku, shift = (IBus.KEY_Zenkaku_Hankaku, 41), (IBus.KEY_Shift_L, 42)
+        for (keyval, keycode), state in ((hankaku, press), (hankaku, press), (shift, press), (shift, release), (hankaku, press), (hankaku, release)):
+            self.engine.do_process_key_event(keyval, keycode, state)
+        self.type_text("ka")
+        self.assertEqual(("ka", ""), (self.engine.document, self.engine.marked))
+        # 離してから押せば、また切り替わる
+        self.engine.do_process_key_event(*hankaku, press)
+        self.type_text("ka")
+        self.assertEqual(("ka", "か"), (self.engine.document, self.engine.marked))
+
     def test_caret_back_moves_into_the_brackets(self):
         # 空の括弧を確定したあと、キャレットを括弧の中に戻す (← をアプリに送る)
         forwarded = []
@@ -509,7 +522,7 @@ class IntegrationTests(unittest.TestCase):
     def test_aux_shows_typed_suggestion_and_hint(self):
         shown = []
         self.engine.update_auxiliary_text = lambda text, visible: shown.append(text.get_text())
-        self.engine._apply({"commits": [], "view": {"text": "かん", "converting": False, "clauses": [], "selectedClause": -1,
+        self.engine._apply({"commits": [], "view": {"text": "かん", "converting": False, "clauses": [], "selectedClause": -1, "caretBack": 0,
                                                     "hint": "Space 変換", "spellingSuggestion": "もしかして", "typedKeys": "kan", "candidates": None}})
         self.assertEqual(["kan　もしかして　Space 変換"], shown)
 

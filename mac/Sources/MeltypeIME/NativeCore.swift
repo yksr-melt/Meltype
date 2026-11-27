@@ -13,6 +13,7 @@ private typealias ReportUrlFunction = @convention(c) (UnsafePointer<CChar>?) -> 
 private typealias FreeFunction = @convention(c) (UnsafeMutableRawPointer?) -> Void
 private typealias ConversionReadyCallback = @convention(c) () -> Void
 private typealias SetConversionReadyFunction = @convention(c) (ConversionReadyCallback) -> Void
+private typealias StartKeyCountFunction = @convention(c) () -> Void
 private typealias ShutdownFunction = @convention(c) () -> Void
 
 // ---- 本体から呼ばれる関数 ----
@@ -57,6 +58,8 @@ struct CompositionView: Decodable {
     let converting: Bool
     let clauses: [String]
     let selectedClause: Int
+    /// 変換中の文字の中のカーソルを、末尾から何文字 (UTF-16) 前に置くか
+    let caretBack: Int
     let hint: String
     let spellingSuggestion: String?
     /// 打ったキー (見えている文字と違うときだけ)
@@ -89,6 +92,7 @@ final class NativeCore {
     private let reportUrlFunction: ReportUrlFunction?
     private let freeFunction: FreeFunction?
     private let setConversionReadyFunction: SetConversionReadyFunction?
+    private let startKeyCountFunction: StartKeyCountFunction?
     private let shutdownFunction: ShutdownFunction?
 
     private init() {
@@ -111,6 +115,7 @@ final class NativeCore {
         reportUrlFunction = symbol("meltype_report_url", as: ReportUrlFunction.self)
         freeFunction = symbol("meltype_free", as: FreeFunction.self)
         setConversionReadyFunction = symbol("meltype_set_conversion_ready", as: SetConversionReadyFunction.self)
+        startKeyCountFunction = symbol("meltype_start_key_count", as: StartKeyCountFunction.self)
         shutdownFunction = symbol("meltype_shutdown", as: ShutdownFunction.self)
     }
 
@@ -123,7 +128,7 @@ final class NativeCore {
         }
     }
 
-    /// 終了する前に呼ぶ。変換エンジンを止める (Zenzai の llama-server を終わらせ、Mozc の学習を保存する)。
+    /// 終了する前に呼ぶ。変換エンジンを止める (Zenzai の llama-server を含む変換エンジンを止める)。
     func shutdown() {
         shutdownFunction?()
     }
@@ -131,6 +136,11 @@ final class NativeCore {
     /// 変換エンジンを入力のスレッドで待たないようにする (入力欄を作る前に呼ぶ)。呼ばなければ変換は同期のまま (--self-test)。
     func startBackgroundConversion() {
         setConversionReadyFunction?(conversionReadyCallback)
+    }
+
+    /// 打鍵数を数え始める。
+    func startKeyCount() {
+        startKeyCountFunction?()
     }
 
     /// 入力欄 (Input Method Kit のクライアント) ごとの本体 (ImeHost)。

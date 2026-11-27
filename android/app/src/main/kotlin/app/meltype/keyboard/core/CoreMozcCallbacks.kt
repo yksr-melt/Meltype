@@ -4,7 +4,6 @@ package app.meltype.keyboard.core
 
 import app.meltype.keyboard.PerfLog
 import app.meltype.keyboard.mozc.MozcBackend
-import app.meltype.keyboard.mozc.MozcClause
 import app.meltype.keyboard.mozc.MozcWord
 
 /**
@@ -39,27 +38,21 @@ internal class CoreMozcCallbacks(
                 PerfLog.event("convert", (System.nanoTime() - start) / 1000, reading.length)
                 // 変換できない読みは空行 (Core はかなのまま見せ、同じ読みでは聞き直さない)
                 segments?.takeIf { found -> found.joinToString("") { it.reading } == reading }
-                    ?.joinToString(RECORD) { s -> (listOf(s.reading) + s.candidates).joinToString(UNIT) }
+                    ?.joinToString(RECORD) { s ->
+                        // ユーザー辞書の語を含む候補は頭に GS を付ける (デスクトップの meltype_mozc_helper と同じ)
+                        val candidates = s.candidates.mapIndexed { i, c -> if (i == 0 && s.userWord) USER_WORD + c else c }
+                        (listOf(s.reading) + candidates).joinToString(UNIT)
+                    }
                     ?: segments?.let { "" }
-            }
-            "L" -> {
-                val (context, records) = fields.drop(1)
-                val clauses = records.split(RECORD).map { record ->
-                    val (reading, text) = record.split(UNIT)
-                    MozcClause(reading, text)
-                }
-                if (converter.learn(clauses, context.ifEmpty { null })) "OK" else "NG"
             }
             "R" -> converter.reading(fields[1]) ?: ""
             "D" -> {
                 val words = fields[1].split(RECORD).filter { it.isNotEmpty() }.map { record ->
-                    val (reading, word) = record.split(UNIT)
-                    MozcWord(reading, word)
+                    val (reading, word, pos) = record.split(UNIT)
+                    MozcWord(reading, word, pos)
                 }
                 if (converter.setUserDictionary(words)) "OK" else "NG"
             }
-            // 覚えさせるたびに保存している (MozcConverter.learn)
-            "S" -> "OK"
             else -> throw IllegalArgumentException("Unknown Mozc helper request: ${fields[0]}")
         }
     }
@@ -67,5 +60,6 @@ internal class CoreMozcCallbacks(
     private companion object {
         const val UNIT = "\u001f"
         const val RECORD = "\u001e"
+        const val USER_WORD = "\u001d"
     }
 }

@@ -63,6 +63,7 @@ public sealed record SessionResult(bool Consumed, IReadOnlyList<TextEdit> Commit
         builder.Append(",\"clauses\":");
         AppendArray(builder, view.Clauses ?? []);
         builder.Append(",\"selectedClause\":").Append(view.SelectedClause);
+        builder.Append(",\"caretBack\":").Append(view.CaretBack);
         builder.Append(",\"hint\":");
         AppendString(builder, view.Hint);
         builder.Append(",\"spellingSuggestion\":");
@@ -108,26 +109,27 @@ public sealed record SessionResult(bool Consumed, IReadOnlyList<TextEdit> Commit
     /// <summary>
     /// フロントに渡す表示。どのフロントも、ここに入っているものをそのまま出す:
     /// text は確定される形 (OS が表示のまま確定しても、本体の確定と同じになる。打っている途中の英字は typed で見える)、
-    /// hint は操作ガイドの設定を反映した案内、typed は見えている文字と違うときだけの打ったキー、
-    /// 一覧は 1 つだけ (変換中で候補が 2 つ以上なら変換の候補、変換していなければ予測変換の候補、無ければ入力中の変換の候補)。
+    /// hint は操作ガイドの設定を反映した案内、typed は text と違うときだけの、打ったもの、
+    /// 一覧は 1 つだけ (変換中で候補が 2 つ以上なら変換の候補、変換していなければ予測変換の候補)。
     /// </summary>
     /// <param name="numberKeysSelect">設定「変換中の数字キーで候補を選ぶ」。番号は、数字キーで選べる変換中の候補だけに出す。</param>
     internal static CompositionView ForFront(CompositionView view, bool showGuide, bool numberKeysSelect)
     {
         var predictions = !view.Converting && view.Predictions is { Count: > 0 };
-        var candidates = !predictions && (view.Converting ? view.Candidates.Count > 1 : view.Candidates.Count > 0);
+        var candidates = view.Converting && view.Candidates.Count > 1;
+        var text = view.Committed ?? view.Text;
         return view with
         {
-            Text = view.Committed ?? view.Text,
+            Text = text,
             Hint = showGuide ? view.Hint : view.ContextHint ?? "",
-            Typed = view.Typed == view.Text ? null : view.Typed,
+            Typed = view.Typed == text ? null : view.Typed,
             Candidates = candidates ? view.Candidates : [],
             SelectedIndex = candidates ? view.SelectedIndex : -1,
             Notes = candidates ? view.Notes : null,
             Meaning = candidates ? view.Meaning : null,
             Predictions = predictions ? view.Predictions : null,
             SelectedPrediction = predictions ? view.SelectedPrediction : -1,
-            Numbered = candidates && view.Converting && numberKeysSelect,
+            Numbered = candidates && numberKeysSelect,
         };
     }
 

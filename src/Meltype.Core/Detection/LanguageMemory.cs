@@ -14,6 +14,17 @@ public sealed record LearnedLanguage(string Word, bool English, int Count, DateT
 }
 
 /// <summary>
+/// 判定に使う英語 / 日本語の学習と、それを引く文脈 (<see cref="LanguageMemory.Get(string, bool?)"/>)。
+/// Memory が null なら使わない (設定「ユーザー学習を使う」が OFF)。
+/// </summary>
+internal readonly record struct LanguageLearning(LanguageMemory? Memory, bool? Context)
+{
+    public bool? Get(string word) => Memory?.Get(word, Context);
+
+    public bool? Get(ReadOnlySpan<char> word) => Memory?.Get(word, Context);
+}
+
+/// <summary>
 /// 英語とも日本語とも読める語 (api, sushi …) を、ユーザーが自分で英字 / かなに直したときに覚えておく。
 /// 次からその語は、自動の判定より覚えた方を優先する (api と打って F10 で英字にして確定 → 次から api は英字)。
 /// %LOCALAPPDATA%\Meltype\languages.json に「打った英字 → 英語か」だけを保存する。
@@ -22,7 +33,7 @@ internal sealed class LanguageMemory
 {
     private const int MaxEntries = 3000;
     private readonly string? _path;
-    // 読み直すときは、中身を書き換えずに丸ごと差し替える (Get は入力のスレッドから lock を取らずに読む)
+    // 覚える・忘れるは中身を書き換えるので、読むときも _gate を取る (設定・トレイの一覧は入力と別のスレッドから読む: issue #2271)
     private Dictionary<string, Entry> _entries;
     private readonly object _gate = new();
     private readonly object _fileGate = new();
@@ -66,18 +77,22 @@ internal sealed class LanguageMemory
         _saver = new DeferredSaver(Write);
         _path = path;
         _stamp = new FileStamp(path);
-        _entries = Load(path);
+        _entries = new(StringComparer.Ordinal);
+        Reload();
     }
 
-    private static Dictionary<string, Entry> Load(string? path)
+    private static Dictionary<string, Entry>? Load(string? path, Config.FileStamp stamp)
     {
         var entries = new Dictionary<string, Entry>(StringComparer.Ordinal);
-        Config.DataFile.Load(path, "英語 / 日本語の学習データ", content =>
+        var read = Config.DataFile.Load(path, "英語 / 日本語の学習データ", content =>
         {
             var loaded = JsonSerializer.Deserialize(content, Config.LearningJsonContext.Default.Languages);
-            if (loaded is not null) foreach (var (word, entry) in loaded) entries[word] = entry;
-        });
-        return entries;
+            // 値が null の語は捨てる (手で書き換えたファイル・細工したバックアップ。System.Text.Json は辞書の値の null を拒まない)
+            if (loaded is not null)
+                foreach (var (word, entry) in loaded)
+                    if (entry is not null) entries[word] = entry;
+        }, stamp);
+        return read ? entries : null;
     }
 
     /// <summary>ほかのプロセス (設定アプリ) が languages.json を書き換えていたら読み直す (<see cref="FileStamp"/>)。</summary>
@@ -93,7 +108,8 @@ internal sealed class LanguageMemory
     private void Reload()
     {
         _stamp.Synced();
-        var entries = Load(_path);
+        // 読めなかったら前の中身のまま (Config.DataFile.Load)
+        if (Load(_path, _stamp) is not { } entries) return;
         lock (_gate)
         {
             _entries = entries;
@@ -101,7 +117,7 @@ internal sealed class LanguageMemory
         }
     }
 
-    public int Count => _entries.Count;
+    public int Count { get { lock (_gate) return _entries.Count; } }
 
     /// <summary>
     /// 文脈ごとに分けるときの、語の後ろにつける印 (分けないときは空)。context は今の入力の前が英語か (true)・日本語か (false) で、
@@ -115,6 +131,11 @@ internal sealed class LanguageMemory
     /// <summary>覚えている語なら英語か (true) 日本語か (false)。覚えていなければ null。word は小文字の英字。</summary>
     public bool? Get(string word, bool? context = null)
     {
+        lock (_gate) return GetLocked(word, context);
+    }
+
+    private bool? GetLocked(string word, bool? context)
+    {
         if (ContextSuffix(context) is { Length: > 0 } suffix && _entries.TryGetValue(word + suffix, out var contextual))
             return NeedsTwice(word, contextual) ? null : contextual.English;
         if (!_entries.TryGetValue(word, out var entry)) return null;
@@ -125,9 +146,12 @@ internal sealed class LanguageMemory
     internal bool? Get(ReadOnlySpan<char> word, bool? context = null)
     {
         if (context is not null) return Get(word.ToString(), context);
-        if (!_entries.GetAlternateLookup<ReadOnlySpan<char>>().TryGetValue(word, out var entry)) return null;
-        if (NeedsTwice(word.ToString(), entry)) return null;
-        return entry.English;
+        lock (_gate)
+        {
+            if (!_entries.GetAlternateLookup<ReadOnlySpan<char>>().TryGetValue(word, out var entry)) return null;
+            if (NeedsTwice(word.ToString(), entry)) return null;
+            return entry.English;
+        }
     }
 
     /// <summary>
@@ -172,11 +196,17 @@ internal sealed class LanguageMemory
     }
 
     /// <summary>学習した語の一覧 (新しく使ったものから)。</summary>
-    public IReadOnlyList<LearnedLanguage> Entries() =>
-        _entries.OrderByDescending(e => e.Value.Used)
-            .Select(e => new LearnedLanguage(WithoutContext(e.Key), e.Value.English, Math.Max(1, e.Value.Count), e.Value.Used, !NeedsTwice(e.Key, e.Value), e.Key,
-                e.Key.EndsWith("@e", StringComparison.Ordinal) ? "英語の後" : e.Key.EndsWith("@j", StringComparison.Ordinal) ? "日本語の後" : null))
-            .ToList();
+    public IReadOnlyList<LearnedLanguage> Entries()
+    {
+        lock (_gate)
+        {
+            // 2 回目を待っているかは、Get と同じく印を外した語で見る (印付きの語はローマ字として読めないので、待っていても有効と出てしまう: issue #2268)
+            return _entries.OrderByDescending(e => e.Value.Used)
+                .Select(e => new LearnedLanguage(WithoutContext(e.Key), e.Value.English, Math.Max(1, e.Value.Count), e.Value.Used, !NeedsTwice(WithoutContext(e.Key), e.Value), e.Key,
+                    e.Key.EndsWith("@e", StringComparison.Ordinal) ? "英語の後" : e.Key.EndsWith("@j", StringComparison.Ordinal) ? "日本語の後" : null))
+                .ToList();
+        }
+    }
 
     /// <summary>文脈ごとに分けて覚えた語の印 (@e / @j) を外した、語そのもの。</summary>
     private static string WithoutContext(string key) => key.EndsWith("@e", StringComparison.Ordinal) || key.EndsWith("@j", StringComparison.Ordinal) ? key[..^2] : key;

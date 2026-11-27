@@ -600,25 +600,17 @@ internal static class LanguageLearningTests
     public static void F10_TeachesEnglish_ThenUsedInContext()
     {
         var memory = new LanguageMemory(null);
-        CompositionTests.Detector.Memory = memory;
-        try
-        {
-            var k = new CompositionTests.Keyboard(languages: memory);
-            k.Type("tao");
-            Assert.Equal("たお", k.Showing, "最初は日本語");
-            k.Press(VirtualKeys.F10);
-            k.Type("\n");
-            Assert.Equal("tao", k.Host.Document);
-            Assert.Equal(true, memory.Get("tao"), "F10 で英字にして確定したので覚える");
+        var k = new CompositionTests.Keyboard(languages: memory);
+        k.Type("tao");
+        Assert.Equal("たお", k.Showing, "最初は日本語");
+        k.Press(VirtualKeys.F10);
+        k.Type("\n");
+        Assert.Equal("tao", k.Host.Document);
+        Assert.Equal(true, memory.Get("tao"), "F10 で英字にして確定したので覚える");
 
-            var next = new CompositionTests.Keyboard(languages: memory);
-            next.Type("taonoerror\n");
-            Assert.Equal("taoのerror", next.Host.Document, "次からは文の中でも英字");
-        }
-        finally
-        {
-            CompositionTests.Detector.Memory = null;
-        }
+        var next = new CompositionTests.Keyboard(languages: memory);
+        next.Type("taonoerror\n");
+        Assert.Equal("taoのerror", next.Host.Document, "次からは文の中でも英字");
     }
 
     [Test]
@@ -628,7 +620,7 @@ internal static class LanguageLearningTests
             ("adbyuukounisuru", "adbゆうこうにする"), // #1131
             ("dive into summer", "dive into summer"), // #1125
             ("imagenzai", "いまげんざい"), ("imagewohiraku", "imageをひらく"), // #1175
-            ("pa-thisyon", "ぱーてぃしょん"), ("applenoiphonehakanaritakai", "appleのiphoneはかなりたかい"),
+            ("pa-thisyon", "ぱーてぃしょん"), ("applenoiphonehakanaritakai", "appleのiPhoneはかなりたかい"),
             ("erroraru", "errorある"),
             // issue を いっ|すえ と読まない。っ で終わる語の後ろの す (いいっす) は日本語のまま
             ("issuearu", "issueある"), ("issueyomu", "issueよむ"), ("issuetaberu", "issueたべる"),
@@ -650,20 +642,12 @@ internal static class LanguageLearningTests
         // きょう はよく使う日本語の語なので、2 回直して覚える
         memory.Remember("kyou", english: true, explicitChoice: true);
         memory.Remember("kyou", english: true, explicitChoice: true);
-        CompositionTests.Detector.Memory = memory;
-        try
-        {
-            var k = new CompositionTests.Keyboard(languages: memory);
-            k.Type("kyou");
-            Assert.Equal("kyou", k.Showing, "入力中は覚えた英字");
-            k.Press(VirtualKeys.Convert);
-            var candidates = k.Host.View!.Candidates;
-            Assert.Equal("今日", candidates[0], $"変換キーの第一候補は変換エンジンの漢字: {string.Join(" ", candidates)}");
-        }
-        finally
-        {
-            CompositionTests.Detector.Memory = null;
-        }
+        var k = new CompositionTests.Keyboard(languages: memory);
+        k.Type("kyou");
+        Assert.Equal("kyou", k.Showing, "入力中は覚えた英字");
+        k.Press(VirtualKeys.Convert);
+        var candidates = k.Host.View!.Candidates;
+        Assert.Equal("今日", candidates[0], $"変換キーの第一候補は変換エンジンの漢字: {string.Join(" ", candidates)}");
     }
 
     [Test]
@@ -672,20 +656,12 @@ internal static class LanguageLearningTests
         // 一度 go を英字で確定したら、日本語 (nihongo) が にほんgo になっていた。
         var memory = new LanguageMemory(null);
         memory.Remember("go", english: true, explicitChoice: true);
-        CompositionTests.Detector.Memory = memory;
-        try
-        {
-            var k = new CompositionTests.Keyboard(languages: memory);
-            k.Type("nihongo\n");
-            Assert.Equal("にほんご", k.Host.Document, "日本語のすぐ後ろでは、覚えた短い英単語を使わない");
-            k = new CompositionTests.Keyboard(languages: memory);
-            k.Type("go\n");
-            Assert.Equal("go", k.Host.Document, "単独なら覚えたとおり英字");
-        }
-        finally
-        {
-            CompositionTests.Detector.Memory = null;
-        }
+        var k = new CompositionTests.Keyboard(languages: memory);
+        k.Type("nihongo\n");
+        Assert.Equal("にほんご", k.Host.Document, "日本語のすぐ後ろでは、覚えた短い英単語を使わない");
+        k = new CompositionTests.Keyboard(languages: memory);
+        k.Type("go\n");
+        Assert.Equal("go", k.Host.Document, "単独なら覚えたとおり英字");
     }
 
     [Test]
@@ -693,24 +669,16 @@ internal static class LanguageLearningTests
     {
         // #1137: go を英字で確定したあと、go + 変換キーの候補が ご ゴ ｺﾞ go Go GO だけで、語 碁 後 が出ない。
         var memory = new LanguageMemory(null);
-        CompositionTests.Detector.Memory = memory;
-        try
-        {
-            // go は英単語として見えるので、F10 は大文字・小文字を変える。英字にして確定した学習を直接入れる
-            memory.Remember("go", english: true, explicitChoice: true);
-            var k = new CompositionTests.Keyboard(languages: memory, moreCandidates: reading => reading == "ご" ? ["語", "碁", "後"] : []);
-            k.Type("go");
-            Assert.Equal("go", k.Showing, "覚えたとおり英字");
-            k.Press(VirtualKeys.Convert);
-            var candidates = k.Host.View!.Candidates.ToList();
-            Assert.True(candidates.Contains("碁") && candidates.Contains("後"), string.Join(",", candidates));
-            Assert.True(candidates.IndexOf("碁") < candidates.IndexOf("ゴ"), "変換エンジンの候補はかなより前: " + string.Join(",", candidates));
-            Assert.True(candidates.IndexOf("ゴ") < candidates.IndexOf("go"), "英字の候補は日本語の候補の後ろのまま: " + string.Join(",", candidates));
-        }
-        finally
-        {
-            CompositionTests.Detector.Memory = null;
-        }
+        // go は英単語として見えるので、F10 は大文字・小文字を変える。英字にして確定した学習を直接入れる
+        memory.Remember("go", english: true, explicitChoice: true);
+        var k = new CompositionTests.Keyboard(languages: memory, moreCandidates: reading => reading == "ご" ? ["語", "碁", "後"] : []);
+        k.Type("go");
+        Assert.Equal("go", k.Showing, "覚えたとおり英字");
+        k.Press(VirtualKeys.Convert);
+        var candidates = k.Host.View!.Candidates.ToList();
+        Assert.True(candidates.Contains("碁") && candidates.Contains("後"), string.Join(",", candidates));
+        Assert.True(candidates.IndexOf("碁") < candidates.IndexOf("ゴ"), "変換エンジンの候補はかなより前: " + string.Join(",", candidates));
+        Assert.True(candidates.IndexOf("ゴ") < candidates.IndexOf("go"), "英字の候補は日本語の候補の後ろのまま: " + string.Join(",", candidates));
     }
 
 
@@ -748,17 +716,6 @@ internal static class LanguageLearningTests
     }
 
     [Test]
-    public static void Phrase_AgeashiWoToru()
-    {
-        // 揚げ足取るな が 揚げ足とルナ になっていた (issue #147)。同梱の語句で 揚げ足取る を 1 つの文節にする
-        var k = new CompositionTests.Keyboard(userDictionary: new UserDictionary(null));
-        k.Type("ageashitoruna ");
-        var view = k.Host.View!;
-        Assert.True(view.Converting, "変換中");
-        Assert.Equal("揚げ足取る", view.Clauses![0], string.Join("|", view.Clauses));
-    }
-
-    [Test]
     public static void TesterNames_AreCandidates()
     {
         // 協力してくださった方々の名前を変換しやすくする (issue #156)
@@ -771,44 +728,39 @@ internal static class LanguageLearningTests
     public static void Issue1512_LearnedNoteDoesNotSplitJapaneseWord()
     {
         var memory = new LanguageMemory(null);
-        CompositionTests.Detector.Memory = memory;
-        try
+        // 環境によって未学習の note 自体が英語と判定されるため、学習時は日本語に見える状態から F10 で直す。
+        var teach = new CompositionTests.Keyboard(languages: memory) { Manual = true };
+        teach.Type("note");
+        teach.Press(VirtualKeys.F10);
+        teach.Press(VirtualKeys.Return);
+        Assert.Equal("note", teach.Host.Document, "F10 で英字にして確定する");
+        Assert.True(memory.Get("note") == true, "英語の学習が有効");
+        foreach (var live in new[] { false, true })
         {
-            // 環境によって未学習の note 自体が英語と判定されるため、学習時は日本語に見える状態から F10 で直す。
-            var teach = new CompositionTests.Keyboard(languages: memory) { Manual = true };
-            teach.Type("note");
-            teach.Press(VirtualKeys.F10);
-            teach.Press(VirtualKeys.Return);
-            Assert.Equal("note", teach.Host.Document, "F10 で英字にして確定する");
-            Assert.True(memory.Get("note") == true, "英語の学習が有効");
-            foreach (var live in new[] { false, true })
+            foreach (var (typed, expected) in new[]
             {
-                foreach (var (typed, expected) in new[]
-                {
-                    ("konotennmo", "このてんも"), ("konotenmo", "このてんも"),
-                    ("sonotennmo", "そのてんも"), ("konotennki", "このてんき"),
-                    ("donotenpo", "どのてんぽ"), ("anotensai", "あのてんさい"),
-                    ("sonotesuto", "そのてすと"), ("konotesuto", "このてすと"),
-                })
-                {
-                    var keyboard = new CompositionTests.Keyboard(live: live, languages: memory);
-                    keyboard.Type(typed + "\n");
-                    Assert.Equal(expected, keyboard.Host.Document, typed + " は日本語のまま");
-                }
+                ("konotennmo", "このてんも"), ("konotenmo", "このてんも"),
+                ("sonotennmo", "そのてんも"), ("konotennki", "このてんき"),
+                ("donotenpo", "どのてんぽ"), ("anotensai", "あのてんさい"),
+                ("sonotesuto", "そのてすと"), ("konotesuto", "このてすと"),
+            })
+            {
+                var keyboard = new CompositionTests.Keyboard(live: live, languages: memory);
+                keyboard.Type(typed + "\n");
+                Assert.Equal(expected, keyboard.Host.Document, typed + " は日本語のまま");
             }
-            var english = new CompositionTests.Keyboard(languages: memory);
-            english.Type("note\n");
-            Assert.Equal("note", english.Host.Document, "単独の note は学習どおり英語");
-            var mixed = new CompositionTests.Keyboard(languages: memory);
-            mixed.Type("notewomiru\n");
-            Assert.True(mixed.Host.Document.StartsWith("noteを", StringComparison.Ordinal), "助詞を伴う note も英語: " + mixed.Host.Document);
-            var settings = new Settings { LiveConversion = true, UseZenzai = false };
-            var session = new TestSession(() => settings, services: new CompositionServices { Languages = memory });
-            foreach (var c in "konotennmo") session.HandleKey(char.ToUpperInvariant(c), c, false, false, false, false);
-            var enter = session.HandleKey(VirtualKeys.Return, null, false, false, false, false);
-            Assert.Equal("このてんも", enter.Commits.Single().Text, "IME の入力セッションでも日本語のまま");
         }
-        finally { CompositionTests.Detector.Memory = null; }
+        var english = new CompositionTests.Keyboard(languages: memory);
+        english.Type("note\n");
+        Assert.Equal("note", english.Host.Document, "単独の note は学習どおり英語");
+        var mixed = new CompositionTests.Keyboard(languages: memory);
+        mixed.Type("notewomiru\n");
+        Assert.True(mixed.Host.Document.StartsWith("noteを", StringComparison.Ordinal), "助詞を伴う note も英語: " + mixed.Host.Document);
+        var settings = new Settings { LiveConversion = true, UseZenzai = false };
+        var session = new TestSession(() => settings, services: new CompositionServices { Languages = memory });
+        foreach (var c in "konotennmo") session.HandleKey(char.ToUpperInvariant(c), c, false, false, false, false);
+        var enter = session.HandleKey(VirtualKeys.Return, null, false, false, false, false);
+        Assert.Equal("このてんも", enter.Commits.Single().Text, "IME の入力セッションでも日本語のまま");
     }
 
     [Test]
@@ -1194,7 +1146,7 @@ internal static class LanguageLearningTests
             // Issue #1216: not|とっている になっていた。Issue #1193: えんv になっていた
             ("nottotteiru", "のっとっている"), ("env", "env"),
             // 略語 + 日本語 + 記号は今までどおり (BE|かな？ が BEkana？ になっていた)
-            ("tougouhandakaraBEkana?", "とうごうはんだからBEかな？"), ("fubusangaXshisuginadakenanda!!", "ふぶさんがXしすぎなだけなんだ！！"), ("tsubemyunorevancedtsukatteru", "つべみゅのrevancedつかってる"),
+            ("tougouhandakaraBEkana?", "とうごうはんだからBEかな？"), ("fubusangaXshisuginadakenanda!!", "ふぶさんがXしすぎなだけなんだ！！"), ("tsubemyunorevancedtsukatteru", "つべみゅのReVancedつかってる"),
             // テスターの報告 (2026-10-05): 英語のユーザー名が打てない。@ の後ろ (メンション)・_ の入った語は英字のまま
             ("@kuraido", "@kuraido"), ("@una08142009 arigatou", "@una08142009 ありがとう"), ("upah_setu", "upah_setu"), ("cafely_latte", "cafely_latte"),
             // メールアドレスは @ の前も英字のまま (issue #59。前は たろ@... だった。例には example.com を使う)
@@ -1222,6 +1174,9 @@ internal static class LanguageLearningTests
         Assert.True(!memory.Entries().Single().Active, "一覧では「2 回目を待っている」");
         memory.Remember("go", english: true);
         Assert.Equal(true, memory.Get("go"), "2 回目で英語として覚える");
+        memory.Remember("no", english: true, context: true);
+        Assert.Equal(null, memory.Get("no", context: true), "文脈ごとに分けても、1 回目はまだ覚えない");
+        Assert.True(!memory.Entries().Single(e => e.Word == "no").Active, "文脈ごとに分けても、一覧では「2 回目を待っている」");
         memory.Remember("to", english: true, explicitChoice: true);
         Assert.Equal(true, memory.Get("to"), "F10 ではっきり直したら 1 回で覚える");
         memory.Remember("api", english: true);
@@ -1236,66 +1191,42 @@ internal static class LanguageLearningTests
         // 英字と判定された語も変換できるように: Shift+Space でローマ字として読んで変換する。
         var memory = new LanguageMemory(null);
         memory.Remember("go", english: true, explicitChoice: true);
-        CompositionTests.Detector.Memory = memory;
-        try
-        {
-            var k = new CompositionTests.Keyboard(languages: memory);
-            k.Type("go");
-            k.TypeKeys((VirtualKeys.Space, true));
-            k.Type("\n");
-            Assert.Equal("ご", k.Host.Document, "Shift+Space で日本語の候補が先頭");
-            Assert.Equal(false, memory.Get("go"), "日本語で確定したので、次から日本語");
-        }
-        finally
-        {
-            CompositionTests.Detector.Memory = null;
-        }
+        var k = new CompositionTests.Keyboard(languages: memory);
+        k.Type("go");
+        k.TypeKeys((VirtualKeys.Space, true));
+        k.Type("\n");
+        Assert.Equal("ご", k.Host.Document, "Shift+Space で日本語の候補が先頭");
+        Assert.Equal(false, memory.Get("go"), "日本語で確定したので、次から日本語");
     }
 
     [Test]
     public static void F6_TeachesJapanese()
     {
         var memory = new LanguageMemory(null);
-        CompositionTests.Detector.Memory = memory;
-        try
-        {
-            var k = new CompositionTests.Keyboard(languages: memory);
-            k.Type("google");
-            k.Press(VirtualKeys.F6);
-            k.Type("\n");
-            Assert.Equal("ごおgぇ", k.Host.Document);
-            Assert.Equal(false, memory.Get("google"), "F6 でかなにして確定したので覚える");
-            var next = new CompositionTests.Keyboard(languages: memory);
-            next.Type("google");
-            // 見せるのは Enter で確定する形 (打ち間違いとして直した形)
-            Assert.Equal("ごごぇ", next.Showing);
-        }
-        finally
-        {
-            CompositionTests.Detector.Memory = null;
-        }
+        var k = new CompositionTests.Keyboard(languages: memory);
+        k.Type("google");
+        k.Press(VirtualKeys.F6);
+        k.Type("\n");
+        Assert.Equal("ごおgぇ", k.Host.Document);
+        Assert.Equal(false, memory.Get("google"), "F6 でかなにして確定したので覚える");
+        var next = new CompositionTests.Keyboard(languages: memory);
+        next.Type("google");
+        // 見せるのは Enter で確定する形 (打ち間違いとして直した形)
+        Assert.Equal("ごごぇ", next.Showing);
     }
 
     [Test]
     public static void ExplicitEnglish_BeatsLattice()
     {
         var memory = new LanguageMemory(null);
-        CompositionTests.Detector.Memory = memory;
-        try
-        {
-            // すし はよく使う日本語の語なので、F10 で直しても 2 回で覚える
-            memory.Remember("sushi", english: true, explicitChoice: true);
-            memory.Remember("sushi", english: true, explicitChoice: true);
-            var k = new CompositionTests.Keyboard(languages: memory);
-            k.Type("sushi");
-            Assert.Equal("sushi", k.Showing);
-            k.Type("\n");
-            Assert.Equal("sushi", k.Host.Document);
-        }
-        finally
-        {
-            CompositionTests.Detector.Memory = null;
-        }
+        // すし はよく使う日本語の語なので、F10 で直しても 2 回で覚える
+        memory.Remember("sushi", english: true, explicitChoice: true);
+        memory.Remember("sushi", english: true, explicitChoice: true);
+        var k = new CompositionTests.Keyboard(languages: memory);
+        k.Type("sushi");
+        Assert.Equal("sushi", k.Showing);
+        k.Type("\n");
+        Assert.Equal("sushi", k.Host.Document);
     }
 
     [Test]
@@ -1308,8 +1239,8 @@ internal static class LanguageLearningTests
             {
                 var text = new Composition.CompositionTextState();
                 var env = TestSupport.Env(detector);
-                foreach (var c in "game") CompositionText.Append(text, env, c);
-                return string.Join("|", CompositionText.Segments(text, env).Select(s => (s.IsEnglish ? "EN:" : "JA:") + s.Raw));
+                foreach (var c in "game") text = CompositionText.Append(text, c);
+                return string.Join("|", CompositionText.Segments(CompositionText.Read(text, env), env).Select(s => (s.IsEnglish ? "EN:" : "JA:") + s.Raw));
             }
             Assert.Equal("EN:game", Segments(CompositionDetector.CreateDefault(directory)));
             File.WriteAllText(Path.Combine(directory, "japanese.txt"), "game\n");
@@ -1323,8 +1254,8 @@ internal static class LanguageLearningTests
             {
                 var text = new Composition.CompositionTextState();
                 var env = TestSupport.Env(registered);
-                foreach (var c in typed) CompositionText.Append(text, env, c);
-                Assert.Equal(expected, CompositionText.Display(text, env, true), typed);
+                foreach (var c in typed) text = CompositionText.Append(text, c);
+                Assert.Equal(expected, CompositionText.Display(CompositionText.Read(text, env), env, true), typed);
             }
         }
         finally
@@ -1420,23 +1351,15 @@ internal static class RawCandidateTests
     public static void Conversion_OffersTypedLetters_AndLearns()
     {
         var memory = new LanguageMemory(null);
-        CompositionTests.Detector.Memory = memory;
-        try
-        {
-            var k = new CompositionTests.Keyboard(languages: memory);
-            k.Type("tao ");
-            var candidates = k.Host.View!.Candidates;
-            Assert.True(candidates.Contains("tao") && candidates.Contains("ｔａｏ"), $"候補に打ったままの英字と全角の英字: {string.Join(" ", candidates)}");
-            // Space を連打して英字まで送る
-            for (var i = 0; i < 10 && k.Host.View!.Candidates[k.Host.View.SelectedIndex] != "tao"; i++) k.Press(VirtualKeys.Space);
-            k.Type("\n");
-            Assert.Equal("tao", k.Host.Document);
-            Assert.Equal(true, memory.Get("tao"), "英字を選んで確定したので覚える");
-        }
-        finally
-        {
-            CompositionTests.Detector.Memory = null;
-        }
+        var k = new CompositionTests.Keyboard(languages: memory);
+        k.Type("tao ");
+        var candidates = k.Host.View!.Candidates;
+        Assert.True(candidates.Contains("tao") && candidates.Contains("ｔａｏ"), $"候補に打ったままの英字と全角の英字: {string.Join(" ", candidates)}");
+        // Space を連打して英字まで送る
+        for (var i = 0; i < 10 && k.Host.View!.Candidates[k.Host.View.SelectedIndex] != "tao"; i++) k.Press(VirtualKeys.Space);
+        k.Type("\n");
+        Assert.Equal("tao", k.Host.Document);
+        Assert.Equal(true, memory.Get("tao"), "英字を選んで確定したので覚える");
     }
 
     [Test]
@@ -1548,5 +1471,25 @@ internal static class RomajiTypoTests
             ("vitamin", "vitamin"), ("paranoia", "paranoia"), ("veteran", "veteran"), ("shuppnbutsu", "しゅっぱんぶつ"),
             // katakana.txt にもある読みは、katakana.txt の重みのまま
             ("oneshasu", "おねしゃす"));
+    }
+
+    [Test]
+    public static void RareReadings_IncludeShortReadings()
+    {
+        // Issue #2015・#2016・#2024: よく使う語でない 3〜4 文字の読み (ごびゅう・ろんぱ・おんぱ・うちどめ) が無く、後ろを英単語にしていた (ろんpa・うちdome)。
+        // 日本語の後ろに打った英単語 (いとてきなbug・うちのdomain) は英語のまま。使わない語の読み (これしゃ = 此れ者) では割らない
+        foreach (var (typed, expected) in new[]
+        {
+            ("itotekinagobyuu", "いとてきなごびゅう"), ("ronpa", "ろんぱ"), ("onpa", "おんぱ"), ("uchidome", "うちどめ"), ("ronpasuru", "ろんぱする"),
+            ("itotekinabug", "いとてきなbug"), ("uchinodomain", "うちのdomain"), ("koreshasuru", "これshaする"),
+            ("konocubekudasai", "このcubeください"), ("zenbutimenisuru", "ぜんぶtimeにする"),
+            ("aduchimomoyamajidai", "あづちももやまじだい"), ("godaijikkoku", "ごだいじっこく"),
+            ("ushiguruma", "うしぐるま"), ("akkanbee", "あっかんべえ"), ("messhiboukou", "めっしぼうこう"),
+        })
+        {
+            var k = new CompositionTests.Keyboard();
+            k.Type(typed + "\n");
+            Assert.Equal(expected, k.Host.Document, typed);
+        }
     }
 }

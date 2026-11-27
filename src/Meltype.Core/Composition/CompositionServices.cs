@@ -49,15 +49,15 @@ internal sealed record CompositionServices
 
     internal Func<GitHubIssueTitles?> GitHubTitles { get; init; } = () => null;
 
-    /// <summary>今の時刻 (UTC。タイムゾーンを指定した時計の候補に使う。テストでは差し替える)。</summary>
-    public Func<DateTime> UtcNow { get; init; } = () => DateTime.UtcNow;
-
-    /// <summary>この PC のタイムゾーン (時計の候補にタイムゾーンの名前を付けるかの判定に使う。テストでは差し替える)。</summary>
-    public Func<TimeZoneInfo> LocalTimeZone { get; init; } = () => TimeZoneInfo.Local;
-
     /// <summary>ユーザーが英字 / かなに直した語の学習。</summary>
     public LanguageMemory? Languages { get; init; }
 
+    /// <summary>入力欄ごとの入力モードの学習。null なら覚えない。</summary>
+    public FieldModes? FieldModes { get; init; }
+
     /// <summary>予測変換の候補を出す元 (null なら出さない)。</summary>
     public Predictor? Predictor { get; init; }
+
+    /// <summary>学習データを除いたもの (設定「ユーザー学習を使う」が OFF のとき)。学習データを足したら、ここでも除く。</summary>
+    public CompositionServices WithoutLearning() => this with { History = null, TranslationHistory = null, Languages = null, FieldModes = null, Predictor = Predictor?.WithoutLearning() };
 }

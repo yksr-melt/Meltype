@@ -193,7 +193,9 @@ internal sealed class TipServer : IDisposable
         var security = new PipeSecurity();
         // GA (汎用の権限) はパイプの権限に置き換わらず、2 つ目のパイプを作るときに拒否されるので、ファイルの権限で書く。
         // ストアアプリには読み書きだけ (0x12019B = 読み取り・データの書き込み・属性の書き込み。パイプを増やす権限は渡さない)
-        security.SetSecurityDescriptorSddlForm($"D:(A;;FA;;;{user})(A;;FA;;;SY)(A;;FA;;;BA)(A;;0x12019b;;;AC)");
+        // 所有者はユーザーにする。ストアアプリの DLL はパイプの所有者が自分のユーザーかで Meltype.exe を確かめる (Pipe.cpp の PipeOwnedBySelf)。
+        // 管理者のトークン (UAC を切った PC など) では既定の所有者が Administrators になり、ストアアプリからつながらなかった (#2135)
+        security.SetSecurityDescriptorSddlForm($"O:{user}D:(A;;FA;;;{user})(A;;FA;;;SY)(A;;FA;;;BA)(A;;0x12019b;;;AC)");
         return security;
     }
 
@@ -761,7 +763,7 @@ internal sealed class TipServer : IDisposable
 /// </summary>
 internal sealed record TipRequest(uint Thread, Point? Anchor, ImeEvent Event, long? WaitSince)
 {
-    public string Type => WaitSince is null ? Event.Type.ToString() : "wait";
+    public string Type => WaitSince is null ? Event.GetType().Name : "wait";
 
     /// <summary>読めない・形の違う要求なら null。</summary>
     public static TipRequest? Parse(string json)
@@ -787,5 +789,5 @@ internal sealed record TipRequest(uint Thread, Point? Anchor, ImeEvent Event, lo
         }
     }
 
-    private static readonly ImeEvent Waiting = new() { Version = ImeHost.Version, Type = ImeEventType.StateRequested };
+    private static readonly ImeEvent Waiting = new ImeEvent.StateRequested();
 }

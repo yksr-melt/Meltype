@@ -5,6 +5,7 @@ using System.Text;
 using Meltype.Detection;
 using Meltype.Dictionary;
 using Meltype.Libraries.Chars;
+using Meltype.Notation;
 
 namespace Meltype.Composition;
 
@@ -15,12 +16,12 @@ internal static partial class CompositionText
     /// 変換用の区間分け segments (<see cref="ConversionSegmentAlternatives"/> の 1 案) の segmentIndex 番目 (日本語の区間) の読みのうち [start, start + length) に対応する、打った英字
     /// (あぴ → api)。変換の候補に「打ったままの英字」を出すのに使う。読みの区切りが 1 音の区切りと合わないときや、かな入力では null。
     /// </summary>
-    public static string? RawForReading(CompositionTextState state, TextEnv env, IReadOnlyList<CompositionSegment> segments, int segmentIndex, int start, int length)
+    public static string? RawForReading(TextReading state, TextEnv env, IReadOnlyList<CompositionSegment> segments, int segmentIndex, int start, int length)
     {
         if (state.KanaInput) return null;
         if (segmentIndex < 0 || segmentIndex >= segments.Count) return null;
         var from = segments.Take(segmentIndex).Sum(s => s.Raw.Length);
-        var units = CompositionText.UnitsInRawRange(state, env, state.Units, from, from + segments[segmentIndex].Raw.Length, out var pending);
+        var units = CompositionText.UnitsInRawRange(state, env, TypedMarks.Read(state, env), from, from + segments[segmentIndex].Raw.Length, out var pending);
         var pieces = new List<(string Kana, string Raw)>();
         foreach (var unit in units) pieces.Add((unit.Kana, unit.Raw));
         if (pending.Length > 0) pieces.Add((env.Detector.Romaji.ConvertLenient(pending.ToLowerInvariant(), final: true), pending));
@@ -51,11 +52,11 @@ internal static partial class CompositionText
     /// かな入力のときと、kanas をつないだものが文全体のかな (<see cref="KanaForSegment"/> を全区間つないだもの) と一致しないときは、すべて null を返す。
     /// 変換中に文節の区切りを動かしたあとで、文節ごとの打った英字を取り直すのに使う。
     /// </summary>
-    public static IReadOnlyList<string?> RawForKanas(CompositionTextState state, TextEnv env, IReadOnlyList<string> kanas)
+    public static IReadOnlyList<string?> RawForKanas(TextReading state, TextEnv env, IReadOnlyList<string> kanas)
     {
         var none = new string?[kanas.Count];
         if (state.KanaInput) return none;
-        var units = CompositionText.UnitsInRawRange(state, env, state.Units, 0, CompositionText.Raw(state).Length, out var pending);
+        var units = CompositionText.UnitsInRawRange(state, env, TypedMarks.Read(state, env), 0, CompositionText.Raw(state).Length, out var pending);
         var pieces = new List<(string Kana, string Raw)>();
         foreach (var unit in units) pieces.Add((unit.Kana, unit.Raw));
         if (pending.Length > 0) pieces.Add((env.Detector.Romaji.ConvertLenient(pending.ToLowerInvariant(), final: true), pending));
@@ -75,7 +76,7 @@ internal static partial class CompositionText
     /// 変換用の区間分け segments の segmentIndex 番目の区間を、打った英字をローマ字として読んだかな (thin → てぃん)。
     /// 英語の区間を日本語の文節として読み直すのに使う。ローマ字として読めない英字はそのまま残る。かな入力では打ったかな。
     /// </summary>
-    public static string? KanaForSegment(CompositionTextState state, TextEnv env, IReadOnlyList<CompositionSegment> segments, int segmentIndex)
+    public static string? KanaForSegment(TextReading state, TextEnv env, IReadOnlyList<CompositionSegment> segments, int segmentIndex)
     {
         if (segmentIndex < 0 || segmentIndex >= segments.Count) return null;
         var start = segments.Take(segmentIndex).Sum(segment => segment.Raw.Length);
@@ -84,23 +85,22 @@ internal static partial class CompositionText
         var builder = new StringBuilder();
         if (CompositionText.UnitIndexAt(state, start) is int first && CompositionText.UnitIndexAt(state, Math.Min(end, unitsEnd)) is int last)
         {
-            for (var unit = first; unit < last; unit++) builder.Append(state.Units[unit].Kana);
+            foreach (var unit in TypedMarks.Read(state, env).Take(first..last)) builder.Append(unit.Kana);
             if (end > unitsEnd) builder.Append(CompositionText.PendingText(state, env, final: true));
         }
         else
         {
             // ラティスが単位の途中で区切った (medals|ha の sha): 区間の打った英字を読み直す
-            CompositionTextState fragment = new CompositionTextState();
-            var fragmentEnv = FragmentEnv(state, env);
-            foreach (var c in CompositionText.Raw(state)[start..end]) CompositionText.Append(fragment, fragmentEnv, c);
-            foreach (var unit in fragment.Units) builder.Append(unit.Kana);
+            var fragment = CompositionText.Fragment(CompositionText.Raw(state)[start..end], env);
+            var fragmentEnv = FragmentEnv(env);
+            foreach (var unit in TypedMarks.Read(fragment, fragmentEnv)) builder.Append(unit.Kana);
             builder.Append(CompositionText.PendingText(fragment, fragmentEnv, final: true));
         }
         return builder.Length > 0 ? builder.ToString() : null;
     }
 
     /// <summary>打った英字の offset 文字目が単位の境目なら、そこから始まる単位の番号 (末尾なら単位の数)。</summary>
-    private static int? UnitIndexAt(CompositionTextState state, int offset)
+    private static int? UnitIndexAt(TextReading state, int offset)
     {
         var at = 0;
         for (var i = 0; at <= offset; i++)
@@ -113,21 +113,27 @@ internal static partial class CompositionText
     }
 
     /// <summary><see cref="Compose"/> の文字。</summary>
-    public static string Display(CompositionTextState state, TextEnv env, bool final, Func<string, bool, string, string>? convert = null) =>
+    public static string Display(TextReading state, TextEnv env, bool final, Func<string, bool, string, string>? convert = null) =>
         Compose(state, env, final, convert is null ? null : (kana, afterEnglish, shown) => ComposedText.Of(SpanKind.Japanese, convert(kana, afterEnglish, shown))).Text;
 
     /// <summary>変換していないときの変換ボックスの表示 (確定するときの文字にもする)。</summary>
     /// <param name="final">確定・変換のときは true (語末の n を ん にする)。</param>
     /// <param name="convert">日本語の区間 (かな, 前の区間が英語か, 変換ボックスの中でその区間より前に出ている文字) を漢字に変換する関数 (ライブ変換)。null ならかなのまま。</param>
-    public static ComposedText Compose(CompositionTextState state, TextEnv env, bool final, Func<string, bool, string, ComposedText>? convert = null) => state.Mode switch
+    public static ComposedText Compose(TextReading state, TextEnv env, bool final, Func<string, bool, string, ComposedText>? convert = null) => state.Mode switch
     {
         DisplayMode.HalfWidthAlphanumeric => ComposedText.English(ApplyCase(CompositionText.Raw(state), state.Case)),
         DisplayMode.FullWidthAlphanumeric => ComposedText.English(ToFullWidth(ApplyCase(CompositionText.Raw(state), state.Case))),
         DisplayMode.Hiragana => ComposedText.Kana(CompositionText.AllKana(state, env, final)),
         DisplayMode.Katakana => ComposedText.Kana(ToKatakana(CompositionText.AllKana(state, env, final))),
         DisplayMode.HalfWidthKatakana => ComposedText.Kana(ToHalfWidthKatakana(ToKatakana(CompositionText.AllKana(state, env, final)))),
-        _ => CompositionText.IsNumeric(state) || CompositionText.IsHorizontalRule(state) ? ComposedText.English(CompositionText.Raw(state)) : CompositionText.RenderSegments(state, env, final, convert),
+        _ when CompositionText.IsNumeric(state) => CompositionText.Numeric(state, env),
+        _ => CompositionText.IsHorizontalRule(state) ? ComposedText.English(CompositionText.Raw(state)) : CompositionText.RenderSegments(state, env, final, convert),
     };
+
+    /// <summary>数字だけの入力 (<see cref="IsNumeric"/>) の表示。読点のほかは打った半角のまま (10:00、-)。英文の続きと、, から始まる入力 (1 を確定した後の ,000) は、すべて打ったまま。</summary>
+    internal static ComposedText Numeric(TextReading state, TextEnv env) =>
+        env.Context().EndsWithEnglishAndSpace || state.Units[0].Raw == "," ? ComposedText.English(CompositionText.Raw(state))
+        : ComposedText.Concat(TypedMarks.Read(state, env).Select(unit => unit.Kana == "、" ? ComposedText.Kana(unit.Kana) : ComposedText.English(unit.Raw)));
 
     /// <summary>英字の大文字・小文字を変える (ai → AI / Ai)。</summary>
     public static string ApplyCase(string text, LetterCase letterCase) => letterCase switch
@@ -137,19 +143,24 @@ internal static partial class CompositionText
         _ => text,
     };
 
+    /// <summary>区間ごとの打った文字 (区間と同じ数・順)。英語の区間は見せる表記にしてある。</summary>
+    internal static IReadOnlyList<TextSpan> TypedSpans(IReadOnlyList<CompositionSegment> segments, TextEnv env) =>
+        NotationRules.Typed([.. segments.Select(s => new TextSpan(s.IsProtected ? SpanKind.Protected : s.IsEnglish ? SpanKind.Typed : SpanKind.Japanese, s.Raw))], env.ProperNoun);
+
     /// <summary>英語区間は英字のまま、日本語区間はかな (または漢字)。保護範囲は打った原文のまま。</summary>
-    private static ComposedText RenderSegments(CompositionTextState state, TextEnv env, bool final, Func<string, bool, string, ComposedText>? convert)
+    private static ComposedText RenderSegments(TextReading state, TextEnv env, bool final, Func<string, bool, string, ComposedText>? convert)
     {
         // 保護範囲 (技術的な文字列) は、幅変換・かな化・漢字変換をせずに原文のまま出す (INV-01)。
         if (CompositionText.VerifyProtectedRaw(state)) return ComposedText.Of(SpanKind.Protected, CompositionText.Raw(state));
         var built = ComposedText.Empty;
         var segments = CompositionText.Segments(state, env);
+        var typed = TypedSpans(segments, env);
         for (var i = 0; i < segments.Count; i++)
         {
             var segment = segments[i];
             if (segment.IsEnglish)
             {
-                built += ComposedText.Of(segment.IsProtected ? SpanKind.Protected : SpanKind.English, segment.Raw);
+                built += ComposedText.Of(typed[i].Kind, typed[i].Text);
                 continue;
             }
             var isLast = i == segments.Count - 1;
@@ -174,17 +185,17 @@ internal static partial class CompositionText
             built += convert is not null && kana.Length > 0 ? convert(kana, i > 0 && segments[i - 1].IsEnglish, built.Text) : ComposedText.Kana(kana);
             built += ComposedText.Kana(pending);
         }
-        return built.MapChars(text => CompositionText.HalfWidthStars(state, text));
+        return NotationRules.Show(built, CompositionText.TypedForNotation(state));
     }
 
     /// <summary>英語判定を無視してすべてかなにしたもの (F6)。</summary>
-    public static string AllKana(CompositionTextState state, TextEnv env, bool final) => string.Concat(state.Units.Select(u => u.Kana)) + CompositionText.PendingText(state, env, final);
+    public static string AllKana(TextReading state, TextEnv env, bool final) => string.Concat(TypedMarks.Read(state, env).Select(u => u.Kana)) + CompositionText.PendingText(state, env, final);
 
     /// <summary>
     /// 日本語の部分の読みに書き間違い (ブレスレッド) があれば、その位置 (単位の範囲) と正しい読みを返す。
     /// 英語として見せている部分や、入力途中の子音は見ない。読みの区切りが単位の区切りと合わないときも null。
     /// </summary>
-    public static (int Start, int End, Misspelling Misspelling)? FindMisspelling(CompositionTextState state, TextEnv env, MisspellingDictionary dictionary)
+    public static (int Start, int End, Misspelling Misspelling)? FindMisspelling(TextReading state, TextEnv env, MisspellingDictionary dictionary)
     {
         if (state.Mode != DisplayMode.Auto || state.Units.Count == 0) return null;
         var english = CompositionText.UnitIsEnglish(state, env);
@@ -201,6 +212,7 @@ internal static partial class CompositionText
             rawOffset = end;
         }
         // 日本語の単位が続く範囲ごとに探す。
+        var units = TypedMarks.Read(state, env);
         var start = 0;
         while (start < state.Units.Count)
         {
@@ -216,7 +228,7 @@ internal static partial class CompositionText
             for (var i = start; i < end; i++)
             {
                 offsets.Add(reading.Length);
-                reading.Append(state.Units[i].Kana);
+                reading.Append(units[i].Kana);
             }
             offsets.Add(reading.Length);
             // 語末の n (まだ ん になっていない) も ん として読む (しゅみれーしょn)。

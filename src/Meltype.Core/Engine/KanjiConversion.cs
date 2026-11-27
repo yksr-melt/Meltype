@@ -9,7 +9,11 @@ namespace Meltype.Engine;
 /// 文節 1 つ分の変換結果。Reading はその文節の読み (ひらがな)。
 /// Zenzai は、この文字列が Zenzai の答えか (変換ボックスに「Zenzai」と出す。issue #1152)。
 /// </summary>
-internal sealed record ConversionClause(string Reading, string Text, bool Zenzai = false);
+internal sealed record ConversionClause(string Reading, string Text, bool Zenzai = false)
+{
+    /// <summary>Mozc がユーザー辞書の語を含む候補にした文節 (活用した形も含む)。</summary>
+    public bool UserWord { get; init; }
+}
 
 /// <summary>
 /// 助詞だけの文節の読み。変換エンジンは助詞だけの文節を漢字にしてしまう (github + に + push → 二) ので、かなのまま使う。
@@ -53,9 +57,6 @@ internal interface IKanjiConverter
 {
     /// <summary>文節に区切って変換する。変換できなければ (変換エンジンが使えない・Deadline までに答えが無い) null。</summary>
     IReadOnlyList<ConversionClause>? Convert(ConversionRequest request);
-
-    /// <summary>ユーザーが確定した文節 (読みと文字列、区切りも確定したとおり) を覚えさせる。before はキャレットの前の確定済みの文字列そのまま。覚えない変換エンジンは何もしない。</summary>
-    void Learn(string? before, IReadOnlyList<ConversionClause> clauses) { }
 
     /// <summary>
     /// Deadline の後に変換エンジンのキャッシュに結果が入った (または変換エンジンが使えるようになった)。ワーカーのスレッドで呼ぶ。

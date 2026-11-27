@@ -11,7 +11,7 @@ namespace Meltype.Composition;
 /// <summary>記号・カタカナ・全角の文字の変換。</summary>
 internal static partial class CompositionText
 {
-    private static string PendingText(CompositionTextState state, TextEnv env, bool final)
+    private static string PendingText(TextReading state, TextEnv env, bool final)
     {
         var pending = CompositionText.Pending(state);
         if (pending.Length == 0) return "";
@@ -19,13 +19,13 @@ internal static partial class CompositionText
     }
 
     /// <summary>日本語の中で打った記号 (全角。テスターの報告で決めた)。英語の区間では打ったままの半角で出す。数字と括弧は半角のまま。</summary>
-    private static char Symbol(CompositionTextState state, char c) => c switch
+    private static char Symbol(TextReading state, char c) => c switch
     {
         '-' => 'ー',
-        // 句読点は、読みでは設定によらず 、。 (設定の句読点は CompositionOutput が当てる)。
-        ',' => '、',
-        '.' => '。',
-        // 設定の括弧の幅は、句読点と違って CompositionOutput では当てられない。出口には区間の種類が届かず、英語の区間の ( や、半角を選んだ候補の () まで全角になる (#1735)
+        // 読みにするときに TypedMarks が決める。
+        ',' => ',',
+        '.' => '.',
+        // 設定の括弧の幅は、句読点と違って文字列にするとき (NotationRules.Write) には当てられない。出口には区間の種類が届かず、英語の区間の ( や、半角を選んだ候補の () まで全角になる (#1735)
         // TODO (#2010): 英語の区間かを状態で判別し、記号の表示の幅を読みに焼き込んでいるのがよくない。読みに全角の記号が入るので、Zenzai には半角に直して渡している (ZenzaiConverter.ToHalfWidth)
         '[' => state.SquareBrackets ? '［' : '「',
         ']' => state.SquareBrackets ? '］' : '」',

@@ -39,11 +39,11 @@ internal static class Program
                 {
                     var text = new Composition.CompositionTextState();
                     var env = TestSupport.Env(CompositionTests.Detector);
-                    foreach (var c in args.ElementAtOrDefault(1) ?? "") Composition.CompositionText.Append(text, env, c);
+                    foreach (var c in args.ElementAtOrDefault(1) ?? "") text = Composition.CompositionText.Append(text, c);
                     Console.OutputEncoding = new System.Text.UTF8Encoding(false);
-                    Console.WriteLine("units: " + string.Join(" ", Composition.CompositionText.Units(text).Select(u => $"{u.Raw}={u.Kana}")) + (Composition.CompositionText.Pending(text).Length > 0 ? $" +{Composition.CompositionText.Pending(text)}" : ""));
+                    Console.WriteLine("units: " + string.Join(" ", Composition.TypedMarks.Read(Composition.CompositionText.Read(text, env), env).Select(u => $"{u.Raw}={u.Kana}")) + (Composition.CompositionText.Pending(Composition.CompositionText.Read(text, env)).Length > 0 ? $" +{Composition.CompositionText.Pending(Composition.CompositionText.Read(text, env))}" : ""));
                     CompositionTests.Detector.LatticeTrace = Console.WriteLine;
-                    var segments = Composition.CompositionText.Segments(text, env);
+                    var segments = Composition.CompositionText.Segments(Composition.CompositionText.Read(text, env), env);
                     CompositionTests.Detector.LatticeTrace = null;
                     Console.WriteLine("segments: " + string.Join(" | ", segments.Select(s => (s.IsEnglish ? "EN:" : "JA:") + s.Raw)));
                 }
@@ -59,13 +59,8 @@ internal static class Program
                 // --mixed-bench 出力ファイル: 日本語の文の中に英単語を入れて打ち、英単語と日本語に正しく分かれるかを数える (区切りの点数化の試作の比較用)
                 Checks.MixedBench(args[1]);
                 return 0;
-            case "--mozc-compare":
-                // --mozc-compare 入力ファイル 出力ファイル: 今の変換と、文を丸ごと Mozc に渡す変換を比べる (MELTYPE_MOZC が要る)
-                MozcCompare.Run(args[1], args[2]);
-                Henkan.Shutdown();
-                return 0;
             case "--perf":
-                // --perf 出力ファイル [例文のファイル] [回数]: 変換エンジンの遅延・段階ごとの時間・候補の数・控えの使い回し・メモリ・正解率 (tools/performance/README.md)
+                // --perf 出力ファイル [例文のファイル] [回数]: 変換エンジンの遅延・段階ごとの時間・候補の数・控えの使い回し・メモリ・正解率 (src/Meltype.Benchmark/README.md)
                 Performance.Measure(args[1], args.ElementAtOrDefault(2), args.Length > 3 ? int.Parse(args[3], CultureInfo.InvariantCulture) : Performance.DefaultSamples);
                 Henkan.Shutdown();
                 return 0;

@@ -11,19 +11,15 @@ namespace Meltype.Tests;
 internal static class UserDictionaryEngineTests
 {
     [Test]
-    public static void UserWords_AreNotSplitByCore()
-    {
-        var dictionary = new UserDictionary(null, builtIn: false);
-        dictionary.Add("しの", "紫乃");
-        Assert.True(dictionary.Split("わたしの") is null, "ユーザーの語は Mozc のコストで決める");
-        Assert.Equal("紫乃", dictionary.Lookup("しの").Single());
-    }
-
-    [Test]
-    public static void BuiltInPhrases_AreStillSplit()
+    public static void BuiltInPhrases_AreGivenToTheEngine()
     {
         var dictionary = new UserDictionary(null);
-        Assert.True(dictionary.Split("いちがっき") is not null, "同梱の語句は、今までどおり Core が当てはめる");
+        dictionary.Add("ほんあか", "本垢");
+        var words = dictionary.EngineWords().Words;
+        Assert.True(words.Contains(new UserWord("あげあしとる", "揚げ足取る", "動詞ラ行五段")), "同梱の語句を品詞と一緒に Mozc に渡す");
+        Assert.Equal(1, words.Count(w => w is { Reading: "ほんあか", Word: "本垢" }), "ユーザーの語と同じ語句は 1 つだけ渡す");
+        Assert.Equal("ほんあか", string.Join(" ", dictionary.Words.Select(w => w.Reading)), "同梱の語句はユーザー辞書の一覧に出さない");
+        Assert.Equal(0, new UserDictionary(null, builtIn: false).EngineWords().Words.Count);
     }
 
     [Test]
@@ -31,8 +27,9 @@ internal static class UserDictionaryEngineTests
     {
         // いちがっき → 壱学期 を登録すると、同梱の語句 いち|がっき → 一|学期 で上書きしていた
         var dictionary = new UserDictionary(null);
+        Assert.True(dictionary.EngineWords().Words.Any(w => w.Word == "一学期"), "同梱の語句も渡す");
         dictionary.Add("いちがっき", "壱学期");
-        Assert.True(dictionary.Split("いちがっき") is null, "同じ読みの語句は当てはめない");
+        Assert.True(dictionary.EngineWords().Words.Where(w => w.Reading == "いちがっき").Select(w => w.Word).SequenceEqual(["壱学期"]), "同じ読みの語句は渡さない");
         var k = new CompositionTests.Keyboard(converter: new Engine(new() { ["いちがっき"] = [new("いちがっき", "壱学期")] }), userDictionary: dictionary);
         k.Type("ichigakki ");
         Assert.Equal("壱学期", string.Concat(k.Host.View!.Clauses!));
@@ -77,16 +74,18 @@ internal static class UserDictionaryEngineTests
     [Test]
     public static void Zenzai_DoesNotReplaceUserWords()
     {
-        var helper = new FakeHelper("OK");
+        // ヘルパーは、ユーザー辞書の語を含む候補 (活用した形も) の頭に GS を付けて返す
+        var helper = new FakeHelper("OK") { Conversion = "とった\x1f\x1d撮った\x1f取った\x1eから\x1fから" };
         using var mozc = new MozcConverter(helper);
-        mozc.SetUserDictionary([("しの", "紫乃", "名詞")]);
-        IReadOnlyList<(ConversionClause, IReadOnlyList<string>)> shino = [(new("しの", "紫乃"), ["紫乃", "篠"])];
-        Assert.Equal("紫乃", Text(HybridConverter.Choose("しの", shino, [new("しの", "篠")], mozc.StartsWithUserWord)), "Mozc が選んだ登録語は、Zenzai の答えで置き換えない");
-        Assert.Equal("篠", Text(HybridConverter.Choose("しの", shino, [new("しの", "篠")], _ => false)), "登録語でなければ Zenzai の答え");
+        var took = mozc.ConvertWithCandidatesNow("とったから")!;
+        Assert.Equal("撮った:True:撮った,取った|から:False:から", string.Join("|", took.Select(s => $"{s.Clause.Text}:{s.Clause.UserWord}:{string.Join(",", s.Candidates)}")), "印を外した候補と、登録語の文節か");
+        Assert.Equal("撮った|から", Text(HybridConverter.Choose("とったから", took, [new("とったから", "取ったから")])), "Mozc が選んだ登録語は、Zenzai の答えで置き換えない");
 
-        IReadOnlyList<(ConversionClause, IReadOnlyList<string>)> sentence = [(new("しのが", "紫乃が"), ["紫乃が", "篠が"]), (new("きた", "来た"), ["来た", "北"])];
-        Assert.Equal("紫乃が|北", Text(HybridConverter.Choose("しのがきた", sentence, [new("しのがきた", "紫乃が北")], mozc.StartsWithUserWord)), "ほかの文節は Zenzai の答え");
-        Assert.Equal("紫乃が|来た", Text(HybridConverter.Choose("しのがきた", sentence, [new("しのがきた", "篠が北")], mozc.StartsWithUserWord)), "登録語を残して作れなければ Mozc の結果");
+        IReadOnlyList<(ConversionClause, IReadOnlyList<string>)> plain = [(new("しの", "篠"), ["篠", "紫乃"])];
+        Assert.Equal("紫乃", Text(HybridConverter.Choose("しの", plain, [new("しの", "紫乃")])), "登録語でなければ Zenzai の答え");
+        IReadOnlyList<(ConversionClause, IReadOnlyList<string>)> sentence = [(new("しのが", "紫乃が") { UserWord = true }, ["紫乃が", "篠が"]), (new("きた", "来た"), ["来た", "北"])];
+        Assert.Equal("紫乃が|北", Text(HybridConverter.Choose("しのがきた", sentence, [new("しのがきた", "紫乃が北")])), "ほかの文節は Zenzai の答え");
+        Assert.Equal("紫乃が|来た", Text(HybridConverter.Choose("しのがきた", sentence, [new("しのがきた", "篠が北")])), "登録語を残して作れなければ Mozc の結果");
 
         static string Text(IReadOnlyList<ConversionClause>? clauses) => string.Join("|", clauses?.Select(c => c.Text) ?? []);
     }
@@ -174,8 +173,31 @@ internal static class UserDictionaryEngineTests
             Assert.True(SpinWait.SpinUntil(() => helper.Dictionary().Contains("しの\x1f紫乃\x1f名詞"), 5000), "変換エンジンを作ったら、登録した語を名詞として渡す: " + helper.Dictionary());
             runtime.UserDictionary.Add("きごうとう", "記号等");
             Assert.True(SpinWait.SpinUntil(() => helper.Dictionary().Contains("きごうとう\x1f記号等"), 5000), "語が変わったら渡し直す: " + helper.Dictionary());
+            runtime.UserDictionary.AddRange([new UserWord("ぐぐる", "ググる", "動詞ラ行五段")]);
+            Assert.True(SpinWait.SpinUntil(() => helper.Dictionary().Contains("ぐぐる\x1fググる\x1f動詞ラ行五段"), 5000), "登録した品詞を渡す: " + helper.Dictionary());
         }
         finally { Directory.Delete(directory, recursive: true); }
+    }
+
+    [Test]
+    public static void Mozc_ThatGaveUp_TriesAgainAfterAWhile()
+    {
+        // 一時的に答えなかっただけで、再起動までかなのままにしない
+        var helper = new FakeHelper("OK");
+        for (var i = 0; i < 3; i++) helper.Next.Enqueue(null);
+        using var mozc = new MozcConverter(helper) { RetryAfterMs = 200 };
+        for (var i = 0; i < 3; i++) mozc.Reading("漢字" + i);
+        Assert.True(!mozc.IsAvailable, "3 回答えなかったら、しばらく諦める");
+        Thread.Sleep(300);
+        Assert.True(mozc.IsAvailable, "しばらくしたら、もう一度使う");
+        helper.Next.Enqueue(null);
+        mozc.Reading("漢字");
+        Assert.True(!mozc.IsAvailable, "試して答えなければ、また待つ");
+        Thread.Sleep(300);
+        mozc.Reading("漢字");
+        Assert.True(mozc.IsAvailable, "答えたら元に戻る");
+        Thread.Sleep(300);
+        Assert.True(mozc.IsAvailable, "元に戻ったあとは、待った時間にかかわらず使える");
     }
 
     private sealed class FakeHelper(string answer) : IMozcHelper
