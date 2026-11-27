@@ -198,7 +198,8 @@ internal static class CompositionConversion
                 continue;
             }
             if (segment.Kana.Length == 0) continue;
-            var japanese = ConvertJapaneseSegment(input, env, segment.Kana, s > 0 && segments[s - 1].IsEnglish, SegmentBefore(env, string.Concat(clauses.Select(c => c.Text))), zenzai);
+            var before = SegmentBefore(env, string.Concat(clauses.Select(c => c.Text)));
+            var japanese = PostProcessJapaneseClauses(ConvertJapaneseSegment(input, env, segment.Kana, s > 0 && segments[s - 1].IsEnglish, before, zenzai), env, before);
             // 候補の最後に、打ったままの英字 (あぴ → api) と全角の英字も出す (Space を連打して英字に戻せる)。
             var offset = 0;
             foreach (var clause in japanese)
@@ -433,6 +434,13 @@ internal static class CompositionConversion
         if (afterEnglish && japanese.Count > 0 && IsParticleAfterEnglish(japanese[0])) Prefer(japanese[0], japanese[0].Reading);
         return japanese;
     }
+
+    /// <summary>
+    /// 日本語変換の文節列に対する後処理 (文節の列 → 文節の列の純粋関数)。
+    /// #2366 (ライブ変換中の文書き換え機構) へそのまま載せ替えられるよう、変換エンジン呼び出しとは独立した入口にしている。
+    /// </summary>
+    internal static List<Clause> PostProcessJapaneseClauses(IReadOnlyList<Clause> clauses, CompositionEnv env, string? before) =>
+        env.Settings.KeigoMode ? KeigoConverter.Convert(clauses, before) : [.. clauses];
 
     /// <summary>日本語の区間を変換エンジンで変換する。英字・記号の部分はそのままの文節にする。</summary>
     private static List<Clause> ConvertJapanese(CompositionInput input, CompositionEnv env, string kana, string before, bool zenzai)
@@ -944,9 +952,10 @@ internal static class CompositionConversion
     internal static List<(string Reading, string? Engine, string Text)> LiveClauses(CompositionInput input, CompositionEnv env, string kana, bool afterEnglish, string before)
     {
         // 辞書・学習・変換エンジンは入力の間は変わらない (控えは入力を始めるときに空にする)。打ったものに英数字があるか (KeepTypedSymbols) は入力の途中で変わる
-        var key = string.Join("\u0001", kana, afterEnglish, before, EnglishInComposition(input, env), env.Context().FollowingText, TypedLetterOrDigit(input));
+        var key = string.Join("\u0001", kana, afterEnglish, before, EnglishInComposition(input, env), env.Context().FollowingText, TypedLetterOrDigit(input), env.Services.History?.Version, env.Settings.KeigoMode ? "1" : "0");
         if (env.LiveCache.TryGetValue(key, out var cached)) return cached;
-        var clauses = ConvertJapaneseSegment(input, env.WithoutWaiting(), kana, afterEnglish, before, zenzai: true).Select(c => (c.Reading, c.Engine, c.Text)).ToList();
+        var clauses = PostProcessJapaneseClauses(ConvertJapaneseSegment(input, env.WithoutWaiting(), kana, afterEnglish, before, zenzai: true), env, before)
+            .Select(c => (c.Reading, c.Engine, c.Text)).ToList();
         if (env.LiveCache.Count > 256) env.LiveCache.Clear();
         env.LiveCache[key] = clauses;
         return clauses;

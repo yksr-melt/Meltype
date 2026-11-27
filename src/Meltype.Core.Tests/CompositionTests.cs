@@ -261,6 +261,7 @@ internal static class CompositionTests
         public bool NonConvertCyclesKana { get => Settings.NonConvertCyclesKana; set => Settings.NonConvertCyclesKana = value; }
         public bool EnglishFirstInput { get => Settings.EnglishFirstInput; set => Settings.EnglishFirstInput = value; }
         public bool ConsonantAbbreviations { get => Settings.ConsonantAbbreviations; set => Settings.ConsonantAbbreviations = value; }
+        public bool KeigoMode { get => Settings.KeigoMode; set => Settings.KeigoMode = value; }
 
         /// <summary>句読点の組み合わせ (設定)。</summary>
         public Meltype.Config.PunctuationStyle Punctuation { get => Settings.Punctuation; set => Settings.Punctuation = value; }
@@ -6770,5 +6771,437 @@ internal static class CompositionTests
             k.Type(keys);
             return Meltype.Diagnostics.Log.Snapshot().Last(e => e.Level == Meltype.Diagnostics.LogLevel.Decision && e.Message.StartsWith("確定:", StringComparison.Ordinal)).Message;
         }
+    }
+
+    [Test]
+    public static void KeigoMode_RealtimeConversion()
+    {
+        foreach (var (typed, expected) in new[]
+        {
+            ("ryoukai", "承知いたしました"),
+            ("arigatou", "ありがとうございます"),
+            ("sumimasen", "申し訳ございません"),
+            ("kyouhaiku", "本日は伺います"),
+            ("sakkiokutta", "先ほどお送りいたしました"),
+            ("ohayo", "おはようございます"),
+            ("makasete", "お任せください"),
+            ("osakini", "お先に失礼いたします"),
+            ("daijoubudesu", "問題ございません"),
+            ("susunda", "進みました"),
+            ("ryoukai.", "承知いたしました。"),
+            ("ryoukai,", "承知いたしました、"),
+            ("ryoukai!", "承知いたしました！"),
+            ("kyouhaiku.", "本日は伺います。"),
+            ("kyouhaiku!", "本日は伺います！"),
+            ("kyouhaiku?", "本日は行かれますでしょうか？"),
+            ("daijoubu?", "問題ございませんでしょうか？"),
+            ("arigatou!", "ありがとうございます！"),
+            ("oshiete!", "ご教示ください！"),
+        })
+        {
+            var k = new Keyboard(live: true) { KeigoMode = true };
+            k.Type(typed);
+            Assert.Equal(expected, k.Showing, $"ライブ変換: {typed}");
+            Assert.True(k.Host.View?.ContextHint?.StartsWith("リアルタイム敬語変換 ON", StringComparison.Ordinal) == true, "入力中にリアルタイム敬語変換 ON を表示");
+            k.Type("\n");
+            Assert.Equal(expected, k.Host.Document, $"確定: {typed}");
+        }
+
+        // 二重敬語・疑問文の精度確認と純粋関数性の検証 (KeigoConverter.Convert 直接)
+        var doubleKeigo = KeigoConverter.Convert([new("ありがとう", false, ["ありがとう"]), new("ございます", false, ["ございます"])]);
+        Assert.Equal("ありがとうございます", string.Concat(doubleKeigo.Select(c => c.Text)), "二重敬語にしない");
+
+        var pureInput = new List<Clause> { new("りょうかい", false, ["了解"]) };
+        var pureOutput = KeigoConverter.Convert(pureInput);
+        Assert.Equal("了解", pureInput[0].Text, "純粋関数として入力の Clause を書き換えない");
+        Assert.Equal("承知いたしました", pureOutput[0].Text, "戻り値の新しい Clause 列が敬語になる");
+
+        var question = KeigoConverter.Convert([new("みた？", false, ["見た？"])]);
+        Assert.Equal("ご覧になりましたでしょうか？", question[0].Text, "疑問文は相手への尊敬・丁寧形にする");
+
+        var pastDa = KeigoConverter.Convert([new("よんだ", false, ["読んだ"])]);
+        Assert.Equal("拝読いたしました", pastDa[0].Text, "動詞の過去形を「読んです」にしない");
+
+        var nominalDa = KeigoConverter.Convert([new("よていだ", false, ["予定だ"])]);
+        Assert.Equal("予定です", nominalDa[0].Text, "名詞+だ は です にする");
+
+        var adj = KeigoConverter.Convert([new("むずかしい", false, ["難しい"])]);
+        Assert.Equal("難しいです", adj[0].Text, "い形容詞の文末は です を付ける");
+
+        var politeAlready = KeigoConverter.Convert([new("かくにんいたします", false, ["確認いたします"])]);
+        Assert.Equal("確認いたします", politeAlready[0].Text, "すでに敬語の文末は変えない");
+
+        var noFalseKyou = KeigoConverter.Convert([new("いまにほん", false, ["今日本"])]);
+        Assert.Equal("今日本", noFalseKyou[0].Text, "「今日本」の途中を「本日」に誤置換しない");
+
+        // 句読点・感嘆符・疑問符が別文節に分かれても元の文にリセットされない
+        var splitPeriod = KeigoConverter.Convert([new("きょうは", false, ["今日は"]), new("いく", false, ["行く"]), new("。", false, ["。"])]);
+        Assert.Equal("本日は伺います。", string.Concat(splitPeriod.Select(c => c.Text)), "別文節の句点でも敬語を保つ");
+
+        var splitComma = KeigoConverter.Convert([new("りょうかい", false, ["了解"]), new("、", false, ["、"])]);
+        Assert.Equal("承知いたしました、", string.Concat(splitComma.Select(c => c.Text)), "別文節の読点でも敬語を保つ");
+
+        var splitExcl = KeigoConverter.Convert([new("おしえて", false, ["教えて"]), new("！", false, ["！"])]);
+        Assert.Equal("ご教示ください！", string.Concat(splitExcl.Select(c => c.Text)), "別文節の感嘆符でも敬語を保つ");
+
+        var splitQuest = KeigoConverter.Convert([new("みた", false, ["見た"]), new("？", false, ["？"])]);
+        Assert.Equal("ご覧になりましたでしょうか？", string.Concat(splitQuest.Select(c => c.Text)), "別文節の疑問符でも尊敬・丁寧疑問形にする");
+
+        // ですます調からの敬語変換
+        var masu = KeigoConverter.Convert([new("たべます", false, ["食べます"])]);
+        Assert.Equal("いただきます", masu[0].Text, "ですます調 (食べます) も敬語にする");
+
+        var masuTeiru = KeigoConverter.Convert([new("かくにんしています", false, ["確認しています"])]);
+        Assert.Equal("確認しております", masuTeiru[0].Text, "ですます調 (確認しています) も敬語にする");
+
+        // 主語の手がかりによる尊敬語 / 謙譲語の自動判別
+        var sonkeigo = KeigoConverter.Convert([new("しゃちょうが", false, ["社長が"]), new("みます", false, ["見ます"])]);
+        Assert.Equal("社長がご覧になります", string.Concat(sonkeigo.Select(c => c.Text)), "目上が主語のときは尊敬語");
+
+        var sonkeigoBefore = KeigoConverter.Convert([new("きます", false, ["来ます"])], before: "お客様は");
+        Assert.Equal("お越しになります", sonkeigoBefore[0].Text, "直前の文脈に相手主語があるときも尊敬語");
+
+        var kenjougo = KeigoConverter.Convert([new("わたしが", false, ["私が"]), new("みます", false, ["見ます"])]);
+        Assert.Equal("私が拝見いたします", string.Concat(kenjougo.Select(c => c.Text)), "自分が主語のときは謙譲語");
+
+        var afterSentenceBreak = KeigoConverter.Convert([new("いきます", false, ["行きます"])], before: "お客様が来ました。");
+        Assert.Equal("伺います", afterSentenceBreak[0].Text, "句点で文が切れたら前の文の相手主語を引きずらない");
+
+        var teHoshii = KeigoConverter.Convert([new("みてほしい", false, ["見てほしい"])]);
+        Assert.Equal("ご覧いただけますでしょうか", teHoshii[0].Text, "てほしい系も正しく敬語になる");
+
+        // 途中の読点 (、) で文末敬語に化けないこと
+        var midComma = KeigoConverter.Convert([new("みて、", false, ["見て、"]), new("れんらくする", false, ["連絡する"])]);
+        Assert.Equal("見て、ご連絡いたします", string.Concat(midComma.Select(c => c.Text)), "途中の読点を文末の『ご覧ください、』にしない");
+
+        // 五段サ行動詞 (押した・思い出した) を『押いたしました』にせず『押しました』にし、サ変動詞 (完了した) は『完了いたしました』にする
+        var godanSa = KeigoConverter.Convert([new("おした", false, ["押した"])]);
+        Assert.Equal("押しました", godanSa[0].Text, "五段サ行は『押いたしました』にせず『押しました』");
+
+        var suruNoun = KeigoConverter.Convert([new("かんりょうした", false, ["完了した"])]);
+        Assert.Equal("完了いたしました", suruNoun[0].Text, "サ変動詞は『完了いたしました』");
+
+        // 疑問文の誤変換防止 (食べました？・危ない？・可愛い？)
+        var politeQuest = KeigoConverter.Convert([new("たべました？", false, ["食べました？"])]);
+        Assert.Equal("食べましたでしょうか？", politeQuest[0].Text, "『食べまされましたでしょうか？』にしない");
+
+        var adjQuest = KeigoConverter.Convert([new("あぶない？", false, ["危ない？"])]);
+        Assert.Equal("危ないでしょうか？", adjQuest[0].Text, "『危ございませんでしょうか？』にしない");
+
+        // 会社・ビジネス実戦 (複文接続・二重敬語回避・メール定型)
+        var compound = KeigoConverter.Convert([new("しゅうせいしたから、", false, ["修正したから、"]), new("みてほしい", false, ["見てほしい"])]);
+        Assert.Equal("修正いたしましたので、ご覧いただけますでしょうか", string.Concat(compound.Select(c => c.Text)), "複文の『〜したから』もビジネス敬語にする");
+
+        var compoundKedo = KeigoConverter.Convert([new("よていだけど、", false, ["予定だけど、"]), new("れんらくする", false, ["連絡する"])]);
+        Assert.Equal("予定ですが、ご連絡いたします", string.Concat(compoundKedo.Select(c => c.Text)), "名詞+だけど → ですが");
+
+        var bizQuest = KeigoConverter.Convert([new("かくにんした？", false, ["確認した？"])]);
+        Assert.Equal("ご確認いただけましたでしょうか？", bizQuest[0].Text, "二重敬語『ご確認されましたでしょうか』を避ける");
+
+        var doneQuest = KeigoConverter.Convert([new("おわった？", false, ["終わった？"])]);
+        Assert.Equal("お済みでしょうか？", doneQuest[0].Text, "ビジネスで自然な完了確認");
+
+        var bizIdiom = KeigoConverter.Convert([new("おせわになります", false, ["お世話になります"])]);
+        Assert.Equal("お世話になっております", bizIdiom[0].Text, "メール書き出し定型");
+
+        // 複数文節に分かれた定型句マージ・ごご重複防止・否定形・相手主語の確認系
+        var splitCompanyOriginal = new List<Clause> { new("うちの", false, ["うちの"]), new("かいしゃ", false, ["会社"]), new("から", false, ["から"]) };
+        var splitCompany = KeigoConverter.Convert(splitCompanyOriginal);
+        Assert.Equal(3, splitCompanyOriginal.Count, "定型句マージ時も入力リストは変更しない");
+        Assert.Equal("弊社から", string.Concat(splitCompany.Select(c => c.Text)), "文中の複数文節定型句もマージして敬語化");
+
+        var noDupGo = KeigoConverter.Convert([new("ごれんらくする", false, ["ご連絡する"])]);
+        Assert.Equal("ご連絡いたします", noDupGo[0].Text, "『ごご連絡いたします』にならない");
+
+        var negTeiru = KeigoConverter.Convert([new("かくにんしてない", false, ["確認してない"])]);
+        Assert.Equal("確認しておりません", negTeiru[0].Text, "『〜てない』を『〜ておりません』にする");
+
+        var bossCheck = KeigoConverter.Convert([new("ぶちょうが", false, ["部長が"]), new("かくにんする", false, ["確認する"])]);
+        Assert.Equal("部長がご確認になります", string.Concat(bossCheck.Select(c => c.Text)), "目上主語の確認する → ご確認になります");
+
+        var askNegative = KeigoConverter.Convert([new("おしえてくれない？", false, ["教えてくれない？"])]);
+        Assert.Equal("ご教示いただけませんでしょうか？", askNegative[0].Text, "〜てくれない？ → いただけませんでしょうか？");
+
+        // 読点直後の即時複文変換・過去否定・勧誘形・割合記号+だ
+        var commaImmediate = KeigoConverter.Convert([new("しゅうせいしたから、", false, ["修正したから、"])]);
+        Assert.Equal("修正いたしましたので、", commaImmediate[0].Text, "読点直後でまだ続きを打っていなくても複文接続を即時変換");
+
+        var pastNeg = KeigoConverter.Convert([new("おわってなかった", false, ["終わってなかった"])]);
+        Assert.Equal("終わっておりませんでした", pastNeg[0].Text, "〜てなかった → 〜ておりませんでした");
+
+        var volitional = KeigoConverter.Convert([new("そうだんしよう", false, ["相談しよう"])]);
+        Assert.Equal("ご相談いたしましょう", volitional[0].Text, "〜しよう → 〜いたしましょう");
+
+        var percentDa = KeigoConverter.Convert([new("100%だ", false, ["100%だ"])]);
+        Assert.Equal("100%です", percentDa[0].Text, "記号+だ → です");
+
+        // 尊敬語と謙譲語のさらなる判別 (進行形・自分主語の疑問文・〜てくれた)
+        var bossProgressive = KeigoConverter.Convert([new("ぶちょうが", false, ["部長が"]), new("みている", false, ["見ている"])]);
+        Assert.Equal("部長がご覧になっています", string.Concat(bossProgressive.Select(c => c.Text)), "目上主語の進行形 → ご覧になっています");
+
+        var selfQuestion = KeigoConverter.Convert([new("わたしが", false, ["私が"]), new("おくった？", false, ["送った？"])]);
+        Assert.Equal("私がお送りいたしましたでしょうか？", string.Concat(selfQuestion.Select(c => c.Text)), "自分主語の疑問文は謙譲語");
+
+        var clientGave = KeigoConverter.Convert([new("おきゃくさまが", false, ["お客様が"]), new("おくってくれた", false, ["送ってくれた"])]);
+        Assert.Equal("お客様がお送りくださいました", string.Concat(clientGave.Select(c => c.Text)), "〜てくれた → お送りくださいました");
+
+        // 口語 → ビジネス書き言葉の言い換え (後で → 後ほど 等)
+        var atode = KeigoConverter.Convert([new("あとで", false, ["後で"]), new("おくる", false, ["送る"])]);
+        Assert.Equal("後ほどお送りいたします", string.Concat(atode.Select(c => c.Text)), "後で → 後ほど");
+
+        var konaida = KeigoConverter.Convert([new("こないだの", false, ["こないだの"]), new("けん", false, ["件"])]);
+        Assert.Equal("先日の件", string.Concat(konaida.Select(c => c.Text)), "こないだの → 先日の");
+
+        var ikaga = KeigoConverter.Convert([new("どうだった？", false, ["どうだった？"])]);
+        Assert.Equal("いかがでしたでしょうか？", ikaga[0].Text, "どうだった？ → いかがでしたでしょうか？");
+
+        // 誤爆防止 (午後で・早急に・ものすごく) とビジネス感謝・謝罪表現
+        var gogo = KeigoConverter.Convert([new("ごごで", false, ["午後で"]), new("おねがい", false, ["お願い"])]);
+        Assert.Equal("午後でお願いいたします", string.Concat(gogo.Select(c => c.Text)), "「午後で」を「午後ほど」に誤爆しない");
+
+        var soukyuu = KeigoConverter.Convert([new("そうきゅうに", false, ["早急に"]), new("たいおうする", false, ["対応する"])]);
+        Assert.Equal("早急に対応いたします", string.Concat(soukyuu.Select(c => c.Text)), "「早急に」を「早急遽」に誤爆しない");
+
+        var thanksBiz = KeigoConverter.Convert([new("かくにんしてくれてありがとう", false, ["確認してくれてありがとう"])]);
+        Assert.Equal("ご確認いただきありがとうございます", thanksBiz[0].Text, "〜してくれてありがとう → ご〜いただきありがとうございます");
+
+        // 客 → お客様、客室誤爆防止、来るのでの自他判別 (読点が別文節・確定済み文脈のときも主語を引きずらない)
+        var kyakuKuru = KeigoConverter.Convert([new("きゃくが", false, ["客が"]), new("くるので、", false, ["来るので、"]), new("じゅんびする", false, ["準備する"])]);
+        Assert.Equal("お客様がお越しになりますので、準備いたします", string.Concat(kyakuKuru.Select(c => c.Text)), "客→お客様 & 相手主語の来るので→お越しになりますので");
+
+        var kyakuKuruSplitComma = KeigoConverter.Convert([new("きゃくが", false, ["客が"]), new("くるので", false, ["来るので"]), new("、", false, ["、"]), new("じゅんびする", false, ["準備する"])]);
+        Assert.Equal("お客様がお越しになりますので、準備いたします", string.Concat(kyakuKuruSplitComma.Select(c => c.Text)), "読点が別文節でも『準備なさいます』にしない");
+
+        var kyakuKuruAfterBefore = KeigoConverter.Convert([new("じゅんびする", false, ["準備する"])], before: "お客様がお越しになりますので、");
+        Assert.Equal("準備いたします", kyakuKuruAfterBefore[0].Text, "読点まで確定済みでも前の節の主語を引きずらない");
+
+        var subjectWithComma = KeigoConverter.Convert([new("おきゃくさまは", false, ["お客様は"]), new("、", false, ["、"]), new("みます", false, ["見ます"])]);
+        Assert.Equal("お客様は、ご覧になります", string.Concat(subjectWithComma.Select(c => c.Text)), "主語直後の読点では尊敬語を維持する");
+
+        var selfKuru = KeigoConverter.Convert([new("くるので、", false, ["来るので、"]), new("まって", false, ["待って"])]);
+        Assert.Equal("参りますので、少々お待ちください", string.Concat(selfKuru.Select(c => c.Text)), "自分主語の来るので→参りますので");
+
+        var kyakushitsu = KeigoConverter.Convert([new("きゃくしつを", false, ["客室を"]), new("かくにんする", false, ["確認する"])]);
+        Assert.Equal("客室を確認いたします", string.Concat(kyakushitsu.Select(c => c.Text)), "「客室」を「お客様室」に誤爆しない");
+
+        // 〜てくれて の文脈振り分け (感謝が続く → いただき / 相手主語の経過 → くださり)
+        var tekureteThanks = KeigoConverter.Convert([new("おしえてくれて", false, ["教えてくれて"]), new("たすかった", false, ["助かった"])]);
+        Assert.Equal("ご教示いただき大変助かりました", string.Concat(tekureteThanks.Select(c => c.Text)), "感謝・恩恵が続くときは『〜いただき』");
+
+        var tekureteBoss = KeigoConverter.Convert([new("ぶちょうが", false, ["部長が"]), new("おくってくれて、", false, ["送ってくれて、"]), new("たすかった", false, ["助かった"])]);
+        Assert.Equal("部長がお送りいただき大変助かりました", string.Concat(tekureteBoss.Select(c => c.Text)).Replace("いただき、", "いただき"), "助かった直前は『〜いただき』");
+
+        var tekureteAction = KeigoConverter.Convert([new("ぶちょうが", false, ["部長が"]), new("おくってくれて、", false, ["送ってくれて、"]), new("かくにんした", false, ["確認した"])]);
+        Assert.Equal("部長がお送りくださり、確認いたしました", string.Concat(tekureteAction.Select(c => c.Text)), "相手主語＋一般動作が続くときは『〜くださり』");
+
+        // 拡充した語彙・ビジネス表現・依頼・疑問・尊敬語
+        var hisashiburi = KeigoConverter.Convert([new("ひさしぶり", false, ["ひさしぶり"])]);
+        Assert.Equal("ご無沙汰しております", hisashiburi[0].Text, "ひさしぶり → ご無沙汰しております");
+
+        var tsuideni = KeigoConverter.Convert([new("ついでに", false, ["ついでに"]), new("せつめいする", false, ["説明する"])]);
+        Assert.Equal("併せてご説明いたします", string.Concat(tsuideni.Select(c => c.Text)), "ついでに → 併せて / 説明する → ご説明いたします");
+
+        var received = KeigoConverter.Convert([new("うけとった", false, ["受け取った"])]);
+        Assert.Equal("拝受いたしました", received[0].Text, "受け取った → 拝受いたしました");
+
+        var bossApproved = KeigoConverter.Convert([new("ぶちょうが", false, ["部長が"]), new("しょうにんした", false, ["承認した"])]);
+        Assert.Equal("部長がご承認なさいました", string.Concat(bossApproved.Select(c => c.Text)), "目上主語の承認した → ご承認なさいました");
+
+        var fixRequest = KeigoConverter.Convert([new("しゅうせいしてほしい？", false, ["修正してほしい？"])]);
+        Assert.Equal("ご修正いただけますでしょうか？", fixRequest[0].Text, "修正してほしい？ → ご修正いただけますでしょうか？");
+
+        var reachableQuest = KeigoConverter.Convert([new("とどいた？", false, ["届いた？"])]);
+        Assert.Equal("届きましたでしょうか？", reachableQuest[0].Text, "届いた？ → 届きましたでしょうか？");
+
+        var tekureteExplain = KeigoConverter.Convert([new("せつめいしてくれて", false, ["説明してくれて"]), new("ありがとう", false, ["ありがとう"])]);
+        Assert.Equal("ご説明いただきありがとうございます", string.Concat(tekureteExplain.Select(c => c.Text)), "説明してくれて＋ありがとう → ご説明いただきありがとうございます");
+
+        // 基本動詞の敬語表現 (着る/寝る/座る/尋ねる/待つ)
+        var bossWear = KeigoConverter.Convert([new("しゃちょうが", false, ["社長が"]), new("きた", false, ["着た"])]);
+        Assert.Equal("社長がお召しになりました", string.Concat(bossWear.Select(c => c.Text)), "社長が着た → お召しになりました");
+
+        var selfWait = KeigoConverter.Convert([new("まっている", false, ["待っている"])]);
+        Assert.Equal("お待ちしております", selfWait[0].Text, "待っている → お待ちしております");
+
+        var selfAsk = KeigoConverter.Convert([new("たずねた", false, ["尋ねた"])]);
+        Assert.Equal("伺いました", selfAsk[0].Text, "尋ねた → 伺いました");
+
+        var sitDown = KeigoConverter.Convert([new("すわって", false, ["座って"])]);
+        Assert.Equal("お掛けください", sitDown[0].Text, "座って → お掛けください");
+
+        // どこに行くの / どこに行くの？ (どこ→どちら & 〜の疑問・確認)
+        var dokoNiIkuno = KeigoConverter.Convert([new("どこに", false, ["どこに"]), new("いくの", false, ["行くの"])]);
+        Assert.Equal("どちらに行かれますか", string.Concat(dokoNiIkuno.Select(c => c.Text)), "どこに行くの → どちらに行かれますか");
+
+        var dokoNiIkunoQuest = KeigoConverter.Convert([new("どこに", false, ["どこに"]), new("いくの？", false, ["行くの？"])]);
+        Assert.Equal("どちらに行かれますでしょうか？", string.Concat(dokoNiIkunoQuest.Select(c => c.Text)), "どこに行くの？ → どちらに行かれますでしょうか？");
+
+        // あったら・あれば ＝ ございましたら (1文節/2文節 & 誤爆防止)
+        var mondaiAreba = KeigoConverter.Convert([new("もんだいがあれば、", false, ["問題があれば、"]), new("れんらくして", false, ["連絡して"])]);
+        Assert.Equal("問題がございましたら、ご連絡ください", string.Concat(mondaiAreba.Select(c => c.Text)), "問題があれば → 問題がございましたら");
+
+        var splitAttara = KeigoConverter.Convert([new("しつもんが", false, ["質問が"]), new("あったら、", false, ["あったら、"]), new("おしえて", false, ["教えて"])]);
+        Assert.Equal("質問がございましたら、ご教示ください", string.Concat(splitAttara.Select(c => c.Text)), "2文節に分かれた『あったら、』→ ございましたら、");
+
+        var kaiteAttara = KeigoConverter.Convert([new("かいて", false, ["書いて"]), new("あったら", false, ["あったら"])]);
+        Assert.Equal("書いてあったら", string.Concat(kaiteAttara.Select(c => c.Text)), "補助動詞の『書いてあったら』は『書いてございましたら』に誤爆しない");
+
+        // 推量表現 (はずだ/みたいだ/らしい/そうだ/に違いない/じゃないか/大丈夫+推量)
+        var hazuda = KeigoConverter.Convert([new("とどくはずだ", false, ["届くはずだ"])]);
+        Assert.Equal("届くはずです", hazuda[0].Text, "届くはずだ → 届くはずです");
+
+        var mitaida = KeigoConverter.Convert([new("おわるみたいだ", false, ["終わるみたいだ"])]);
+        Assert.Equal("終わるみたいです", mitaida[0].Text, "終わるみたいだ → 終わるみたいです");
+
+        var daijoubuKamo = KeigoConverter.Convert([new("だいじょうぶかも", false, ["大丈夫かも"])]);
+        Assert.Equal("問題ないかもしれません", daijoubuKamo[0].Text, "大丈夫かも → 問題ないかもしれません (問題ございませんかもしれませんにしない)");
+
+        var daijoubuToOmou = KeigoConverter.Convert([new("だいじょうぶだとおもう", false, ["大丈夫だと思う"])]);
+        Assert.Equal("問題ないかと存じます", daijoubuToOmou[0].Text, "大丈夫だと思う → 問題ないかと存じます");
+
+        var chigainai = KeigoConverter.Convert([new("まちがいに", false, ["間違いに"]), new("ちがいない", false, ["違いない"])]);
+        Assert.Equal("間違いに違いありません", string.Concat(chigainai.Select(c => c.Text)), "〜に違いない → 〜に違いありません");
+
+        var janaika = KeigoConverter.Convert([new("まにあうんじゃないか", false, ["間に合うんじゃないか"])]);
+        Assert.Equal("間に合うのではないでしょうか", janaika[0].Text, "〜んじゃないか → 〜のではないでしょうか");
+
+        var kamoMid = KeigoConverter.Convert([new("おくれるかもだけど、", false, ["遅れるかもだけど、"]), new("いく", false, ["行く"])]);
+        Assert.Equal("遅れるかもしれませんが、伺います", string.Concat(kamoMid.Select(c => c.Text)), "〜かもだけど、 → 〜かもしれませんが、");
+
+        var kamoQuest = KeigoConverter.Convert([new("とどくかも？", false, ["届くかも？"])]);
+        Assert.Equal("届くでしょうか？", kamoQuest[0].Text, "届くかも？ → 届くでしょうか？");
+
+        // OFF (既定) なら通常のまま
+        var off = new Keyboard(live: true);
+        off.Type("ryoukai");
+        Assert.True(off.Showing != "承知いたしました", "OFF は通常のまま: " + off.Showing);
+
+        // LateResults = true (実アプリ相当) のライブ変換→確定 (CommittedDisplay) でも敬語が適用されること
+        var lateSettings = new Settings { LiveConversion = true, KeigoMode = true };
+        var lateSession = new TestSession(() => lateSettings, lateResults: true);
+        foreach (var ch in "ryoukai") lateSession.HandleKey(0, ch, false, false, false, false);
+        var lateCommit = lateSession.HandleKey(VirtualKeys.Return, null, false, false, false, false);
+        Assert.Equal("承知いたしました", lateCommit.Commits.Single().Text, "LateResults=true の確定でも敬語が消えない");
+
+        // 名詞+助詞「で」や副詞・接続の「〜て」に「ください」を誤爆しないこと
+        foreach (var (reading, text) in new[]
+        {
+            ("かいぎで", "会議で"),
+            ("めーるで", "メールで"),
+            ("すべて", "全て"),
+            ("はじめて", "初めて"),
+            ("あらためて", "改めて"),
+            ("にかんして", "に関して"),
+            ("として", "として"),
+        })
+        {
+            var kept = KeigoConverter.Convert([new(reading, false, [text])]);
+            Assert.Equal(text, kept[0].Text, $"非依頼の『{text}』に『ください』を誤爆しない");
+        }
+        Assert.Equal("結んでください", KeigoConverter.Convert([new("むすんで", false, ["結んで"])])[0].Text, "動詞の『結んで』には『ください』が付く");
+        Assert.Equal("繋いでください", KeigoConverter.Convert([new("つないで", false, ["繋いで"])])[0].Text, "動詞の『繋いで』には『ください』が付く");
+
+        // 追加語彙の確認 (〜しとく / 〜してみる / 対応できない / 〜してもらえる？)
+        Assert.Equal("確認しておきます", KeigoConverter.Convert([new("かくにんしとく", false, ["確認しとく"])])[0].Text);
+        Assert.Equal("調べてみます", KeigoConverter.Convert([new("しらべてみる", false, ["調べてみる"])])[0].Text);
+        Assert.Equal("対応いたしかねます", KeigoConverter.Convert([new("たいおうできない", false, ["対応できない"])])[0].Text);
+        Assert.Equal("ご確認いただけますでしょうか？", KeigoConverter.Convert([new("かくにんしてもらえる？", false, ["確認してもらえる？"])])[0].Text);
+
+        // 動詞の尊敬語・謙譲語の言い換え網羅確認
+        Assert.Equal("召し上がります", KeigoConverter.Convert([new("しゃちょうが", false, ["社長が"]), new("たべる", false, ["食べる"])])[1].Text);
+        Assert.Equal("お亡くなりになりました", KeigoConverter.Convert([new("せんせいが", false, ["先生が"]), new("しんだ", false, ["死んだ"])])[1].Text);
+        Assert.Equal("お話しになります", KeigoConverter.Convert([new("ぶちょうが", false, ["部長が"]), new("はなす", false, ["話す"])])[1].Text);
+        Assert.Equal("お預かりになります", KeigoConverter.Convert([new("おきゃくさまが", false, ["お客様が"]), new("あずかる", false, ["預かる"])])[1].Text);
+        Assert.Equal("差し上げます", KeigoConverter.Convert([new("あげる", false, ["あげる"])])[0].Text);
+        Assert.Equal("おります", KeigoConverter.Convert([new("いる", false, ["いる"])])[0].Text);
+        Assert.Equal("拝見しております", KeigoConverter.Convert([new("みている", false, ["見ている"])])[0].Text);
+        Assert.Equal("拝読いたしました", KeigoConverter.Convert([new("よみました", false, ["読みました"])])[0].Text);
+        Assert.Equal("申し上げております", KeigoConverter.Convert([new("いっている", false, ["言っている"])])[0].Text);
+        Assert.Equal("お預かりいたします", KeigoConverter.Convert([new("あずかる", false, ["預かる"])])[0].Text);
+        Assert.Equal("お届けいたしました", KeigoConverter.Convert([new("とどけた", false, ["届けた"])])[0].Text);
+
+        // 複合五段サ行動詞を「〜いたしました」と誤爆しないこと + ビジネスクッション言葉
+        Assert.Equal("取り消しました", KeigoConverter.Convert([new("とりけした", false, ["取り消した"])])[0].Text);
+        Assert.Equal("見直しました", KeigoConverter.Convert([new("みなおした", false, ["見直した"])])[0].Text);
+        Assert.Equal("折り返します", KeigoConverter.Convert([new("おりかえす", false, ["折り返す"])])[0].Text);
+        Assert.Equal("思い出しました", KeigoConverter.Convert([new("おもいだした", false, ["思い出した"])])[0].Text);
+        Assert.Equal("恐れ入りますが", KeigoConverter.Convert([new("おそれいりますが", false, ["恐れ入りますが"])])[0].Text);
+        Assert.Equal("差し支えなければ", KeigoConverter.Convert([new("さしつかえなければ", false, ["差し支えなければ"])])[0].Text);
+
+        // 2 文節に分かれた既敬語の重複防止 (お世話+になっております / 失礼+いたします / お待たせ+いたしました / お先に+失礼します)
+        Assert.Equal("お世話になっております", string.Concat(KeigoConverter.Convert([new("おせわ", false, ["お世話"]), new("になっております", false, ["になっております"])]).Select(c => c.Text)));
+        Assert.Equal("失礼いたします", string.Concat(KeigoConverter.Convert([new("しつれい", false, ["失礼"]), new("いたします", false, ["いたします"])]).Select(c => c.Text)));
+        Assert.Equal("お待たせいたしました", string.Concat(KeigoConverter.Convert([new("おまたせ", false, ["お待たせ"]), new("いたしました", false, ["いたしました"])]).Select(c => c.Text)));
+        Assert.Equal("お先に失礼いたします", string.Concat(KeigoConverter.Convert([new("おさきに", false, ["お先に"]), new("しつれいします", false, ["失礼します"])]).Select(c => c.Text)));
+
+        // 2 文節に分かれた「〜て / 〜で + 補助動詞」の精度確認 (みる/ない/ある/おく/いく/いい？)
+        Assert.Equal("調べてみます", string.Concat(KeigoConverter.Convert([new("しらべて", false, ["調べて"]), new("みる", false, ["見る"])]).Select(c => c.Text)));
+        Assert.Equal("書いてみましたでしょうか？", string.Concat(KeigoConverter.Convert([new("かいて", false, ["書いて"]), new("みた？", false, ["見た？"])]).Select(c => c.Text)));
+        Assert.Equal("確認しておりません", string.Concat(KeigoConverter.Convert([new("かくにんして", false, ["確認して"]), new("ない", false, ["ない"])]).Select(c => c.Text)));
+        Assert.Equal("届いておりませんでした", string.Concat(KeigoConverter.Convert([new("とどいて", false, ["届いて"]), new("いなかった", false, ["いなかった"])]).Select(c => c.Text)));
+        Assert.Equal("書いてあります", string.Concat(KeigoConverter.Convert([new("かいて", false, ["書いて"]), new("ある", false, ["ある"])]).Select(c => c.Text)));
+        Assert.Equal("確認しておきます", string.Concat(KeigoConverter.Convert([new("かくにんして", false, ["確認して"]), new("おく", false, ["おく"])]).Select(c => c.Text)));
+        Assert.Equal("進めてまいります", string.Concat(KeigoConverter.Convert([new("すすめて", false, ["進めて"]), new("いく", false, ["いく"])]).Select(c => c.Text)));
+        Assert.Equal("確認してよろしいでしょうか？", string.Concat(KeigoConverter.Convert([new("かくにんして", false, ["確認して"]), new("いい？", false, ["いい？"])]).Select(c => c.Text)));
+        Assert.Equal("確認していただけますでしょうか？", string.Concat(KeigoConverter.Convert([new("かくにんして", false, ["確認して"]), new("もらえますか？", false, ["もらえますか？"])]).Select(c => c.Text)));
+
+        // 常体敬語動詞の丁寧化・二重敬語防止・業務定番表現
+        Assert.Equal("おっしゃいました", KeigoConverter.Convert([new("おっしゃった", false, ["おっしゃった"])])[0].Text);
+        Assert.Equal("くださいました", KeigoConverter.Convert([new("くださった", false, ["くださった"])])[0].Text);
+        Assert.Equal("いただきました", KeigoConverter.Convert([new("いただいた", false, ["いただいた"])])[0].Text);
+        Assert.Equal("ご提出ください", KeigoConverter.Convert([new("ていしゅつして", false, ["提出して"])])[0].Text);
+        Assert.Equal("ご利用ください", KeigoConverter.Convert([new("りようして", false, ["利用して"])])[0].Text);
+        Assert.Equal("拝見できかねます", KeigoConverter.Convert([new("みられない", false, ["見られない"])])[0].Text);
+        Assert.Equal("チームがご覧になります", string.Concat(KeigoConverter.Convert([new("ちーむが", false, ["チームが"]), new("みます", false, ["見ます"])]).Select(c => c.Text)));
+        Assert.Equal("当方が拝見いたします", string.Concat(KeigoConverter.Convert([new("とうほうが", false, ["当方が"]), new("みます", false, ["見ます"])]).Select(c => c.Text)));
+
+        // 「いいですか？ / 良いですか？ / 〜ていいですか？」→「よろしいでしょうか？」
+        Assert.Equal("よろしいでしょうか？", KeigoConverter.Convert([new("いいですか？", false, ["いいですか？"])])[0].Text);
+        Assert.Equal("よろしいでしょうか？", KeigoConverter.Convert([new("よいですか？", false, ["良いですか？"])])[0].Text);
+        Assert.Equal("確認してもよろしいでしょうか？", KeigoConverter.Convert([new("かくにんしていいですか？", false, ["確認していいですか？"])])[0].Text);
+        Assert.Equal("確認してよろしいでしょうか？", string.Concat(KeigoConverter.Convert([new("かくにんして", false, ["確認して"]), new("いいですか？", false, ["いいですか？"])]).Select(c => c.Text)));
+        Assert.Equal("これでよろしいでしょうか？", KeigoConverter.Convert([new("これでいいですか？", false, ["これでいいですか？"])])[0].Text);
+        Assert.Equal("明日がよろしいでしょうか？", KeigoConverter.Convert([new("あしたがいいですか？", false, ["明日がいいですか？"])])[0].Text);
+
+        // 変換後に Space を押すと元の常体候補が出て戻せること
+        var revertLive = new Keyboard(live: true) { KeigoMode = true };
+        revertLive.Type("ryoukai");
+        Assert.Equal("承知いたしました", revertLive.Showing);
+        revertLive.Press(VirtualKeys.Space);
+        Assert.True(revertLive.Host.View!.Candidates.Contains("了解"), "Space で元の表現 (了解) が候補に出る: " + string.Join(",", revertLive.Host.View.Candidates));
+        var originalIndex = revertLive.Host.View.Candidates.ToList().IndexOf("了解");
+        revertLive.SelectCandidate(originalIndex);
+        revertLive.Press(VirtualKeys.Return);
+        Assert.Equal("了解", revertLive.Host.Document, "Space から元の表現を選んで確定できる");
+
+        var revertManual = new Keyboard(live: false) { KeigoMode = true };
+        revertManual.Type("ryoukai ");
+        Assert.Equal("承知いたしました", revertManual.Showing);
+        Assert.True(revertManual.Host.View!.Candidates.Contains("了解"), "変換候補に元の表現 (了解) が含まれる: " + string.Join(",", revertManual.Host.View.Candidates));
+        while (revertManual.Showing != "了解")
+            revertManual.Press(VirtualKeys.Space);
+        revertManual.Press(VirtualKeys.Return);
+        Assert.Equal("了解", revertManual.Host.Document, "Space で候補を送って元の常体 (了解) に戻せる");
+
+        // 逆向きの例: ON でも変えてはいけない入力 (引用・固有名詞・客観・後でを含む熟語・英字混在)
+        Assert.Equal("「了解」", string.Concat(KeigoConverter.Convert([new("「", false, ["「"]), new("りょうかい", false, ["了解"]), new("」", false, ["」"])]).Select(c => c.Text)), "カギ括弧で囲まれた引用は変えない");
+        Assert.Equal("「了解」", KeigoConverter.Convert([new("「りょうかい」", false, ["「了解」"])])[0].Text, "単一文節の引用は変えない");
+        Assert.Equal("「後で」と申し上げました", string.Concat(KeigoConverter.Convert([new("「あとで」と", false, ["「後で」と"]), new("いった", false, ["言った"])]).Select(c => c.Text)), "引用内の語は変えず、外の地の文だけ敬語にする");
+        Assert.Equal("株式会社山田", KeigoConverter.Convert([new("かぶしきがいしゃやまだ", false, ["株式会社山田"])])[0].Text, "固有名詞は変えない");
+        Assert.Equal("東日本", KeigoConverter.Convert([new("ひがしにほん", false, ["東日本"])])[0].Text, "固有名詞の途中を変えない");
+        Assert.Equal("客観", KeigoConverter.Convert([new("きゃっかん", false, ["客観"])])[0].Text, "客観の「客」をお客様にしない");
+        Assert.Equal("客室", KeigoConverter.Convert([new("きゃくしつ", false, ["客室"])])[0].Text, "客室の「客」をお客様にしない");
+        Assert.Equal("観客", KeigoConverter.Convert([new("かんきゃく", false, ["観客"])])[0].Text, "観客の「客」をお客様にしない");
+        Assert.Equal("客観的に拝見いたします", string.Concat(KeigoConverter.Convert([new("きゃっかんてきに", false, ["客観的に"]), new("みる", false, ["見る"])]).Select(c => c.Text)), "客観の「客」で尊敬語 (ご覧になります) に誤爆しない");
+        Assert.Equal("前後で確認", KeigoConverter.Convert([new("ぜんごでかくにん", false, ["前後で確認"])])[0].Text, "「前後で」の途中を後ほどにしない");
+        Assert.Equal("午後で調整", KeigoConverter.Convert([new("ごごでちょうせい", false, ["午後で調整"])])[0].Text, "「午後で」の途中を後ほどにしない");
+        Assert.Equal("食後で構いません", KeigoConverter.Convert([new("しょくごでかまいません", false, ["食後で構いません"])])[0].Text, "「食後で」の途中を後ほどにしない");
+        Assert.Equal("githubに上げた", string.Concat(KeigoConverter.Convert([new("github", true, ["github"]), new("に", false, ["に"]), new("あげた", false, ["上げた"])]).Select(c => c.Text)), "英字混在の「上げた」を「差し上げました」に誤爆しない");
+
+        var mixedEnglish = new Keyboard(live: true) { KeigoMode = true };
+        mixedEnglish.Type("githubniageta");
+        var mixedShowing = mixedEnglish.Showing ?? "";
+        Assert.True(mixedShowing.StartsWith("github", StringComparison.OrdinalIgnoreCase), "英字混在入力の英字部分を壊さない: " + mixedShowing);
+        Assert.True(!mixedShowing.Contains("差し上げ", StringComparison.Ordinal), "githubniageta を差し上げに誤爆しない: " + mixedShowing);
     }
 }
