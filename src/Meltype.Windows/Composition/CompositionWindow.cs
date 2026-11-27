@@ -361,6 +361,13 @@ internal sealed class CompositionWindow : PopupForm
         {
             DrawText(g, view.Text, _textFont, new Point(10, y), _palette.Text, Background, TextFormatFlags.NoPrefix);
             var textWidth = TextRenderer.MeasureText(g, view.Text, _textFont).Width;
+            if (view.CaretBack > 0 && view.CaretBack <= view.Text.Length)
+            {
+                // 読みの途中を直している間は、カーソルの位置に縦線を引く
+                var caretX = 10 + TextRenderer.MeasureText(g, view.Text[..^view.CaretBack], _textFont, Size.Empty, TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding).Width;
+                using var caret = new Pen(Accent, 2);
+                g.DrawLine(caret, caretX, y, caretX, y + _textFont.Height);
+            }
             y += _textFont.Height;
             using (var underline = new Pen(_palette.Text, 1) { DashStyle = DashStyle.Dot })
             {

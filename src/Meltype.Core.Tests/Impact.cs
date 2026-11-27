@@ -31,8 +31,8 @@ internal static class Impact
         {
             var text = new Composition.CompositionTextState();
             var env = TestSupport.Env(detector);
-            foreach (var c in word) CompositionText.Append(text, env, c);
-            judged.Append(word).Append('\t').Append(CompositionText.Display(text, env, final: true)).Append('\n');
+            foreach (var c in word) text = CompositionText.Append(text, c);
+            judged.Append(word).Append('\t').Append(CompositionText.Display(CompositionText.Read(text, env), env, final: true)).Append('\n');
         }
         File.WriteAllText(output, judged.ToString(), new UTF8Encoding(false));
         Console.WriteLine($"判定した語: {words.Distinct(StringComparer.Ordinal).Count()} 語");
