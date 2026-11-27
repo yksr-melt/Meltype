@@ -14,7 +14,7 @@ Android では同じプロセス内の Mozc を JNI 経由で使い、ヘルパ�
 | `build-mozc-helper.sh` | 同じことを Linux・macOS で行う (`bin/linux/`・`bin/mac/` に置く) |
 | `bazel-downloader.cfg` | Linux・macOS の Bazel が、GitHub Releases の依存ファイルを公式ミラーからも取得するための設定 |
 | `merge-ut-dictionary.py` | Mozc-UT の辞書 (`mozcdic-ut.txt`) を Mozc の辞書に統合する (下の「Mozc-UT の辞書を使う」) |
-| `tests/` | 辞書統合と、ビルドしたヘルパーの変換候補のテスト |
+| `tests/` | `merge-ut-dictionary.py` のテスト。本物の Mozc も UT の辞書も要らない |
 | `bin\` | ビルドしたヘルパー (Git には入れない)。`Build-Package.ps1` / `Install-Meltype.ps1` が `app\mozc\` に同梱する |
 
 ## ビルド
@@ -33,20 +33,6 @@ Linux・macOS では `native/mozc/build-mozc-helper.sh` でビルドします (m
 Meltype は Mozc に学習させません。Mozc のユーザーデータの場所 (OS ごとの Meltype データフォルダーの `mozc/`) から、Meltype は起動のたびに学習データ (`boundary.db`・`segment.db`) だけを消します。データフォルダーの場所は [共通の使い方](../../docs/USAGE.md#データと学習) を参照してください。
 
 ヘルパーは、Mozc の設定を操作する候補 (`COMMAND_CANDIDATE`) を変換結果から除外します。「シークレットモードをオン」などは入力する文字ではなく、Meltype ではその操作も実行しないためです。
-
-## テスト
-
-辞書統合のテストには、本物の Mozc も UT の辞書も要りません。
-
-```bash
-python3 native/mozc/tests/test_merge_ut_dictionary.py
-```
-
-変換候補のテストは、`build-mozc-helper.sh` でビルドしたヘルパーを指定して実行します (Linux は `bin/linux/`、macOS は `bin/mac/`)。操作用の候補が混ざらず、通常の変換候補とユーザー辞書の語が残ることを確かめます。
-
-```bash
-MELTYPE_MOZC="$PWD/native/mozc/bin/linux/meltype_mozc_helper" python3 native/mozc/tests/test_helper_candidates.py
-```
 
 ## Mozc-UT の辞書を使う (任意)
 

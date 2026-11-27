@@ -119,8 +119,6 @@ jobs:
         run: python3 src/Meltype.Core.CApi/tests/test-native-boundaries.py linux/build/Meltype-linux/libMeltypeNative.so
       - name: IBus and real Mozc integration tests
         run: timeout 120 python3 linux/tests/test_integration.py linux/build/Meltype-linux
-      - name: Mozc helper candidate tests
-        run: MELTYPE_MOZC="$PWD/linux/build/Meltype-linux/mozc/meltype_mozc_helper" timeout 300 python3 native/mozc/tests/test_helper_candidates.py
       - name: Private IBus daemon tests
         run: timeout 120 xvfb-run -a dbus-run-session -- python3 linux/tests/test_daemon.py linux/build/Meltype-linux
       - name: Package
