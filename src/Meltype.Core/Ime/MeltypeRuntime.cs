@@ -280,7 +280,6 @@ public sealed class MeltypeRuntime : IDisposable
     {
         if (services.Languages is { } languages && services.RomajiTypos is { } typos) languages.IsCommonJapanese ??= typos.IsCommonJapanese;
         if (services.Languages is { } memory) memory.IsReadableRomaji ??= LanguageMemory.ReadableBy(detector.Romaji);
-        if (services.RomajiTypos is { } lexicon) detector.IsCommonJapanese ??= lexicon.IsCommonJapanese;
     }
 
     public void Dispose()

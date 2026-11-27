@@ -100,10 +100,11 @@ internal static class BackgroundConversionTests
             Interlocked.Increment(ref calls);
             if (n == 1) throw new InvalidOperationException("試し");
         });
+        // 壊れたワーカーは何秒待っても終わらないので、時間切れは長くてよい。Windows の CI では、1 件目の処理 (例外をログに書く) に 5 秒以上かかったことがある
         worker.Submit(1);
-        Assert.True(worker.Wait(1, 5000), "例外でも終わる");
+        Assert.True(worker.Wait(1, 30000), "例外でも終わる");
         worker.Submit(2);
-        Assert.True(worker.Wait(2, 5000), "次の要求も処理する");
+        Assert.True(worker.Wait(2, 30000), "次の要求も処理する");
         Assert.Equal(2, Volatile.Read(ref calls));
     }
 
@@ -116,9 +117,9 @@ internal static class BackgroundConversionTests
         converter.ResultReady += ready.Set;
         var session = Session(converter);
 
-        var watch = Stopwatch.StartNew();
+        // 経過時間で確かめると、プロセスで初めて打鍵を処理するときの JIT の時間も入る。変換エンジンは release まで答えないので、打鍵が答えを待てば ready が立つ
         var results = SessionFacadeTests.Type(session, "nihongo");
-        Assert.True(watch.ElapsedMilliseconds < 2000, $"打鍵は答えを待たない ({watch.ElapsedMilliseconds}ms)");
+        Assert.True(!ready.IsSet, "打鍵は答えを待たない");
         Assert.Equal("にほんご", results[^1].View?.Text);
 
         release.Set();

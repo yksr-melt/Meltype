@@ -95,7 +95,8 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         if anchor.length > 0, !hasMarkedText, let selection = client.attributedSubstring(from: anchor)?.string { field["selection"] = selection }
         let start = max(0, anchor.location - Self.beforeLength)
         let requested = NSRange(location: start, length: anchor.location - start)
-        let before = client.attributedSubstring(from: requested)?.string
+        // 文書先頭には直前の文字がない。長さ 0 の範囲に nil を返す入力欄でも、先頭は空文字と分かる。
+        let before = anchor.location == 0 ? "" : client.attributedSubstring(from: requested)?.string
         if let before { field["before"] = before }
         noteBefore(unreadable: before == nil) {
             // 原因を調べるために、短い範囲なら読めるかも書く

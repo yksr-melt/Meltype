@@ -9,6 +9,51 @@ namespace Meltype.Tests;
 internal static class SettingsJsonTests
 {
     [Test]
+    public static void SettingsJson_CommentChoicesDefaultOnAndRoundTripProfiles()
+    {
+        string[] keys = [nameof(Settings.CodeCommentSlash), nameof(Settings.CodeCommentHash), nameof(Settings.CodeCommentDash),
+            nameof(Settings.CodeCommentBlock), nameof(Settings.CodeCommentHtml), nameof(Settings.CodeCommentRem)];
+        static void Check(Settings settings, string[] keys, bool[] expected)
+        {
+            using var json = JsonDocument.Parse(settings.ToJson());
+            for (var i = 0; i < keys.Length; i++)
+                Assert.Equal(expected[i], json.RootElement.GetProperty(keys[i]).GetBoolean(), keys[i]);
+        }
+        var directory = Path.Combine(Path.GetTempPath(), "meltype-comment-settings-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var path = Path.Combine(directory, "config.json");
+            // 旧設定・一部だけ書いた設定でも、省略した記号はすべて ON。
+            foreach (var json in new[] { "{}", "{\"SettingsVersion\":12}", "{\"SettingsVersion\":13}", "{\"CodeCommentDash\":false}" })
+            {
+                File.WriteAllText(path, json);
+                var settings = Settings.Load(path);
+                bool[] expected = [true, true, !json.Contains("CodeCommentDash"), true, true, true];
+                Check(settings, keys, expected);
+                settings.Clone().Save(path);
+                Check(Settings.Load(path), keys, expected);
+            }
+            var standard = new Settings().Normalize();
+            var comments = standard.AddProfile("英語コメント")!;
+            comments.CodeCommentSlash = false;
+            comments.CodeCommentHash = false;
+            comments.CodeCommentDash = false;
+            comments.CodeCommentBlock = false;
+            comments.CodeCommentHtml = false;
+            comments.CodeCommentRem = false;
+            var switched = comments.SwitchProfile(Settings.DefaultProfileName);
+            Check(switched, keys, [true, true, true, true, true, true]);
+            switched.Clone().Save(path);
+            var restored = Settings.Load(path).SwitchProfile("英語コメント");
+            Check(restored, keys, [false, false, false, false, false, false]);
+            restored.Save(path);
+            Check(Settings.Load(path), keys, [false, false, false, false, false, false]);
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
+
+    [Test]
     public static void SettingsJson_ShowGuideDefaultsOnAndRoundTrips()
     {
         var directory = Path.Combine(Path.GetTempPath(), "meltype-guide-settings-" + Guid.NewGuid().ToString("N"));
