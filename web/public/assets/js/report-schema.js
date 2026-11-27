@@ -133,6 +133,7 @@ export const FORMS = [
     required: [
       { id: "problem", label: "困っていること", type: "textarea", placeholder: "Discord で絵文字を打つとき、毎回 : を打つのが面倒", hint: "どんな場面で、何が不便か" },
       { id: "idea", label: "こうなってほしい", type: "textarea", hint: "具体例があれば書いてください" },
+      { id: "version", label: "Meltype の版", type: "text", placeholder: "1.4.0", hint: "「ばーじょん」と打って変換すると、候補に出ます。インストールできていないときは「未インストール」と書いてください" },
     ],
     optional: [CONTACT],
     // フォームから外した欄。保存済みの報告 (180 日で消える) の表示だけに使う
