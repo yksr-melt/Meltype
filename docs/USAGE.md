@@ -186,6 +186,8 @@ kyouhagoogledekensaku  →  今日はgoogleで検索
 
 ローマ字の綴りを足す場合は、データフォルダーの `dictionaries/romaji.txt` に「綴り<Tab>かな」の形で書き、Meltype を起動し直します。組み込みの綴りより優先します。[AZIK の一部の規則を入れた見本](romaji-azik-sample.txt) もあります。
 
+英語 (US) 配列で JIS かなを使うときも、キーの位置でかなを入力します。<kbd>&#96;</kbd> で「ろ」、<kbd>\</kbd> で「む」、<kbd>Shift</kbd> + <kbd>-</kbd> で「ー」が入ります。
+
 <a name="ほかの-ime-から移るとき"></a>
 
 ## ほかの IME から移るとき

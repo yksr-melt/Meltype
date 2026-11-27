@@ -418,7 +418,11 @@ internal static class ImeSession
             return CommitCombiningForPassThrough(state, env, preserveLatinRaw: key.Ch is >= 0x0300 and <= 0x036F);
         // 補助面の文字 (絵文字など) は char に入らないので、未確定の内容を確定してからアプリに通す
         if (key.Ch >= 0x10000) return CommitForPassThrough(state, env);
-        var result = ComposeKey(state, env, vk, Position(vk, key.Physical), key.Ch > 0 ? (char)key.Ch : null, key.Shift, key.Ctrl, key.Alt, key.Command, key.ReleaseFollows);
+        var position = Position(vk, key.Physical);
+        // US 配列の Shift+- は _。JIS かなでは、US 配列にない ¥ キーの長音をこの位置で打てるようにする。
+        if (settings.InputStyle == InputStyle.Kana && settings.KanaLayout == KanaLayout.Jis &&
+            position == VirtualKeys.OemMinus && key.Shift && key.Ch == '_') position = 0xDC;
+        var result = ComposeKey(state, env, vk, position, key.Ch > 0 ? (char)key.Ch : null, key.Shift, key.Ctrl, key.Alt, key.Command, key.ReleaseFollows);
         // アプリに通したキーはキャレットを動かすかもしれない (Core が通すと決めたので、フロントからは送られてこない)
         if (!result.Consumed) CaretMoved(state, vk, key.Ctrl);
         return result;
@@ -458,6 +462,7 @@ internal static class ImeSession
     {
         >= 'a' and <= 'z' => ch - 0x20,
         >= 'A' and <= 'Z' or >= '0' and <= '9' or ' ' => ch,
+        '`' or '~' => ToggleShortcut.Grave,
         ',' => VirtualKeys.OemComma,
         '.' => VirtualKeys.OemPeriod,
         '-' => VirtualKeys.OemMinus,
@@ -803,7 +808,8 @@ internal static class ImeSession
     /// キーの位置 (<see cref="KeyPress.Position"/>)。物理キーが分からないフロント (端末・Android) と文字の無いキーは、仮想キーコードの位置のキーとみなす
     /// (Vk を文字から決めたなら、QWERTY のキーボードでその文字を打つキー)。
     /// </summary>
-    private static int Position(int vk, PhysicalKey? physical) => physical?.JisPosition() ?? vk;
+    private static int Position(int vk, PhysicalKey? physical) =>
+        vk == ToggleShortcut.Grave && physical?.IsGravePosition == true ? 0xE2 : physical?.JisPosition() ?? vk;
 
     /// <summary>
     /// 変換・無変換・ひらがな/カタカナ キー。設定「入力中のキーの役割を分ける」が ON (無変換は「無変換でカタカナを切り替える」が ON でもよい) で入力中なら、変換ボックスで処理する (issue #199)。
