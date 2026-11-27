@@ -462,6 +462,23 @@ internal static class ZenzaiConverterTests
     }
 
     [Test]
+    public static void Hybrid_KeepsParticlesAndDoesNotResplitAfterEnglish()
+    {
+        using var server = new FakeServer { Answer = p => p.Contains("ナラ", StringComparison.Ordinal) ? "なら" : "は知る" };
+        using var zenzai = new ZenzaiConverter(server.Endpoint);
+        // 同じ読みでも、文のはじめでは Mozc に任せ、英語に続く付属語では Zenzai のかなを残す。
+        Assert.True(zenzai.ConvertClauses("なら", null) is null, "文の始めは Mozc に任せる");
+        var kana = zenzai.ConvertClauses("なら", "python")!;
+        Assert.Equal("なら", kana.Single().Text);
+        Assert.Equal("なら", HybridConverter.Choose("なら", [(new("なら", "奈良"), ["奈良"])], kana, "python")!.Single().Text);
+
+        var mozc = new[] { (new ConversionClause("はしる", "走る"), (IReadOnlyList<string>)["走る"]) };
+        var z = new[] { new ConversionClause("はしる", "は知る", Zenzai: true) };
+        Assert.Equal("走る", HybridConverter.Choose("はしる", mozc, z, "python")!.Single().Text);
+        Assert.Equal("は知る", HybridConverter.Choose("はしる", mozc, z, "彼女")!.Single().Text);
+    }
+
+    [Test]
     public static void Align_BuildsTextFromEachClauseCandidates()
     {
         IReadOnlyList<(ConversionClause, IReadOnlyList<string>)> clauses =

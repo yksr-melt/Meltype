@@ -24,6 +24,9 @@ internal static class JapaneseParticles
     private static readonly HashSet<string> Readings = ["は", "が", "を", "に", "で", "と", "も", "へ", "の", "や", "か", "から", "まで", "より"];
 
     internal static bool IsParticle(string reading) => Readings.Contains(reading);
+
+    /// <summary>名詞の後ろの助詞・付属語の読み。ひらがなの答えにも意味がある。</summary>
+    internal static bool IsAttachedWord(string reading) => IsParticle(reading) || reading is "なら" or "しか" or "だけ" or "では" or "でも";
 }
 
 /// <summary>変換エンジンへの依頼。</summary>

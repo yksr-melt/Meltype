@@ -10,6 +10,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Meltype.Libraries.Chars;
 
 namespace Meltype.Engine;
 
@@ -183,7 +184,9 @@ internal sealed class ZenzaiConverter : IKanjiConverter, IDisposable
         var answer = Complete(Prompt(hiragana, context), timeout.Token);
         // 読みのまま (変換していない: かんたん → かんたん) の答えは使わない。Mozc に任せる。記号の幅は、zenz に半角で渡すので見ない (ほんとう？ → ほんとう?)。
         // 壊れた答え (はーどうぇ → ハードウェアウェア…) かは、Mozc の候補と比べられる HybridConverter が決める
-        var text = answer is null || ToHalfWidth(answer) == ToHalfWidth(hiragana) ? null : answer;
+        // 英単語に続く付属語 (python なら) では、かなのままの答えも変換結果として使う。
+        var keepsAttachedWord = TextChars.LanguageOf(context) == true && JapaneseParticles.IsAttachedWord(hiragana);
+        var text = answer is null || !keepsAttachedWord && ToHalfWidth(answer) == ToHalfWidth(hiragana) ? null : answer;
         // 経過時間を測って比べない。Windows の Environment.TickCount64 は約 16 ms 刻みなので、時間切れでも _timeoutMs より短く測れて、失敗に数えてしまう
         var slow = timeout.IsCancellationRequested;
         lock (_gate)

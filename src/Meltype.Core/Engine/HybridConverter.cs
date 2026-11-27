@@ -83,12 +83,12 @@ internal sealed class HybridConverter(MozcConverter mozc, Func<ZenzaiConverter?>
     {
         var fromMozc = mozc.ConvertWithCandidates(request);
         if (!request.Zenzai || Zenzai(request) is not { Count: > 0 } z) return fromMozc?.Select(s => s.Clause).ToList();
-        return Choose(request.Hiragana, fromMozc, z);
+        return Choose(request.Hiragana, fromMozc, z, request.Before);
     }
 
     /// <summary><see cref="Convert"/> の、Zenzai の答え z と Mozc の結果 fromMozc から使う結果を選ぶところ。</summary>
     internal static IReadOnlyList<ConversionClause>? Choose(string hiragana, IReadOnlyList<(ConversionClause Clause, IReadOnlyList<string> Candidates)>? fromMozc,
-        IReadOnlyList<ConversionClause> z)
+        IReadOnlyList<ConversionClause> z, string? before = null)
     {
         var other = fromMozc?.Select(s => s.Clause).ToList();
         // Zenzai の答えと同じなら、その文節も Zenzai の答えとして印を付ける
@@ -100,8 +100,21 @@ internal sealed class HybridConverter(MozcConverter mozc, Func<ZenzaiConverter?>
             var kept = fromMozc.Select(s => s.Clause.UserWord ? (s.Clause, (IReadOnlyList<string>)[s.Clause.Text]) : s).ToList();
             return Align(kept, z[0].Text)?.Select(c => c with { Zenzai = true }).ToList() ?? other;
         }
-        return (fromMozc is not null ? Align(fromMozc, z[0].Text)?.Select(c => c with { Zenzai = true }).ToList() : null)
-            ?? (ZenzaiConverter.KeepsSymbols(hiragana, z[0].Text) && ZenzaiConverter.IsPlausible(hiragana, z[0].Text) ? z : other);
+        var answer = z[0].Text;
+        if (fromMozc is not null && Align(fromMozc, answer) is { } aligned)
+            return aligned.Select(c => c with { Zenzai = true }).ToList();
+        // 英単語の後ろで、Mozc の候補には無い区切りで助詞を作った答え (python + はしる → は知る) は使わない。
+        if (other is [{ Text: var first }, ..] && TextChars.LanguageOf(before) == true && answer != hiragana &&
+            HasNewLeadingParticle(hiragana, answer, first)) return other;
+        return ZenzaiConverter.KeepsSymbols(hiragana, answer) && ZenzaiConverter.IsPlausible(hiragana, answer) ? z : other;
+    }
+
+    private static bool HasNewLeadingParticle(string reading, string answer, string mozc)
+    {
+        // 最長の共通のかなが付属語で、Mozc の最初の候補にはその境界がないか。
+        var end = 0;
+        while (end < reading.Length && end < answer.Length && reading[end] == answer[end]) end++;
+        return end > 0 && JapaneseParticles.IsAttachedWord(reading[..end]) && !mozc.StartsWith(reading[..end], StringComparison.Ordinal);
     }
 
     /// <summary>
