@@ -1843,6 +1843,23 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void ElementNames_OfferTheSymbolAndAbridgedAtomicWeight()
+    {
+        foreach (var (typed, symbol, weight) in new[]
+        {
+            ("suiso", "H", "H (AW=1.0)"), ("enso", "Cl", "Cl (AW=35.5)"), ("oganeson", "Og", null),
+        })
+        {
+            var keyboard = new Keyboard();
+            keyboard.Type(typed + " ");
+            var candidates = keyboard.Host.View!.Candidates;
+            Assert.True(candidates[0] != symbol && candidates.Contains(symbol), string.Join(",", candidates));
+            if (weight is not null) Assert.True(candidates.Contains(weight), string.Join(",", candidates));
+            else Assert.True(!candidates.Any(c => c.Contains("AW=", StringComparison.Ordinal)), string.Join(",", candidates));
+        }
+    }
+
+    [Test]
     public static void Candidates_IncludeHomophonesFromDictionary()
     {
         // 報告: とうてん が 当店 しか出ない。
