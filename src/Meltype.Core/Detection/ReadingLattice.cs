@@ -135,6 +135,7 @@ internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
         bool manual, bool englishSentence, bool kanaInput, bool punctuateAfterEnglish, double englishBias, int count, List<Func<string>>? reasons = null)
     {
         var text = prepared.Raw + pending;
+        var lowerText = text.ToLowerInvariant();
         var length = text.Length;
         if (length == 0) return [[new CompositionSegment(false, "", "")]];
         var keep = count > 1 ? PathsPerState : 1;
@@ -289,7 +290,7 @@ internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
             if (EscapeEnd(learning, text, p) is >= 0 and var escape) return new(LexemeRule.Escape, escape, domain, technical);
             if (HyphenatedWordEnd(prepared, learning, units, unit, pending) is >= 0 and var hyphenated) return new(LexemeRule.HyphenatedWord, RawEnd(hyphenated), domain, technical);
             if (NumeronymEnd(prepared, units, unit, pending) is >= 0 and var numeronym) return new(LexemeRule.Numeronym, RawEnd(numeronym), domain, technical);
-            if (ProperNounWithDigitsEnd(text, p) is >= 0 and var proper) return new(LexemeRule.ProperNounWithDigits, proper, domain, technical);
+            if (ProperNounWithDigitsEnd(lowerText, p) is >= 0 and var proper) return new(LexemeRule.ProperNounWithDigits, proper, domain, technical);
             if (VersionSuffixEnd(units, unit, pending) is >= 0 and var version) return new(LexemeRule.VersionSuffix, RawEnd(version), domain, technical);
             return new(LexemeRule.None, -1, domain, technical);
         }
@@ -886,9 +887,11 @@ internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
         var letter = false;
         for (var i = start; i < text.Length && char.IsAsciiLetterOrDigit(text[i]); i++)
         {
+            var prefix = text.AsSpan(start, i - start + 1);
+            if (!words.ProperNouns.HasPrefix(prefix)) break;
             digit |= char.IsAsciiDigit(text[i]);
             letter |= char.IsAsciiLetter(text[i]);
-            if (digit && letter && words.ProperNouns.Contains(text[start..(i + 1)].ToLowerInvariant())) end = i + 1;
+            if (digit && letter && words.ProperNouns.Contains(prefix)) end = i + 1;
         }
         return end;
     }
