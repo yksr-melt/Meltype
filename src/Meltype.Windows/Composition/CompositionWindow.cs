@@ -311,9 +311,10 @@ internal sealed class CompositionWindow : PopupForm
         {
             for (var i = 0; i < items.Count; i++)
             {
-                // 候補の右に注記を出す分だけ広くする
+                // 候補の右に注記や色見本を出す分だけ広くする
                 var note = view.Notes?[i].ToDisplayText() is { } n ? TextRenderer.MeasureText(g, n, _hintFont).Width + 12 : 0;
-                width = Math.Max(width, TextRenderer.MeasureText(g, $"9  {items[i]}", _candidateFont).Width + 28 + note);
+                var swatch = TryDecodeColor(view.Colors, i, out _) ? SwatchWidth() : 0;
+                width = Math.Max(width, TextRenderer.MeasureText(g, $"9  {items[i]}", _candidateFont).Width + 28 + note + swatch);
             }
             height += Math.Min(items.Count, PageSize) * (_candidateFont.Height + 4) + 6;
             // 2 ページ以上あるときは、下に「3 / 27」を出す分
@@ -407,14 +408,25 @@ internal sealed class CompositionWindow : PopupForm
                     using var highlight = new SolidBrush(Color.FromArgb(60, Accent));
                     g.FillRectangle(highlight, 4, y - 2, Width - 8, rowHeight);
                 }
-                DrawText(g, $"{(numbered ? $"{i - first + 1}" : " ")}  {items[i]}", _candidateFont, new Point(12, y),
+                var rowText = $"{(numbered ? $"{i - first + 1}" : " ")}  {items[i]}";
+                DrawText(g, rowText, _candidateFont, new Point(12, y),
                     i == selectedItem ? _palette.Text : _palette.Candidate,
                     i == selectedItem ? Blend(Background, Color.FromArgb(60, Accent)) : Background, TextFormatFlags.NoPrefix);
+                var rightEdge = Width - 10;
                 if (view.Notes?[i].ToDisplayText() is { } note)
                 {
                     // 候補の注記を右端に小さく出す
                     var noteWidth = TextRenderer.MeasureText(g, note, _hintFont).Width;
-                    TextRenderer.DrawText(g, note, _hintFont, new Point(Width - noteWidth - 10, y + (_candidateFont.Height - _hintFont.Height) / 2), Accent, TextFormatFlags.NoPrefix);
+                    TextRenderer.DrawText(g, note, _hintFont, new Point(rightEdge - noteWidth, y + (_candidateFont.Height - _hintFont.Height) / 2), Accent, TextFormatFlags.NoPrefix);
+                    rightEdge -= noteWidth + 8;
+                }
+                if (TryDecodeColor(view.Colors, i, out var rgba))
+                {
+                    var swatchSize = SwatchSize(rowHeight);
+                    var textWidth = TextRenderer.MeasureText(g, rowText, _candidateFont).Width;
+                    var swatchX = Math.Min(12 + textWidth + 6, rightEdge - swatchSize);
+                    var swatchY = y + (_candidateFont.Height - swatchSize) / 2;
+                    DrawColorSwatch(g, swatchX, swatchY, swatchSize, rgba);
                 }
                 y += rowHeight;
             }
@@ -430,6 +442,43 @@ internal sealed class CompositionWindow : PopupForm
             y += 6;
         }
         TextRenderer.DrawText(g, view.Hint, _hintFont, new Point(8, y), _palette.Hint, TextFormatFlags.NoPrefix);
+    }
+
+    private int SwatchSize(int rowHeight) =>
+        Math.Max(12, Math.Min(rowHeight - 2, (int)Math.Round(14 * _monitorScale)));
+
+    private int SwatchWidth() => SwatchSize(_candidateFont.Height + 4) + 14;
+
+    private static bool TryDecodeColor(IReadOnlyList<string?>? colors, int index, out (byte R, byte G, byte B, byte A) rgba)
+    {
+        rgba = default;
+        if (colors is null || index < 0 || index >= colors.Count || colors[index] is not { Length: 9 } hex || hex[0] != '#')
+            return false;
+        if (!byte.TryParse(hex.AsSpan(1, 2), System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out var r) ||
+            !byte.TryParse(hex.AsSpan(3, 2), System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out var g) ||
+            !byte.TryParse(hex.AsSpan(5, 2), System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out var b) ||
+            !byte.TryParse(hex.AsSpan(7, 2), System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out var a))
+            return false;
+        rgba = (r, g, b, a);
+        return true;
+    }
+
+    private void DrawColorSwatch(Graphics g, int x, int y, int size, (byte R, byte G, byte B, byte A) rgba)
+    {
+        if (rgba.A < 255)
+        {
+            var half = size / 2;
+            using var light = new SolidBrush(Color.White);
+            using var dark = new SolidBrush(Color.LightGray);
+            g.FillRectangle(light, x, y, half, half);
+            g.FillRectangle(dark, x + half, y, size - half, half);
+            g.FillRectangle(dark, x, y + half, half, size - half);
+            g.FillRectangle(light, x + half, y + half, size - half, size - half);
+        }
+        using var fill = new SolidBrush(Color.FromArgb(rgba.A, rgba.R, rgba.G, rgba.B));
+        g.FillRectangle(fill, x, y, size, size);
+        using var border = new Pen(Color.FromArgb(160, _palette.Hint));
+        g.DrawRectangle(border, x, y, size, size);
     }
 
     /// <summary>
