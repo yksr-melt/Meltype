@@ -3535,6 +3535,13 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void DehaRemainsACompleteParticleAfterAnEnglishWord()
+    {
+        AssertCommitted(("dokkanoverdeha", "どっかのverでは"), ("watashideha", "わたしでは"),
+            ("verdekara", "verdeから"), ("googledeha", "googleでは"));
+    }
+
+    [Test]
     public static void Punctuation_FollowsSetting()
     {
         // 句読点の設定 (Microsoft IME と同じ 4 通り)。数字の間の . , (1.5、1,000) は半角のまま。
