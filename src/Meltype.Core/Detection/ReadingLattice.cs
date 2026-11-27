@@ -102,7 +102,7 @@ internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
     }
 
     /// <summary>コストで比べずに、その区間を英語にする記号・数字の決まり (このクラスの説明の「コストで比べない決まり」)。</summary>
-    private enum LexemeRule { None, Dotfile, UserName, Escape, HyphenatedWord, Numeronym, ProperNounWithDigits, VersionSuffix }
+    private enum LexemeRule { None, Dotfile, UserName, Escape, HyphenatedWord, Numeronym, ProperNounWithDigits, VersionSuffix, CodeName }
 
     /// <summary>
     /// 1 つの位置から始まる字句。Rule が None でなければ、End (打った文字の位置) までを英語にする。
@@ -287,6 +287,7 @@ internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
             if (UserNameEnd(prepared, units, unit, pending) is >= 0 and var user) return new(LexemeRule.UserName, RawEnd(user), domain, technical);
             if (!englishLevel) return new(LexemeRule.None, -1, domain, technical);
             if (EscapeEnd(learning, text, p) is >= 0 and var escape) return new(LexemeRule.Escape, escape, domain, technical);
+            if (CodeNameEnd(text, p) is >= 0 and var codeName) return new(LexemeRule.CodeName, codeName, domain, technical);
             if (HyphenatedWordEnd(prepared, learning, units, unit, pending) is >= 0 and var hyphenated) return new(LexemeRule.HyphenatedWord, RawEnd(hyphenated), domain, technical);
             if (NumeronymEnd(prepared, units, unit, pending) is >= 0 and var numeronym) return new(LexemeRule.Numeronym, RawEnd(numeronym), domain, technical);
             if (ProperNounWithDigitsEnd(prepared, units, unit, pending) is >= 0 and var proper) return new(LexemeRule.ProperNounWithDigits, RawEnd(proper), domain, technical);
@@ -449,6 +450,29 @@ internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
     /// 2 文字以上の付属語 (ます・ません) は、英単語を切り出した残りにはまずならず、なっても日本語の根拠として十分なので入れない。
     /// </summary>
     private static readonly HashSet<string> VerbAuxiliaries = ["う", "た", "て", "ば", "れ"];
+
+    private static readonly string[] CommonFunctionNames = ["main", "setup", "launch", "init", "loop", "draw"];
+    private static readonly string[] CommonBranchNames = ["main", "master", "develop"];
+
+    /// <summary>技術的な文脈を示す日本語が続くときに、関数名・ブランチ名のつづりを保持する。</summary>
+    private int CodeNameEnd(string text, int start)
+    {
+        var tail = text.AsSpan(start);
+        foreach (var name in CommonFunctionNames)
+        {
+            if (!tail.StartsWith(name, StringComparison.Ordinal) || tail.Length <= name.Length || tail[name.Length] != 'k') continue;
+            var after = words.Romaji.ConvertLenient(text[(start + name.Length)..].ToLowerInvariant(), final: false);
+            if (after.StartsWith("かんすう", StringComparison.Ordinal)) return start + name.Length;
+        }
+        foreach (var name in CommonBranchNames)
+        {
+            if (!tail.StartsWith(name, StringComparison.Ordinal) || tail.Length <= name.Length || tail[name.Length] != 'o') continue;
+            var after = words.Romaji.ConvertLenient(text[(start + name.Length)..].ToLowerInvariant(), final: false);
+            if (after.StartsWith("おちて", StringComparison.Ordinal) || after.StartsWith("おちた", StringComparison.Ordinal) ||
+                after.StartsWith("おちる", StringComparison.Ordinal)) return start + name.Length;
+        }
+        return -1;
+    }
 
     /// <summary>
     /// start から始まる技術用語の綴り (share・make) のすぐ後ろが する の活用 (して・します) か。
