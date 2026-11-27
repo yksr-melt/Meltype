@@ -23,10 +23,11 @@ internal static class SmoothCaretTests
         Assert.True(motion.SetTarget(124, 200, 20), "近くの移動ではアニメーションを開始する");
         Assert.True(motion.IsActive, "アニメーション中になる");
         Assert.Equal(100f, motion.CurrentX);
-        Assert.True(motion.Opacity > 0.5f, "移動開始時は鮮明な不透明度になる");
+        Assert.True(motion.Opacity is > 0.2f and < 0.6f, $"出発直後はソフトフェードインする: {motion.Opacity}");
 
         motion.Step(16f);
         Assert.True(motion.CurrentX > 105f && motion.CurrentX < 115f, $"1 フレーム後はゆったり中間に位置する: {motion.CurrentX}");
+        Assert.True(motion.Opacity > 0.8f, $"フェードイン後は鮮明な不透明度になる: {motion.Opacity}");
 
         // ゆったり減速しながらターゲット近傍へ達し、オーバーシュートせずにネイティブキャレットへ引き継ぐ
         var steps = 0;
@@ -42,6 +43,24 @@ internal static class SmoothCaretTests
         Assert.Equal(124f, motion.CurrentX);
         Assert.True(!motion.IsActive, "到着ハンドオフ後は即座に非アクティブになる");
         Assert.Equal(0f, motion.Opacity);
+    }
+
+    [Test]
+    public static void SmoothCaretMotion_IgnoresRevertSpikeAndKeepsOpacityWhenMasked()
+    {
+        var motion = new SmoothCaretMotion();
+        motion.SetTarget(100, 200, 20);
+        Assert.True(motion.SetTarget(120, 200, 20, 2f, nativeCaretMasked: true), "マスク有効でアニメーション開始");
+
+        motion.Step(20f, nativeCaretMasked: true);
+        // 40ms 以内に直前の元の座標 (100) へ戻る UIA キャッシュ遅延スパイクは無視し、ターゲット 120 を維持する
+        Assert.True(motion.SetTarget(100, 200, 20, 2f, nativeCaretMasked: true), "逆戻りスパイクでも進行中を維持する");
+        Assert.Equal(120f, motion.TargetX);
+
+        // 単色背景マスク有効時は到着直前 (残り 1px 付近) でも薄くならず、最後まで鮮明に吸い付く
+        while (motion.TargetX - motion.CurrentX > 1.2f)
+            motion.Step(8.33f, nativeCaretMasked: true);
+        Assert.True(motion.IsActive && motion.Opacity > 0.85f, $"マスク有効時は到着直前まで鮮明な不透明度を維持: {motion.Opacity}");
     }
 
     [Test]

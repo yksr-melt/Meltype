@@ -10,7 +10,7 @@ namespace Meltype.Composition;
 /// <summary>
 /// システム全体の入力欄でテキストカーソルが動くとき、Word のように滑らかに追従するクリックスルー・レイヤードオーバーレイ。
 /// UpdateLayeredWindow によるサブピクセル描画と DwmFlush 垂直同期駆動でちらつき・カクつきをなくし、
-/// 到着先のネイティブキャレットと重なる手前で透明へ溶け込ませることで二重表示やぼやけを防ぐ。
+/// 単色背景では移動先のネイティブキャレットを一時マスクで隠すことで常に 1 本の美しいカーソルとして見せる。
 /// </summary>
 internal sealed class SmoothCaretWindow : PopupForm
 {
@@ -22,6 +22,7 @@ internal sealed class SmoothCaretWindow : PopupForm
     private const int BurstDurationMs = 140;
     private const int StripWidth = 4;
     private const int MaxBitmapHeight = 128;
+    private const int BackgroundColorTolerance = 10;
     private const byte AC_SRC_OVER = 0;
     private const byte AC_SRC_ALPHA = 1;
     private const uint ULW_ALPHA = 0x00000002;
@@ -35,6 +36,7 @@ internal sealed class SmoothCaretWindow : PopupForm
     private readonly Control _invoker;
     private readonly Func<Rectangle?> _uiaCaretProvider;
     private readonly SmoothCaretMotion _motion = new();
+    private readonly CaretMaskWindow _maskWindow = new();
     private readonly System.Windows.Forms.Timer _pollTimer = new() { Interval = IdlePollIntervalMs };
     private readonly Native.WinEventProc _winEventCallback;
     private readonly Action _onVSyncFrameDelegate;
@@ -50,6 +52,7 @@ internal sealed class SmoothCaretWindow : PopupForm
     private int _frameQueued;
     private long _lastFrameTicks;
     private long _burstUntilMs;
+    private long _caretGeneration;
     private IntPtr _lastForeground;
     private IntPtr _caretHook;
     private IntPtr _selectionHook;
@@ -57,6 +60,8 @@ internal sealed class SmoothCaretWindow : PopupForm
     private int _uiaDirty;
 
     private volatile int _caretRgb = 0x141414;
+    private volatile int _backgroundRgb = 0xFFFFFF;
+    private volatile bool _hasUniformBackground;
     private IntPtr _sampledForeground;
     private long _lastColorSampleMs;
 
@@ -155,16 +160,18 @@ internal sealed class SmoothCaretWindow : PopupForm
         {
             while (Interlocked.Exchange(ref _uiaDirty, 0) != 0 && _enabled && !_suppressed && !IsDisposed)
             {
+                var generation = Interlocked.Increment(ref _caretGeneration);
                 var foreground = Native.GetForegroundWindow();
                 var bounds = _uiaCaretProvider();
                 if (bounds is { Width: >= 0, Height: > 0 and < 200 } rect && (rect.X != 0 || rect.Y != 0))
                 {
-                    SampleCaretColorOnWorker(foreground, rect);
+                    SampleBackgroundAndCaretColorOnWorker(foreground, rect);
                     if (!IsDisposed && !_invoker.IsDisposed && _invoker.IsHandleCreated)
                     {
                         _invoker.BeginInvoke(() =>
                         {
-                            if (_enabled && !_suppressed && !IsDisposed)
+                            // 古い非同期クエリが後から到着しても新しい座標を巻き戻さない
+                            if (_enabled && !_suppressed && !IsDisposed && generation == Interlocked.Read(ref _caretGeneration))
                                 ApplyCaretTarget(foreground, rect);
                         });
                     }
@@ -184,7 +191,7 @@ internal sealed class SmoothCaretWindow : PopupForm
     {
         if (_enabled && !_suppressed)
         {
-            EnsureWindowReady();
+            EnsureWindowsReady();
             InstallHooks();
             _pollTimer.Interval = IdlePollIntervalMs;
             _pollTimer.Start();
@@ -195,8 +202,12 @@ internal sealed class SmoothCaretWindow : PopupForm
         UninstallHooks();
         SetVSyncActive(false);
         _motion.Reset();
-        ClearLayered();
-        if (!_enabled && Visible) Hide();
+        ClearOverlayAndMask();
+        if (!_enabled)
+        {
+            if (Visible) Hide();
+            if (_maskWindow.Visible) _maskWindow.Hide();
+        }
     }
 
     private void InstallHooks()
@@ -235,6 +246,7 @@ internal sealed class SmoothCaretWindow : PopupForm
         if (!Native.ClientToScreen(info.hwndCaret, ref top) || (top.X == 0 && top.Y == 0))
             return false;
 
+        Interlocked.Increment(ref _caretGeneration);
         var width = Math.Clamp(info.rcCaret.Right - info.rcCaret.Left, 1, 3);
         var height = Math.Max(10, info.rcCaret.Bottom - info.rcCaret.Top);
         var rect = new Rectangle(top.X, top.Y, width, height);
@@ -248,30 +260,49 @@ internal sealed class SmoothCaretWindow : PopupForm
         if (foreground != IntPtr.Zero && foreground != _lastForeground)
         {
             _lastForeground = foreground;
+            _hasUniformBackground = false;
             _motion.Reset();
-            ClearLayered();
+            ClearOverlayAndMask();
         }
 
         if (!Screen.AllScreens.Any(s => s.Bounds.Contains(rect.Location))) return;
 
         var caretWidth = rect.Width is >= 1 and <= 3 ? rect.Width : Math.Clamp(SystemInformation.CaretWidth, 1, 2);
+        var useMask = _hasUniformBackground && foreground == _sampledForeground;
         var wasActive = _motion.IsActive;
-        if (_motion.SetTarget(rect.Left, rect.Top, rect.Height, caretWidth))
+        if (_motion.SetTarget(rect.Left, rect.Top, rect.Height, caretWidth, nativeCaretMasked: useMask))
         {
-            EnsureWindowReady();
-            if (!wasActive)
+            EnsureWindowsReady();
+            if (useMask)
+            {
+                // 移動先のネイティブキャレット幅だけ背景色で一時的に覆い、その手前に動くカーソルを重ねる
+                var maskWidth = Math.Clamp(caretWidth, 1, 2);
+                _maskWindow.ShowMask(rect.Left, rect.Top, maskWidth, Math.Clamp(rect.Height, 10, MaxBitmapHeight), _backgroundRgb);
+                _ = SetWindowPos(_maskWindow.Handle, HWND_TOPMOST, 0, 0, 0, 0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_NOSENDCHANGING);
+            }
+            else
+            {
+                _maskWindow.ClearMask();
+            }
+
+            // オーバーレイカーソルは常にマスクより手前に置く
+            if (!wasActive || useMask)
             {
                 _ = SetWindowPos(Handle, HWND_TOPMOST, 0, 0, 0, 0,
                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_NOSENDCHANGING);
-                _lastFrameTicks = Stopwatch.GetTimestamp();
             }
-            RenderLayered();
+
+            if (!wasActive)
+                _lastFrameTicks = Stopwatch.GetTimestamp();
+
+            RenderLayered(nativeCaretMasked: useMask);
             SetVSyncActive(true);
         }
         else if (wasActive)
         {
             SetVSyncActive(false);
-            ClearLayered();
+            ClearOverlayAndMask();
         }
     }
 
@@ -281,11 +312,14 @@ internal sealed class SmoothCaretWindow : PopupForm
         if (foreground == _sampledForeground && now - Interlocked.Read(ref _lastColorSampleMs) < 1500)
             return;
         Interlocked.Exchange(ref _lastColorSampleMs, now);
-        ThreadPool.QueueUserWorkItem(_ => SampleCaretColorOnWorker(foreground, rect));
+        ThreadPool.QueueUserWorkItem(_ => SampleBackgroundAndCaretColorOnWorker(foreground, rect));
     }
 
-    /// <summary>UI スレッドを止めないようワーカースレッド側で背景輝度をサンプルし、明暗に応じたキャレット色をキャッシュする。</summary>
-    private void SampleCaretColorOnWorker(IntPtr foreground, Rectangle rect)
+    /// <summary>
+    /// UI スレッドを止めないようワーカースレッド側でキャレット周囲の 4 点をサンプルし、
+    /// 3 点以上が同じ単色背景ならマスク有効化＋背景色キャッシュと明暗に応じたキャレット色を更新する。
+    /// </summary>
+    private void SampleBackgroundAndCaretColorOnWorker(IntPtr foreground, Rectangle rect)
     {
         var now = Environment.TickCount64;
         if (foreground == _sampledForeground && now - Interlocked.Read(ref _lastColorSampleMs) < 1500)
@@ -300,18 +334,67 @@ internal sealed class SmoothCaretWindow : PopupForm
         if (hdc == IntPtr.Zero) return;
         try
         {
-            var pixel = GetPixel(hdc, rect.Left + 6, rect.Top + rect.Height / 2);
-            if (pixel == uint.MaxValue) return;
-            var r = (int)(pixel & 0xFF);
-            var g = (int)((pixel >> 8) & 0xFF);
-            var b = (int)((pixel >> 16) & 0xFF);
+            // 行の上下余白とキャレット右側の 4 点をサンプルし、文字インクや画像背景を誤判定しないようにする
+            Span<int> samples = stackalloc int[4];
+            var count = 0;
+            ReadSample(hdc, rect.Left + 5, rect.Top + 1, samples, ref count);
+            ReadSample(hdc, rect.Left + 5, rect.Bottom - 2, samples, ref count);
+            ReadSample(hdc, rect.Left + 10, rect.Top + rect.Height / 2, samples, ref count);
+            ReadSample(hdc, rect.Left - 5, rect.Top + 1, samples, ref count);
+
+            if (count == 0)
+            {
+                _hasUniformBackground = false;
+                return;
+            }
+
+            var bestRgb = samples[0];
+            var bestMatches = 0;
+            for (var i = 0; i < count; i++)
+            {
+                var matches = 0;
+                for (var j = 0; j < count; j++)
+                {
+                    if (ColorsClose(samples[i], samples[j], BackgroundColorTolerance))
+                        matches++;
+                }
+                if (matches > bestMatches)
+                {
+                    bestMatches = matches;
+                    bestRgb = samples[i];
+                }
+            }
+
+            var r = (bestRgb >> 16) & 0xFF;
+            var g = (bestRgb >> 8) & 0xFF;
+            var b = bestRgb & 0xFF;
             var luminance = (r * 299 + g * 587 + b * 114) / 1000;
             _caretRgb = luminance >= 128 ? 0x141414 : 0xF2F2F2;
+            _backgroundRgb = bestRgb;
+            _hasUniformBackground = bestMatches >= 3;
         }
         finally
         {
             _ = ReleaseDC(IntPtr.Zero, hdc);
         }
+    }
+
+    private static void ReadSample(IntPtr hdc, int x, int y, Span<int> samples, ref int count)
+    {
+        var pixel = GetPixel(hdc, x, y);
+        if (pixel == uint.MaxValue) return;
+        var r = (int)(pixel & 0xFF);
+        var g = (int)((pixel >> 8) & 0xFF);
+        var b = (int)((pixel >> 16) & 0xFF);
+        samples[count++] = (r << 16) | (g << 8) | b;
+    }
+
+    private static bool ColorsClose(int rgbA, int rgbB, int tolerance)
+    {
+        var dr = Math.Abs(((rgbA >> 16) & 0xFF) - ((rgbB >> 16) & 0xFF));
+        var dg = Math.Abs(((rgbA >> 8) & 0xFF) - ((rgbB >> 8) & 0xFF));
+        var db = Math.Abs((rgbA & 0xFF) - (rgbB & 0xFF));
+        return dr <= tolerance && dg <= tolerance && db <= tolerance;
     }
 
     private void SetVSyncActive(bool active)
@@ -363,7 +446,7 @@ internal sealed class SmoothCaretWindow : PopupForm
         if (!_enabled || _suppressed || IsDisposed)
         {
             SetVSyncActive(false);
-            ClearLayered();
+            ClearOverlayAndMask();
             return;
         }
 
@@ -371,20 +454,22 @@ internal sealed class SmoothCaretWindow : PopupForm
         var dtMs = Math.Clamp((nowTicks - _lastFrameTicks) * 1000f / Stopwatch.Frequency, 0.5f, 50f);
         _lastFrameTicks = nowTicks;
 
-        if (_motion.Step(dtMs))
+        var masked = _maskWindow.IsMaskVisible;
+        if (_motion.Step(dtMs, nativeCaretMasked: masked))
         {
-            RenderLayered();
+            RenderLayered(nativeCaretMasked: masked);
         }
         else
         {
             SetVSyncActive(false);
-            ClearLayered();
+            ClearOverlayAndMask();
         }
     }
 
-    private void EnsureWindowReady()
+    private void EnsureWindowsReady()
     {
         EnsureGdiBuffer();
+        _maskWindow.EnsureReady();
         if (!Visible)
         {
             ClearLayered();
@@ -410,7 +495,7 @@ internal sealed class SmoothCaretWindow : PopupForm
             _oldBitmap = SelectObject(_memDc, _dib);
     }
 
-    private void RenderLayered()
+    private void RenderLayered(bool nativeCaretMasked)
     {
         EnsureGdiBuffer();
         if (_dib == IntPtr.Zero || _dibBits == IntPtr.Zero || !IsHandleCreated) return;
@@ -445,8 +530,8 @@ internal sealed class SmoothCaretWindow : PopupForm
         for (var col = 0; col < StripWidth; col++)
         {
             var screenX = baseX + col;
-            // ネイティブキャレットが既に描画されている列には一切重ね塗りせず、太り・ぼやけを物理的にゼロにする
-            if (sameLineAsTarget && screenX >= targetColStart && screenX <= targetColEnd)
+            // 単色背景マスクが出ていない場合のみ、ネイティブキャレット列への重ね塗りを防いでぼやけを抑える
+            if (!nativeCaretMasked && sameLineAsTarget && screenX >= targetColStart && screenX <= targetColEnd)
             {
                 rowPixels[col] = 0;
                 capPixels[col] = 0;
@@ -508,6 +593,12 @@ internal sealed class SmoothCaretWindow : PopupForm
         };
         _ = UpdateLayeredWindow(Handle, IntPtr.Zero, ref dstPt, ref size, _memDc, ref srcPt, 0, ref blend, ULW_ALPHA);
         _layeredCleared = false;
+    }
+
+    private void ClearOverlayAndMask()
+    {
+        _maskWindow.ClearMask();
+        ClearLayered();
     }
 
     private void ClearLayered()
@@ -572,9 +663,145 @@ internal sealed class SmoothCaretWindow : PopupForm
         if (disposing)
         {
             _pollTimer.Dispose();
+            _maskWindow.Dispose();
         }
         ReleaseGdiResources();
         base.Dispose(disposing);
+    }
+
+    /// <summary>
+    /// 移動先のネイティブキャレットを単色背景で一時的に覆い、アニメーション中の二重表示を防ぐ極小レイヤードウィンドウ。
+    /// </summary>
+    private sealed class CaretMaskWindow : PopupForm
+    {
+        private readonly int[] _pixels = new int[StripWidth * MaxBitmapHeight];
+        private IntPtr _memDc;
+        private IntPtr _dib;
+        private IntPtr _oldBitmap;
+        private IntPtr _dibBits;
+        private bool _cleared = true;
+
+        public CaretMaskWindow()
+        {
+            MinimumSize = new Size(1, 1);
+            Size = new Size(StripWidth, 18);
+        }
+
+        public bool IsMaskVisible => !_cleared;
+
+        protected override bool ClickThrough => true;
+
+        protected override CreateParams CreateParams
+        {
+            get
+            {
+                var cp = base.CreateParams;
+                cp.ExStyle |= WS_EX_LAYERED;
+                return cp;
+            }
+        }
+
+        public void EnsureReady()
+        {
+            EnsureGdiBuffer();
+            if (!Visible)
+            {
+                ClearMask();
+                ShowOnTop();
+            }
+        }
+
+        public void ShowMask(int x, int y, int width, int height, int backgroundRgb)
+        {
+            EnsureReady();
+            if (_dib == IntPtr.Zero || _dibBits == IntPtr.Zero || !IsHandleCreated) return;
+
+            width = Math.Clamp(width, 1, StripWidth);
+            height = Math.Clamp(height, 10, MaxBitmapHeight);
+            var opaqueBg = unchecked((int)0xFF000000) | (backgroundRgb & 0x00FFFFFF);
+
+            for (var row = 0; row < height; row++)
+            {
+                var offset = row * StripWidth;
+                for (var col = 0; col < StripWidth; col++)
+                    _pixels[offset + col] = col < width ? opaqueBg : 0;
+            }
+
+            Marshal.Copy(_pixels, 0, _dibBits, StripWidth * height);
+
+            var dstPt = new Native.POINT { X = x, Y = y };
+            var size = new SIZE { cx = width, cy = height };
+            var srcPt = new Native.POINT { X = 0, Y = 0 };
+            var blend = new BLENDFUNCTION
+            {
+                BlendOp = AC_SRC_OVER,
+                BlendFlags = 0,
+                SourceConstantAlpha = 255,
+                AlphaFormat = AC_SRC_ALPHA,
+            };
+            _ = UpdateLayeredWindow(Handle, IntPtr.Zero, ref dstPt, ref size, _memDc, ref srcPt, 0, ref blend, ULW_ALPHA);
+            _cleared = false;
+        }
+
+        public void ClearMask()
+        {
+            if (_cleared || !IsHandleCreated) return;
+            EnsureGdiBuffer();
+            if (_dib == IntPtr.Zero || _dibBits == IntPtr.Zero) return;
+
+            Marshal.WriteInt32(_dibBits, 0);
+            var dstPt = new Native.POINT { X = -32000, Y = -32000 };
+            var size = new SIZE { cx = 1, cy = 1 };
+            var srcPt = new Native.POINT { X = 0, Y = 0 };
+            var blend = new BLENDFUNCTION
+            {
+                BlendOp = AC_SRC_OVER,
+                BlendFlags = 0,
+                SourceConstantAlpha = 0,
+                AlphaFormat = AC_SRC_ALPHA,
+            };
+            _ = UpdateLayeredWindow(Handle, IntPtr.Zero, ref dstPt, ref size, _memDc, ref srcPt, 0, ref blend, ULW_ALPHA);
+            _cleared = true;
+        }
+
+        private void EnsureGdiBuffer()
+        {
+            if (_dib != IntPtr.Zero) return;
+            _memDc = CreateCompatibleDC(IntPtr.Zero);
+            var bmi = new BITMAPINFO
+            {
+                biSize = Marshal.SizeOf<BITMAPINFO>(),
+                biWidth = StripWidth,
+                biHeight = -MaxBitmapHeight,
+                biPlanes = 1,
+                biBitCount = 32,
+                biCompression = 0,
+            };
+            _dib = CreateDIBSection(_memDc, ref bmi, 0, out _dibBits, IntPtr.Zero, 0);
+            if (_dib != IntPtr.Zero)
+                _oldBitmap = SelectObject(_memDc, _dib);
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (_memDc != IntPtr.Zero && _oldBitmap != IntPtr.Zero)
+            {
+                _ = SelectObject(_memDc, _oldBitmap);
+                _oldBitmap = IntPtr.Zero;
+            }
+            if (_dib != IntPtr.Zero)
+            {
+                _ = DeleteObject(_dib);
+                _dib = IntPtr.Zero;
+                _dibBits = IntPtr.Zero;
+            }
+            if (_memDc != IntPtr.Zero)
+            {
+                _ = DeleteDC(_memDc);
+                _memDc = IntPtr.Zero;
+            }
+            base.Dispose(disposing);
+        }
     }
 
     [StructLayout(LayoutKind.Sequential)]
