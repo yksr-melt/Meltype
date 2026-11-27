@@ -7,6 +7,7 @@ import Carbon.HIToolbox
 final class EventClient: NSObject, IMKTextInput {
  var document=""; var marked=""
  var appID = "local.meltype.event-client"
+ var canReadSubstring = true
  var contextReads = 0
  var lineRect = NSRect(x:0,y:0,width:1,height:20)
  var fontSize: CGFloat = 13
@@ -25,7 +26,7 @@ final class EventClient: NSObject, IMKTextInput {
  func attributedSubstring(from range:NSRange)->NSAttributedString! {
   contextReads += 1
   let text = document as NSString
-  guard range.location != NSNotFound, range.location <= text.length else { return nil }
+  guard canReadSubstring, range.length > 0, range.location != NSNotFound, range.location <= text.length else { return nil }
   let length = min(range.length, text.length - range.location)
   return NSAttributedString(string: text.substring(with: NSRange(location: range.location, length: length)))
  }
@@ -94,6 +95,24 @@ struct EventTests {
    precondition(key(controller,client,"\r",code:UInt16(kVK_Return)))
    equal(client.document,"「」")
    equal(client.marked,"")
+  }
+  for prefix in ["", "前の行\n"] {
+   check("snippet after \(prefix.debugDescription)") { controller,client in
+    client.document = prefix
+    type(controller,client,";tes")
+    equal(client.document,prefix + ";tes")
+    equal(client.marked,"")
+    precondition(key(controller,client," ",code:UInt16(kVK_Space)))
+    equal(client.document,prefix + "テスト")
+   }
+  }
+  check("unreadable snippet after newline") { controller,client in
+   client.document = "前の行\n"
+   client.canReadSubstring = false
+   precondition(key(controller,client,";",code:UInt16(kVK_ANSI_Semicolon)))
+   equal(client.document,"前の行\n")
+   precondition(!client.marked.isEmpty)
+   controller.commitComposition(client)
   }
   for (authApp, normalApp, firstKey, first, rest) in [
    ("com.apple.loginwindow", "local.meltype.event-client", kVK_ANSI_S, "s", "a12"),

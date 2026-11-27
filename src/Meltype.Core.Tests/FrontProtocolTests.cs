@@ -42,18 +42,18 @@ internal static class FrontProtocolTests
             // 送る入力欄の事実
             Others: ["app", "selection"]),
         new("端末", "tui/meltype-tty", source => source, new([], Index: true),
-            // 端末はキーをすべて送り (capture を見ない)、canRemove: false なので removeBefore は来ない。案内 (hint) は端末に届かないキーも書くので出さない
+            // 端末はキーをすべて送り (capture を見ない)、canRemove: false なので removeBefore は来ない。案内 (hint) は端末に届かないキーも書くので出さない。変換中の文字は行に重ねて出すだけで、中のカーソルは描かない
             Unused: ["version", "state", "handlesInput", "imeOpen", "languageMode", "modeIndicatorMs", "capture", "printableAscii", "printableAsciiExcept",
                 "shortcuts", "vk", "modifiers", "ctrlKeysWhileComposing", "altKeys", "keyReleases", "revision", "currentWord", "insertByPaste",
-                "removeBefore", "hint", "notes", "selectedMeaning", "meaningDelayMs"],
+                "removeBefore", "hint", "notes", "selectedMeaning", "meaningDelayMs", "caretBack"],
             Others: []),
         new("Android", "android/app/src/main/kotlin/app/meltype/keyboard/core/ImeJson.kt", source => source,
             new(["getString", "getInt", "getBoolean", "getJSONObject", "getJSONArray", "optString", "optInt", "optBoolean", "optJSONObject", "optJSONArray", "isNull"]),
-            // Android reports field facts to Core, and handles text edits, candidate choices and the language mode from its output.
+            // Android reports field facts to Core, and handles text edits, candidate choices and the language mode from its output. The composing text is sent with setComposingText, which keeps the cursor at its end, so caretBack is unused.
             Unused: ["version", "handlesInput", "imeOpen", "modeIndicatorMs", "capture", "printableAscii",
                 "printableAsciiExcept", "shortcuts", "vk", "modifiers", "ctrlKeysWhileComposing", "revision", "currentWord", "insertByPaste",
                 "keyReleases", "altKeys", "hint", "spellingSuggestion", "typedKeys", "notes", "numbered",
-                "selectedMeaning", "meaningDelayMs"],
+                "selectedMeaning", "meaningDelayMs", "caretBack"],
             Others: []),
         new("macOS", "mac/Sources/MeltypeIME/NativeCore.swift", source => source[source.IndexOf("struct ImeOutput", StringComparison.Ordinal)..source.IndexOf("/// libMeltypeNative", StringComparison.Ordinal)],
             new([], Fields: true),

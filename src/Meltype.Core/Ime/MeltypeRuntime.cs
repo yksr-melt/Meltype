@@ -56,6 +56,7 @@ public sealed class MeltypeRuntime : IDisposable
             History = Learning.History,
             Misspellings = MisspellingDictionary.Load(_userDirectory),
             Languages = Learning.LanguageMemory,
+            FieldModes = Learning.FieldModes,
             Translations = TranslationDictionary.Load(),
             Meanings = MeaningDictionary.Load(),
             RomajiTypos = RomajiTypoCorrector.Load(Detector.Romaji),
