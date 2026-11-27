@@ -1378,6 +1378,23 @@ internal static class RawCandidateTests
 internal static class RomajiTypoTests
 {
     [Test]
+    public static void TrailingConsonantsStayVisibleOnCommit()
+    {
+        foreach (var (typed, expected) in new[]
+        {
+            ("anb", "あんb"), ("kanb", "かんb"), ("anm", "あんm"), ("anh", "あんh"),
+            ("a-nb", "あーんb"), ("a\\nb", "あ\\nb"), ("anp", "あんp"), ("a-nk", "あーんk"),
+        })
+        {
+            var keyboard = new CompositionTests.Keyboard();
+            keyboard.Type(typed);
+            Assert.Equal(expected, keyboard.Showing, typed);
+            keyboard.Type("\n");
+            Assert.Equal(expected, keyboard.Host.Document, typed);
+        }
+    }
+
+    [Test]
     public static void RomajiTypos_AreFixedOnCommit()
     {
         CompositionTests.AssertCommitted(
