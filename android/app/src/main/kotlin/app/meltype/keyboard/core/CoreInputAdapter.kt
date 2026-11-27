@@ -2,6 +2,9 @@
 // Copyright (C) 2026 KoheiTakada
 package app.meltype.keyboard.core
 
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.BackgroundColorSpan
 import android.view.KeyEvent
 import android.view.inputmethod.ExtractedTextRequest
 import android.view.inputmethod.InputConnection
@@ -18,6 +21,8 @@ internal class CoreInputAdapter(
     /** Records where these edits leave the caret, to tell them from moves by the user or the app. */
     private val caret: CaretWatch = CaretWatch(),
     private val connection: () -> InputConnection?,
+    /** The background of the selected clause while converting (ARGB), so that its boundary can be seen. */
+    private val selectedClauseColor: () -> Int = { 0 },
 ) {
     /** The composing text this adapter shows in the editor ("" if none). */
     var shown: String = ""
@@ -104,7 +109,7 @@ internal class CoreInputAdapter(
                 }
                 val view = result.view
                 if (view != null) {
-                    input.setComposingText(view.text, 1)
+                    input.setComposingText(composingText(view), 1)
                     caret.replaced(shown.length, view.text.length)
                     shown = view.text
                 } else if (composing) {
@@ -122,6 +127,19 @@ internal class CoreInputAdapter(
         japanese = result.japanese
         refreshChoices()
         return result.consumed
+    }
+
+    /**
+     * The composing text, with the selected clause marked while converting: its boundary moves when the clause is
+     * resized (Shift + ← → from the space bar), so it must be visible. Editors that ignore spans show plain text.
+     */
+    private fun composingText(view: ImeView): CharSequence {
+        val range = selectedClauseRange(view) ?: return view.text
+        val color = selectedClauseColor()
+        if (color == 0) return view.text
+        return SpannableString(view.text).apply {
+            setSpan(BackgroundColorSpan(color), range.first, range.last + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE or Spanned.SPAN_COMPOSING)
+        }
     }
 
     /** Moves the cursor [count] UTF-16 units to the left of where the last commit left it. */
@@ -148,4 +166,16 @@ internal class CoreInputAdapter(
         /** UTF-16 units after the cursor sent as field.after (as the Mac and IBus fronts). */
         const val AFTER_LENGTH = 20
     }
+}
+
+/**
+ * Where the selected clause is in [ImeView.text] (UTF-16 offsets), or null when not converting or when the
+ * clauses do not make up the shown text.
+ */
+internal fun selectedClauseRange(view: ImeView): IntRange? {
+    if (!view.converting || view.clauses.isEmpty() || view.selectedClause !in view.clauses.indices) return null
+    if (view.clauses.joinToString("") != view.text) return null
+    val start = view.clauses.take(view.selectedClause).sumOf { it.length }
+    val length = view.clauses[view.selectedClause].length
+    return if (length == 0) null else start until start + length
 }

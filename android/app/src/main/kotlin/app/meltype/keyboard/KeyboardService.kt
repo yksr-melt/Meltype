@@ -83,7 +83,10 @@ class KeyboardService : InputMethodService(), KeyListener {
     private val bridge = EditorBridge { currentInputConnection }
     /** Where the Core's edits leave the caret; any other move is reported to the Core (CaretMoved). */
     private val caretWatch = CaretWatch()
-    private val coreInput = CoreInputAdapter(caretWatch) { currentInputConnection }
+    // 変換中に選んでいる文節には、キーボードの強調の色を薄く敷く (区切りを伸び縮みさせると、どこまでかが見える)。
+    private val coreInput = CoreInputAdapter(caretWatch, { currentInputConnection }) {
+        (Palette.of(this).accent and 0x00FFFFFF) or 0x59000000
+    }
     private var core: MeltypeCoreHost? = null
     private var nativeCoreUnavailable = false
 
