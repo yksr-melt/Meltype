@@ -19,6 +19,9 @@ sumitomo mizuho nomura daikin shimano asics mazinger gundam naruto dragonball do
 github gitlab bitbucket git svn typescript javascript java python node nodejs npm npx yarn pnpm deno bun
 react vue angular svelte next nuxt vite webpack rollup esbuild babel eslint prettier jest mocha vitest
 docker podman kubernetes kubectl helm terraform ansible aws redshift azure gcp linux ubuntu debian fedora centos
+# APT のパッケージ管理で使うサブコマンド
+autoremove
+
 wsl windows macos ios android bash zsh fish powershell pwsh cmd terminal console server client localhost
 http https www html css scss sass json yaml yml toml xml csv sql mysql postgres postgresql sqlite mongodb
 redis nginx apache kafka rabbitmq elasticsearch commit commits push pull merge rebase branch checkout

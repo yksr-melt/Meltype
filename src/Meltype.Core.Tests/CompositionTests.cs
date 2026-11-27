@@ -4804,6 +4804,12 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void AptAutoremoveStaysEnglish()
+    {
+        AssertCommitted(("autoremove", "autoremove"), ("aptnoautoremove", "aptのautoremove"), ("autoninaru", "あうとになる"));
+    }
+
+    [Test]
     public static void ReadableToolNames_StayEnglish()
     {
         // 報告 (#301 / #457): おぺんこで・tむx に割れず、ツール名のまま英字にする
