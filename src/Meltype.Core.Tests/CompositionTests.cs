@@ -2487,6 +2487,12 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void FunaboriStaysTogetherAsJapanese()
+    {
+        AssertCommitted(("funabori", "ふなぼり"), ("funaborideau", "ふなぼりであう"), ("nab", "nab"));
+    }
+
+    [Test]
     public static void Issue710_UserDictionaryAcceptsOneCharacterReading()
     {
         var dictionary = new UserDictionary(null);
