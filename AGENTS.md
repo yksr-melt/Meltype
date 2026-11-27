@@ -69,6 +69,8 @@
 - SSOT
 - 根本原因分析
 - fail-fast
+- Parse, don't validate
+- stringly typed
 
 ### コメント
 
