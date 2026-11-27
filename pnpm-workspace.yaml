@@ -1,0 +1,6 @@
+packages:
+  - linux/ime-tests
+  - web
+allowBuilds:
+  esbuild: true
+  workerd: true

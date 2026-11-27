@@ -21,7 +21,7 @@ internal interface IUtilityConversion
 /// 変換を始めたときの入力。Reading は入力の全体が日本語の区間 1 つのときの読み (それ以外は null)。
 /// 打った英字は Text.Raw (かな入力では物理キーの表記)。
 /// </summary>
-internal sealed record UtilityInput(CompositionTextState Text, string? Reading, bool Direct, UtilityContext Context);
+internal sealed record UtilityInput(TextReading Text, string? Reading, bool Direct, UtilityContext Context);
 
 /// <summary>変換を始めたときの設定と、候補に使う外の値。</summary>
 internal sealed record UtilityContext(
