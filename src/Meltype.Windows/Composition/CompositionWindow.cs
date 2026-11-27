@@ -122,7 +122,7 @@ internal sealed class CompositionWindow : PopupForm
                 var now = System.Diagnostics.Stopwatch.GetTimestamp();
                 var dtMs = Math.Clamp((now - _caretLastTicks) * 1000f / System.Diagnostics.Stopwatch.Frequency, 1f, 50f);
                 _caretLastTicks = now;
-                var alpha = 1f - MathF.Exp(-dtMs / 36f);
+                var alpha = 1f - MathF.Exp(-dtMs / 46f);
                 _caretX += (_caretTargetX - _caretX) * alpha;
                 if (MathF.Abs(_caretTargetX - _caretX) < 0.35f)
                 {

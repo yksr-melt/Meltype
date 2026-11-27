@@ -31,14 +31,14 @@ internal static class SmoothCaretTests
         // ゆったり減速しながらターゲット近傍へ達し、オーバーシュートせずにネイティブキャレットへ引き継ぐ
         var steps = 0;
         var maxX = motion.CurrentX;
-        while (motion.Step(8.33f) && steps < 40)
+        while (motion.Step(8.33f) && steps < 50)
         {
             maxX = MathF.Max(maxX, motion.CurrentX);
             steps++;
         }
 
         Assert.True(maxX <= 124.01f, $"指数減衰なのでオーバーシュートしない: maxX={maxX}");
-        Assert.True(steps is >= 10 and < 30, $"ゆったりふわっとした余韻 (~110〜200ms) で収束する: steps={steps}");
+        Assert.True(steps is >= 15 and < 40, $"さらにゆったりふわっとした余韻 (~150〜250ms) で収束する: steps={steps}");
         Assert.Equal(124f, motion.CurrentX);
         Assert.True(!motion.IsActive, "到着ハンドオフ後は即座に非アクティブになる");
         Assert.Equal(0f, motion.Opacity);

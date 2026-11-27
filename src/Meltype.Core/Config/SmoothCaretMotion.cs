@@ -10,8 +10,8 @@ namespace Meltype.Config;
 /// </summary>
 public sealed class SmoothCaretMotion
 {
-    // ゆったりふわっと減速する指数減衰の時定数 (1 文字移動で約 125ms、長距離移動で約 150ms かけて柔らかく吸い付く)
-    private const float TauMs = 36f;
+    // ゆったりふわっと減速する指数減衰の時定数 (1 文字移動で約 160ms、長距離移動で約 200ms かけて柔らかく吸い付く)
+    private const float TauMs = 46f;
     private const float ArriveSnapPx = 0.35f;
     private const float FadeStartDistancePx = 2.0f;
     private const float MinGlideDistancePx = 3.0f;
