@@ -35,7 +35,7 @@ internal sealed class SmoothCaretWindow : PopupForm
         Size = new Size(3, 18);
         Opacity = 0.0;
 
-        _pollTimer.Tick += (_, _) => PollWin32Caret();
+        _pollTimer.Tick += (_, _) => PollCaret();
         _animTimer.Tick += (_, _) => OnAnimationTick();
     }
 
@@ -56,8 +56,10 @@ internal sealed class SmoothCaretWindow : PopupForm
         UpdateTimers();
     }
 
-    /// <summary>文字確定などの直後に UI Automation 経由のアプリ (Chrome・Discord 等) のキャレット位置も非同期で追従する。</summary>
-    public void NotifyActivity()
+    /// <summary>キー入力・確定・矢印移動の直後にキャレット位置を即座に追従する (TSF / UI Automation 対応)。</summary>
+    public void NotifyActivity() => PollCaret();
+
+    private void PollCaret()
     {
         if (!_enabled || _suppressed || IsDisposed) return;
         if (PollWin32Caret()) return;

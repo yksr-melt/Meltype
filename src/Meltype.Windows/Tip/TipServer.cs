@@ -550,6 +550,8 @@ internal sealed class TipServer : IDisposable
         if (output.State.HandlesInput && connection.Process is { } process) Greet(process);
         if (output.State.ModeIndicatorMs > 0 && request.Thread != 0)
             _composition.ShowMode(output.State.LanguageMode == ImeLanguageMode.Japanese, output.State.ModeIndicatorMs, request.Thread, request.Anchor);
+        if (e is ImeEvent.KeyPressed or ImeEvent.CommitRequested or ImeEvent.CommittedByApp or ImeEvent.CaretMoved)
+            _composition.NotifyCaretActivity();
         return output.ToJson();
     }
 

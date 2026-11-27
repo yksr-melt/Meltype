@@ -10,12 +10,12 @@ namespace Meltype.Config;
 /// </summary>
 public sealed class SmoothCaretMotion
 {
-    private const float TauMs = 34f;
+    private const float TauMs = 42f;
     private const float SnapThresholdPx = 0.5f;
     private const float MaxGlideDistancePx = 300f;
-    private const float ActiveOpacity = 0.85f;
-    private const float IdleBeforeFadeMs = 110f;
-    private const float FadeDurationMs = 160f;
+    private const float ActiveOpacity = 0.9f;
+    private const float IdleBeforeFadeMs = 140f;
+    private const float FadeDurationMs = 180f;
 
     private bool _initialized;
     private float _targetX;

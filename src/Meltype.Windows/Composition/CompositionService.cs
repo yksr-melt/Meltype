@@ -66,6 +66,13 @@ internal sealed class CompositionService : IDisposable
 
     public FocusInspector Focus { get; } = new();
 
+    /// <summary>TSF 等からの入力・キャレット移動を受けてスムースカーソルを追従させる。</summary>
+    public void NotifyCaretActivity()
+    {
+        if (!_invoker.IsDisposed && _invoker.IsHandleCreated)
+            _invoker.BeginInvoke(_smoothCaret.NotifyActivity);
+    }
+
     /// <summary>
     /// 確定した文字を入れる: 前の count 文字を消してから text を入れる。paste なら貼り付けで入れる (貼り付けられなければキーで送る。改行は Shift+Enter)。
     /// キーで送るときは、BackSpace と新しい文字を 1 回の SendInput でまとめて送る (間に物理キーやほかの入力が割り込まないように。issue #227)。
