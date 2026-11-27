@@ -24,14 +24,22 @@ internal static class SettingsPage
             // 検索の結果の 2 つ目からの分類は、前の分類と間を空ける (1 つ目は pageHeader のスタイルの余白のまま)
             if (!first) header.Margin = new Thickness(0, 24, 0, 8);
             page.Children.Add(header);
-            // 値はトレイで選んだプロファイルにも入るので、プロファイルを使い分けている人には、どれを変えているかを出す
-            if (first && store.Current.Profiles.Count > 1)
-                page.Children.Add(new TextBlock { Text = $"プロファイル「{store.Current.ActiveProfile}」の値を変えています。", Opacity = 0.7, Margin = new Thickness(0, 0, 0, 8) });
+            page.Children.Add(Cards(items, store, owner, profileNote: first));
             first = false;
-            foreach (var item in items) page.Children.Add(Card(item, SettingEditors.Create(new EditorContext(item, store, owner))));
             if (!search) page.Children.Add(ResetButton(category, items, store, owner));
         }
         return page;
+    }
+
+    /// <summary>項目のカードを縦に並べる。設定以外のページ (<see cref="Pages"/>) の上にも置く。</summary>
+    public static StackPanel Cards(IEnumerable<SettingItem> items, SettingsStore store, Window owner, bool profileNote = true)
+    {
+        var cards = new StackPanel { Spacing = 4 };
+        // 値はトレイで選んだプロファイルにも入るので、プロファイルを使い分けている人には、どれを変えているかを出す
+        if (profileNote && store.Current.Profiles.Count > 1)
+            cards.Children.Add(new TextBlock { Text = $"プロファイル「{store.Current.ActiveProfile}」の値を変えています。", Opacity = 0.7, Margin = new Thickness(0, 0, 0, 8) });
+        foreach (var item in items) cards.Children.Add(Card(item, SettingEditors.Create(new EditorContext(item, store, owner))));
+        return cards;
     }
 
     /// <summary>この分類の項目を既定値に戻す。変えたらすぐ保存するので、確かめてから戻す。</summary>
