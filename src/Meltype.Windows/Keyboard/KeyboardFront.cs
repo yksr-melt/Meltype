@@ -25,6 +25,12 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
     /// <summary>Windows の IME の ON/OFF を切り替えるときに、応答を待つ時間。</summary>
     private const int ImeTimeoutMs = 300;
 
+    /// <summary>
+    /// Windows の IME の状態を読む間隔。ゲームのチャット欄が開いたことを、チャットで打ち始める最初の文字より先に知るために短くする
+    /// (チャットを開いてから最初の文字を打つまでは、早くても 0.3 秒ほどかかる)。
+    /// </summary>
+    private const int PollMs = 100;
+
     private readonly Control _invoker;
     private readonly CompositionService _composition;
     private readonly ForegroundTracker _foreground = new();
@@ -55,6 +61,10 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
     private volatile bool _stale = true;
     private int _pumpScheduled;
     private int _polling;
+    // 前面のウィンドウに IME の入力コンテキストが結び付いているか (PollSystemIme が読む。ImeTrait.ImeContext)
+    private volatile bool _imeContext;
+    // IME の入力コンテキストが外れているのを最後に見たウィンドウ。PollSystemIme のスレッドだけが使う
+    private IntPtr _detachedSeenIn;
     private IntPtr _lastLayout;
     private long _lastForcedClose;
     private int _forcedCloses;
@@ -91,7 +101,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         {
             if (_composing) Send(new ImeEvent.ConversionFinished());
         });
-        _pollTimer = new System.Threading.Timer(_ => PollSystemIme(), null, 250, 250);
+        _pollTimer = new System.Threading.Timer(_ => PollSystemIme(), null, PollMs, PollMs);
     }
 
     /// <summary>入力モード (トレイのアイコン)。</summary>
@@ -149,9 +159,9 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
                 Enqueue(input with { Key = null, Notice = true });
                 return false;
             }
-            if (Captures(e)) return Enqueue(input);
+            if (input.Event is { } key && Captures(e, key)) return Enqueue(input);
             // アプリに通したキーはキャレットを動かすかもしれない (後のキーより先に本体に知らせる)
-            if (!VirtualKeys.IsModifier(e.Vk)) Enqueue(new Input(Caret: new ImeCaret { Moved = true, PassedKey = e.Vk, Ctrl = IsDown(VirtualKeys.Control) }));
+            if (!VirtualKeys.IsModifier(e.Vk)) Enqueue(new Input(Caret: new ImeCaret { Moved = true, PassedKey = e.Vk, Ctrl = input.Event?.Ctrl == true }));
         }
         return false;
     }
@@ -196,20 +206,20 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
     // 受け取るキーか。本体の状態 (capture) どおりにする。ただし、フォーカスが移ってから本体の状態をまだ受け取っていないときと、
     // 本体が受け持っていないのに入力欄にフォーカスがある (UI Automation の通知が遅れた・来なかった) ときは、
     // Ctrl・Alt・Win と一緒でないキーを本体に聞く (本体が使わなければ送り直す)
-    private bool Captures(KeyEvent e)
+    private bool Captures(KeyEvent e, ImeKey key)
     {
         if (VirtualKeys.IsModifier(e.Vk)) return false;
         var state = _state;
-        var mods = (IsDown(VirtualKeys.Shift) ? 1 : 0) | (IsDown(VirtualKeys.Control) ? 2 : 0) | (IsDown(VirtualKeys.Menu) ? 4 : 0) |
-            (IsDown(VirtualKeys.LWin) || IsDown(VirtualKeys.RWin) ? 8 : 0);
+        var mods = (key.Shift ? (int)ShortcutModifiers.Shift : 0) | (key.Ctrl ? (int)ShortcutModifiers.Control : 0) |
+            (key.Alt ? (int)ShortcutModifiers.Alt : 0) | (key.Command ? (int)ShortcutModifiers.Win : 0);
         if (state.HandlesInput && !_stale)
         {
-            if (state.Capture.Shortcuts.Any(key => ToggleShortcut.NormalizeKey(key.Vk) == ToggleShortcut.NormalizeKey(e.ShortcutKey) && key.Modifiers == mods)) return true;
+            if (state.Capture.Shortcuts.Any(shortcut => ToggleShortcut.NormalizeKey(shortcut.Vk) == key.Vk && shortcut.Modifiers == mods)) return true;
             // テンキー (0x60〜0x6F) は文字を生んでも受け取らない (ImeCapture の契約)
-            return (mods & ~1) == 0 && e.Vk is not (>= 0x60 and <= 0x6F) && KeyText.CharFromKey(e.Vk, e.Scan, (mods & 1) != 0) is { } c && c is > ' ' and <= '~' &&
-                state.Capture.PrintableAscii && !state.Capture.PrintableAsciiExcept.Contains(c);
+            return (mods & ~(int)ShortcutModifiers.Shift) == 0 && e.Vk is not (>= 0x60 and <= 0x6F) && key.Ch is > ' ' and <= '~' &&
+                state.Capture.PrintableAscii && !state.Capture.PrintableAsciiExcept.Contains((char)key.Ch);
         }
-        if ((mods & ~1) != 0) return false;
+        if ((mods & ~(int)ShortcutModifiers.Shift) != 0) return false;
         return _stale || TextFocusRechecked();
     }
 
@@ -231,10 +241,20 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
 
     private ImeKey KeyOf(KeyEvent e, bool repeat)
     {
-        bool shift = IsDown(VirtualKeys.Shift), ctrl = IsDown(VirtualKeys.Control), alt = IsDown(VirtualKeys.Menu), command = IsDown(VirtualKeys.LWin) || IsDown(VirtualKeys.RWin);
+        bool shift, ctrl, alt, command;
+        lock (_gate)
+        {
+            shift = IsDown(VirtualKeys.LShift) || IsDown(VirtualKeys.RShift);
+            ctrl = IsDown(VirtualKeys.LControl) || IsDown(VirtualKeys.RControl);
+            alt = IsDown(VirtualKeys.LMenu) || IsDown(VirtualKeys.RMenu);
+            command = IsDown(VirtualKeys.LWin) || IsDown(VirtualKeys.RWin);
+        }
         var ch = !ctrl && !alt && !command && KeyText.CharFromKey(e.Vk, e.Scan, shift) is { } c && !char.IsControl(c) ? c : 0;
-        return new ImeKey { Vk = e.ShortcutKey, Ch = ch, Shift = shift, Ctrl = ctrl, Alt = alt, Command = command, Repeat = repeat };
+        return new ImeKey { Vk = e.ShortcutKey, Ch = ch, Physical = Physical(e), Shift = shift, Ctrl = ctrl, Alt = alt, Command = command, CapsLock = KeyText.CapsLockOn, Repeat = repeat };
     }
+
+    // ほかのソフトが送り込んだキー (SendInput) はスキャンコードが 0 のことがある。VK_PACKET (0xE7) のスキャンコードは、送り込んだ文字の UTF-16
+    private static PhysicalKey.Windows? Physical(KeyEvent e) => e.Scan != 0 && e.Vk != 0xE7 ? new PhysicalKey.Windows(e.Scan, e.Extended) : null;
 
     // ---- UI スレッド ----
 
@@ -311,7 +331,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         if (input.Key is not { } e) return;
         if (input.Event is not { } key)
         {
-            // 離したキー: 本体が使った押下なら通さない
+            // 離したキーはふつう押下に合わせる。親指キーを単独で離して本体が通したら、保留した押下も一緒に送る (#2103)。
             bool consumed, follows;
             lock (_gate)
             {
@@ -319,8 +339,10 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
                 follows = _releaseFollows.Remove(e.PhysicalId);
             }
             // 変換していないときは入力欄を読まない (離すたびに UI Automation で読むと打鍵が遅れる)
-            if (follows) Send(new ImeEvent.KeyReleased(new ImeKeyRelease(e.ShortcutKey)), readField: _composing);
-            if (!consumed && e.IsUp) _composition.Replay(e);
+            var released = follows ? Send(new ImeEvent.KeyReleased(new ImeKeyRelease(e.ShortcutKey, Physical: Physical(e))), readField: _composing) : null;
+            if (!consumed) _composition.Replay(e);
+            else if (released is { State.HandlesInput: true, Result.Consumed: false })
+                _injector.Inject([e with { IsUp = false }, e]);
             return;
         }
         if (_state.Capture.KeyReleases && !VirtualKeys.IsModifier(e.Vk))
@@ -398,6 +420,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         if (app.Window == IntPtr.Zero || app.IsOwnProcess || !ForegroundTracker.CanSendInputTo(app)) traits.Add(ImeTrait.Unreachable);
         if (WindowsIme.ImeTarget.FromForeground() is not { ThreadId: not 0 } target || !IsJapaneseLayout(Native.GetKeyboardLayout(target.ThreadId))) traits.Add(ImeTrait.OtherLanguage);
         if (app.LooksLikeGame) traits.Add(ImeTrait.Game);
+        if (_imeContext) traits.Add(ImeTrait.ImeContext);
         if (app.IsFullscreen) traits.Add(ImeTrait.Fullscreen);
         return new ImeField
         {
@@ -478,25 +501,31 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         return capture;
     }
 
-    // 押している修飾キーか。変換中はフックが修飾キーの押下も止めて並べ、本体に聞いてから送り直すので、
-    // 送り直すまでは GetAsyncKeyState に表れない (止めたキーは反映されない)。そうしないと、変換中に Shift + / を打つと
-    // Shift が離れて見え、? が / (・) になる。GetAsyncKeyState に表れないのは、並べてまだ送り直していない押下 (処理中のものと _queue) だけなので、
-    // それも見る (同じ物理キーの解放が後ろに並んでいれば、離している)。並びが空なら GetAsyncKeyState だけで決まる
+    // GetAsyncKeyState はフックが止めた押下・解放を反映しない。左右の修飾キーを別々に調べ、
+    // 処理待ちの解放は、そのキーをまだ押しているように見える OS の状態より優先する。
+    // 呼び出す間は _gate を保持する。
     private bool IsDown(int vk)
     {
-        if ((Native.GetAsyncKeyState(vk) & 0x8000) != 0) return true;
-        var down = new HashSet<int>();
-        lock (_gate)
-        {
-            foreach (var input in _processing is { } current ? _queue.Prepend(current) : _queue)
-            {
-                if (input.Key is not { } key || key.Vk != vk && GenericModifier(key.Vk) != vk) continue;
-                if (key.IsDown) down.Add(key.PhysicalId);
-                else down.Remove(key.PhysicalId);
-            }
-        }
-        return down.Count > 0;
+        var systemDown = (Native.GetAsyncKeyState(vk) & 0x8000) != 0;
+        if (_waiting == 0 && _processing?.Key is null) return systemDown;
+        return ModifierAfterPendingKeys(vk, systemDown, _queue.Select(input => input.Key).Prepend(_processing?.Key));
     }
+
+    internal static bool ModifierAfterPendingKeys(int vk, bool down, IEnumerable<KeyEvent?> pending)
+    {
+        foreach (var key in pending)
+            if (key is { } modifier && ModifierSide(modifier) == vk) down = modifier.IsDown;
+        return down;
+    }
+
+    // 一部の注入打鍵は汎用の仮想キーを含む。Shift はスキャンコード、Ctrl と Alt は拡張フラグで左右を区別する。
+    private static int ModifierSide(KeyEvent key) => key.Vk switch
+    {
+        VirtualKeys.Shift => key.Scan == 0x36 ? VirtualKeys.RShift : VirtualKeys.LShift,
+        VirtualKeys.Control => key.Extended ? VirtualKeys.RControl : VirtualKeys.LControl,
+        VirtualKeys.Menu => key.Extended ? VirtualKeys.RMenu : VirtualKeys.LMenu,
+        _ => key.Vk,
+    };
 
     /// <summary>左右を区別する修飾キーの、区別しない仮想キー (修飾キーでなければ 0)。</summary>
     private static int GenericModifier(int vk) => vk switch
@@ -533,6 +562,15 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
             if (ForegroundTracker.IsOwnWindow(Native.GetForegroundWindow()) || WindowsIme.ImeTarget.FromForeground() is not { } target) return;
             var state = WindowsIme.Imm32ImeController.GetState(target);
             SystemImeState = state;
+            // 外れているのを見たウィンドウだけ、結び付いたことを知らせる。入力欄の外でも外さないアプリ・ゲーム (Minecraft 26.3 の SDL3 や Unreal など) は、
+            // 常に結び付いているので、知らせると、ゲームではずっとチャット欄が開いているとみなして移動のキーまで取ってしまう
+            // 読めなかった (相手が忙しくて時間内に答えない) ときは、外れたのか分からないので、何も判断しない
+            if (state.Mode != WindowsIme.ImeMode.Unknown)
+            {
+                var attached = state.Mode == WindowsIme.ImeMode.Open || state.ConversionMode != 0;
+                if (!attached) _detachedSeenIn = target.TopLevel;
+                SetImeContext(attached && _detachedSeenIn == target.TopLevel);
+            }
             var layout = Native.GetKeyboardLayout(target.ThreadId);
             if (layout != _lastLayout)
             {
@@ -558,6 +596,30 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         {
             Volatile.Write(ref _polling, 0);
         }
+    }
+
+    /// <summary>
+    /// IME の入力コンテキストが前面のウィンドウに結び付いているかが変わった。Unity などのゲームは、入力欄にフォーカスがあるときだけ結び付け、閉じると外す
+    /// (ImeTrait.ImeContext)。外れている間は、既定の IME ウィンドウに聞くと変換モードが 0・IME は閉じている。VRChat では、チャット欄の開閉の 35〜146 ms 後に変わる。
+    /// ゲームかどうかは本体が決めるので、ここではどのアプリでも、変わったら本体の状態を受け取り直す。
+    /// フレームワークによって、入力欄がないときに外すかが違う (コードを読んで確かめたもの):
+    /// 外す: Unity (VRChat で実測)・Godot (ウィンドウを作るときに外し、入力欄にフォーカスがあるときだけ結び付ける)・
+    /// winit (Rust の Bevy など。set_ime_allowed(false))・SDL3 (SDL_StopTextInput)。
+    /// 外さない: GLFW (Minecraft 26.2 まで・LWJGL3・raylib など。IME のコンテキストを触らない)。
+    /// SDL3 でもゲームが SDL_StopTextInput を呼ばなければ外さない (Minecraft 26.3 は開閉に関係なく常に結び付いていた)。Unreal は未確認。
+    /// </summary>
+    private void SetImeContext(bool attached)
+    {
+        if (_imeContext == attached) return;
+        _imeContext = attached;
+        _stale = true;
+        Post(() =>
+        {
+            // 変換を始めたときに読んだ入力欄でなく、今の入力欄で判断する
+            _fieldAtComposition = null;
+            if (_composing && !Send(new ImeEvent.StateRequested(), apply: false).State.HandlesInput) Abandon();
+            else if (!_composing) Send(new ImeEvent.StateRequested(), apply: false);
+        });
     }
 
     /// <summary>設定が変わった (UI スレッド)。本体の状態を受け取り直す (受け持つか・受け取るキーが変わる)。</summary>

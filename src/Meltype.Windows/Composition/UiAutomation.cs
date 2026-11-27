@@ -26,10 +26,22 @@ internal sealed class UiAutomation
     private const int TextUnitCharacter = 0;
     private const int EndpointStart = 0, EndpointEnd = 1;
 
-    private static readonly Guid ClsidCUIAutomation = new("FF48DBA4-60EF-4201-AA87-54103EEF594E");
+    // IUIAutomation2 (タイムアウトの設定) は、Windows 8 以降の CUIAutomation8 だけが持つ (従来の CUIAutomation に聞くと E_NOINTERFACE)
+    private static readonly Guid ClsidCUIAutomation = new("E22AD333-B25F-460C-83D0-0581107395C9");
     private static readonly Guid IidIServiceProvider = new("6D5140C1-7436-11CE-8034-00AA006009FA");
     private static readonly Guid IidIAccessible = new("618736E0-3C3D-11CF-810C-00AA00389B71");
     private static readonly Guid IidIAccessible2 = new("E89F726E-C4F4-4C19-BB19-B647D7FA8478");
+    private static readonly Guid IidIUIAutomation2 = new("34723AFF-0C9D-49D0-9896-7AB52DF8CD8A");
+
+    // IUIAutomation2 (IUIAutomation の 55 個のメソッドのあとに get/put の AutoSetFocus・ConnectionTimeout・TransactionTimeout が続く) の put の vtable の位置
+    private const int PutConnectionTimeoutVTableSlot = 61, PutTransactionTimeoutVTableSlot = 63;
+
+    /// <summary>
+    /// UI Automation が相手のプロセスの応答を待つ時間。既定は接続 2 秒・呼び出し 20 秒で、応答しない相手 (終了処理中のゲームなど) に聞くと
+    /// 呼び出しが 1 分ほど返らず、このクラスのスレッドの行列が止まって、次のアプリに移ってもフォーカスの判定が出なかった。
+    /// 長い文書の読み取りなど遅い相手にも答えてもらえて、止まっても入力が遅れ続けない長さにする。
+    /// </summary>
+    private const int ConnectionTimeoutMs = 500, TransactionTimeoutMs = 2000;
 
     private readonly IUIAutomation _automation;
 
@@ -37,6 +49,33 @@ internal sealed class UiAutomation
     {
         var type = Type.GetTypeFromCLSID(ClsidCUIAutomation, throwOnError: true)!;
         _automation = (IUIAutomation)Activator.CreateInstance(type)!;
+        SetTimeouts(_automation);
+    }
+
+    private static unsafe IntPtr VTable(IntPtr instance, int slot) =>
+        (*(IntPtr**)instance)[slot];
+
+    private static unsafe void SetTimeouts(IUIAutomation automation)
+    {
+        var unknown = Marshal.GetIUnknownForObject(automation);
+        try
+        {
+            var iid = IidIUIAutomation2;
+            Marshal.ThrowExceptionForHR(Marshal.QueryInterface(unknown, in iid, out var automation2));
+            try
+            {
+                Marshal.ThrowExceptionForHR(((delegate* unmanaged[Stdcall]<IntPtr, int, int>)VTable(automation2, PutConnectionTimeoutVTableSlot))(automation2, ConnectionTimeoutMs));
+                Marshal.ThrowExceptionForHR(((delegate* unmanaged[Stdcall]<IntPtr, int, int>)VTable(automation2, PutTransactionTimeoutVTableSlot))(automation2, TransactionTimeoutMs));
+            }
+            finally
+            {
+                Marshal.Release(automation2);
+            }
+        }
+        finally
+        {
+            Marshal.Release(unknown);
+        }
     }
 
     /// <summary>フォーカスのある要素。無ければ null。</summary>
@@ -158,9 +197,6 @@ internal sealed class UiAutomation
                 return false;
             }
         }
-
-        private static unsafe IntPtr VTable(IntPtr instance, int slot) =>
-            (*(IntPtr**)instance)[slot];
 
         /// <summary>単一の選択範囲を取得。無ければ null。</summary>
         private IUIAutomationTextRange? SelectionRange()

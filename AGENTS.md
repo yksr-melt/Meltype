@@ -3,6 +3,8 @@
 配布用のパッケージを作る・Windows に入れて試すときは [docs/dev/DEVELOPMENT.md](docs/dev/DEVELOPMENT.md) を読む。
 機能を足すか判断するときは [CONTRIBUTING.md](CONTRIBUTING.md) の「運営の方針」、PR を出すときは「Pull Request を送る場合」を読む。
 `native/tip/`・`src/Meltype.Windows/Tip/` を変えるときは、先に [docs/dev/TSF_DESIGN.md](docs/dev/TSF_DESIGN.md) を読む。
+コード入力 (`src/Meltype.Core/Ime/LineContext.cs`・`ImeSession` のコードの行の判断) を変えるときは、先に [docs/dev/CODE_INPUT.md](docs/dev/CODE_INPUT.md) を読み、変えた決まりを同じ PR で直す。
+ゲームのチャット欄の判定 (`ImeTrait.ImeContext`・`ImeSession.IsGame`・`KeyboardFront.PollSystemIme`) を変えるときは、先に [docs/dev/GAME_CHAT.md](docs/dev/GAME_CHAT.md) を読む。
 
 ## 構成
 

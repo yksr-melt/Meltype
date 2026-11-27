@@ -27,11 +27,12 @@ internal static class CompositionDirectInput
 
     // - を付けて使う英語の接頭辞 (e-mail、re-do、co-op、x-ray)
 
-    internal static void Hold(CompositionState state, CompositionScene.Judging judging, CompositionEnv env, KeyEvent e)
+    internal static void Hold(CompositionState state, CompositionScene.Judging judging, CompositionEnv env, KeyEvent e, int position, char? passedChar)
     {
         judging.Letters.Append(VirtualKeys.ToLetter(e.Vk));
+        judging.Positions.Add(position);
         judging.LastKeyTime = e.TimeMs;
-        Send(state, judging, e);
+        Send(state, judging, passedChar);
         Decide(state, judging, env, final: false);
     }
 
@@ -39,10 +40,10 @@ internal static class CompositionDirectInput
     /// 判定中の語の打鍵を、判定を待たずにアプリへ送る。前は判定できるまで保留していたので、英単語 (can・game・today) は
     /// Space を押すまで画面に出ず、英数状態の入力が遅れて見えた。ローマ字と分かったら、送った分を BackSpace で消す。
     /// </summary>
-    internal static void Send(CompositionState state, CompositionScene.Judging judging, KeyEvent e)
+    internal static void Send(CompositionState state, CompositionScene.Judging judging, char? passedChar)
     {
         CompositionOutput.PassCurrent(state.Out);
-        judging.Sent.Append(e.Scan is > 0 and < 0x10000 ? (char)e.Scan : '\0');
+        judging.Sent.Append(passedChar ?? '\0');
     }
 
     /// <summary>判定中の英字の、最後の - より後ろ (e-ma → ma)。- が無ければ全体。</summary>
@@ -104,7 +105,7 @@ internal static class CompositionDirectInput
     private static Verdict Classify(CompositionEnv env, string part, string held, bool final)
     {
         // 英語の接頭辞の後の - (e-、co-) の後ろだけで判定する。e-mail・co-op のような語全体の一致も見る。
-        if (env.Detector.IsHyphenatedEnglishWord(CompositionText.LearnedLanguages(env), held)) return Verdict.English;
+        if (env.Detector.Words.IsHyphenatedEnglishWord(CompositionText.LearnedLanguages(env), held)) return Verdict.English;
         var verdict = part.Length == 0 ? Verdict.Undecided : env.ClassifyDirect!(part, final);
         // up や my も、ローマ字の打ちかけなら続きを待つ。
         if (verdict == Verdict.English && !final && held.Length <= 2 &&
@@ -138,6 +139,7 @@ internal static class CompositionDirectInput
         // 英字はすでにアプリに届いている。再送せず通常判定に残る末尾だけを持つ。
         judging.Letters.Remove(0, skip);
         judging.Sent.Remove(0, skip);
+        judging.Positions.RemoveRange(0, skip);
         judging.ResumeAt = 0;
         if (judging.Letters.Length == 0) CompositionLifecycle.ForgetDirectInput(state);
     }
@@ -148,10 +150,10 @@ internal static class CompositionDirectInput
         // 判定を待たずに送っていた英字を消して、変換ボックスに入れ直す。
         CompositionOutput.DeleteHeld(state.Out, judging.Sent.ToString());
         var input = CompositionLifecycle.BeginFromJudging(state, judging, env);
-        foreach (var c in judging.Letters.ToString())
+        foreach (var (c, position) in judging.Letters.ToString().Zip(judging.Positions))
         {
-            if (input.Text.KanaInput && Detection.KanaDetector.KanaForKey(char.ToUpperInvariant(c), char.IsAsciiLetterUpper(c)) is { } kana) CompositionText.AppendKana(input.Text, c, kana);
-            else CompositionText.Append(input.Text, env, c);
+            input.Text = input.Text.KanaInput && Detection.KanaDetector.KanaForKey(position, char.IsAsciiLetterUpper(c)) is { } kana
+                ? CompositionText.AppendKana(input.Text, c, kana) : CompositionText.Append(input.Text, c);
         }
     }
 

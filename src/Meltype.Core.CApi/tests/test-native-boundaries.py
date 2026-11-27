@@ -49,6 +49,10 @@ class NativeBoundaryTests(unittest.TestCase):
         cls.lib.meltype_ime_handle.restype = ctypes.c_void_p
         cls.lib.meltype_free.argtypes = [ctypes.c_void_p]
         cls.lib.meltype_shutdown.restype = None
+        cls.lib.meltype_typed_reading.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
+        cls.lib.meltype_typed_reading.restype = ctypes.c_void_p
+        cls.lib.meltype_user_dictionary.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
+        cls.lib.meltype_user_dictionary.restype = ctypes.c_void_p
         # Mozc のヘルパーを置かないフォルダー (変換はかなのまま)
         assert cls.lib.meltype_init(cls.data.name.encode()) == 0
         # 終了するときの解放は、2 回呼ばれても 1 回だけ止める (一時フォルダーを消す前に)
@@ -222,6 +226,73 @@ class NativeBoundaryTests(unittest.TestCase):
             self.assertEqual("sushi", self.key(0, vk=0x0D, host=other)["commits"][0]["text"])
         finally:
             self.lib.meltype_ime_destroy(other)
+
+    def typed_reading(self, text, directory=None):
+        """meltype_typed_reading: Android の設定画面のユーザー辞書の読み。"""
+        pointer = self.lib.meltype_typed_reading((directory or self.data.name).encode(), text.encode("utf-8"))
+        self.assertTrue(pointer, "C ABI returned NULL")
+        try:
+            return ctypes.string_at(pointer).decode("utf-8")
+        finally:
+            self.lib.meltype_free(pointer)
+
+    def test_typed_reading_converts_romaji_like_the_settings_app(self):
+        self.assertEqual("しの", self.typed_reading(" Shino "))
+        self.assertEqual("きごうとう", self.typed_reading("kigoutou"))
+        # かな・英字の無い読みは、前後の空白を除くだけ
+        self.assertEqual("しの", self.typed_reading("しの "))
+
+    def test_typed_reading_uses_the_users_romaji_table(self):
+        with tempfile.TemporaryDirectory(prefix="meltype-typed-reading-") as directory:
+            (Path(directory) / "dictionaries").mkdir()
+            (Path(directory) / "dictionaries" / "romaji.txt").write_text("qq\tくぅ\n", encoding="utf-8")
+            self.assertEqual("くぅ", self.typed_reading("qq", directory))
+        self.assertEqual("しの", self.typed_reading("shino"))
+
+    def user_dictionary(self, directory, **request):
+        """meltype_user_dictionary: Android の設定画面のユーザー辞書。答えの (語の一覧, 理由) を返す。"""
+        pointer = self.lib.meltype_user_dictionary(str(directory).encode(), json.dumps(request).encode("utf-8"))
+        self.assertTrue(pointer, "C ABI returned NULL")
+        try:
+            response = json.loads(ctypes.string_at(pointer).decode("utf-8"))
+        finally:
+            self.lib.meltype_free(pointer)
+        words = None if response["words"] is None else [(w["reading"], w["word"], w["pos"]) for w in response["words"]]
+        return words, response["error"]
+
+    def test_user_dictionary_reads_and_writes_the_core_format(self):
+        with tempfile.TemporaryDirectory(prefix="meltype-user-dictionary-") as directory:
+            path = Path(directory) / "userdict.txt"
+            # BOM・コメント・品詞の列・読めない行 (読みだけ・制御文字) は Core と同じに扱う
+            path.write_text("\ufeff# コメント\nはしる\t走る\t動詞ラ行五段\n読みだけ\nえすけーぷ\t\x1b\n", encoding="utf-8")
+            self.assertEqual(([("はしる", "走る", "動詞ラ行五段")], None), self.user_dictionary(directory, op="list"))
+            words, error = self.user_dictionary(directory, op="add", reading=" めるたいぷ ", word="Meltype")
+            self.assertIsNone(error)
+            self.assertEqual([("はしる", "走る", "動詞ラ行五段"), ("めるたいぷ", "Meltype", "名詞")], words)
+            # 同じ読みと単語は 2 つにしない
+            self.assertEqual((words, None), self.user_dictionary(directory, op="add", reading="めるたいぷ", word="Meltype"))
+            words, error = self.user_dictionary(
+                directory, op="edit", target={"reading": "はしる", "word": "走る", "pos": "動詞ラ行五段"}, reading="はしる", word="奔る")
+            self.assertIsNone(error)
+            self.assertEqual(("はしる", "奔る", "動詞ラ行五段"), words[0], "品詞と位置はそのまま")
+            words, error = self.user_dictionary(directory, op="remove", target={"reading": "めるたいぷ", "word": "Meltype", "pos": "名詞"})
+            self.assertEqual(([("はしる", "奔る", "動詞ラ行五段")], None), (words, error))
+            self.assertEqual("はしる\t奔る\t動詞ラ行五段", path.read_text(encoding="utf-8-sig").splitlines()[1])
+
+    def test_user_dictionary_refuses_words_that_would_not_survive_a_reload(self):
+        with tempfile.TemporaryDirectory(prefix="meltype-user-dictionary-") as directory:
+            # # から始まる読みはコメントの行になり、次に読むと消える
+            self.assertEqual(([], "読みの先頭に # は使えません。"), self.user_dictionary(directory, op="add", reading="#123", word="番号"))
+            self.assertEqual(([], "タブ・改行などの制御文字は使えません。"), self.user_dictionary(directory, op="add", reading="よみ", word="a\tb"))
+            self.assertEqual(([], "読みを入力してください。"), self.user_dictionary(directory, op="add", reading=" ", word="空"))
+            self.user_dictionary(directory, op="add", reading="めるたいぷ", word="Meltype")
+            self.user_dictionary(directory, op="add", reading="めるたいぷ", word="メルタイプ")
+            target = {"reading": "めるたいぷ", "word": "メルタイプ", "pos": "名詞"}
+            self.assertEqual("同じ読みと単語は、もう登録しています。",
+                             self.user_dictionary(directory, op="edit", target=target, reading="めるたいぷ", word="Meltype")[1])
+            self.assertEqual("読みの先頭に # は使えません。",
+                             self.user_dictionary(directory, op="edit", target=target, reading="#めるたいぷ", word="メルタイプ")[1])
+            self.assertEqual(2, len(self.user_dictionary(directory, op="list")[0]))
 
 
 if __name__ == "__main__":
