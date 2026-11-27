@@ -235,7 +235,7 @@ Meltype IME は TSF の DLL が入力を受け、名前付きパイプで Meltyp
 
 ### 変更後の確認
 
-文書だけを変更した場合は、相対リンク・見出しへのリンク・図の構文を確認します。[公式サイトのガイド](../../web/scripts/make-guide.mjs) に使う `USAGE.md`・`WINDOWS.md`・`MACOS.md`・`LINUX.md` は、`web/` で `npm ci` の後に `npm test` と `npm run guide` を実行します。ガイドの生成物はコミットしません。
+文書だけを変更した場合は、相対リンク・見出しへのリンク・図の構文を確認します。[公式サイトのガイド](../../web/scripts/make-guide.mjs) に使う `USAGE.md`・`WINDOWS.md`・`MACOS.md`・`LINUX.md` は、`web/` で `pnpm install` の後に `pnpm test` と `pnpm run guide` を実行します。ガイドの生成物はコミットしません。
 
 C# を変更した場合のフォーマットと静的解析は次のとおりです。
 

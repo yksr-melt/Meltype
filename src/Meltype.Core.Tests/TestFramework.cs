@@ -45,7 +45,6 @@ internal static class TestHost
             try
             {
                 test.Invoke(null, null);
-                Console.WriteLine($"  PASS  {name}");
             }
             catch (TargetInvocationException ex) when (ex.InnerException is not null)
             {

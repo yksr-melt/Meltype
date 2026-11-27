@@ -53,7 +53,7 @@ static DWORD SelfIntegrity() {
 // 自分が整合性レベル Low 以下 (ストアアプリ・サンドボックス) で動いているか
 static bool SelfIsLowIntegrity() { return SelfIntegrity() < SECURITY_MANDATORY_MEDIUM_RID; }
 
-// パイプの所有者が自分と同じユーザーか。所有者は作ったプロセスのユーザーになり、ほかのユーザーには自分の SID を所有者にできない。
+// パイプの所有者が自分と同じユーザーか。所有者は Meltype.exe が自分のユーザーにして作り (TipServer.CreateSecurity)、ほかのユーザーには自分の SID を所有者にできない。
 // 整合性レベルの印は、Meltype.exe もストアアプリのために Low にしているので見ない。
 // 読むのに要る READ_CONTROL は、つなぐときの GENERIC_READ と、Meltype.exe がストアアプリに渡す権限に含まれる
 static bool PipeOwnedBySelf(HANDLE pipe) {
