@@ -22,7 +22,7 @@ internal static partial class CompositionText
     /// 打った英字の [start, end) に入っている、入力途中の子音の読み。
     /// 区間分けは入力途中の子音の途中でも区切る (bug|w の g は英語の区間、w は日本語の区間) ので、区間には入力途中の子音の一部だけが入ることがある (#2417)。
     /// </summary>
-    private static string PendingText(CompositionTextState state, TextEnv env, int start, int end, bool final)
+    private static string PendingText(TextReading state, TextEnv env, int start, int end, bool final)
     {
         var pending = CompositionText.Pending(state);
         var unitsEnd = CompositionText.Raw(state).Length - pending.Length;
@@ -31,7 +31,7 @@ internal static partial class CompositionText
     }
 
     /// <summary>最後の区間 last に入っている、入力途中の子音の読み。</summary>
-    private static string PendingText(CompositionTextState state, TextEnv env, CompositionSegment last, bool final)
+    private static string PendingText(TextReading state, TextEnv env, CompositionSegment last, bool final)
     {
         var length = CompositionText.Raw(state).Length;
         return CompositionText.PendingText(state, env, length - last.Raw.Length, length, final);
