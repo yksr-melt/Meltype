@@ -1014,6 +1014,32 @@ internal static class ImeContractTests
     }
 
     [Test]
+    public static void CommitRequestedWithoutField_CommitsForTheComposingField()
+    {
+        // TSF は編集ロックを取れない旧欄から離れるとき、欄を読めないまま確定を求め、返った文字をあとで旧欄の変換中の範囲に入れる。
+        // 前の語の確定し直し (i → I) は入れない。欄の事実が無くても、変換中の欄 (Private) として学習しない。
+        const string leave = ",\"caret\":{\"moved\":true,\"passedKey\":0,\"focusLeft\":true}";
+        foreach (var isPrivate in new[] { false, true })
+        {
+            var phrases = new PhraseHistory(null);
+            var front = new Front { Converter = new LearningConverter(), Services = new CompositionServices { Predictor = new Predictor(phrases, null, null) } };
+            front.Settings.PredictiveCandidates = true;
+            if (isPrivate) front.Traits.Add("Private");
+            front.Type("i ");
+            front.Type("kan");
+            var commits = Commits(front.Event("CommitRequested", extra: leave, omitField: true));
+            Assert.Equal(1, commits.GetArrayLength(), front.Trace);
+            Assert.Equal("かん", commits[0].GetProperty("text").GetString(), front.Trace);
+            Assert.Equal(JsonValueKind.Null, commits[0].GetProperty("removeBefore").ValueKind, front.Trace);
+            Assert.True(front.Composition["t1"] is null, front.Trace);
+
+            front.Type("nihongo ");
+            Assert.Equal("日本語", Commits(front.Event("CommitRequested", extra: leave, omitField: true))[0].GetProperty("text").GetString(), front.Trace);
+            Assert.Equal(isPrivate ? 0 : 1, phrases.Count, (isPrivate ? "Private の欄で始めた入力は学習しない\n" : "通常の欄では学習する\n") + front.Trace);
+        }
+    }
+
+    [Test]
     public static void CandidateClicked_UsesTheLatestPrivateTrait()
     {
         foreach (var isPrivate in new[] { false, true })

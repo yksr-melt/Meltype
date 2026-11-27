@@ -12,6 +12,7 @@
 
 #include <future>
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "CandidateWindow.h"
@@ -172,8 +173,10 @@ private:
     void CommittedOutside(const std::string& field = {});
     // パスワード欄に変わったとき、表示済みの文字を確定して属性を通知する。
     void FinishPasswordTransition(TfEditCookie ec, ITfContext* context);
-    // 変換を切り離し、表示済みの文字を残して TSF の変換だけを非同期で終える。
-    void EndCompositionAsync();
+    // 変換を切り離し、TSF の変換だけを非同期で終える。commit があれば、終えるときに表示済みの文字をそれに置き換える。
+    void EndCompositionAsync(std::optional<std::wstring> commit = std::nullopt);
+    // 確定の応答から、旧欄に入れる文字を取り出す。入れるものが無い・決められなければ nullopt
+    static std::optional<std::wstring> CommitText(const JsonValue& result);
     void ResumeOrCommit(ITfContext* context);
     void SelectCandidate(int index);
     // キャレットの前を読めたら true (読めなければ before は空のまま。読めない入力欄を調べられるように、変わったときだけ tip-log に書く)
@@ -197,6 +200,8 @@ private:
     void UpdateLangBar();
     bool ForgetAbandoned(ITfComposition* composition);
     void EndAbandonedNow();
+    // context に残した前の変換を、この編集セッションで確定の文字に置き換えて終える (新しい入力より先に)。
+    void FinishAbandonedIn(TfEditCookie ec, ITfContext* context);
 
     LONG refs_ = 1;
     ITfThreadMgr* threadMgr_ = nullptr;
@@ -246,8 +251,12 @@ private:
     struct Abandoned {
         Microsoft::WRL::ComPtr<ITfComposition> composition;
         Microsoft::WRL::ComPtr<ITfContext> context;
+        std::wstring shown;                  // 手放したときに表示していた文字
+        std::optional<std::wstring> commit;  // Core が確定した文字 (無ければ表示のまま終える)
     };
-    std::vector<Abandoned> abandoned_;  // 手放した前の入力欄の変換中の文字 (あとで下線を消して終える)
+    static void FinishAbandoned(TfEditCookie ec, const Abandoned& item);
+    std::vector<Abandoned> abandoned_;  // 手放した前の入力欄の変換中の文字 (あとで確定の文字を入れ、下線を消して終える)
+    std::wstring compositionText_;      // 最後に変換中の範囲へ置いた文字
     UINT reinjectGuardVk_ = 0;     // 同じキーを続けて送り直した回数 (送り直しが止まらなくなるのを防ぐ)
     ULONGLONG reinjectGuardTime_ = 0;
     int reinjectGuardCount_ = 0;

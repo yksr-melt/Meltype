@@ -500,9 +500,17 @@ void TextService::CommitOnFocusLoss() {
     // 本当に別の欄へ移ったときだけ、元の欄のキャレットを動かさずに確定する。
     if (composition_ != nullptr) {
         if (!CommitNow(true, true)) {
-            // 編集できない旧欄は表示済みの文字を残して切り離す。遅れた確定が、戻ってからの新しい打鍵を巻き込まないようにする。
-            EndCompositionAsync();
-            CommittedOutside();
+            // 旧欄を今は編集できない。Core の確定は次の入力より先にここで 1 回だけ求め、旧欄に入れるのは編集できるときに回す
+            // (変換ごと遅らせると、戻ってから打った文字まで旧欄の確定に入る)。
+            // 欄の属性は編集ロックが無いと読めないので送らない。Core は直前の欄 (この変換の欄) の属性 (Private など) で確定する。
+            JsonValue reply;
+            if (Send("CommitRequested", "", CaretMoved(true), reply)) {
+                ApplyState(reply[L"state"]);
+                EndCompositionAsync(CommitText(reply[L"result"]));
+            } else {
+                EndCompositionAsync();
+                CommittedOutside();
+            }
         }
     } else if (!disabled_) {
         JsonValue reply;
@@ -536,6 +544,9 @@ STDMETHODIMP TextService::OnSetFocus(BOOL foreground) {
 STDMETHODIMP TextService::OnPopContext(ITfContext* context) {
     // 外れた入力欄に Core の未確定入力を持ち越さない。文書の破棄でも、最後の context の Pop が先に通知される。
     if (SameObject(context, compositionContext_) || SameObject(context, resumeContext_.Get())) CommitOnFocusLoss();
+    // 外れた欄に残した前の変換には、もう書き込まない (Core には手放したときに確定を伝えてある)
+    abandoned_.erase(std::remove_if(abandoned_.begin(), abandoned_.end(), [context](const Abandoned& item) { return SameObject(context, item.context.Get()); }),
+                     abandoned_.end());
     if (SameObject(context, editSinkContext_)) UnadviseTextEditSink();
     return S_OK;
 }
@@ -585,6 +596,7 @@ HRESULT TextService::SelectionInComposition(TfEditCookie ec, ITfContext* context
 }
 
 void TextService::PrepareComposition(TfEditCookie ec, ITfContext* context) {
+    FinishAbandonedIn(ec, context);
     if (composition_ == nullptr || !SameObject(context, compositionContext_)) return;
     bool inside = true;
     // 選択を提供しない欄も通常欄として扱う。読めないことは、入力欄から離れた証拠にならない。
@@ -1924,7 +1936,7 @@ void TextService::ApplyComposition(TfEditCookie ec, ITfContext* context, const J
 
     ITfRange* range = nullptr;
     if (FAILED(composition_->GetRange(&range))) return;
-    range->SetText(ec, 0, text.c_str(), static_cast<LONG>(text.size()));
+    if (SUCCEEDED(range->SetText(ec, 0, text.c_str(), static_cast<LONG>(text.size())))) compositionText_ = text;
 
     // 下線: 変換中は文節ごと (選んでいる文節は太線)、打っている途中は点線
     const auto& clauses = view[L"clauses"].array;
@@ -2088,6 +2100,7 @@ void TextService::ResumeOrCommit(ITfContext* context) {
                 compositionContext_ = context;
                 compositionContext_->AddRef();
                 SetAttribute(ec, context, range.Get(), atomInput_);
+                compositionText_ = text;
                 resumed = true;
             }
             contextComposition->Release();
@@ -2116,9 +2129,23 @@ void TextService::CommitAsync(bool keepAppCaret, bool left) {
     });
 }
 
-void TextService::EndCompositionAsync() {
+std::optional<std::wstring> TextService::CommitText(const JsonValue& result) {
+    // 旧欄への遅れた反映では、確定し直し (removeBefore) をせず、今の語だけを入れる。キャレットも動かさない。
+    const auto& commits = result[L"commits"].array;
+    if (commits.empty()) return std::nullopt;
+    std::wstring text;
+    for (const JsonValue& edit : commits) {
+        const JsonValue& current = edit[L"currentWord"];
+        if (edit[L"removeBefore"].type != JsonValue::Type::String) text += edit[L"text"].Str();
+        else if (current.type == JsonValue::Type::String) text += current.Str();
+        else return std::nullopt;
+    }
+    return text;
+}
+
+void TextService::EndCompositionAsync(std::optional<std::wstring> commit) {
     // 以後の確定や候補操作がこの変換に触れないよう、編集を待つ前に手放す。
-    TipLog(L"表示済みの文字を残して変換を終えます");
+    TipLog(commit ? L"確定した文字を旧欄に入れられるようになってから変換を終えます" : L"表示済みの文字を残して変換を終えます");
     Microsoft::WRL::ComPtr<ITfComposition> old;
     old.Attach(composition_);
     composition_ = nullptr;
@@ -2129,11 +2156,20 @@ void TextService::EndCompositionAsync() {
     if (oldContext && old) {
         // いくつも溜まらないように (古いものは、アプリが終えたときに下線だけ消える)
         if (abandoned_.size() >= 8) abandoned_.erase(abandoned_.begin());
-        abandoned_.push_back({old, oldContext});
+        abandoned_.push_back({old, oldContext, compositionText_, std::move(commit)});
         Microsoft::WRL::ComPtr<TextService> self = this;
-        RunEditSession(oldContext.Get(), clientId_, TF_ES_ASYNC | TF_ES_READWRITE, [self, old](TfEditCookie ec) {
-            // 終わった後 (Deactivate) は一覧を空にしているので、そのときも終える
-            if (self->ForgetAbandoned(old.Get()) || self->deactivated_) {
+        RunEditSession(oldContext.Get(), clientId_, TF_ES_ASYNC | TF_ES_READWRITE, [self, old, oldContext](TfEditCookie ec) {
+            // 同じ欄の次の編集セッション (FinishAbandonedIn)・アプリの終了 (OnCompositionTerminated) で済んでいたら何もしない。
+            // 終わった後 (Deactivate) は一覧を空にしているので、そのときは表示のまま終える
+            for (auto it = self->abandoned_.begin(); it != self->abandoned_.end(); ++it) {
+                if (!SameObject(old.Get(), it->composition.Get())) continue;
+                const Abandoned item = *it;
+                self->abandoned_.erase(it);
+                if (SameObject(oldContext.Get(), self->editSinkContext_)) self->ownEdit_ = true;
+                FinishAbandoned(ec, item);
+                return S_OK;
+            }
+            if (self->deactivated_) {
                 ClearAttributeOf(ec, old.Get());
                 old->EndComposition(ec);
             }
@@ -2158,14 +2194,46 @@ void TextService::EndAbandonedNow() {
     std::vector<Abandoned> pending;
     pending.swap(abandoned_);
     for (Abandoned& item : pending) {
-        Microsoft::WRL::ComPtr<ITfComposition> composition = item.composition;
-        HRESULT hr = RunEditSession(item.context.Get(), clientId_, TF_ES_SYNC | TF_ES_READWRITE, [composition](TfEditCookie ec) {
-            ClearAttributeOf(ec, composition.Get());
-            composition->EndComposition(ec);
+        HRESULT hr = RunEditSession(item.context.Get(), clientId_, TF_ES_SYNC | TF_ES_READWRITE, [&item](TfEditCookie ec) {
+            FinishAbandoned(ec, item);
             return S_OK;
         });
         if (FAILED(hr)) TipLog(L"手放した変換中の文字を終えられませんでした: 0x%08X", hr);
     }
+}
+
+void TextService::FinishAbandonedIn(TfEditCookie ec, ITfContext* context) {
+    // 旧欄の非同期の編集より先に、同じ欄の編集ロックが取れた: 新しい入力を置く前に、前の変換を確定の文字で終える。
+    // 後から届く非同期の編集は、一覧に無いので何もしない
+    for (auto it = abandoned_.begin(); it != abandoned_.end();) {
+        if (!SameObject(context, it->context.Get())) {
+            ++it;
+            continue;
+        }
+        const Abandoned item = *it;
+        it = abandoned_.erase(it);
+        FinishAbandoned(ec, item);
+    }
+}
+
+void TextService::FinishAbandoned(TfEditCookie ec, const Abandoned& item) {
+    // 範囲の文字が手放したときのままなら、Core の確定の文字に置き換える。アプリが書き換えていたら、アプリの文字を残す。
+    // 範囲の中だけを書き換え、選択位置は設定しない (アプリのキャレットは、範囲の後ろなら文字の後ろへずれるだけ)
+    Microsoft::WRL::ComPtr<ITfRange> range;
+    Microsoft::WRL::ComPtr<ITfContext> context;
+    if (item.commit && *item.commit != item.shown && SUCCEEDED(item.composition->GetRange(&range)) &&
+        SUCCEEDED(range->GetContext(&context)) && !IsTkWindow(ContextWindow(context.Get()))) {
+        std::wstring actual(item.shown.size() + 1, L'\0');
+        ULONG length = 0;
+        if (SUCCEEDED(range->GetText(ec, 0, actual.data(), static_cast<ULONG>(actual.size()), &length)) && length == item.shown.size() &&
+            actual.compare(0, length, item.shown) == 0) {
+            range->SetText(ec, 0, item.commit->c_str(), static_cast<LONG>(item.commit->size()));
+        } else {
+            TipLog(L"旧欄の文字が変わっていたので、確定の文字を入れずに変換を終えます");
+        }
+    }
+    ClearAttributeOf(ec, item.composition.Get());
+    item.composition->EndComposition(ec);
 }
 
 bool TextService::CommitNow(bool keepAppCaret, bool left) {

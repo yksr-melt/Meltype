@@ -19,6 +19,10 @@ bool composingTest = false;
 std::wstring pendingText;
 std::vector<std::wstring> committedText;
 std::vector<bool> composingKeys;
+// 空でなければ、CommitRequested は表示中の文字ではなくこの文字を確定する (変換すると表示と確定が変わる場合)
+std::wstring commitResult;
+int appCommits = 0;
+std::vector<bool> commitFields;  // CommitRequested が欄の事実を送ったか
 int eventRequests = 0;
 void TipLog(const wchar_t*, ...) {}
 std::string ToUtf8(const std::wstring& text) {
@@ -50,10 +54,13 @@ bool PipeClient::Transact(const std::string& request, std::string& response, DWO
             composingKeys.push_back(event[L"field"][L"composing"].Bool());
             pendingText += static_cast<wchar_t>(event[L"key"][L"ch"].Int());
         } else if (type == L"CommitRequested") {
-            committedText.push_back(pendingText);
-            commits = "[{\"text\":\"" + ToUtf8(pendingText) + "\"}]";
+            const std::wstring text = commitResult.empty() ? pendingText : commitResult;
+            committedText.push_back(text);
+            commitFields.push_back(!event[L"field"].IsNull());
+            commits = "[{\"text\":\"" + ToUtf8(text) + "\"}]";
             pendingText.clear();
         } else if (type == L"CommittedByApp") {
+            ++appCommits;
             pendingText.clear();
         }
         if (!pendingText.empty()) view = "{\"text\":\"" + ToUtf8(pendingText) + "\",\"converting\":false}";
@@ -80,6 +87,8 @@ public:
     bool blockReads = false;
     bool failSelection = false;
     bool emptySelection = false;
+    LONG CaretStart() const { return selection_.acpStart; }
+    LONG CaretEnd() const { return selection_.acpEnd; }
     void MoveCaret(LONG position) {
         selection_ = {position, position, {TS_AE_NONE, FALSE}};
         if (sink_) sink_->OnSelectionChange();
@@ -145,6 +154,11 @@ public:
         if (start < 0 || end < start || end > static_cast<LONG>(text.size())) return TS_E_INVALIDPOS;
         text.replace(start, end - start, value, length);
         *change = {start, end, start + static_cast<LONG>(length)};
+        // 実際の入力欄と同じく、書き換えた範囲の後ろの選択位置は文字数の差だけずらす
+        const LONG delta = static_cast<LONG>(length) - (end - start);
+        for (LONG* anchor : {&selection_.acpStart, &selection_.acpEnd}) {
+            if (*anchor > end || (*anchor == end && end > start)) *anchor += delta;
+        }
         return S_OK;
     }
     STDMETHODIMP InsertTextAtSelection(DWORD flags, const WCHAR* value, ULONG length, LONG* start, LONG* end, TS_TEXTCHANGE* change) override {
@@ -335,7 +349,22 @@ int main(int argc, char** argv) {
             pendingText.clear();
             committedText.clear();
             composingKeys.clear();
+            commitFields.clear();
+            appCommits = 0;
             service->OnSetFocus(document.Get(), nullptr);
+        };
+        auto clearOther = [&] {
+            const HRESULT hr = RunEditSession(otherContext.Get(), client, TF_ES_SYNC | TF_ES_READWRITE, [&](TfEditCookie ec) {
+                ComPtr<ITfRange> range, end;
+                otherContext->GetStart(ec, &range);
+                otherContext->GetEnd(ec, &end);
+                range->ShiftEndToRange(ec, end.Get(), TF_ANCHOR_END);
+                range->SetText(ec, 0, L"", 0);
+                range->Collapse(ec, TF_ANCHOR_START);
+                TF_SELECTION selection = {range.Get(), {TF_AE_NONE, FALSE}};
+                return otherContext->SetSelection(ec, 1, &selection);
+            });
+            if (FAILED(hr)) { ++failed; std::puts("FAIL resetting the other text store"); }
         };
         auto press = [&](UINT vk) { service->OnKeyDown(context.Get(), vk, 1, &keyEaten); };
 
@@ -395,17 +424,77 @@ int main(int argc, char** argv) {
         press('E');
         check(!composingKeys.back() && pendingText == L"e" && store->text == L"exxt", "input at the new caret does not join the old range");
 
+        // 旧欄を同期編集できない間に離れた: Core の確定は離れたときに 1 回だけ求め、旧欄には表示ではなく Core の確定の文字を入れる。
+        // 模擬 Core は表示 (t) と違う文字 (と) を確定する。
+        resetInput();
+        press('T');
+        commitResult = L"と";
+        store->blockWrites = true;
+        service->OnSetFocus(otherDocument.Get(), document.Get());
+        check(committedText.size() == 1 && pendingText.empty() && appCommits == 0,
+              "leaving a locked field asks the core to commit once instead of reporting the display as committed");
+        check(commitFields.size() == 1 && !commitFields.back(), "the detached commit does not send field facts it could not read");
+        service->OnKeyDown(otherContext.Get(), 'E', 1, &keyEaten);
+        check(pendingText == L"e" && !composingKeys.back() && otherStore->text == L"e", "the first key in the new field starts new input there");
+        store->blockWrites = false;
+        store->GrantPendingLock();
+        Pump();
+        check(store->text == L"と" && committedText.size() == 1 && otherStore->text == L"e" && pendingText == L"e",
+              "the old field receives the core's committed text once the lock is released");
+        commitResult.clear();
+        service->OnSetFocus(document.Get(), otherDocument.Get());
+        clearOther();
+
+        // A → B → A と戻り、旧欄の非同期の編集より先に打つ: 打鍵の編集セッションで先に旧範囲を確定し、新しい入力は後ろに続ける。
+        resetInput();
+        press('T');
+        commitResult = L"とう";
+        store->blockWrites = true;
+        service->OnSetFocus(otherDocument.Get(), document.Get());
+        store->blockWrites = false;
+        service->OnSetFocus(document.Get(), otherDocument.Get());
+        press('E');
+        check(store->text == L"とうe" && committedText.size() == 1 && pendingText == L"e" && !composingKeys.back(),
+              "returning before the late edit commits only the old input and keeps new keys composing");
+        commitResult.clear();
+        press('S');
+        check(store->text == L"とうes" && pendingText == L"es" && composingKeys.back(), "keys after the return continue the new composition");
+        store->GrantPendingLock();
+        Pump();
+        check(store->text == L"とうes" && store->CaretStart() == 4 && store->CaretEnd() == 4 && committedText.size() == 1,
+              "the late callback after the return changes neither the text nor the caret");
+
+        // アプリが旧範囲の変換を先に終えた: 遅れた反映はアプリの文字を上書きせず、Core にも確定を送り直さない。
+        resetInput();
+        press('T');
+        commitResult = L"と";
+        store->blockWrites = true;
+        service->OnSetFocus(otherDocument.Get(), document.Get());
+        // アプリが変換を終えるときは、アプリ自身が編集ロックを与える。旧欄の非同期の編集はまだ待たせたまま
+        store->blockWrites = false;
+        check(SUCCEEDED(owner->TerminateComposition(nullptr)), "the application can terminate the detached composition");
+        store->GrantPendingLock();
+        Pump();
+        check(store->text == L"t" && committedText.size() == 1 && appCommits == 0,
+              "an application-ended old composition is neither overwritten nor committed again");
+
+        // アプリが旧範囲の文字を書き換えた: 遅れた反映はアプリの文字を残す。
         resetInput();
         press('T');
         store->blockWrites = true;
         service->OnSetFocus(otherDocument.Get(), document.Get());
-        check(pendingText.empty() && store->text == L"t", "leaving a locked field keeps visible text and clears pending core input");
         store->blockWrites = false;
-        service->OnSetFocus(document.Get(), otherDocument.Get());
-        press('E');
+        RunEditSession(context.Get(), client, TF_ES_SYNC | TF_ES_READWRITE, [&](TfEditCookie ec) {
+            ComPtr<ITfRange> range, end;
+            context->GetStart(ec, &range);
+            context->GetEnd(ec, &end);
+            range->ShiftEndToRange(ec, end.Get(), TF_ANCHOR_END);
+            return range->SetText(ec, 0, L"x", 1);
+        });
         store->GrantPendingLock();
         Pump();
-        check(pendingText == L"e" && !composingKeys.back() && store->text == L"te", "late cleanup of the old composition does not commit or replace new input");
+        check(store->text == L"x" && committedText.size() == 1, "an application-rewritten old range keeps the application's text");
+        commitResult.clear();
 
         resetInput();
         press('T');
@@ -420,35 +509,41 @@ int main(int argc, char** argv) {
         focusManager.noDocument = false;
         service->OnSetFocus(document.Get(), nullptr);
 
+        // フォーカス通知より先に、別の欄のキーが届いた: 同じく旧欄の確定を先に求めてから、新しい欄で始める。
         resetInput();
         press('T');
-        // フォーカス通知が欠けていても、新しい context のキーで旧欄を切り離せる。
+        commitResult = L"と";
         store->blockWrites = true;
         service->OnKeyDown(otherContext.Get(), 'E', 1, &keyEaten);
+        check(pendingText == L"e" && !composingKeys.back() && otherStore->text == L"e" && committedText.size() == 1,
+              "a key in a different context commits the locked old field before starting new input");
         store->blockWrites = false;
         store->GrantPendingLock();
         Pump();
-        check(pendingText == L"e" && !composingKeys.back() && store->text == L"t" && otherStore->text == L"e",
-              "a key in a different context immediately detaches a locked old field without retry counters");
+        check(store->text == L"と" && otherStore->text == L"e" && committedText.size() == 1,
+              "the old field receives the committed text after a key arrives before the focus notification");
+        commitResult.clear();
         service->OnSetFocus(document.Get(), otherDocument.Get());
-        RunEditSession(otherContext.Get(), client, TF_ES_SYNC | TF_ES_READWRITE, [&](TfEditCookie ec) {
-            ComPtr<ITfRange> range, end;
-            otherContext->GetStart(ec, &range);
-            otherContext->GetEnd(ec, &end);
-            range->ShiftEndToRange(ec, end.Get(), TF_ANCHOR_END);
-            range->SetText(ec, 0, L"", 0);
-            range->Collapse(ec, TF_ANCHOR_START);
-            TF_SELECTION selection = {range.Get(), {TF_AE_NONE, FALSE}};
-            return otherContext->SetSelection(ec, 1, &selection);
-        });
+        clearOther();
         resetInput();
         press('T');
         service->OnSetFocus(otherDocument.Get(), document.Get());
         service->OnKeyDown(otherContext.Get(), 'E', 1, &keyEaten);
         check(committedText.size() == 1 && committedText.front() == L"t" && !composingKeys.back() &&
               store->text == L"t" && otherStore->text == L"e", "switching documents commits the old field and starts new input in the new field");
+
+        // 旧欄を編集できないまま、その context が取り外された: 遅れた反映をせず、Core にも 2 回目の確定を送らない。
+        commitResult = L"え";
+        otherStore->blockWrites = true;
+        service->OnSetFocus(document.Get(), otherDocument.Get());
+        check(committedText.size() == 2 && committedText.back() == L"え" && pendingText.empty(), "leaving the locked new field commits it once");
         otherDocument->Pop(TF_POPF_ALL);
-        check(pendingText.empty() && otherStore->text == L"e", "removing the owning context clears pending input without erasing visible text");
+        otherStore->blockWrites = false;
+        otherStore->GrantPendingLock();
+        Pump();
+        check(committedText.size() == 2 && appCommits == 0 && otherStore->text == L"e",
+              "removing the owning context neither writes late text nor commits again");
+        commitResult.clear();
         composingTest = false;
         if (!compositionOnly) {
             auto takesKey = [&](UINT vk) {
