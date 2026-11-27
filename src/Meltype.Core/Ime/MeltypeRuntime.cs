@@ -49,7 +49,6 @@ public sealed class MeltypeRuntime : IDisposable
         _ = Settings.Current;
         Detector = CompositionDetector.CreateDefault(_userDirectory);
         Learning = new LearningData(dataDirectory);
-        Detector.Memory = Learning.LanguageMemory;
         _shared = new CompositionServices
         {
             Candidates = CandidateDictionary.Load(_userDirectory),
@@ -57,6 +56,7 @@ public sealed class MeltypeRuntime : IDisposable
             History = Learning.History,
             Misspellings = MisspellingDictionary.Load(_userDirectory),
             Languages = Learning.LanguageMemory,
+            FieldModes = Learning.FieldModes,
             Translations = TranslationDictionary.Load(),
             Meanings = MeaningDictionary.Load(),
             RomajiTypos = RomajiTypoCorrector.Load(Detector.Romaji),

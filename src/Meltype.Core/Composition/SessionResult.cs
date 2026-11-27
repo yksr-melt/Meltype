@@ -63,6 +63,7 @@ public sealed record SessionResult(bool Consumed, IReadOnlyList<TextEdit> Commit
         builder.Append(",\"clauses\":");
         AppendArray(builder, view.Clauses ?? []);
         builder.Append(",\"selectedClause\":").Append(view.SelectedClause);
+        builder.Append(",\"caretBack\":").Append(view.CaretBack);
         builder.Append(",\"hint\":");
         AppendString(builder, view.Hint);
         builder.Append(",\"spellingSuggestion\":");

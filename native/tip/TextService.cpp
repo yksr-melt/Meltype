@@ -1171,6 +1171,8 @@ bool TextService::WouldEat(ITfContext* context, UINT vk, LPARAM lParam, wchar_t&
     if (InMenuMode()) return pass(L"メニューを開いている");
     if (KeyDown(VK_CONTROL) || KeyDown(VK_MENU) || KeyDown(VK_LWIN) || KeyDown(VK_RWIN)) return pass(L"Ctrl・Alt・Windows キーを押している");
     if (ContextDisabled(context)) return pass(L"この入力欄では使わない");
+    // テンキーは ImeCapture の契約で受け取らない (受け取ってから入れ直すと、ファイル保存ダイアログのファイル名欄で数字が消える: issue #2388)
+    if (vk >= VK_NUMPAD0 && vk <= VK_DIVIDE) return pass(L"テンキー");
     ch = CharOf(vk, 0);
     // 受け取る文字は Meltype.exe が決める (英数では打っている英語の語の続きを通すなど)
     if (!state_.text || ch < L'!' || ch > L'~' || state_.except.find(ch) != std::wstring::npos) return pass(L"受け取らない文字");
@@ -1310,6 +1312,7 @@ void TextService::HandleKey(ITfContext* context, UINT vk, wchar_t ch, bool repea
         const std::string key = std::string(",\"key\":{\"vk\":") + std::to_string(vk) + ",\"ch\":" + std::to_string(ch) +
                                 ",\"shift\":" + (shift ? "true" : "false") + ",\"ctrl\":" + (control ? "true" : "false") +
                                 ",\"alt\":" + (alt ? "true" : "false") + ",\"command\":" + (command ? "true" : "false") +
+                                ((GetKeyState(VK_CAPITAL) & 1) ? ",\"capsLock\":true" : "") +
                                 (repeat ? ",\"repeat\":true" : "") + "}";
         JsonValue reply;
         if (!Send("KeyPressed", field, key, reply, 800, false, listed ? &anchor : nullptr)) {
@@ -1850,10 +1853,15 @@ void TextService::ApplyComposition(TfEditCookie ec, ITfContext* context, const J
         SetAttribute(ec, context, range, atomInput_);
     }
 
-    // キャレットは変換中の文字の後ろ
+    // キャレットは変換中の文字の後ろ。読みの途中を直している間は、末尾から caretBack 文字 (UTF-16) 前
     ITfRange* caretRange = nullptr;
     if (SUCCEEDED(range->Clone(&caretRange))) {
         caretRange->Collapse(ec, TF_ANCHOR_END);
+        if (const int back = view[L"caretBack"].Int(); back > 0) {
+            LONG moved = 0;
+            caretRange->ShiftStart(ec, -back, &moved, nullptr);
+            caretRange->Collapse(ec, TF_ANCHOR_START);
+        }
         TF_SELECTION caret = {};
         caret.range = caretRange;
         caret.style.ase = TF_AE_NONE;

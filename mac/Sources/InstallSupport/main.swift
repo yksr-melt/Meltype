@@ -49,6 +49,10 @@ do {
         try selectJapaneseInputSource(at: URL(fileURLWithPath: arguments[1]))
         exit(0)
     }
+    // 有効なら 0、まだ有効でなければ 2。DMG のインストーラーが、利用者が有効化を許可するまで繰り返し呼ぶ。
+    if arguments.count == 2, arguments[0] == "--enabled" {
+        exit(try isJapaneseInputSourceEnabled(at: URL(fileURLWithPath: arguments[1])) ? 0 : 2)
+    }
     if arguments.count == 2, arguments[0] == "--validate-bundle" {
         try validateBundleLayout(at: URL(fileURLWithPath: arguments[1]))
         exit(0)
@@ -64,7 +68,7 @@ do {
 }
 
 guard CommandLine.arguments.count == 3 else {
-    fputs("Usage: MeltypeInstallSupport directory directory | --lock file executable [arguments...] | --stop app reference state [manual-job-label] | --restore app state | --start app | --select app | --validate-bundle app\n", stderr)
+    fputs("Usage: MeltypeInstallSupport directory directory | --lock file executable [arguments...] | --stop app reference state [manual-job-label] | --restore app state | --start app | --select app | --enabled app | --validate-bundle app\n", stderr)
     exit(1)
 }
 let paths = Array(CommandLine.arguments.dropFirst())

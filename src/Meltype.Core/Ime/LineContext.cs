@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
 
-using System.Text;
-
 namespace Meltype.Ime;
 
 /// <summary>コードの行の、キャレットの位置がどこか。</summary>
@@ -41,20 +39,21 @@ internal static class LineContext
     /// キャレットより前の文字列 (前の行も含んでよい) から、キャレットの位置の種類を調べる。
     /// 前の行から続く複数行の文字列・コメント (Python の """ … """、/* … */、&lt;!-- … --&gt;) の中なら、その種類。
     /// それ以外は、今の行 (最後の改行より後ろ) だけで調べる。
+    /// terminal はターミナルか (<see cref="IsTerminalComment"/>)。
     /// </summary>
-    public static LineKind ClassifyText(string text)
+    public static LineKind ClassifyText(string text, bool terminal = false)
     {
         var lastNewline = text.LastIndexOfAny(['\r', '\n']);
         var line = lastNewline >= 0 ? text[(lastNewline + 1)..] : text;
-        if (lastNewline >= 0 && OpenBlock(text) is { } block) return block;
-        return Classify(line);
+        if (lastNewline >= 0 && OpenBlock(text, terminal) is { } block) return block;
+        return Classify(line, terminal);
     }
 
     /// <summary>
     /// 前の行から始まって、まだ閉じていない複数行の文字列・コメントがあれば、その種類 (無ければ null)。
     /// 1 行のコメント (# //) と 1 行の文字列 ("…" '…') の中の """ /* は数えない。
     /// </summary>
-    private static LineKind? OpenBlock(string text)
+    private static LineKind? OpenBlock(string text, bool terminal)
     {
         string? close = null; // 閉じる記号 (""" ''' */ -->)
         var kind = LineKind.Code;
@@ -80,10 +79,15 @@ internal static class LineContext
             }
             var atStart = lineStart && !char.IsWhiteSpace(c);
             if (!char.IsWhiteSpace(c)) lineStart = false;
+            if (UrlLength(text, i) is > 0 and var url)
+            {
+                i += url - 1;
+                continue;
+            }
             string? open = null;
             if (StartsWith(text, i, "\"\"\"")) (open, kind) = ("\"\"\"", LineKind.String);
             else if (StartsWith(text, i, "'''")) (open, kind) = ("'''", LineKind.String);
-            else if (StartsWith(text, i, "/*")) (open, kind) = ("*/", LineKind.Comment);
+            else if (IsBlockComment(text, i, terminal)) (open, kind) = ("*/", LineKind.Comment);
             else if (StartsWith(text, i, "<!--")) (open, kind) = ("-->", LineKind.Comment);
             if (open is not null)
             {
@@ -92,8 +96,9 @@ internal static class LineContext
                 i += (open == "*/" ? 2 : open == "-->" ? 4 : 3) - 1;
                 continue;
             }
-            // 1 行のコメント: 行の終わりまで飛ばす
-            if (StartsWith(text, i, "//") || (c == '#' && (i + 1 == text.Length || char.IsWhiteSpace(text[i + 1]) || text[i + 1] == '#')) ||
+            // 1 行のコメント: 行の終わりまで飛ばす。
+            // ターミナルの引数の // (//src/work/* など) も飛ばす。後ろの /* を、次の行まで続くコメントの始まりにしない
+            if (StartsWith(text, i, "//") || IsHashComment(text, i, terminal: false) || IsDashComment(text, i, terminal: false) ||
                 (atStart && StartsWithIgnoreCase(text, i, "rem ")))
             {
                 while (i + 1 < text.Length && text[i + 1] is not ('\r' or '\n')) i++;
@@ -113,7 +118,7 @@ internal static class LineContext
         return close is not null && startedBeforeLastLine ? kind : null;
     }
 
-    public static LineKind Classify(string line)
+    public static LineKind Classify(string line, bool terminal = false)
     {
         if (IsChatPrompt(line)) return LineKind.Prompt;
         char? quote = null;
@@ -137,8 +142,13 @@ internal static class LineContext
                 quote = c;
                 continue;
             }
-            if (StartsWith(line, i, "//")) return LineKind.Comment;
-            if (StartsWith(line, i, "/*"))
+            if (UrlLength(line, i) is > 0 and var url)
+            {
+                i += url - 1;
+                continue;
+            }
+            if (IsSlashComment(line, i, terminal)) return LineKind.Comment;
+            if (IsBlockComment(line, i, terminal))
             {
                 var close = line.IndexOf("*/", i + 2, StringComparison.Ordinal);
                 if (close < 0) return LineKind.Comment;
@@ -152,16 +162,88 @@ internal static class LineContext
                 i = close + 2;
                 continue;
             }
-            // # コメント (Python・シェル・PowerShell・YAML)。#include や #region のように # の直後が文字なら指令なので除く。
-            if (c == '#' && (i + 1 == line.Length || char.IsWhiteSpace(line[i + 1]) || line[i + 1] == '#')) return LineKind.Comment;
-            // -- コメント (SQL・Lua・Haskell)。x-- のような減算は直後が空白でないことが多い。
-            if (StartsWith(line, i, "--") && (i + 2 == line.Length || line[i + 2] == ' ') && (atStart || i > 0 && line[i - 1] == ' ')) return LineKind.Comment;
+            if (IsHashComment(line, i, terminal)) return LineKind.Comment;
+            if (IsDashComment(line, i, terminal)) return LineKind.Comment;
             // 複数行コメントの途中の行 ( * …)
             if (atStart && c == '*' && (i + 1 == line.Length || line[i + 1] == ' ')) return LineKind.Comment;
             // REM コメント (バッチファイル)
             if (atStart && StartsWithIgnoreCase(line, i, "rem ")) return LineKind.Comment;
         }
         return quote is null ? LineKind.Code : LineKind.String;
+    }
+
+    // ターミナルのシェルでは、コメントの記号は語の先頭 (行頭か空白の後) にあるときだけコメント。語の途中の # は $#・${#name}・${path#*/}・16#ff・.#pkg。
+    // 語の先頭でも、直後に ASCII が続く // -- /* はコマンドの引数 (Bazel の //src/main:app、bash --kyouha、ls /*.c) なので、直後が空白か ASCII 以外 (確定した日本語) のときだけコメントにする。
+    // 打ったばかりの記号も、続く引数を直接入力するためにコードとする。中で動くエディター (Vim など) のコメントも、記号の後に空白を打てば日本語で書ける。
+    // 改行は本文の始まりにしない。ls /* を実行した後の行を、閉じていない /* コメントの中にしない。
+    private static bool IsTerminalComment(string text, int index, int length) =>
+        IsWordStart(text, index) && index + length < text.Length && text[index + length] is not ('\r' or '\n') && StartsCommentBody(text[index + length]);
+
+    private static bool IsWordStart(string text, int index) => index == 0 || char.IsWhiteSpace(text[index - 1]);
+
+    // コメントの本文の始まり: 空白か、確定した日本語 (「」※ や全角の文字も)。
+    private static bool StartsCommentBody(char c) => c is > '~' || char.IsWhiteSpace(c);
+
+    private static bool IsSlashComment(string text, int index, bool terminal) =>
+        StartsWith(text, index, "//") && (!terminal || IsTerminalComment(text, index, 2));
+
+    // ターミナルの /* は、ls src/*.c・ls /* のようなワイルドカードのほうが多い。
+    private static bool IsBlockComment(string text, int index, bool terminal) =>
+        StartsWith(text, index, "/*") && (!terminal || IsTerminalComment(text, index, 2));
+
+    // #1623: # の直後に日本語を確定してもコメントのままにする。## (区切り) もコメント。
+    // # の直後が ASCII の文字なら、#include・#region・r#type のような指令や名前なのでコードのまま。
+    private static bool IsHashComment(string text, int index, bool terminal) =>
+        text[index] == '#' && (terminal
+            ? IsWordStart(text, index) && index + 1 < text.Length && (text[index + 1] == '#' || StartsCommentBody(text[index + 1]))
+            : index + 1 == text.Length || text[index + 1] == '#' || StartsCommentBody(text[index + 1]));
+
+    // #1623: -- コメント (SQL・Lua・Haskell) は、直後に日本語・全角の本文を確定してもコメントのままにする。
+    // 直前の境界は x-- の減算、直後の ASCII は --count のようなオプションと区別するために残す。
+    private static bool IsDashComment(string text, int index, bool terminal) =>
+        StartsWith(text, index, "--") && (terminal
+            ? IsTerminalComment(text, index, 2)
+            : IsWordStart(text, index) && (index + 2 == text.Length || StartsCommentBody(text[index + 2])));
+
+    /// <summary>
+    /// 行コメントの // にすぐ続けて打った記号 c か (C# の ///、Rust の //!、区切りの //---- //==== //****)。
+    /// コメントの記号の一部なので、日本語の記号にしない。ほかの記号・英数字・日本語・空白を打ったら本文。
+    /// kana はかな入力か。記号のキーもかな (; は れ、- は ほ) を打つので、/// の / だけを記号とする。
+    /// </summary>
+    public static bool ContinuesSlashCommentMarker(string before, char c, bool kana)
+    {
+        if (!IsSlashCommentMarker(c) || kana && c != '/') return false;
+        var start = before.Length;
+        while (start > 0 && IsSlashCommentMarker(before[start - 1])) start--;
+        return StartsWith(before, start, "//");
+    }
+
+    // コメントの記号に使うものだけにする。[ ( " などは「せつめい」のように本文の始まりで、日本語の記号にする。
+    private static bool IsSlashCommentMarker(char c) => c is '/' or '!' or '-' or '=' or '*';
+
+    // #1623: http:// や file:/// のスキーム名の後の / から URL の終わりまでの長さ (URL でなければ 0)。
+    // URL の中の // と /* (gs://bucket/* のワイルドカード) をコメントとみなさない。
+    // :// はほぼ URL にしか出ないので、スキーム名は一覧にせず「英字で始まり英数字・+・-・. が続く名前 + :」で見分ける (s3://・git+ssh://)。
+    // URL には空白と引用符が入らないので、そこを URL の終わりとする。後ろの // や # はコメントとして調べる。
+    // URL より前で開いた括弧を閉じる ) も URL の終わり (CSS の url(https://x/a.png);/* の /* はコメント)。
+    // URL の中で開いた括弧 (https://en.wikipedia.org/wiki/Foo_(bar)) は URL に含める。
+    private static int UrlLength(string text, int index)
+    {
+        if (index < 2 || text[index - 1] != ':') return 0;
+        var scheme = index - 1;
+        while (scheme > 0 && (char.IsAsciiLetterOrDigit(text[scheme - 1]) || text[scheme - 1] is '+' or '-' or '.')) scheme--;
+        if (scheme == index - 1 || !char.IsAsciiLetter(text[scheme])) return 0;
+        var slashes = index;
+        while (slashes < text.Length && text[slashes] == '/') slashes++;
+        if (slashes - index is not (2 or 3)) return 0;
+        var end = slashes;
+        var depth = 0; // URL の中で開いた括弧の数
+        for (; end < text.Length && !char.IsWhiteSpace(text[end]) && text[end] is not ('"' or '\'' or '`'); end++)
+        {
+            if (text[end] == '(') depth++;
+            else if (text[end] == ')' && depth-- == 0) break;
+        }
+        return end - index;
     }
 
     /// <summary>

@@ -254,6 +254,9 @@ internal static class CompositionTests
         public bool NowPlayingCandidates { get => Settings.NowPlayingCandidates; set => Settings.NowPlayingCandidates = value; }
         public bool ContinueAfterConversion { get => Settings.ContinueAfterConversion; set => Settings.ContinueAfterConversion = value; }
         public bool Learning { get => Settings.LearningEnabled; set => Settings.LearningEnabled = value; }
+
+        /// <summary>覚えないように求める入力欄で打っているか (覚えたものは読む)。</summary>
+        public bool Private { get; set; }
         public bool SeparateKeyRoles { get => Settings.SeparateKeyRoles; set => Settings.SeparateKeyRoles = value; }
         public bool NonConvertCyclesKana { get => Settings.NonConvertCyclesKana; set => Settings.NonConvertCyclesKana = value; }
         public bool EnglishFirstInput { get => Settings.EnglishFirstInput; set => Settings.EnglishFirstInput = value; }
@@ -366,6 +369,7 @@ internal static class CompositionTests
                     Selection = Host.Selection?.Text,
                     Composing = _composing,
                     App = Code ? "Code.exe" : null,
+                    Traits = Private ? [ImeTrait.Private] : [],
                     CanRemove = Host.CanDeleteBackward,
                 },
             });
@@ -383,7 +387,7 @@ internal static class CompositionTests
             if (VirtualKeys.IsModifier(vk) || !_state.HandlesInput) return false;
             var mods = (shift ? 1 : 0) | (_ctrlHeld ? 2 : 0);
             if (_state.Capture.Shortcuts.Any(key => ToggleShortcut.NormalizeKey(key.Vk) == ToggleShortcut.NormalizeKey(vk) && key.Modifiers == mods)) return true;
-            return !_ctrlHeld && Host.CharFromKey(vk, shift) is { } c && c is > ' ' and <= '~' && _state.Capture.PrintableAscii && !_state.Capture.PrintableAsciiExcept.Contains(c);
+            return !_ctrlHeld && vk is not (>= 0x60 and <= 0x6F) && Host.CharFromKey(vk, shift) is { } c && c is > ' ' and <= '~' && _state.Capture.PrintableAscii && !_state.Capture.PrintableAsciiExcept.Contains(c);
         }
 
         /// <summary>キーを押す・離す。本体が受け取った (アプリに通さなかった) なら true。</summary>
@@ -2637,6 +2641,84 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void EscRevertedReading_TypedAfterKeptLaughter_IsTheSameAtEndAndAfterArrows()
+    {
+        // Space で笑いの w を残した読みの後ろに打った w は、前の w と合わせて っ にしない。End で末尾に戻しても、← → で戻しても同じ
+        foreach (var (label, arrows) in new[] { ("End", new[] { VirtualKeys.End }), ("← →", new[] { VirtualKeys.Left, VirtualKeys.Right }) })
+        {
+            var k = new Keyboard { EscStepsBack = true };
+            k.Type("warotaww ");
+            k.Press(VirtualKeys.Escape);
+            k.Press(VirtualKeys.F7);
+            k.Press(VirtualKeys.Escape);
+            foreach (var vk in arrows) k.Press(vk);
+            k.Type("w\n");
+            Assert.Equal("わろたwww", k.Host.Document, label);
+        }
+    }
+
+    [Test]
+    public static void EscRevertedReading_CanBeEditedInTheMiddle()
+    {
+        // #972: Esc でひらがなに戻した読みは、← → でカーソルを動かして途中だけを打ち直せる
+        var k = new Keyboard { EscStepsBack = true };
+        k.Type("momijifariniikimasu");
+        k.Press(VirtualKeys.F7);
+        k.Press(VirtualKeys.Escape);
+        Assert.Equal("もみじふぁりにいきます", k.Showing);
+        for (var i = 0; i < 6; i++) k.Press(VirtualKeys.Left);
+        Assert.Equal("もみじふぁりにいきます", k.Showing, "カーソルを動かしても読みは変わらない");
+        Assert.Equal(6, k.Host.View!.CaretBack, "カーソルは「ふぁ」の後ろ");
+        k.Press(VirtualKeys.Back);
+        Assert.Equal("もみじりにいきます", k.Showing, "BackSpace はカーソルの前を消す");
+        k.Type("ga");
+        Assert.Equal("もみじがりにいきます", k.Showing, "カーソルの位置で消して打つ");
+        Assert.Equal(6, k.Host.View!.CaretBack);
+        k.Press(VirtualKeys.End);
+        Assert.Equal(0, k.Host.View!.CaretBack, "End で末尾へ");
+        k.Press(VirtualKeys.Home);
+        k.Press(VirtualKeys.Delete);
+        Assert.Equal("みじがりにいきます", k.Showing, "Delete はカーソルの後ろを消す");
+        k.Type("\n");
+        Assert.Equal("みじがりにいきます", k.Host.Document, "確定は直した読みのまま");
+    }
+
+    [Test]
+    public static void EscRevertedReading_KeepsPendingRomajiAtTheCaret()
+    {
+        // 打ちかけのローマ字があるまま確定しても、見えていた位置 (カーソル) に残す
+        var k = new Keyboard { EscStepsBack = true };
+        k.Type("momijifariniikimasu");
+        k.Press(VirtualKeys.F7);
+        k.Press(VirtualKeys.Escape);
+        for (var i = 0; i < 6; i++) k.Press(VirtualKeys.Left);
+        k.Type("k");
+        Assert.Equal("もみじふぁkりにいきます", k.Showing);
+        k.Type("\n");
+        Assert.Equal("もみじふぁkりにいきます", k.Host.Document);
+        // 打ちかけの n は、末尾で確定するときと同じく ん
+        var n = new Keyboard { EscStepsBack = true };
+        n.Type("momijifariniikimasu");
+        n.Press(VirtualKeys.F7);
+        n.Press(VirtualKeys.Escape);
+        for (var i = 0; i < 6; i++) n.Press(VirtualKeys.Left);
+        n.Type("n");
+        Assert.Equal("もみじふぁんりにいきます", n.Showing);
+        n.Type("\n");
+        Assert.Equal("もみじふぁんりにいきます", n.Host.Document);
+        // 途中に入ってから末尾に戻して打っても、同じ読みの続き (確定して新しく始めない)
+        var end = new Keyboard { EscStepsBack = true };
+        end.Type("kyou");
+        end.Press(VirtualKeys.F7);
+        end.Press(VirtualKeys.Escape);
+        end.Press(VirtualKeys.Left);
+        end.Press(VirtualKeys.End);
+        end.Type("ha");
+        Assert.Equal("", end.Host.Document, "確定しない");
+        Assert.Equal("きょうは", end.Showing);
+    }
+
+    [Test]
     public static void Issue676_EscStepsBackOneLevelAtATime()
     {
         var k = new Keyboard { EscStepsBack = true };
@@ -2796,6 +2878,41 @@ internal static class CompositionTests
         Assert.Equal("とる", k.Showing, "残りは未確定のまま");
         k.Type("\n");
         Assert.Equal("単位をとる", k.Host.Document);
+    }
+
+    [Test]
+    public static void AtokConversionKeys_ArrowsResizeAndDownCommitsUpToTheSelectedClause()
+    {
+        // #2128: ATOK と同じく、Shift + ← で文節を移り、↓ で選んだ文節までを確定する。← は区切りを変える
+        var k = new Keyboard();
+        k.Settings.AtokConversionKeys = true;
+        k.Type("tanniwotoru ");
+        var before = string.Join("|", k.Host.View!.Clauses!);
+        k.Press(VirtualKeys.Left);
+        Assert.True(string.Join("|", k.Host.View!.Clauses!) != before, "← で区切りが変わる: " + before);
+        var clauses = k.Host.View!.Clauses!;
+        k.Host.PhysicalShift = true;
+        k.Key(VirtualKeys.LShift);
+        k.Press(VirtualKeys.Left);
+        k.Key(VirtualKeys.LShift, up: true);
+        k.Host.PhysicalShift = false;
+        k.Press(VirtualKeys.Down);
+        Assert.Equal(clauses[0], k.Host.Document, "選んでいる文節までを確定");
+        Assert.True(k.Showing is { Length: > 0 }, "残りは未確定のまま");
+    }
+
+    [Test]
+    public static void UserDictionary_EnglishReadingConvertsToTheRegisteredWord()
+    {
+        // #764: 英字の読み (atm) に英単語 (Atmosphere) を登録したら、その読みだけを打って変換したときに出す
+        var dictionary = new UserDictionary(null);
+        dictionary.Add("atm", "Atmosphere");
+        var k = new Keyboard(userDictionary: dictionary);
+        k.Type("atm \n");
+        Assert.Equal("Atmosphere", k.Host.Document);
+        var sentence = new Keyboard(userDictionary: dictionary);
+        sentence.Type("atmdeharau\n");
+        Assert.True(!sentence.Host.Document.Contains("Atmosphere"), "文の中の atm は登録語にしない: " + sentence.Host.Document);
     }
 
     [Test]
@@ -3298,6 +3415,109 @@ internal static class CompositionTests
             fresh.Type("\n");
             Assert.Equal(fresh.Host.Document, erased.Host.Document, typed + ": 確定");
         }
+    }
+
+    [Test]
+    public static void Typos_AfterBackspace_AreReadAsIfRetyped()
+    {
+        // 記号を消したら、記号を打つ前に直した打ち間違いも、記号を打たずに打ち直したのと同じになる
+        foreach (var (typed, retyped) in new[] { ("onegaishimsu,\b\b", "onegaishim"), ("kyouh,\b", "kyouh") })
+        {
+            var (erased, fresh) = (new Keyboard(), new Keyboard());
+            erased.Type(typed);
+            fresh.Type(retyped);
+            Assert.Equal(fresh.Showing, erased.Showing, typed + ": 表示");
+            erased.Type("\n");
+            fresh.Type("\n");
+            Assert.Equal(fresh.Host.Document, erased.Host.Document, typed + ": 確定");
+        }
+    }
+
+    [Test]
+    public static void ModeKeys_AfterMark_ShowTheTypedLetters()
+    {
+        // F6〜F10 は打ち間違いを直さない。記号の前の英字も、記号を打たずに F6〜F10 を押したときと同じ (後ろに記号の形を足した形)
+        foreach (var (typed, mark, vk, shownMark) in new[]
+        {
+            ("kyouh", ",", VirtualKeys.F6, "、"),
+            ("onegaishimsu", ",", VirtualKeys.F10, ","),
+            ("sumimasn", ".", VirtualKeys.F9, "．"),
+        })
+        {
+            var (marked, plain) = (new Keyboard(), new Keyboard());
+            marked.Type(typed + mark);
+            marked.Press(vk);
+            plain.Type(typed);
+            plain.Press(vk);
+            Assert.Equal(plain.Showing + shownMark, marked.Showing, typed + mark + ": 表示");
+            marked.Type("\n");
+            plain.Type("\n");
+            Assert.Equal(plain.Host.Document + shownMark, marked.Host.Document, typed + mark + ": 確定");
+        }
+    }
+
+    [Test]
+    public static void Settled_ReadingIsKept_ByModeKeysAndContinuedTyping()
+    {
+        // Space で変換に進んだときに直した読み (打ち間違いの直し・笑いの w) は、F6〜F10 を押しても、続けて打っても戻らない
+        foreach (var (keys, expected) in new[] { ("sumimasn ", "スミマセン"), ("sushiww ", "スシww") })
+        {
+            var k = new Keyboard();
+            k.Type(keys);
+            k.Press(VirtualKeys.F7);
+            k.Type("\n");
+            Assert.Equal(expected, k.Host.Document, keys + "F7");
+        }
+        var continued = new Keyboard();
+        continued.Settings.ContinueAfterConversion = true;
+        continued.Type("kyouh desu \n");
+        Assert.Equal("きょうです", continued.Host.Document, "変換の後も続けて打つ");
+    }
+
+    [Test]
+    public static void Settled_Backspace_RemovesOneSoundOfTheFixedReading()
+    {
+        // Space で直した読みの中を BackSpace で消すと、直した読みから 1 音消える (直す前の打った文字に戻らない)。入力途中の子音だけを消すなら、直した読みはそのまま
+        foreach (var (keys, after, expected) in new (string, int[], string)[]
+        {
+            ("sumimasn ", [VirtualKeys.Escape, VirtualKeys.Back], "すみませ"),
+            ("sumimasn ", [VirtualKeys.F7, VirtualKeys.Back], "スミマセ"),
+            ("sumimasn ", [VirtualKeys.Escape, VirtualKeys.Back, VirtualKeys.Space], "すみませ"),
+            // 範囲の最後の入力途中の子音を消す: 残った打った文字を読み直す
+            ("kan ", [VirtualKeys.Escape, VirtualKeys.Back], "か"),
+        })
+        {
+            var k = new Keyboard();
+            k.Type(keys);
+            foreach (var vk in after) k.Press(vk);
+            k.Type("\n");
+            Assert.Equal(expected, k.Host.Document.TrimEnd(' ', '\n'), keys + string.Join(",", after));
+        }
+        var pending = new Keyboard();
+        pending.Type("sumimasn ");
+        pending.Press(VirtualKeys.Escape);
+        pending.Type("k\b\n");
+        Assert.Equal("すみません", pending.Host.Document, "入力途中の子音を消す");
+        foreach (var (keys, expected) in new[] { ("kyouh d\b\n", "きょう"), ("kyouh desu\b\n", "きょうで"), ("kyouh desu\b\b\n", "きょう"), ("kyouh desu\b\b\b\n", "きょ") })
+        {
+            var continued = new Keyboard();
+            continued.Settings.ContinueAfterConversion = true;
+            continued.Type(keys);
+            Assert.Equal(expected, continued.Host.Document, "変換の後も続けて打つ: " + keys.Replace("\b", "⌫"));
+        }
+    }
+
+    [Test]
+    public static void Laughter_IsKept_WhenArrowStartsClauseSelection()
+    {
+        // 矢印で文節の選択に入っても、表示と同じく最後の ww は笑いの w のまま (っw にしない)
+        var k = new Keyboard();
+        k.Type("sushiww");
+        var shown = k.Showing;
+        k.Press(VirtualKeys.Right);
+        k.Type("\n");
+        Assert.Equal("すしww", shown, "表示");
+        Assert.Equal("すしww", k.Host.Document, "確定");
     }
 
     [Test]
@@ -4044,6 +4264,62 @@ internal static class CompositionTests
         k.Type("\n");
         Assert.Equal(0, history.Count, "変換を覚えない");
         Assert.Equal(0, languages.Entries().Count, "英字に直した語を覚えない");
+    }
+
+    [Test]
+    public static void LearningOff_DoesNotUseLearnedData()
+    {
+        // 設定「ユーザー学習を使う」が OFF なら、今まで覚えた分も使わない。消しはしないので、ON に戻すとまた使う
+        var history = new ConversionHistory(null);
+        history.Remember("はしを", "箸を");
+        var languages = new LanguageMemory(null);
+        languages.Remember("tao", english: true, explicitChoice: true);
+        languages.Remember("google", english: false, explicitChoice: true);
+        var phrases = new PhraseHistory(null);
+        phrases.Remember("にほんごでにゅうりょく", "日本語で入力");
+        var dictionary = TranslationDictionary.Parse("川\tn\triver,stream");
+        var translations = new TranslationHistory(null);
+        translations.Remember("かわ", "stream");
+        var predictor = new Predictor(phrases, () => [("にほんごかいわ", "日本語会話")], history);
+        Keyboard Create(bool learning) => new(history: history, languages: languages, predictor: predictor, translations: dictionary, translationHistory: translations) { Learning = learning };
+        string Typed(bool learning, string keys)
+        {
+            var k = Create(learning);
+            k.Type(keys);
+            return k.Showing ?? "";
+        }
+        List<string> Candidates(bool learning, string keys)
+        {
+            var k = Create(learning);
+            k.Type(keys);
+            return k.Host.View!.Candidates.ToList();
+        }
+        List<string> Predictions(bool learning, string keys)
+        {
+            var k = Create(learning);
+            k.Type(keys);
+            return k.Host.View!.Predictions?.ToList() ?? [];
+        }
+        Assert.Equal("箸を", Candidates(true, "hashiwo ")[0], "ON: 選び直した変換");
+        Assert.True(Candidates(false, "hashiwo ")[0] != "箸を", "OFF: 選び直した変換");
+        Assert.Equal("tao", Typed(true, "tao"), "ON: 英字に直した語");
+        Assert.Equal("たお", Typed(false, "tao"), "OFF: 英字に直した語");
+        Assert.True(Typed(true, "google") != "google", "ON: かなに直した語");
+        Assert.Equal("google", Typed(false, "google"), "OFF: かなに直した語");
+        Assert.True(Predictions(true, "nihongo").Contains("日本語で入力"), "ON: 予測変換の語句");
+        Assert.True(!Predictions(false, "nihongo").Contains("日本語で入力"), "OFF: 予測変換の語句");
+        Assert.True(Predictions(false, "nihongo").Contains("日本語会話"), "OFF でもユーザー辞書の語は予測する");
+        int Place(bool learning) => Candidates(learning, "kawa ").IndexOf("stream");
+        Assert.True(Place(true) < Place(false), $"選んだ英訳: ON {Place(true)} / OFF {Place(false)}");
+        Assert.Equal("箸を", history.Get("はしを"), "OFF で打っても消えない");
+        Assert.Equal(true, languages.Get("tao"), "OFF で打っても消えない");
+
+        // 同じ入力欄で ON に戻したら、次の入力から使う
+        var toggled = Create(learning: false);
+        toggled.Type("tao\n");
+        toggled.Learning = true;
+        toggled.Type("tao");
+        Assert.Equal("tao", toggled.Showing, "ON に戻すと使う");
     }
 
     [Test]
@@ -5531,6 +5807,35 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void LiveConversion_NextInputUsesWordRegisteredAfterInput()
+    {
+        // ライブ変換の控えを次の入力に持ち越さないことを確かめる。1 回目の入力の後に登録した語は、次の入力で同じ読みを打てば使う
+        // (変換エンジンの答えが記号だけ (にょろ → ～) のときは、ユーザー辞書の語でなければかなにする)。
+        // 前の文字と学習を変えないために、1 回目は確定せずに Esc で取り消す
+        var path = Path.Combine(Path.GetTempPath(), "meltype-live-cache-" + Guid.NewGuid().ToString("N") + ".txt");
+        try
+        {
+            var dictionary = new UserDictionary(path, builtIn: false);
+            var k = new Keyboard(live: true, converter: new WaveDashConverter(), userDictionary: dictionary);
+            k.Type("nyoro");
+            Assert.Equal("にょろ", k.Showing, "ユーザー辞書の語でない記号の答え");
+            k.Press(VirtualKeys.Escape);
+            Assert.True(dictionary.Add("にょろ", "～") is null, "登録");
+            k.Type("nyoro");
+            Assert.Equal("～", k.Showing, "次の入力では登録した語");
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    private sealed class WaveDashConverter : TestConverter
+    {
+        public override string? Convert(string hiragana, string? before) => hiragana == "にょろ" ? "～" : null;
+    }
+
+    [Test]
     public static void LiveConversion_SpaceShowsAlternatives()
     {
         var k = new Keyboard(live: true);
@@ -6365,8 +6670,8 @@ internal static class CompositionTests
             ("edityo", "editよ"));
         var text = new Composition.CompositionTextState();
         var env = TestSupport.Env(Detector);
-        foreach (var c in "suityoku") CompositionText.Append(text, env, c);
-        Assert.Equal("JA:suityoku", string.Join(" | ", CompositionText.Segments(text, env).Select(s => (s.IsEnglish ? "EN:" : "JA:") + s.Raw)));
+        foreach (var c in "suityoku") text = CompositionText.Append(text, c);
+        Assert.Equal("JA:suityoku", string.Join(" | ", CompositionText.Segments(CompositionText.Read(text, env), env).Select(s => (s.IsEnglish ? "EN:" : "JA:") + s.Raw)));
     }
 
     [Test]
@@ -6382,21 +6687,21 @@ internal static class CompositionTests
             var detector = CompositionDetector.CreateDefault(dir);
             var text = new Composition.CompositionTextState();
             var env = TestSupport.Env(detector);
-            CompositionText.Append(text, env, 'n');
-            Assert.Equal("n", CompositionText.Display(text, env, final: false), "n だけなら打ちかけのまま");
-            CompositionText.Append(text, env, 'g');
-            Assert.Equal("ng", CompositionText.Display(text, env, final: false), "表の綴りの打ちかけは んg ではなく ng と表示する");
-            CompositionText.Append(text, env, 'h');
-            Assert.Equal("にゅう", CompositionText.Display(text, env, final: false), "続けて打つと登録した読みになる");
+            text = CompositionText.Append(text, 'n');
+            Assert.Equal("n", CompositionText.Display(CompositionText.Read(text, env), env, final: false), "n だけなら打ちかけのまま");
+            text = CompositionText.Append(text, 'g');
+            Assert.Equal("ng", CompositionText.Display(CompositionText.Read(text, env), env, final: false), "表の綴りの打ちかけは んg ではなく ng と表示する");
+            text = CompositionText.Append(text, 'h');
+            Assert.Equal("にゅう", CompositionText.Display(CompositionText.Read(text, env), env, final: false), "続けて打つと登録した読みになる");
             // 表を登録していない場合 (main 側の判定に従う)
             var plain = new Composition.CompositionTextState();
             var plainEnv = TestSupport.Env(Detector);
-            foreach (var c in "ng") CompositionText.Append(plain, plainEnv, c);
+            foreach (var c in "ng") plain = CompositionText.Append(plain, c);
             // main の判定では、語頭の ng は表の有無に関係なく英字の ng として表示される (main だけの状態でも同じ結果を確認済み)。
             // 表の登録で変わるのは、続けて h を打ったときに にゅう になるかどうか。
-            Assert.Equal("ng", CompositionText.Display(plain, plainEnv, final: false), "表が無いときの ng は main と同じ表示");
-            CompositionText.Append(plain, plainEnv, 'h');
-            Assert.True(CompositionText.Display(plain, plainEnv, final: false) != "にゅう", "表が無ければ ngh は にゅう にならない");
+            Assert.Equal("ng", CompositionText.Display(CompositionText.Read(plain, plainEnv), plainEnv, final: false), "表が無いときの ng は main と同じ表示");
+            plain = CompositionText.Append(plain, 'h');
+            Assert.True(CompositionText.Display(CompositionText.Read(plain, plainEnv), plainEnv, final: false) != "にゅう", "表が無ければ ngh は にゅう にならない");
         }
         finally { Directory.Delete(dir, recursive: true); }
     }
@@ -6451,8 +6756,8 @@ internal static class CompositionTests
             // 保護区間を含む入力も、保護区間以外の区切りの重みを出す
             var text = new Composition.CompositionTextState();
             var env = TestSupport.Env(Detector);
-            foreach (var c in "@kuraido kyouha") CompositionText.Append(text, env, c);
-            var mention = CompositionText.ExplainSegments(text, env);
+            foreach (var c in "@kuraido kyouha") text = CompositionText.Append(text, c);
+            var mention = CompositionText.ExplainSegments(CompositionText.Read(text, env), env);
             Assert.True(mention.Contains("保護区間") && mention.Contains("区切り "), "保護区間と、ほかの区間の区切り: " + mention);
         }
         finally
