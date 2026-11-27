@@ -1029,6 +1029,9 @@ public sealed class Settings
     internal bool Migrate()
     {
         if (SettingsVersion >= CurrentVersion) return false;
+        // 旧版からの移行でアプリ別設定を参照する。Normalize は移行後なので、明示的な null はここで空にする。
+        AppRules ??= [];
+        AppRules.RemoveAll(rule => rule is null);
         // v2: IME 自動切替の保留の時間を延ばした (IME 自動切替は消した)。
         // v3: Meltype キーボード (変換ボックス) を追加。v2 以前の config.json には Mode が無いので、
         // 読み込み時に初期値になる。
