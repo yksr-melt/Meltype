@@ -195,8 +195,18 @@ internal sealed class RomajiTypoCorrector
         if (first <= 0) return null;
         // 読めない子音の後ろに 2 文字以上打つまでは待つ (続きを打つと読めることがある: shimsu の s の後の u)。
         if (!final && letters.Length - first - 1 < 2) return null;
-        // 表示された語末の未確定の子音は、確定するときも打った文字のままにする (#2461)。
-        if (first == letters.Length - 1 && _romaji.AnalyzeFragment(letters).IsValid) return null;
+        // 語末に子音が 1 つ残っただけ (yoroshikuy) なら、隣のキーを一緒に押したときだけ消す
+        // (teh を ては のように母音を足して直すと、英語の打ち間違いまで日本語にしてしまう)。
+        if (first == letters.Length - 1 && _romaji.AnalyzeFragment(letters).IsValid)
+        {
+            // ん のすぐ後ろに見えている子音は、確定時に n の隣を打った誤りとして消さない (#2461)。
+            if (letters[^2] == 'n') return null;
+            var extra = letters[^1];
+            if (!(Neighbors.TryGetValue(extra, out var around) && around.Contains(letters[^2]) || extra == letters[^2])) return null;
+            var trimmed = letters[..^1];
+            var kana = _romaji.ConvertLenient(trimmed, final: true);
+            return Segment(kana, kana.Length - 1).Known ? new RomajiFix(letters, trimmed, kana) : null;
+        }
 
         var candidates = new Dictionary<string, (double Cost, int Edit)>(StringComparer.Ordinal);
         void Consider(string fixedLetters, int edit, double prior)
