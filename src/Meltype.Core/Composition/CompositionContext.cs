@@ -22,9 +22,10 @@ internal static class CompositionContext
     /// </summary>
     internal static TextContext ContextOf(CompositionState state, CompositionEnv env)
     {
-        var before = state.Own is { } own && (env.Before is null || env.Before == own.Shown) ? own.Text : CompositionOutput.Before(state.Out, env);
+        var own = CurrentCommit(state, env.Before);
+        var before = own is not null && (env.Before is null || env.Before == own.Shown) ? own.Text : CompositionOutput.Before(state.Out, env);
         var after = CompositionOutput.After(env);
-        return new TextContext(before, LanguageBefore(before), IsEnglishSentence(before), IsEnglishNameContext(before), after, LanguageOfStart(after));
+        return new TextContext(before, own?.ExplicitPath == true ? null : LanguageBefore(before), IsEnglishSentence(before), IsEnglishNameContext(before), after, LanguageOfStart(after));
     }
 
     /// <summary>
@@ -37,12 +38,16 @@ internal static class CompositionContext
         return LanguageOf(before);
     }
 
+    /// <summary>自分の直前の確定に対応する入力欄の文脈か。</summary>
+    internal static OwnCommit? CurrentCommit(CompositionState state, string? before) =>
+        state.Own is { } own && (before is null || before == own.Shown || before.EndsWith(own.Text, StringComparison.Ordinal)) ? own : null;
+
     /// <summary>確定する text を記録する。text を入れる前に、キャレットの前を deleteBefore 文字だけ消す。</summary>
-    internal static void NoteCommit(CompositionState state, CompositionEnv env, int deleteBefore, ComposedText text)
+    internal static void NoteCommit(CompositionState state, CompositionEnv env, int deleteBefore, ComposedText text, bool explicitPath)
     {
         var before = env.Context().PrecedingText ?? "";
         var committed = before[..^Math.Min(deleteBefore, before.Length)] + NotationRules.Read(NotationRules.Write(text, env.Settings.Punctuation), env.Settings.Punctuation);
-        state.Own = new OwnCommit(env.Before, committed.Length > OwnTextLength ? committed[^OwnTextLength..] : committed);
+        state.Own = new OwnCommit(env.Before, committed.Length > OwnTextLength ? committed[^OwnTextLength..] : committed, explicitPath);
     }
 
     /// <summary>

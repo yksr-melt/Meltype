@@ -1416,6 +1416,21 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void ParticleAfterAnExplicitlyAlphanumericPath()
+    {
+        foreach (var path in new[] { "/usr/bin/php", @"c:\temp\php" })
+        {
+            var keyboard = new Keyboard();
+            keyboard.Type(path);
+            keyboard.Press(VirtualKeys.F10);
+            keyboard.Type("\nwo");
+            Assert.Equal("を", keyboard.Showing, path);
+            keyboard.Type("\n");
+            Assert.Equal(path.ToUpperInvariant() + "を", keyboard.Host.Document, path);
+        }
+    }
+
+    [Test]
     public static void F10_CaseResetsAfterCommit()
     {
         var k = new Keyboard();
