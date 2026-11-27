@@ -93,6 +93,7 @@ internal static class UtilityConversions
         new TraditionalUnitConversion(),
         new CurrencyConversion(),
         new ClipboardConversion(),
+        new UuidConversion(),
         new VersionConversion(),
         new KanjiPartsConversion(),
     ];
