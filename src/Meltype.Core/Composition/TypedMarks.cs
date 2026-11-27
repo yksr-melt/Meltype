@@ -25,13 +25,13 @@ internal enum MarkRole
 }
 
 /// <summary>
-/// 打った , . の役割を、打ったもの全体から決める。単位 (<see cref="CompositionTextState.Units"/>) は , . を打った文字のまま持ち、
+/// 打った , . の役割を、打ったもの全体から決める。単位 (<see cref="TextReading.Units"/>) は , . を打った文字のまま持ち、
 /// 読みにするときに、ここで役割から文字を決める。かな入力の 、 。 のキーは、単位が読みの 、 。 を持つので役割を持たない。
 /// </summary>
 internal static class TypedMarks
 {
     /// <summary>読みを決めた単位の並び。halfWidth の単位は、打った半角のままにする。</summary>
-    public static IReadOnlyList<CompositionUnit> Read(CompositionTextState state, TextEnv env, IReadOnlySet<int>? halfWidth = null)
+    public static IReadOnlyList<CompositionUnit> Read(TextReading state, TextEnv env, IReadOnlySet<int>? halfWidth = null)
     {
         var units = state.Units;
         if (halfWidth is null && !units.Any(IsMark)) return units;
@@ -50,7 +50,7 @@ internal static class TypedMarks
         _ => throw new InvalidOperationException($"不明な MarkRole: {role}"),
     };
 
-    private static MarkRole RoleOf(CompositionTextState state, TextEnv env, int i, IReadOnlySet<int>? halfWidth)
+    private static MarkRole RoleOf(TextReading state, TextEnv env, int i, IReadOnlySet<int>? halfWidth)
     {
         var units = state.Units;
         if (halfWidth?.Contains(i) == true) return MarkRole.Enclosed;
@@ -69,7 +69,7 @@ internal static class TypedMarks
     }
 
     /// <summary>i 番目の単位のすぐ後ろに打った文字。かな入力のかなのキーは、打った文字 (Raw) が入力した文字でないので除く。</summary>
-    private static char? NextChar(CompositionTextState state, int i)
+    private static char? NextChar(TextReading state, int i)
     {
         if (i + 1 == state.Units.Count) return state.Pending.Length > 0 ? state.Pending[0] : null;
         var unit = state.Units[i + 1];

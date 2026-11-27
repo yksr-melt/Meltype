@@ -137,9 +137,9 @@ internal static class ImeContractTests
             _ => throw new ArgumentException($"送れないキー: {key}"),
         };
 
-        public JsonElement Key(int vk, char ch = '\0', bool shift = false, bool ctrl = false, string instance = "t1", bool moved = false, bool omitField = false)
+        public JsonElement Key(int vk, char ch = '\0', bool shift = false, bool ctrl = false, string instance = "t1", bool moved = false, bool omitField = false, bool capsLock = false)
         {
-            var output = Event("KeyPressed", instance, $",\"key\":{{\"vk\":{vk},\"ch\":{(int)ch},\"shift\":{(shift ? "true" : "false")},\"ctrl\":{(ctrl ? "true" : "false")}}}", moved, omitField);
+            var output = Event("KeyPressed", instance, $",\"key\":{{\"vk\":{vk},\"ch\":{(int)ch},\"shift\":{(shift ? "true" : "false")},\"ctrl\":{(ctrl ? "true" : "false")},\"capsLock\":{(capsLock ? "true" : "false")}}}", moved, omitField);
             // 使わなかったキーは、アプリがそのまま入れる
             if (!Consumed(output) && (ch != '\0' || vk == VirtualKeys.Return)) Document += vk == VirtualKeys.Return ? '\n' : ch;
             return output;
@@ -1159,6 +1159,55 @@ internal static class ImeContractTests
             front.Key(0x75);
             front.Key('\n');
             Assert.Equal("ka か", front.Document, front.Trace);
+        }
+    }
+
+    [Test]
+    public static void FieldMode_IsLearnedFromTheSwitchBeforeTyping()
+    {
+        // #1144: 入力欄に入ってまだ何も打たないうちに切り替えたモードを覚え、次にその入力欄に入ったらそのモードにする
+        var front = new Front { Services = new() { FieldModes = new Meltype.Learning.FieldModes(null) }, App = "chat.exe" };
+        Assert.True(Japanese(front.Event("CaretMoved", extra: Entered)), front.Trace);
+        Assert.True(!Japanese(front.Key(0xF0)), "英数キーで英数に" + front.Trace);
+        front.Type("hello ");
+        // 打ち始めてからの切り替えは一時的なもの
+        Assert.True(Japanese(front.Event("JapaneseModeSelected")), front.Trace);
+        front.App = "notepad.exe";
+        Assert.True(Japanese(front.Event("CaretMoved", extra: Entered)), "覚えていない入力欄はそのまま" + front.Trace);
+        front.App = "chat.exe";
+        Assert.True(!Japanese(front.Event("CaretMoved", extra: Entered)), "覚えたモードにする" + front.Trace);
+        // 自動で切り替えた直後に逆へ直したら、覚え直す
+        Assert.True(Japanese(front.Event("JapaneseModeSelected")), front.Trace);
+        front.App = "notepad.exe";
+        front.Event("CaretMoved", extra: Entered);
+        front.App = "chat.exe";
+        Assert.True(Japanese(front.Event("CaretMoved", extra: Entered)), "直したモードを覚え直す" + front.Trace);
+    }
+
+    [Test]
+    public static void FieldMode_KeepsALimitedNumberOfFields()
+    {
+        // 覚える入力欄の数には上限があり、古いものから忘れる
+        var modes = new Meltype.Learning.FieldModes(null);
+        for (var i = 0; i < 1000; i++) modes.Remember($"app{i}.exe\t", false);
+        Assert.True(modes.Count < 1000, modes.Count.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        Assert.Equal(false, modes.Get("app999.exe\t"), "新しいものは残る");
+        Assert.Equal(null, modes.Get("app0.exe\t"), "古いものは忘れる");
+    }
+
+    [Test]
+    public static void CapsLock_TypesCapitalsOnlyWhenTheSettingIsOn()
+    {
+        // #837: 日本語入力中も CapsLock で大文字にしたい人と、CapsLock を ON のまま日本語にしたい人 (#736) がいる
+        foreach (var on in new[] { false, true })
+        {
+            var front = new Front();
+            front.Settings.CapsLockTypesCapitals = on;
+            foreach (var c in "KA") front.Key(c, c, capsLock: true);
+            // CapsLock 中の Shift は小文字
+            front.Key('N', 'n', shift: true, capsLock: true);
+            front.Key('\n');
+            Assert.Equal(on ? "KAn" : "かN", front.Document, front.Trace);
         }
     }
 

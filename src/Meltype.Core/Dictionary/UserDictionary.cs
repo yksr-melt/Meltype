@@ -9,15 +9,16 @@ namespace Meltype.Dictionary;
 /// <summary>
 /// ユーザー辞書の 1 語。品詞 (Pos) は変換エンジン (Mozc) に渡し、活用 (動詞・形容詞) とコストに使う。品詞の名前は、Mozc の品詞名か、
 /// 取り込んだ辞書 (Microsoft IME・Google 日本語入力・ATOK) の品詞名のまま持ち、Mozc が自分の品詞に読み替える。
+/// 分類 (Category) は登録した人が語を分けて管理するための名前で、変換には使わない (空なら分類なし)。
 /// </summary>
-public sealed record UserWord(string Reading, string Word, string Pos = UserWord.Noun)
+public sealed record UserWord(string Reading, string Word, string Pos = UserWord.Noun, string Category = "")
 {
     /// <summary>品詞を書いていない語の品詞。</summary>
     public const string Noun = "名詞";
 }
 
 /// <summary>
-/// ユーザー辞書 (%LOCALAPPDATA%\Meltype\userdict.txt、1 行に「読み[Tab]単語」か「読み[Tab]単語[Tab]品詞」。品詞が無ければ名詞)。
+/// ユーザー辞書 (%LOCALAPPDATA%\Meltype\userdict.txt、1 行に「読み[Tab]単語」か「読み[Tab]単語[Tab]品詞」か「読み[Tab]単語[Tab]品詞[Tab]分類」。品詞が無ければ名詞)。
 /// 登録した語と同梱の語句 (phrases.txt) は変換エンジン (Mozc) のユーザー辞書に渡し (<see cref="EngineWords"/>)、ほかの語との取り合いと
 /// 文節の区切りを Mozc のコストで決める。
 /// トレイの「ユーザー辞書...」から登録・削除する。
@@ -187,7 +188,8 @@ public sealed class UserDictionary
             // 制御文字 (ESC など) の入った語は、確定するとアプリにキー操作として届くので読まない
             if (parts.Length >= 2 && parts[0].Trim().Length >= MinRegisteredReadingLength && parts[1].Trim().Length > 0 && !parts[0].Any(char.IsControl) && !parts[1].Any(char.IsControl))
             {
-                words.Add(new UserWord(parts[0].Trim(), parts[1].Trim(), parts.Length >= 3 && parts[2].Trim() is { Length: > 0 } pos ? pos : UserWord.Noun));
+                words.Add(new UserWord(parts[0].Trim(), parts[1].Trim(), parts.Length >= 3 && parts[2].Trim() is { Length: > 0 } pos ? pos : UserWord.Noun,
+                    parts.Length >= 4 ? parts[3].Trim() : ""));
             }
         }
     }
@@ -214,18 +216,19 @@ public sealed class UserDictionary
     public IReadOnlyList<UserWord> Words => _words;
 
     /// <summary>登録する。同じ読み・同じ単語が既にあれば何もしない。登録できなければ理由を返す。</summary>
-    public string? Add(string reading, string word)
+    public string? Add(string reading, string word, string category = "")
     {
         reading = reading.Trim();
         word = word.Trim();
+        category = category.Trim();
         if (reading.Length < MinRegisteredReadingLength) return "読みを入力してください。";
         if (word.Length == 0) return "単語を入力してください。";
         // CR・ESC などは確定するとアプリにキー操作として届く
-        if (reading.Any(char.IsControl) || word.Any(char.IsControl)) return "タブ・改行などの制御文字は使えません。";
+        if (reading.Any(char.IsControl) || word.Any(char.IsControl) || category.Any(char.IsControl)) return "タブ・改行などの制御文字は使えません。";
         // 外で書き換えた語の上に足す
         if (!Refresh()) return Unreadable;
         if (_words.Any(w => w.Reading == reading && w.Word == word)) return null;
-        _words.Add(new UserWord(reading, word));
+        _words.Add(new UserWord(reading, word, Category: category));
         Changed();
         return null;
     }
@@ -245,6 +248,26 @@ public sealed class UserDictionary
         if (added > 0) Changed();
         return added;
     }
+
+    /// <summary>語の分類を変える (空なら分類なし)。userdict.txt を読めなければ IOException。</summary>
+    public void SetCategory(IEnumerable<UserWord> words, string category)
+    {
+        category = category.Trim();
+        if (category.Any(char.IsControl)) throw new ArgumentException("タブ・改行などの制御文字は使えません。", nameof(category));
+        if (!Refresh()) throw new IOException(Unreadable);
+        var changed = false;
+        foreach (var word in words)
+        {
+            var index = _words.IndexOf(word);
+            if (index < 0 || word.Category == category) continue;
+            _words[index] = word with { Category = category };
+            changed = true;
+        }
+        if (changed) Changed();
+    }
+
+    /// <summary>使っている分類 (名前の順)。</summary>
+    public IReadOnlyList<string> Categories => [.. _words.Select(w => w.Category).Where(c => c.Length > 0).Distinct().Order(StringComparer.CurrentCulture)];
 
     /// <summary>消す。userdict.txt を読めなければ IOException。</summary>
     public void Remove(UserWord word)
@@ -287,9 +310,10 @@ public sealed class UserDictionary
         if (_path is null) return;
         try
         {
-            var lines = new List<string> { "# Meltype ユーザー辞書: 1 行に「読み<Tab>単語」か「読み<Tab>単語<Tab>品詞」(品詞が無ければ名詞)" };
-            // 名詞は品詞を書かない (前の版と、macOS の取り込み (MacUserDictionary.swift) が書く 2 列の行と同じ形にする)
-            lines.AddRange(_words.Select(w => w.Pos == UserWord.Noun ? $"{w.Reading}\t{w.Word}" : $"{w.Reading}\t{w.Word}\t{w.Pos}"));
+            var lines = new List<string> { "# Meltype ユーザー辞書: 1 行に「読み<Tab>単語」か「読み<Tab>単語<Tab>品詞」か「読み<Tab>単語<Tab>品詞<Tab>分類」(品詞が無ければ名詞)" };
+            // 分類の無い名詞は品詞を書かない (前の版と、macOS の取り込み (MacUserDictionary.swift) が書く 2 列の行と同じ形にする)
+            lines.AddRange(_words.Select(w => w.Category.Length > 0 ? $"{w.Reading}\t{w.Word}\t{w.Pos}\t{w.Category}"
+                : w.Pos == UserWord.Noun ? $"{w.Reading}\t{w.Word}" : $"{w.Reading}\t{w.Word}\t{w.Pos}"));
             Config.DataFile.Write(_path, temp => File.WriteAllLines(temp, lines, new UTF8Encoding(true)));
             _fileTime = FileTime();
             _read = _fileTime is not null;
