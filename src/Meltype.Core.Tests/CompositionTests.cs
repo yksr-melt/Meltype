@@ -304,12 +304,13 @@ internal static class CompositionTests
             Func<string, IReadOnlyList<string>>? moreCandidates = null, UserDictionary? userDictionary = null, LanguageMemory? languages = null,
             TranslationDictionary? translations = null, TranslationHistory? translationHistory = null, Predictor? predictor = null,
             Func<DateTime>? now = null, Meltype.Config.TypedKeysStyle typedKeys = Meltype.Config.TypedKeysStyle.Off, bool tabConversion = false, bool englishNamePredictions = false,
-            CompositionDetector? detector = null)
+            CompositionDetector? detector = null, bool directAutoDetect = false)
         {
             detector ??= Detector;
             Settings = new Meltype.Config.Settings
             {
                 Mode = Meltype.Config.InputMode.Keyboard,
+                DirectModeAutoDetect = directAutoDetect,
                 LiveConversion = live,
                 TypedKeys = typedKeys,
                 TabConversion = tabConversion,
@@ -2030,7 +2031,7 @@ internal static class CompositionTests
     [Test]
     public static void DirectMode_RomajiSwitchesBackToJapanese()
     {
-        var k = new Keyboard(direct: true);
+        var k = new Keyboard(direct: true, directAutoDetect: true);
         k.Type("konnnichiha");
         Assert.True(!k.Direct, "ローマ字だと分かったら日本語入力に戻る");
         Assert.Equal("こんにちは", k.Showing, "判定中に打った英字も変換ボックスに入る");
@@ -2042,7 +2043,7 @@ internal static class CompositionTests
     public static void DirectMode_LongVowelDashSwitchesToJapanese()
     {
         // 英数状態で ro-maji と打つと、- の時点で英語として出してしまっていた (ローマ字 が打てない)。
-        var k = new Keyboard(direct: true);
+        var k = new Keyboard(direct: true, directAutoDetect: true);
         k.Type("ro-maji");
         Assert.True(!k.Direct, "母音の後の - (長音) で日本語に戻る");
         Assert.Equal("ろーまじ", k.Showing);
@@ -2052,18 +2053,18 @@ internal static class CompositionTests
         // 英語の接頭辞 (e-) の後は - の後ろで決める: e-mail・co-op は英語、e-me-ru は日本語
         foreach (var word in new[] { "e-mail ", "co-op ", "re-do " })
         {
-            k = new Keyboard(direct: true);
+            k = new Keyboard(direct: true, directAutoDetect: true);
             k.Type(word);
             Assert.True(k.Direct, word + "は英数のまま");
         }
         // 2 文字の英単語 (up) でも、続きがローマ字なら日本語 (upa- → うぱー)。打ち終われば英語のまま。
-        k = new Keyboard(direct: true);
+        k = new Keyboard(direct: true, directAutoDetect: true);
         k.Type("upa-");
         Assert.Equal("うぱー", k.Showing ?? "(なし)");
-        k = new Keyboard(direct: true);
+        k = new Keyboard(direct: true, directAutoDetect: true);
         k.Type("up ");
         Assert.True(k.Direct, "up + Space は英数のまま");
-        k = new Keyboard(direct: true);
+        k = new Keyboard(direct: true, directAutoDetect: true);
         k.Type("e-me-ru");
         Assert.True(!k.Direct, "e-me-ru は日本語に戻る");
         Assert.Equal("えーめーる", k.Showing);
@@ -3843,7 +3844,7 @@ internal static class CompositionTests
         // can・game・today のようにローマ字としても読める語は、Space を押すまで丸ごと出なかった。
         foreach (var word in new[] { "can", "game", "today", "hello" })
         {
-            var k = new Keyboard(direct: true);
+            var k = new Keyboard(direct: true, directAutoDetect: true);
             k.Type(word);
             Assert.Equal(string.Join(",", word.ToCharArray()), Letters(k.Host.Events), $"{word}: 打ったそばから送る (英語と決まった後は素通し)");
             k.Type(" ");
@@ -3855,7 +3856,7 @@ internal static class CompositionTests
     [Test]
     public static void DirectMode_EnglishPassesThroughInOrder()
     {
-        var k = new Keyboard(direct: true);
+        var k = new Keyboard(direct: true, directAutoDetect: true);
         k.Type("hello world");
         Assert.True(k.Direct, "英語なら英数のまま");
         Assert.True(k.Showing is null, "変換ボックスは出さない");
@@ -3875,7 +3876,7 @@ internal static class CompositionTests
     [Test]
     public static void DirectMode_IdleReleasesHeldKeys()
     {
-        var k = new Keyboard(direct: true);
+        var k = new Keyboard(direct: true, directAutoDetect: true);
         k.Type("ka");
         Assert.Equal(2, k.Host.Events.Count(e => e.StartsWith("down:", StringComparison.Ordinal)), "判定中でも打った英字はすぐ送る");
         Assert.True(k.CapturesLetters, "判定中は打鍵を受け取る");
@@ -3890,7 +3891,7 @@ internal static class CompositionTests
     public static void DirectMode_ShiftAfterHeldWordReachesApp()
     {
         // 英数状態で英字を打った直後に押した Shift がアプリに届かず、(bow) の ) が Shift なしの 0 になっていた。
-        var k = new Keyboard(direct: true);
+        var k = new Keyboard(direct: true, directAutoDetect: true);
         k.Type("bow");
         Assert.True(k.CapturesLetters, "bow はまだ判定中");
         k.Key(VirtualKeys.LShift);
@@ -5191,7 +5192,7 @@ internal static class CompositionTests
             ("nk\b", "ん"),              // 後ろのキーで決めた ん も決め直す (打ちかけの n は確定される形で見せる)
             ("kyouhagoogle\b", "きょうはgoogl"), // 英語の区間は 1 文字
             ("/k\b", "・"),               // 打ち始めの / を ・ にした単位は残す (打ち直すと / になる)
-            ("/kk\b", "・k"),
+            ("/kk\b", "/k"),              // /k と打ったときと同じ (打ちかけの子音が英語の区間なので / のまま)
             ("/\bka/", "か/"),                // 入力が空になったら、次の / は打ち始めの / ではない (かなの後ろの /)
         })
         {
@@ -6747,7 +6748,7 @@ internal static class CompositionTests
                 {
                     Meltype.Diagnostics.Log.RecordText = withText;
                     var version = Meltype.Diagnostics.Log.Version;
-                    new Keyboard(direct: true).Type(keys);
+                    new Keyboard(direct: true, directAutoDetect: true).Type(keys);
                     var logged = Meltype.Diagnostics.Log.Snapshot().TakeLast((int)Math.Min(Meltype.Diagnostics.Log.Version - version, 1000)).Select(e => e.Message).ToList();
                     var entry = logged.LastOrDefault(m => m.StartsWith("英数状態の判定を打ち切り", StringComparison.Ordinal));
                     Assert.True(entry is not null, $"{keys}: 設定に関係なく打ち切りのログは残す");

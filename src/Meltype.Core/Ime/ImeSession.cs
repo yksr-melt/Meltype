@@ -723,7 +723,7 @@ internal static class ImeSession
     /// <summary>変換して候補を選んでいるか。</summary>
     public static bool IsConverting(ImeSessionState state) => CompositionController.IsConverting(state.Composition);
 
-    /// <summary>入力中に Ctrl と一緒に押すと、変換ボックスで使う英字のキー。</summary>
+    /// <summary>入力中に Ctrl と一緒に押すと、変換ボックスで使うキー。</summary>
     public static IReadOnlyList<int> ComposingControlKeys(ImeSessionState state, ImeEnv env) => CompositionController.ComposingControlKeys(state.Composition, Env(state, env));
 
     /// <summary>
@@ -793,7 +793,8 @@ internal static class ImeSession
 
     /// <summary>
     /// ワークアラウンド (ImeEvent.KeyReleased): releaseFollows を付けて押したキーを離した。親指シフトの親指キー・中指NICOLA のシフトのキーを離したことを、
-    /// かな配列に伝える (文字に使わずに離した親指キーは、もとの変換・無変換をする)。離したことをアプリに通すかはフロントが押下のとおりに決める。
+    /// かな配列に伝える (文字に使わずに離した親指キーは、もとの変換・無変換をする)。
+    /// 本体が受け持っている間に Consumed が false なら、保留していた押下と解放をアプリに渡す。
     /// </summary>
     public static SessionResult HandleKeyUp(ImeSessionState state, ImeEnv env, int vk, PhysicalKey? physical) =>
         CompositionController.Release(state.Composition, Env(state, env), vk, Position(vk, physical));

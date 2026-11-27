@@ -18,6 +18,8 @@ void* meltype_ime_create();
 unsigned char* meltype_ime_handle(void* host, unsigned char* json);
 void meltype_ime_destroy(void* host);
 void meltype_free(unsigned char* ptr);
+unsigned char* meltype_typed_reading(unsigned char* data_directory, unsigned char* input);
+unsigned char* meltype_user_dictionary(unsigned char* data_directory, unsigned char* request);
 }
 
 namespace {
@@ -198,4 +200,46 @@ Java_app_meltype_keyboard_core_NativeApi_handle(
     auto json = read_utf8(env, event);
     if (env->ExceptionCheck()) return nullptr;
     return return_utf8(env, meltype_ime_handle(as_handle(host), json.data()));
+}
+
+// The settings screen may run before the keyboard has started the Core in this process. The Core fixes
+// its data directory (MELTYPE_DATA_DIR) for the process on first use, so set the same directory the
+// keyboard will pass to init before calling in, and refuse a different one. Returns the directory as
+// NUL-terminated UTF-8, or empty on failure.
+static std::vector<unsigned char> settings_data_directory(JNIEnv* env, jbyteArray directory) {
+    if (!directory) return {};
+    auto path = read_utf8(env, directory);
+    if (env->ExceptionCheck() || path.size() <= 1) return {};
+    const std::string requested(reinterpret_cast<const char*>(path.data()), path.size() - 1);
+    if (requested.empty() || requested.find('\0') != std::string::npos) return {};
+    std::lock_guard<std::mutex> guard(init_mutex);
+    if (!data_dir.empty() && data_dir != requested) return {};
+    const char* current = getenv("MELTYPE_DATA_DIR");
+    if (current && requested != current) return {};
+    if (!current && setenv("MELTYPE_DATA_DIR", requested.c_str(), 1) != 0) return {};
+    return path;
+}
+
+// The settings screen's user dictionary: the reading as typed (romaji allowed) in, hiragana out, both UTF-8.
+extern "C" JNIEXPORT jbyteArray JNICALL
+Java_app_meltype_keyboard_core_NativeApi_typedReading(
+        JNIEnv* env, jobject, jbyteArray directory, jbyteArray input) {
+    if (!input) return nullptr;
+    auto path = settings_data_directory(env, directory);
+    if (path.empty()) return nullptr;
+    auto text = read_utf8(env, input);
+    if (env->ExceptionCheck()) return nullptr;
+    return return_utf8(env, meltype_typed_reading(path.data(), text.data()));
+}
+
+// The settings screen's user dictionary: one request (JSON) in, the words and an error (JSON) out, both UTF-8.
+extern "C" JNIEXPORT jbyteArray JNICALL
+Java_app_meltype_keyboard_core_NativeApi_userDictionary(
+        JNIEnv* env, jobject, jbyteArray directory, jbyteArray request) {
+    if (!request) return nullptr;
+    auto path = settings_data_directory(env, directory);
+    if (path.empty()) return nullptr;
+    auto json = read_utf8(env, request);
+    if (env->ExceptionCheck()) return nullptr;
+    return return_utf8(env, meltype_user_dictionary(path.data(), json.data()));
 }
