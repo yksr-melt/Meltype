@@ -335,7 +335,16 @@ internal sealed class ZenzaiConverter : IKanjiConverter, IDisposable
         var end = content.AsSpan().IndexOfAny(OutputBoundaries);
         if (end >= 0) content = content[..end];
         content = content.Replace("</s>", "").Replace("<s>", "").Trim();
-        return content.Length == 0 ? null : content;
+        // 変換結果は入力欄に確定される 1 行の文字列。モデルから混入した制御文字・未定義の符号・置換文字は候補にしない。
+        if (content.Length == 0) return null;
+        foreach (var rune in content.EnumerateRunes())
+        {
+            if (rune == Rune.ReplacementChar || Rune.GetUnicodeCategory(rune) is UnicodeCategory.Control
+                or UnicodeCategory.Format or UnicodeCategory.PrivateUse or UnicodeCategory.OtherNotAssigned
+                or UnicodeCategory.LineSeparator or UnicodeCategory.ParagraphSeparator)
+                return null;
+        }
+        return content;
     }
 
     private void EnsureStarting()
