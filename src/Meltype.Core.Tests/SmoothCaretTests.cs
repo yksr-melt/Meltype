@@ -21,6 +21,13 @@ internal static class SmoothCaretTests
 
         var keyboard = new Settings { SmoothCaret = true, Mode = InputMode.Keyboard, Enabled = true };
         Assert.True(!keyboard.UsesSmoothCaret, "Meltype キーボード使用時は反映されない");
+
+        Assert.True(Settings.IsSmoothCaretExcludedApp("WINWORD"), "Word は除外される");
+        Assert.True(Settings.IsSmoothCaretExcludedApp("winword"), "大文字小文字を問わず Word は除外される");
+        Assert.True(Settings.IsSmoothCaretExcludedApp("Code"), "VS Code は除外される");
+        Assert.True(Settings.IsSmoothCaretExcludedApp("Code - Insiders"), "VS Code Insiders は除外される");
+        Assert.True(!Settings.IsSmoothCaretExcludedApp("notepad"), "メモ帳は除外されない");
+        Assert.True(!Settings.IsSmoothCaretExcludedApp("chrome"), "Chrome は除外されない");
     }
 
     [Test]

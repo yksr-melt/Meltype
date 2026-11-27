@@ -483,12 +483,19 @@ public sealed class Settings
     public TypedKeysStyle TypedKeys { get; set; } = TypedKeysStyle.Keys;
 
     [Category("9. 表示"), DisplayName("カーソルを滑らかに動かす (スムースカーソル)"), Platforms(Platform.Windows),
-     Description("Meltype IME を使っているとき、入力や矢印キーでテキストカーソルが動く際にふわっと滑らかに追従するアニメーションを表示します。動きが止まると元のカーソルへ自然に引き継がれます。Meltype キーボードや一時停止中は動作しません。既定は OFF です。")]
+     Description("Meltype IME を使っているとき、入力や矢印キーでテキストカーソルが動く際にふわっと滑らかに追従するアニメーションを表示します。動きが止まると元のカーソルへ自然に引き継がれます。Meltype キーボードや一時停止中、および標準でスムースカーソルを持つアプリ (Word・VS Code) では動作しません。既定は OFF です。")]
     public bool SmoothCaret { get; set; }
 
     /// <summary>スムースカーソルを有効にするか (Meltype が有効で、Meltype IME を使っているときだけ)。</summary>
     [JsonIgnore, Browsable(false)]
     public bool UsesSmoothCaret => Enabled && Mode == InputMode.Tsf && SmoothCaret;
+
+    /// <summary>アプリ自体がスムースカーソルを持つため Meltype 側では抑止するプロセス名 (.exe なし)。</summary>
+    public static bool IsSmoothCaretExcludedApp(string? processName) =>
+        processName is not null &&
+        (processName.Equals("WINWORD", StringComparison.OrdinalIgnoreCase) ||
+         processName.Equals("Code", StringComparison.OrdinalIgnoreCase) ||
+         processName.Equals("Code - Insiders", StringComparison.OrdinalIgnoreCase));
 
     [Browsable(false), DisplayName("固定の操作ガイドを表示"),
      Description("変換中の表示に Space 変換・F7 カタカナ などの固定ガイドを表示します。OFF でも英字・予測・訂正の提案は表示します。")]
