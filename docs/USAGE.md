@@ -190,7 +190,7 @@ kyouhagoogledekensaku  →  今日はgoogleで検索
 
 ## ほかの IME から移るとき
 
-変換を <kbd>Enter</kbd> 以外で確定したいときは、設定の「キー操作」→「Control キーの個別の割り当て」に `J=Enter` と書くと、入力中の <kbd>Ctrl</kbd> + <kbd>J</kbd> で確定できます。チャット欄で確定と送信を押し分けたいときに使えます。
+変換を <kbd>Enter</kbd> 以外で確定したいときは、設定の「キー操作」→「Control キーの個別の割り当て」に `J=Enter` と書くと、入力中の <kbd>Ctrl</kbd> + <kbd>J</kbd> で確定できます。チャット欄で確定と送信を押し分けたいときに使えます。入力していないときの <kbd>Ctrl</kbd> + <kbd>J</kbd> は、そのままアプリに渡ります。
 
 <kbd>Ctrl</kbd> + 英字を Microsoft IME と同じにするには、設定「Control キーの個別の割り当て」に次のとおり書きます。
 

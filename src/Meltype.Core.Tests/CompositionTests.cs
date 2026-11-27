@@ -3048,6 +3048,7 @@ internal static class CompositionTests
         k.Press('J');
         k.Key(VirtualKeys.LControl, up: true);
         Assert.Equal(candidate, k.Host.Document, "選んだ候補だけを入力欄へ渡す");
+        Assert.True(!k.Host.Events.Any(e => e is "down:4A" or "down:0D"), "Ctrl+J も Enter もアプリへ渡さない");
         Assert.True(k.Showing is null, "変換を終える");
     }
 
