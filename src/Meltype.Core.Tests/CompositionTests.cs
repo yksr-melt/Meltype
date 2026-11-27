@@ -4775,6 +4775,13 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void N8n_IsKeptBeforeJapanese()
+    {
+        AssertCommitted(("n8n", "n8n"), ("n8nwotukau", "n8nをつかう"), ("n8nnitunagu", "n8nにつなぐ"),
+            ("8nin", "8にん"));
+    }
+
+    [Test]
     public static void DotSuffix_FileExtensionsStayEnglish()
     {
         // 報告 (#260・#254): 英語の語.拡張子 の拡張子がひらがなになる (MeltypeTip.dっl、Meltype.coんふぃg、Meltype.ご。mod)
