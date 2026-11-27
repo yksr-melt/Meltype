@@ -42,9 +42,9 @@ internal static class Program
                     foreach (var c in args.ElementAtOrDefault(1) ?? "") text = Composition.CompositionText.Append(text, c);
                     Console.OutputEncoding = new System.Text.UTF8Encoding(false);
                     Console.WriteLine("units: " + string.Join(" ", Composition.TypedMarks.Read(Composition.CompositionText.Read(text, env), env).Select(u => $"{u.Raw}={u.Kana}")) + (Composition.CompositionText.Pending(Composition.CompositionText.Read(text, env)).Length > 0 ? $" +{Composition.CompositionText.Pending(Composition.CompositionText.Read(text, env))}" : ""));
-                    CompositionTests.Detector.LatticeTrace = Console.WriteLine;
+                    CompositionTests.Detector.Lattice.LatticeTrace = Console.WriteLine;
                     var segments = Composition.CompositionText.Segments(Composition.CompositionText.Read(text, env), env);
-                    CompositionTests.Detector.LatticeTrace = null;
+                    CompositionTests.Detector.Lattice.LatticeTrace = null;
                     Console.WriteLine("segments: " + string.Join(" | ", segments.Select(s => (s.IsEnglish ? "EN:" : "JA:") + s.Raw)));
                 }
                 return 0;
