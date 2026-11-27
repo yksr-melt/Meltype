@@ -1,0 +1,9 @@
+{
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.9.0",
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "typescript": "5.9.3"
+  }
+}
