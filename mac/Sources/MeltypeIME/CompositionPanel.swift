@@ -3,6 +3,71 @@
 
 import Cocoa
 
+struct ColorSwatchRgba: Equatable {
+    let r: UInt8
+    let g: UInt8
+    let b: UInt8
+    let a: UInt8
+
+    /// Core が決めた色見本 (#rrggbbaa) を RGBA に展開する。
+    static func decode(_ hex: String?) -> ColorSwatchRgba? {
+        guard let hex else { return nil }
+        let scalars = Array(hex.unicodeScalars)
+        guard scalars.count == 9, scalars[0] == "#" else { return nil }
+        var d = [UInt8]()
+        d.reserveCapacity(8)
+        for i in 1..<9 {
+            let v = scalars[i].value
+            switch v {
+            case 48...57: d.append(UInt8(v - 48))
+            case 65...70: d.append(UInt8(v - 55))
+            case 97...102: d.append(UInt8(v - 87))
+            default: return nil
+            }
+        }
+        return ColorSwatchRgba(
+            r: (d[0] << 4) | d[1],
+            g: (d[2] << 4) | d[3],
+            b: (d[4] << 4) | d[5],
+            a: (d[6] << 4) | d[7]
+        )
+    }
+}
+
+private final class ColorSwatchView: NSView {
+    private let rgba: ColorSwatchRgba
+
+    init(rgba: ColorSwatchRgba) {
+        self.rgba = rgba
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override func draw(_ dirtyRect: NSRect) {
+        if rgba.a < 255 {
+            let midX = bounds.midX
+            let midY = bounds.midY
+            NSColor.white.setFill()
+            NSBezierPath.fill(NSRect(x: bounds.minX, y: midY, width: midX - bounds.minX, height: bounds.maxY - midY))
+            NSBezierPath.fill(NSRect(x: midX, y: bounds.minY, width: bounds.maxX - midX, height: midY - bounds.minY))
+            NSColor.lightGray.setFill()
+            NSBezierPath.fill(NSRect(x: midX, y: midY, width: bounds.maxX - midX, height: bounds.maxY - midY))
+            NSBezierPath.fill(NSRect(x: bounds.minX, y: bounds.minY, width: midX - bounds.minX, height: midY - bounds.minY))
+        }
+        NSColor(srgbRed: CGFloat(rgba.r) / 255.0,
+                green: CGFloat(rgba.g) / 255.0,
+                blue: CGFloat(rgba.b) / 255.0,
+                alpha: CGFloat(rgba.a) / 255.0).setFill()
+        NSBezierPath.fill(bounds)
+        NSColor.secondaryLabelColor.withAlphaComponent(0.6).setStroke()
+        let border = NSBezierPath(rect: bounds.insetBy(dx: 0.5, dy: 0.5))
+        border.lineWidth = 1
+        border.stroke()
+    }
+}
+
 /// 未確定文字列の行全体を避け、案内を入力行に近い側へ置く。
 struct CompositionPanelPlacement {
     private static let gap: CGFloat = 6
@@ -97,6 +162,8 @@ final class CompositionPanel: NSObject, NSTableViewDataSource, NSTableViewDelega
     private static let guideFont = NSFont.systemFont(ofSize: 12)
     private static let meaningFont = NSFont.systemFont(ofSize: 13)
     private static let candidateRowHeight: CGFloat = 32
+    private static let swatchSize: CGFloat = 14
+    private static let swatchGap: CGFloat = 8
     // Windows IME の候補窓 (kMaxWidth) と同じ上限。長い案内や候補でパネルが広がりすぎないようにする。
     private static let maxWidth: CGFloat = 520
     // Core の数字キー選択は、選択中の候補が属する 9 件のページ内で行う。
@@ -132,6 +199,7 @@ final class CompositionPanel: NSObject, NSTableViewDataSource, NSTableViewDelega
         let title: NSAttributedString
         let note: NSAttributedString?
         let noteWidth: CGFloat
+        let swatch: ColorSwatchRgba?
         let height: CGFloat
     }
 
@@ -152,11 +220,13 @@ final class CompositionPanel: NSObject, NSTableViewDataSource, NSTableViewDelega
         let titleWidth: CGFloat
         let note: NSAttributedString?
         let noteWidth: CGFloat
+        let swatch: ColorSwatchRgba?
     }
 
     private struct RowsKey: Equatable {
         let items: [String]
         let notes: [String?]
+        let colors: [String?]
         let numbered: Bool
         let range: Range<Int>
         let width: CGFloat
@@ -258,10 +328,13 @@ final class CompositionPanel: NSObject, NSTableViewDataSource, NSTableViewDelega
         let list = content.list
         let items = list?.items ?? []
         let notes = list?.notes ?? []
+        let colors = list?.colors ?? []
         let numbered = list?.numbered == true
         let numberWidth = numbered ? Self.numberColumnWidth : 0
         let candidates = items.enumerated().map { index, item in
-            candidateText(item, note: notes.indices.contains(index) ? notes[index] : nil)
+            candidateText(item,
+                          note: notes.indices.contains(index) ? notes[index] : nil,
+                          color: colors.indices.contains(index) ? colors[index] : nil)
         }
         // 表示中のパネルの大きさと中身を、途中の状態を見せずに一度に入れ替える。
         if window.isVisible { window.disableScreenUpdatesUntilFlush() }
@@ -277,7 +350,11 @@ final class CompositionPanel: NSObject, NSTableViewDataSource, NSTableViewDelega
         let rowInset = 2 * Self.candidatePadding
         let scrollerWidth = NSScroller.scrollerWidth(for: .regular, scrollerStyle: .legacy)
         // セル自身を測り、描画時に引かれる文字欄の左右の余白も幅に含める。
-        let longestRow = candidates.map { $0.titleWidth + ($0.note == nil ? 0 : Self.noteGap + $0.noteWidth) }.max() ?? 0
+        let longestRow = candidates.map {
+            $0.titleWidth
+                + ($0.swatch == nil ? 0 : Self.swatchGap + Self.swatchSize)
+                + ($0.note == nil ? 0 : Self.noteGap + $0.noteWidth)
+        }.max() ?? 0
         let listWidth = items.isEmpty ? 0 : longestRow + numberWidth + rowInset + scrollerWidth
         let width = min(max(listWidth, naturalWidth(of: guideLabel), naturalWidth(of: meaningLabel), naturalWidth(of: positionLabel), 44),
                         floor(min(content.placement.visible.width, Self.maxWidth)) - 2 * padding)
@@ -338,7 +415,7 @@ final class CompositionPanel: NSObject, NSTableViewDataSource, NSTableViewDelega
 
         guideLabel.toolTip = content.guide
         meaningLabel.toolTip = meaning
-        let key = RowsKey(items: items, notes: notes, numbered: numbered, range: range, width: rowWidth)
+        let key = RowsKey(items: items, notes: notes, colors: colors, numbered: numbered, range: range, width: rowWidth)
         updateRows(newRows, key: key, selected: list?.selected ?? -1, viewportHeight: scrollHeight,
                    documentHeight: documentHeight, revealSelection: selectionWasVisible && viewportShrank)
         // 中身を並べ終えてから大きさを変えて描く。先に大きさを変えると、古い中身のまま広がった枠が一瞬見える。
@@ -374,22 +451,24 @@ final class CompositionPanel: NSObject, NSTableViewDataSource, NSTableViewDelega
         return ceil(label.cell?.cellSize(forBounds: bounds).height ?? 0)
     }
 
-    private func candidateText(_ item: String, note: String?) -> CandidateText {
+    private func candidateText(_ item: String, note: String?, color: String?) -> CandidateText {
         let title = styled(item, font: Self.candidateFont, color: .labelColor)
         measuringLabel.attributedStringValue = title
         let titleWidth = naturalWidth(of: measuringLabel)
+        let swatch = ColorSwatchRgba.decode(color)
         guard let note, !note.isEmpty else {
-            return CandidateText(title: title, titleWidth: titleWidth, note: nil, noteWidth: 0)
+            return CandidateText(title: title, titleWidth: titleWidth, note: nil, noteWidth: 0, swatch: swatch)
         }
         let detail = styled(note, font: Self.guideFont, color: .secondaryLabelColor, alignment: .right)
         measuringLabel.attributedStringValue = detail
-        return CandidateText(title: title, titleWidth: titleWidth, note: detail, noteWidth: naturalWidth(of: measuringLabel))
+        return CandidateText(title: title, titleWidth: titleWidth, note: detail, noteWidth: naturalWidth(of: measuringLabel), swatch: swatch)
     }
 
     private func makeRow(_ text: CandidateText, index: Int, number: Int?, availableWidth: CGFloat) -> Row {
         let spacing = min(Self.noteGap, floor(availableWidth / 4))
-        let noteWidth = min(text.noteWidth, max(floor(availableWidth / 2) - spacing, availableWidth - spacing - text.titleWidth))
-        let reserved = noteWidth > 0 ? noteWidth + spacing : 0
+        let swatchSpace = text.swatch == nil ? 0 : Self.swatchSize + Self.swatchGap
+        let noteWidth = min(text.noteWidth, max(floor(availableWidth / 2) - spacing, availableWidth - spacing - text.titleWidth - swatchSpace))
+        let reserved = (noteWidth > 0 ? noteWidth + spacing : 0) + swatchSpace
         measuringLabel.attributedStringValue = text.title
         let titleHeight = height(of: measuringLabel, width: availableWidth - reserved)
         var noteHeight: CGFloat = 0
@@ -398,7 +477,7 @@ final class CompositionPanel: NSObject, NSTableViewDataSource, NSTableViewDelega
             noteHeight = height(of: measuringLabel, width: noteWidth)
         }
         let rowHeight = max(Self.candidateRowHeight, max(titleHeight, noteHeight) + 2 * Self.candidatePadding)
-        return Row(index: index, number: number, title: text.title, note: text.note, noteWidth: noteWidth, height: rowHeight)
+        return Row(index: index, number: number, title: text.title, note: text.note, noteWidth: noteWidth, swatch: text.swatch, height: rowHeight)
     }
 
     private func updateRows(_ newRows: [Row], key: RowsKey, selected: Int, viewportHeight: CGFloat,
@@ -461,18 +540,35 @@ final class CompositionPanel: NSObject, NSTableViewDataSource, NSTableViewDelega
         let title = addLabel(item.title, to: cell)
         cell.textField = title
         title.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: padding + numberWidth).isActive = true
+
+        var trailingTarget: NSLayoutXAxisAnchor = cell.trailingAnchor
+        var trailingConstant: CGFloat = -padding
         if let note = item.note, item.noteWidth > 0 {
             let detail = addLabel(note, to: cell)
             detail.alignment = .right
             let availableWidth = column.width - 2 * padding - numberWidth
             let spacing = min(Self.noteGap, floor(availableWidth / 4))
             NSLayoutConstraint.activate([
-                title.trailingAnchor.constraint(equalTo: detail.leadingAnchor, constant: -spacing),
                 detail.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -padding),
                 detail.widthAnchor.constraint(equalToConstant: item.noteWidth)
             ])
+            trailingTarget = detail.leadingAnchor
+            trailingConstant = -spacing
+        }
+        if let swatch = item.swatch {
+            let swatchView = ColorSwatchView(rgba: swatch)
+            cell.addSubview(swatchView)
+            title.setContentHuggingPriority(.defaultHigh, for: .horizontal)
+            title.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            NSLayoutConstraint.activate([
+                swatchView.leadingAnchor.constraint(equalTo: title.trailingAnchor, constant: Self.swatchGap),
+                swatchView.trailingAnchor.constraint(lessThanOrEqualTo: trailingTarget, constant: trailingConstant),
+                swatchView.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
+                swatchView.widthAnchor.constraint(equalToConstant: Self.swatchSize),
+                swatchView.heightAnchor.constraint(equalToConstant: Self.swatchSize)
+            ])
         } else {
-            title.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -padding).isActive = true
+            title.trailingAnchor.constraint(equalTo: trailingTarget, constant: trailingConstant).isActive = true
         }
         return cell
     }

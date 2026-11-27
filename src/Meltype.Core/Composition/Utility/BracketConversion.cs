@@ -15,7 +15,7 @@ internal sealed class BracketConversion : IUtilityConversion
 {
     public UtilityCandidates? Convert(UtilityInput input)
     {
-        CompositionTextState text = input.Text;
+        var text = input.Text;
         if (input.Direct || text.Mode is DisplayMode.HalfWidthAlphanumeric or DisplayMode.FullWidthAlphanumeric ||
             CompositionText.Pending(text).Length > 0 || CompositionText.Units(text).Count is not (1 or 2) || CompositionText.ProtectedSpans(text).Count > 0) return null;
         var bracket = string.Concat(CompositionText.Units(text).Select(u => !text.KanaInput && u.Raw is "{" or "}" or "<" or ">" ? u.Raw : u.Kana));

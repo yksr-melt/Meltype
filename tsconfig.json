@@ -1,0 +1,18 @@
+{
+  // 開発用のスクリプトとテスト。Node.js が型を取り除いて .ts のまま実行するので、出力しない
+  "compilerOptions": {
+    "target": "ES2024",
+    "module": "NodeNext",
+    "types": ["node"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "allowImportingTsExtensions": true,
+    "skipLibCheck": true,
+    "noEmit": true
+  },
+  "include": ["mac/Tests", "android/tools"]
+}
