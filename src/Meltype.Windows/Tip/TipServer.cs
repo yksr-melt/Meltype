@@ -719,10 +719,12 @@ internal sealed class TipServer : IDisposable
         {
             if (_java && !_looksLikeGame) _looksLikeGame = ForegroundTracker.IsForegroundJavaGame(_processId);
             var focus = _server._composition.Focus.Current;
+            var foreground = Native.GetForegroundWindow();
             return field with
             {
                 App = Process is null ? null : Process + ".exe",
-                Title = KeyText.WindowTitle(Native.GetForegroundWindow()),
+                Title = KeyText.WindowTitle(foreground),
+                WindowClass = Keyboard.KeyboardFront.WindowClass(foreground),
                 Element = new ImeElement(focus.Name, focus.ClassName),
                 Traits = _looksLikeGame ? [.. field.Traits, ImeTrait.Game] : field.Traits,
             };

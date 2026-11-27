@@ -298,6 +298,10 @@ internal static class CompositionTests
 
         public long Now => _now;
 
+        public string? App { get; init; }
+        public string? Title { get; init; }
+        public string? WindowClass { get; init; }
+
         public FakeConverter Converter { get; } = new();
 
         public Keyboard(bool live = false, bool direct = false, ConversionHistory? history = null, IKanjiConverter? converter = null,
@@ -369,7 +373,9 @@ internal static class CompositionTests
                     After = Host.FollowingText,
                     Selection = Host.Selection?.Text,
                     Composing = _composing,
-                    App = Code ? "Code.exe" : null,
+                    App = Code ? "Code.exe" : App,
+                    Title = Title,
+                    WindowClass = WindowClass,
                     Traits = Private ? [ImeTrait.Private] : [],
                     CanRemove = Host.CanDeleteBackward,
                 },
@@ -1656,6 +1662,22 @@ internal static class CompositionTests
         var selected = k.Showing;
         k.Press(VirtualKeys.Return);
         Assert.Equal(selected, k.Host.Document);
+    }
+
+    [Test]
+    public static void ShellRunDialog_LeavesTheCommandAndEnterWithWindows()
+    {
+        foreach (var title in new[] { "Run", "ファイル名を指定して実行" })
+        {
+            var run = new Keyboard { App = "explorer.exe", Title = title, WindowClass = "#32770" };
+            run.Type("C:\n");
+            Assert.Equal("C:\n", run.Host.Document);
+            Assert.True(run.Host.View is null && run.Host.Output.Count == 0, title);
+        }
+
+        var editor = new Keyboard { App = "notepad.exe", Title = "Run", WindowClass = "#32770" };
+        editor.Type("nihongo");
+        Assert.Equal("にほんご", editor.Showing, "ほかのアプリの同名のダイアログでは日本語を打てる");
     }
 
     [Test]
