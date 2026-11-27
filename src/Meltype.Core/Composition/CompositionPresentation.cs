@@ -80,7 +80,7 @@ internal static class CompositionPresentation
             CandidateMeaning(env, selected),
             Suggestion(CompositionSpelling.MisspellingSuggestion(input, env)),
             Typed: TypedKeys(input, conversion, env),
-            Committed: ComposedText.Concat(clauses), ContextHint: zenzai ? "Zenzai" : null);
+            Committed: ComposedText.Concat(clauses), ContextHint: zenzai ? "Zenzai" : null, Colors: selected.Colors);
     }
 
     private static ComposedView TypingView(CompositionInput input, CompositionEnv env)
@@ -107,7 +107,8 @@ internal static class CompositionPresentation
             Suggestion: Suggestion(misspelling),
             Predictions: predictions.Count > 0 ? predictions.Select(p => ComposedText.Of(SpanKind.Japanese, p.Text)).ToList() : null, SelectedPrediction: predictionIndex, Typed: TypedKeys(input, null, env),
             Committed: selected ?? CurrentComposed(input, env, final: true), ContextHint: contextHint,
-            CaretBack: selected is null ? CompositionText.TailText(input.Text).Length : 0);
+            CaretBack: selected is null ? CompositionText.TailText(input.Text).Length : 0,
+            Colors: predictions.Any(p => p.Color is not null) ? predictions.Select(p => p.Color).ToList() : null);
     }
 
     /// <summary>文節 clause の候補 candidate の文字。文全体の文節の案は、確定と同じく案の文節から作る (<see cref="CompositionConversion.SplitWholeSentence"/>)。</summary>
@@ -145,8 +146,11 @@ internal static class CompositionPresentation
 
     private static List<Prediction> BuildPredictions(CompositionInput input, CompositionEnv env)
     {
-        if (env.Services.Predictor is not { } predictor || !env.Settings.PredictiveCandidates || input.Text.Mode != DisplayMode.Auto) return [];
+        if (!env.Settings.PredictiveCandidates || input.Text.Mode != DisplayMode.Auto) return [];
         var raw = CompositionText.Raw(CompositionText.Read(input.Text, env));
+        if (!input.Text.KanaInput && Utility.ColorConversion.CandidatesWithColors(raw) is { Count: > 0 } colorCandidates)
+            return colorCandidates.Select(c => new Prediction(c.Text, "", raw, c.Color)).ToList();
+        if (env.Services.Predictor is not { } predictor) return [];
         IEnumerable<string> PredictEnglish() => Predictor.PredictEnglish(raw).Select(w => NotationRules.Word(w, env.ProperNoun));
         if (CompositionText.IsAlphanumeric(CompositionText.Read(input.Text, env), env))
         {

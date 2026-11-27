@@ -2159,6 +2159,7 @@ void TextService::ShowCandidates(TfEditCookie ec, ITfContext* context, const Jso
     const JsonValue& list = view[L"candidates"];
     for (const JsonValue& item : list[L"items"].array) data.candidates.push_back(item.Str());
     for (const JsonValue& item : list[L"notes"].array) data.notes.push_back(item.Str());
+    for (const JsonValue& item : list[L"colors"].array) data.colors.push_back(item.Str());
     data.selected = list.IsNull() ? -1 : list[L"selected"].Int();
     data.numbered = list[L"numbered"].Bool();
     data.meaning = list[L"selectedMeaning"].Str();

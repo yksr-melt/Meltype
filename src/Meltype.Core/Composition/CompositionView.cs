@@ -41,7 +41,9 @@ public sealed record CompositionView(
     // 一覧に番号を出すか (数字キーで選べる変換中の候補だけ。SessionResult.ForFront が決める)
     bool Numbered = false,
     // 変換中の文字の中のカーソルを、末尾から何文字 (UTF-16) 前に置くか (読みの途中を直している間だけ 1 以上)
-    int CaretBack = 0);
+    int CaretBack = 0,
+    // 候補と同じ順・件数の色見本 (#rrggbbaa)。色見本が無い候補は null、一覧全体で不要なら null
+    IReadOnlyList<string?>? Colors = null);
 
 /// <summary>キーを 1 つ押した。Ch は入力する文字 (キーボード配列は OS 側で解決済み。文字を生まないキーなら null)。</summary>
 internal readonly record struct KeyPress(int Vk, char? Ch, bool Shift, bool Control, bool Alt, bool Command, long TimeMs)

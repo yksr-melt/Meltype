@@ -12,7 +12,7 @@ namespace Meltype.Composition;
 /// 予測変換の候補。Text は一覧に出す語、Before は選んだときに語の前に残す文字 (最後の文節の続きの候補なら前の文節の見えている文字、
 /// 読み全体の続きの候補なら空)、Reading は語に置き換わる打ちかけの読み。
 /// </summary>
-internal sealed record Prediction(string Text, string Before, string Reading);
+internal sealed record Prediction(string Text, string Before, string Reading, string? Color = null);
 
 /// <summary>変換中の文節。英語の区間も 1 つの文節として扱う (候補は英字/全角英字)。</summary>
 internal sealed class Clause(string reading, bool isEnglish, List<string> candidates)
@@ -52,6 +52,9 @@ internal sealed class Clause(string reading, bool isEnglish, List<string> candid
 
     /// <summary>候補と同じ順・件数の注記 (ユーティリティ変換が決めたもの)。null なら候補から決める (<see cref="CandidateNotes"/>)。</summary>
     public IReadOnlyList<CandidateNote>? Notes { get; init; }
+
+    /// <summary>候補と同じ順・件数の色見本 (#rrggbbaa)。無ければ null。</summary>
+    public IReadOnlyList<string?>? Colors { get; init; }
 
     /// <summary>候補のうち、選んでも学習しないユーティリティ変換の候補 (<see cref="Utility.UtilityCandidates.NotLearned"/>)。</summary>
     public HashSet<string> NotLearned { get; } = new(StringComparer.Ordinal);

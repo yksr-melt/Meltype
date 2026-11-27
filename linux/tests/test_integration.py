@@ -171,12 +171,25 @@ class IntegrationTests(unittest.TestCase):
                 self.assertTrue(selector.select(timeout=30), "Mozc response timed out")
                 return process.stdout.readline().decode("utf-8").removesuffix("\n").removesuffix("\r")
 
+            def request(text):
+                process.stdin.write(f"{text}\n".encode("utf-8"))
+                process.stdin.flush()
+                return line()
+
+            def candidates(reading):
+                clauses = [record.split("\x1f") for record in request(f"C\t\t{reading}").split("\x1e")]
+                self.assertEqual(reading, "".join(clause[0] for clause in clauses))
+                return [candidate for clause in clauses for candidate in clause[1:]]
+
             self.assertEqual("READY", line())
-            process.stdin.write("C\t\tきょう\n".encode("utf-8"))
-            process.stdin.flush()
-            clauses = [record.split("\x1f") for record in line().split("\x1e")]
-            self.assertEqual("きょう", "".join(clause[0] for clause in clauses))
-            self.assertIn("今日", [candidate for clause in clauses for candidate in clause[1:]])
+            self.assertIn("今日", candidates("きょう"))
+            # Mozc が「ひみつ」に足す設定の操作 (シークレットモードをオン) は、入力する文字ではないので候補にしない
+            himitsu = candidates("ひみつ")
+            self.assertIn("秘密", himitsu)
+            self.assertNotIn("シークレットモードをオン", himitsu)
+            # 同じ文言でも、利用者が辞書に登録した語は候補に残す (\x1d はユーザー辞書の語の印)
+            self.assertEqual("OK", request("D\tひみつ\x1fシークレットモードをオン\x1f名詞"))
+            self.assertIn("\x1dシークレットモードをオン", candidates("ひみつ"))
             process.stdin.write(b"Q\n")
             process.stdin.flush()
             self.assertEqual(0, process.wait(timeout=30))
