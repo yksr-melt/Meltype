@@ -45,6 +45,7 @@ struct ServerState {
 
 class TextService final : public ITfTextInputProcessorEx,
                           public ITfThreadMgrEventSink,
+                          public ITfThreadFocusSink,
                           public ITfKeyEventSink,
                           public ITfCompositionSink,
                           public ITfDisplayAttributeProvider,
@@ -69,7 +70,11 @@ public:
     STDMETHODIMP OnUninitDocumentMgr(ITfDocumentMgr*) override { return S_OK; }
     STDMETHODIMP OnSetFocus(ITfDocumentMgr* focus, ITfDocumentMgr* previous) override;
     STDMETHODIMP OnPushContext(ITfContext*) override { return S_OK; }
-    STDMETHODIMP OnPopContext(ITfContext*) override { return S_OK; }
+    STDMETHODIMP OnPopContext(ITfContext* context) override;
+
+    // ITfThreadFocusSink (別アプリへの移動は、文書フォーカスが null になっただけでは区別できない)
+    STDMETHODIMP OnSetThreadFocus() override;
+    STDMETHODIMP OnKillThreadFocus() override;
 
     // ITfKeyEventSink
     STDMETHODIMP OnSetFocus(BOOL foreground) override;
@@ -177,6 +182,10 @@ private:
     // 選択範囲の画面上の位置 (入力モードの表示に使う)。分からなければ空
     RECT CaretRect(TfEditCookie ec, ITfContext* context);
     bool ContextDisabled(ITfContext* context);
+    bool ContextHasFocus(ITfContext* context);
+    HRESULT SelectionInComposition(TfEditCookie ec, ITfContext* context, bool& inside);
+    void PrepareComposition(TfEditCookie ec, ITfContext* context);
+    void CommitOnFocusLoss();
     void AdviseTextEditSink(ITfDocumentMgr* documentMgr);
     void UnadviseTextEditSink();
     enum class FieldScope { Regular, Private, Password, Unreadable };
@@ -193,6 +202,7 @@ private:
     ITfThreadMgr* threadMgr_ = nullptr;
     TfClientId clientId_ = TF_CLIENTID_NULL;
     DWORD threadMgrCookie_ = TF_INVALID_COOKIE;
+    DWORD threadFocusCookie_ = TF_INVALID_COOKIE;
     DWORD compartmentCookie_ = TF_INVALID_COOKIE;
     ITfContext* editSinkContext_ = nullptr;
     DWORD editSinkCookie_ = TF_INVALID_COOKIE;
@@ -233,9 +243,6 @@ private:
     Microsoft::WRL::ComPtr<ITfContext> resumeContext_;
     std::wstring resumeText_;
     bool lastConverting_ = false;  // 最後に置いた変換中の文字が、変換した状態か (打っている途中なら false)
-    int staleCommitTries_ = 0;     // 前の入力欄に残った変換中の文字を確定しようとした回数 (打鍵ごとに 1 回)
-    UINT staleVk_ = 0;             // OnTestKeyDown で数えたキーと時刻 (続く OnKeyDown で数え直さない)
-    ULONGLONG staleTime_ = 0;
     struct Abandoned {
         Microsoft::WRL::ComPtr<ITfComposition> composition;
         Microsoft::WRL::ComPtr<ITfContext> context;
