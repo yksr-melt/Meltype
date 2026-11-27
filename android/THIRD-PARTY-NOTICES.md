@@ -31,7 +31,7 @@
 
 - 名前: Unicode Emoji 18.0 の `emoji-test.txt`（Emoji Keyboard/Display Test Data for UTS #51、Date: 2026-04-30）
 - 入手元: https://unicode.org/Public/18.0.0/emoji/emoji-test.txt
-- 使っているもの: `app/src/main/assets/emoji.txt`（上のファイルから fully-qualified の絵文字とグループ名だけを取り出し、形を変えたもの。`tools/make-emoji-asset.py` が作る）。絵文字の画面の一覧と、種類への振り分けに使う。
+- 使っているもの: `app/src/main/assets/emoji.txt`（上のファイルから fully-qualified の絵文字とグループ名だけを取り出し、形を変えたもの。`tools/make-emoji-asset.ts` が作る）。絵文字の画面の一覧と、種類への振り分けに使う。
 - ライセンス: Unicode License v3（https://www.unicode.org/license.txt）
 - 著作権表示と許諾の全文:
 
