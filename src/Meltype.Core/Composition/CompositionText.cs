@@ -299,6 +299,22 @@ internal static partial class CompositionText
     /// <summary>キー以外から入った読み (選んだ候補の読みなど) を足す。</summary>
     public static CompositionTextState AppendReading(CompositionTextState state, string kana) => kana.Aggregate(state, (s, c) => CompositionText.Add(s, new TypedKey.Reading(c)));
 
+    /// <summary>かな配列の打鍵。単打は JIS かな同様、英語と判定できるようにする。シフトとの組み合わせは表示だけに使う。</summary>
+    public static CompositionTextState AppendLayoutKana(CompositionTextState state, string kana, string keys, bool repeat)
+    {
+        if (kana is [var sound] && keys is [var key])
+        {
+            if (!repeat) return AppendKana(state, key, sound);
+            // 長押しで増えたかなは、最初の打鍵も含めて英単語にはしない (W の長押し → かかか)。
+            var last = (state.Caret ?? state.Keys.Count) - 1;
+            if (last >= 0 && state.Keys[last] is TypedKey.Kana previous && previous.Key == key && previous.Value == sound)
+                state = state with { Keys = state.Keys.SetItem(last, new TypedKey.Reading(sound, keys)) };
+        }
+        for (var i = 0; i < kana.Length; i++)
+            state = Add(state, new TypedKey.Reading(kana[i], i == 0 ? keys : ""));
+        return state;
+    }
+
     public static CompositionTextState Append(CompositionTextState state, char c) => CompositionText.Add(state, new TypedKey.Letter(c));
 
     /// <summary>読みの英字 (打ち間違いを直した後の英字)。</summary>
