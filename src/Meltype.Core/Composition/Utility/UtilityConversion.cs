@@ -21,7 +21,11 @@ internal interface IUtilityConversion
 /// 変換を始めたときの入力。Reading は入力の全体が日本語の区間 1 つのときの読み (それ以外は null)。
 /// 打った英字は Text.Raw (かな入力では物理キーの表記)。
 /// </summary>
-internal sealed record UtilityInput(TextReading Text, string? Reading, bool Direct, UtilityContext Context);
+internal sealed record UtilityInput(TextReading Text, string? Reading, bool Direct, UtilityContext Context)
+{
+    // 数字と日本語が続く定型の入力 (30ぷんご) は、途中の字句が英字に見えても全体のかなを読める。
+    internal string? ReadingAcrossSegments => Reading ?? (Text.Pending.Length == 0 ? string.Concat(Text.Units.Select(unit => unit.Kana)) : null);
+}
 
 /// <summary>変換を始めたときの設定と、候補に使う外の値。</summary>
 internal sealed record UtilityContext(
@@ -86,6 +90,8 @@ internal static class UtilityConversions
         new TypedDateConversion(),
         new KanjiNumberConversion(),
         new TodayConversion(),
+        new RelativeDateConversion(),
+        new EraConversion(),
         new NowConversion(),
         new ClockConversion(),
         new SeasonalGreetingConversion(),
