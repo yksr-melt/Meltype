@@ -8,12 +8,10 @@ namespace Meltype.Composition.Utility;
 
 /// <summary>
 /// HEX・RGB・HSL のカラー表記を相互変換して候補に出す (#3b82f6 ↔ rgb(59, 130, 246) ↔ hsl(217, 91%, 60%))。
-/// 打った表記を先頭に残し、別形式を後ろに並べる。
+/// 打った表記を先頭に残し、別形式を後ろに並べる。各候補の色見本 (#rrggbbaa) も Core で決めて返す。
 /// </summary>
-public sealed partial class ColorConversion : IUtilityConversion
+internal sealed partial class ColorConversion : IUtilityConversion
 {
-    internal ColorConversion() { }
-
     [GeneratedRegex(@"^#(?<hex>[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")]
     private static partial Regex HexPattern();
 
@@ -23,110 +21,106 @@ public sealed partial class ColorConversion : IUtilityConversion
     [GeneratedRegex(@"^hsla?\(\s*(?<h>-?\d+(?:\.\d+)?)\s*(?:,\s*|\s+)(?<s>\d+(?:\.\d+)?)%\s*(?:,\s*|\s+)(?<l>\d+(?:\.\d+)?)%(?:\s*(?:,|/)\s*(?<a>\d+(?:\.\d+)?%?|\.\d+%?))?\s*\)$", RegexOptions.IgnoreCase)]
     private static partial Regex HslPattern();
 
-    UtilityCandidates? IUtilityConversion.Convert(UtilityInput input)
+    public UtilityCandidates? Convert(UtilityInput input)
     {
         var raw = CompositionText.Raw(input.Text);
         if (input.Text.KanaInput || input.Text.Mode != DisplayMode.Auto) return null;
-        var candidates = Candidates(raw);
-        return candidates.Count > 0 ? new(candidates, UtilityPlacement.Replace) : null;
+        var pairs = CandidatesWithColors(raw);
+        if (pairs.Count == 0) return null;
+        return new(pairs.Select(p => p.Text).ToList(), UtilityPlacement.Replace)
+        {
+            Colors = pairs.Select(p => (string?)p.Color).ToList(),
+        };
     }
 
-    /// <summary>HEX・RGB・HSL のカラーコードなら RGBA (0..255) を返す。色見本の描画用。</summary>
-    public static bool TryParseRgba(string text, out (byte R, byte G, byte B, byte A) rgba)
-    {
-        if (TryParseHex(text, out var hex))
-        {
-            rgba = (hex.R, hex.G, hex.B, ToAlphaByte(hex.Alpha));
-            return true;
-        }
-        if (TryParseRgb(text, out var rgb))
-        {
-            rgba = (rgb.R, rgb.G, rgb.B, ToAlphaByte(rgb.Alpha));
-            return true;
-        }
-        if (TryParseHsl(text, out var hsl))
-        {
-            var (r, g, b) = HslToRgb(hsl.H, hsl.S, hsl.L);
-            rgba = (r, g, b, ToAlphaByte(hsl.Alpha));
-            return true;
-        }
-        rgba = default;
-        return false;
-    }
+    internal static List<string> Candidates(string raw) =>
+        CandidatesWithColors(raw).Select(p => p.Text).ToList();
 
-    private static byte ToAlphaByte(double? alpha) =>
-        alpha is { } a ? (byte)Math.Round(a * 255.0, MidpointRounding.AwayFromZero) : (byte)255;
-
-    internal static List<string> Candidates(string raw)
+    internal static List<(string Text, string Color)> CandidatesWithColors(string raw)
     {
         if (TryParseHex(raw, out var hexColor))
         {
-            var results = new List<string> { raw };
-            if (raw.Length is 4 or 5)
-            {
-                results.Add(hexColor.Alpha is { } ha
-                    ? FormatHex(hexColor.R, hexColor.G, hexColor.B, ToAlphaByte(ha), lowercase: true)
-                    : FormatHex(hexColor.R, hexColor.G, hexColor.B, lowercase: true));
-            }
-            AddRgbAndHsl(results, hexColor.R, hexColor.G, hexColor.B, hexColor.Alpha, includeHex: false);
-            return results.Distinct(StringComparer.Ordinal).ToList();
+            var results = new List<(string Text, string Color)>();
+            var hexRgba = FormatRgbaHex(hexColor.R, hexColor.G, hexColor.B, ToAlphaByte(hexColor.Alpha));
+            AddUnique(results, raw, hexRgba);
+            AddFormattedCandidates(results, hexColor.R, hexColor.G, hexColor.B, hexColor.Alpha, includeHex: true, includeRgb: true, includeHsl: true);
+            return results;
         }
 
         if (TryParseRgb(raw, out var rgbColor))
         {
-            var results = new List<string> { raw };
-            AddRgbAndHsl(results, rgbColor.R, rgbColor.G, rgbColor.B, rgbColor.Alpha, includeHex: true, includeRgb: false);
-            return results.Distinct(StringComparer.Ordinal).ToList();
+            var results = new List<(string Text, string Color)>();
+            var rgbRgba = FormatRgbaHex(rgbColor.R, rgbColor.G, rgbColor.B, ToAlphaByte(rgbColor.Alpha));
+            AddUnique(results, raw, rgbRgba);
+            AddFormattedCandidates(results, rgbColor.R, rgbColor.G, rgbColor.B, rgbColor.Alpha, includeHex: true, includeRgb: false, includeHsl: true);
+            return results;
         }
 
         if (TryParseHsl(raw, out var hslColor))
         {
             var (r, g, b) = HslToRgb(hslColor.H, hslColor.S, hslColor.L);
-            var results = new List<string> { raw };
-            AddRgbAndHsl(results, r, g, b, hslColor.Alpha, includeHex: true, includeHsl: false);
-            return results.Distinct(StringComparer.Ordinal).ToList();
+            var results = new List<(string Text, string Color)>();
+            var hslRgba = FormatRgbaHex(r, g, b, ToAlphaByte(hslColor.Alpha));
+            AddUnique(results, raw, hslRgba);
+            AddFormattedCandidates(results, r, g, b, hslColor.Alpha, includeHex: true, includeRgb: true, includeHsl: false);
+            return results;
         }
 
         return [];
     }
 
-    private static void AddRgbAndHsl(List<string> results, byte r, byte g, byte b, double? alpha, bool includeHex, bool includeRgb = true, bool includeHsl = true)
+    private static void AddFormattedCandidates(List<(string Text, string Color)> results, byte r, byte g, byte b, double? alpha, bool includeHex, bool includeRgb, bool includeHsl)
     {
+        var alphaByte = ToAlphaByte(alpha);
+        var exactColor = FormatRgbaHex(r, g, b, alphaByte);
+
         if (alpha is { } a)
         {
             if (includeHex)
             {
-                var alphaByte = ToAlphaByte(a);
-                results.Add(FormatHex(r, g, b, alphaByte, lowercase: true));
-                results.Add(FormatHex(r, g, b, alphaByte, lowercase: false));
+                AddUnique(results, FormatHex(r, g, b, alphaByte, lowercase: true), exactColor);
+                AddUnique(results, FormatHex(r, g, b, alphaByte, lowercase: false), exactColor);
             }
-            if (includeRgb) results.Add(FormatRgba(r, g, b, a));
+            if (includeRgb) AddUnique(results, FormatRgba(r, g, b, a), exactColor);
             if (includeHsl)
             {
                 var (h, s, l) = RgbToHsl(r, g, b);
-                results.Add(FormatHsla(h, s, l, a));
+                var (hr, hg, hb) = HslToRgb(h, s, l);
+                AddUnique(results, FormatHsla(h, s, l, a), FormatRgbaHex(hr, hg, hb, alphaByte));
             }
             return;
         }
 
         if (includeHex)
         {
-            results.Add(FormatHex(r, g, b, lowercase: true));
-            results.Add(FormatHex(r, g, b, lowercase: false));
+            AddUnique(results, FormatHex(r, g, b, lowercase: true), exactColor);
+            AddUnique(results, FormatHex(r, g, b, lowercase: false), exactColor);
         }
-        if (includeRgb) results.Add(FormatRgb(r, g, b));
+        if (includeRgb) AddUnique(results, FormatRgb(r, g, b), exactColor);
         if (includeHsl)
         {
             var (h, s, l) = RgbToHsl(r, g, b);
-            results.Add(FormatHsl(h, s, l));
+            var (hr, hg, hb) = HslToRgb(h, s, l);
+            AddUnique(results, FormatHsl(h, s, l), FormatRgbaHex(hr, hg, hb, 255));
         }
     }
+
+    private static void AddUnique(List<(string Text, string Color)> results, string text, string color)
+    {
+        if (!results.Any(r => r.Text == text))
+            results.Add((text, color));
+    }
+
+    private static byte ToAlphaByte(double? alpha) =>
+        alpha is { } a ? (byte)Math.Round(a * 255.0, MidpointRounding.AwayFromZero) : (byte)255;
 
     private static bool TryParseHex(string raw, out (byte R, byte G, byte B, double? Alpha) color)
     {
         color = default;
         if (HexPattern().Match(raw) is not { Success: true } match) return false;
         var hex = match.Groups["hex"].Value;
+        // #123・#2422・#123456 のような数字だけの Issue 番号をカラーコードとして誤判定しない
+        if (!hex.Any(c => c is (>= 'a' and <= 'f') or (>= 'A' and <= 'F'))) return false;
         switch (hex.Length)
         {
             case 3:
@@ -280,6 +274,8 @@ public sealed partial class ColorConversion : IUtilityConversion
         if (t < 2.0 / 3.0) return p + (q - p) * (2.0 / 3.0 - t) * 6.0;
         return p;
     }
+
+    private static string FormatRgbaHex(byte r, byte g, byte b, byte a) => $"#{r:x2}{g:x2}{b:x2}{a:x2}";
 
     private static string FormatHex(byte r, byte g, byte b, bool lowercase) =>
         lowercase ? $"#{r:x2}{g:x2}{b:x2}" : $"#{r:X2}{g:X2}{b:X2}";

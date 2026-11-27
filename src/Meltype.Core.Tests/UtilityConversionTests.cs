@@ -276,19 +276,26 @@ internal static class UtilityConversionTests
     [Test]
     public static void ColorConversion_ConvertsHexRgbAndHsl()
     {
-        Assert.Equal("#3b82f6|rgb(59, 130, 246)|hsl(217, 91%, 60%)", string.Join("|", ColorConversion.Candidates("#3b82f6")));
-        Assert.Equal("#f00|#ff0000|rgb(255, 0, 0)|hsl(0, 100%, 50%)", string.Join("|", ColorConversion.Candidates("#f00")));
-        Assert.Equal("#f008|#ff000088|rgba(255, 0, 0, 0.533)|hsla(0, 100%, 50%, 0.533)", string.Join("|", ColorConversion.Candidates("#f008")));
+        Assert.Equal("#3b82f6|#3B82F6|rgb(59, 130, 246)|hsl(217, 91%, 60%)", string.Join("|", ColorConversion.Candidates("#3b82f6")));
+        Assert.Equal("#3B82F6|#3b82f6|rgb(59, 130, 246)|hsl(217, 91%, 60%)", string.Join("|", ColorConversion.Candidates("#3B82F6")));
+        Assert.Equal("#f00|#ff0000|#FF0000|rgb(255, 0, 0)|hsl(0, 100%, 50%)", string.Join("|", ColorConversion.Candidates("#f00")));
+        Assert.Equal("#f008|#ff000088|#FF000088|rgba(255, 0, 0, 0.533)|hsla(0, 100%, 50%, 0.533)", string.Join("|", ColorConversion.Candidates("#f008")));
         Assert.Equal("rgb(59, 130, 246)|#3b82f6|#3B82F6|hsl(217, 91%, 60%)", string.Join("|", ColorConversion.Candidates("rgb(59, 130, 246)")));
         Assert.Equal("hsl(217, 91%, 60%)|#3c83f6|#3C83F6|rgb(60, 131, 246)", string.Join("|", ColorConversion.Candidates("hsl(217, 91%, 60%)")));
         Assert.Equal("rgba(255, 0, 0, 0.5)|#ff000080|#FF000080|hsla(0, 100%, 50%, 0.5)", string.Join("|", ColorConversion.Candidates("rgba(255, 0, 0, 0.5)")));
         Assert.Equal(0, ColorConversion.Candidates("rgb(256, 0, 0)").Count);
         Assert.Equal(0, ColorConversion.Candidates("#12345").Count);
 
+        // # の後ろが数字だけの Issue 番号はカラーコードにしない
+        foreach (var issueNumber in new[] { "#123", "#2422", "#123456", "#12345678" })
+            Assert.Equal(0, ColorConversion.Candidates(issueNumber).Count, $"数字だけの {issueNumber} は色変換しない");
+
         var k = new Keyboard();
         k.Settings.PredictiveCandidates = true;
         k.Type("#3b82f6");
-        Assert.Equal("rgb(59, 130, 246)|hsl(217, 91%, 60%)", string.Join("|", k.Host.View!.Predictions!));
+        Assert.Equal("#3B82F6|rgb(59, 130, 246)|hsl(217, 91%, 60%)", string.Join("|", k.Host.View!.Predictions!));
+        Assert.Equal("#3b82f6ff|#3b82f6ff|#3c83f6ff", string.Join("|", k.Host.View.Colors!));
+        k.Press(VirtualKeys.Tab);
         k.Press(VirtualKeys.Tab);
         k.Press(VirtualKeys.Return);
         Assert.Equal("rgb(59, 130, 246)", k.Host.Document);
@@ -297,29 +304,27 @@ internal static class UtilityConversionTests
         convert.Type("#3b82f6");
         convert.Press(VirtualKeys.Convert);
         Assert.Equal("#3b82f6", convert.Host.View!.Candidates[0]);
-        Assert.True(convert.Host.View.Candidates.Contains("rgb(59, 130, 246)") && convert.Host.View.Candidates.Contains("hsl(217, 91%, 60%)"), string.Join(",", convert.Host.View.Candidates));
+        Assert.True(convert.Host.View.Candidates.Contains("#3B82F6") && convert.Host.View.Candidates.Contains("rgb(59, 130, 246)") && convert.Host.View.Candidates.Contains("hsl(217, 91%, 60%)"), string.Join(",", convert.Host.View.Candidates));
+        Assert.Equal("#3b82f6ff|#3b82f6ff|#3b82f6ff|#3c83f6ff", string.Join("|", convert.Host.View.Colors!));
 
         // Space は英数字の確定＋空白のまま邪魔しない
         var space = new Keyboard();
         space.Type("#3b82f6 ");
         Assert.Equal("#3b82f6 ", space.Host.Document);
 
-        // 色見本用の RGBA パース
-        Assert.True(ColorConversion.TryParseRgba("#3b82f6", out var hexRgba) && hexRgba == (59, 130, 246, 255), "HEX を RGBA にパースできる");
-        Assert.True(ColorConversion.TryParseRgba("rgba(255, 0, 0, 0.5)", out var alphaRgba) && alphaRgba == (255, 0, 0, 128), "RGBA をパースできる");
-        Assert.True(ColorConversion.TryParseRgba("hsl(0, 100%, 50%)", out var hslRgba) && hslRgba == (255, 0, 0, 255), "HSL を RGBA にパースできる");
-        Assert.True(!ColorConversion.TryParseRgba("#3b82f6 Issueタイトル", out _), "カラーコード以外の文字が混ざる候補はパースしない");
-
-        // #123456 は GitHubIssueConversion の後ろに共存し、学習には残らない
+        // #2422 や #123456 には予測候補も変換候補も色変換を出さず、色見本も付けない
         var issueHistory = new ConversionHistory(null);
         var issuePhrases = new PhraseHistory(null);
-        var titles = new GitHubIssueTitles((repo, number) => Task.FromResult<string?>(repo == "yksr-melt/Meltype" && number == 123456 ? "テストIssue" : null));
-        var sixDigits = new Keyboard(history: issueHistory, predictor: new Predictor(issuePhrases, null, issueHistory)) { GitHubRepository = "yksr-melt/Meltype", GitHubTitles = titles };
-        sixDigits.Type("#123456");
-        sixDigits.Press(VirtualKeys.Convert);
-        Assert.Equal("#123456", sixDigits.Host.View!.Candidates[0], "#123456 の先頭は打ったまま");
-        Assert.True(sixDigits.Host.View.Candidates.Contains("#123456 テストIssue"), "GitHub Issue 候補を維持する");
-        Assert.True(sixDigits.Host.View.Candidates.Contains("rgb(18, 52, 86)"), "後ろに色変換も出す");
+        var titles = new GitHubIssueTitles((repo, number) => Task.FromResult<string?>(repo == "yksr-melt/Meltype" && number == 2422 ? "テストIssue" : null));
+        var issueKey = new Keyboard(history: issueHistory, predictor: new Predictor(issuePhrases, null, issueHistory)) { GitHubRepository = "yksr-melt/Meltype", GitHubTitles = titles };
+        issueKey.Type("#2422");
+        Assert.True(issueKey.Host.View!.Predictions is null && issueKey.Host.View.Colors is null, "#2422 の予測候補に色変換を出さない");
+        issueKey.Press(VirtualKeys.Convert);
+        Assert.Equal("#2422", issueKey.Host.View!.Candidates[0]);
+        Assert.True(issueKey.Host.View.Candidates.Contains("#2422 テストIssue"), "GitHub Issue 候補を維持する");
+        Assert.True(!issueKey.Host.View.Candidates.Any(c => c.StartsWith("rgba(", StringComparison.Ordinal)), "#2422 に色変換を混ぜない: " + string.Join(",", issueKey.Host.View.Candidates));
+        Assert.True(issueKey.Host.View.Colors is null, "Issue 参照の候補に色見本を付けない");
+
         var learnCheck = new Keyboard(history: issueHistory, predictor: new Predictor(issuePhrases, null, issueHistory));
         learnCheck.Type("#3b82f6");
         learnCheck.Press(VirtualKeys.Convert);

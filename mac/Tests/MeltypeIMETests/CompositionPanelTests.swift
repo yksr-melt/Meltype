@@ -42,12 +42,11 @@ final class CompositionPanelTests: XCTestCase {
         XCTAssertTrue(screen.contains(frame))
     }
 
-    func testColorSwatchParserParsesHexRgbAndHsl() {
-        XCTAssertEqual(ColorSwatchParser.parseRgba("#3b82f6"), ColorSwatchRgba(r: 59, g: 130, b: 246, a: 255))
-        XCTAssertEqual(ColorSwatchParser.parseRgba("#f00"), ColorSwatchRgba(r: 255, g: 0, b: 0, a: 255))
-        XCTAssertEqual(ColorSwatchParser.parseRgba("rgba(255, 0, 0, 0.5)"), ColorSwatchRgba(r: 255, g: 0, b: 0, a: 128))
-        XCTAssertEqual(ColorSwatchParser.parseRgba("hsl(0, 100%, 50%)"), ColorSwatchRgba(r: 255, g: 0, b: 0, a: 255))
-        XCTAssertNil(ColorSwatchParser.parseRgba("#3b82f6 Issueタイトル"))
-        XCTAssertNil(ColorSwatchParser.parseRgba("rgb(256, 0, 0)"))
+    func testColorSwatchDecodeDecodesCoreRgbaHexOnly() {
+        XCTAssertEqual(ColorSwatchRgba.decode("#3b82f6ff"), ColorSwatchRgba(r: 59, g: 130, b: 246, a: 255))
+        XCTAssertEqual(ColorSwatchRgba.decode("#ff000080"), ColorSwatchRgba(r: 255, g: 0, b: 0, a: 128))
+        XCTAssertNil(ColorSwatchRgba.decode(nil))
+        XCTAssertNil(ColorSwatchRgba.decode("#3b82f6"))
+        XCTAssertNil(ColorSwatchRgba.decode("rgb(59, 130, 246)"))
     }
 }

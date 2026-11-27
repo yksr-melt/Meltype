@@ -116,6 +116,7 @@ internal static class CompositionConversion
                 Expanded = true,
                 Fixed = true,
                 Notes = utility.Notes,
+                Colors = utility.Colors,
             };
             fixedClause.NotLearned.UnionWith(utility.NotLearned);
             // 続けて入力する前の選択だけを復元し、候補の順 (注記と同じ順) は変えない。

@@ -211,165 +211,19 @@ int HexDigit(wchar_t c) {
     return -1;
 }
 
-void SkipSpaces(const std::wstring& s, size_t& i) {
-    while (i < s.size() && (s[i] == L' ' || s[i] == L'\t')) i++;
-}
-
-bool MatchWordInsensitive(const std::wstring& s, size_t& i, const wchar_t* word) {
-    size_t j = i;
-    for (const wchar_t* p = word; *p != 0; p++, j++) {
-        if (j >= s.size()) return false;
-        wchar_t c = s[j];
-        if (c >= L'A' && c <= L'Z') c = static_cast<wchar_t>(c - L'A' + L'a');
-        if (c != *p) return false;
+// Core が決めた色見本 (#rrggbbaa) を RGBA に展開する
+bool DecodeRgbaHex(const std::wstring& hex, unsigned char& outR, unsigned char& outG, unsigned char& outB, unsigned char& outA) {
+    if (hex.size() != 9 || hex[0] != L'#') return false;
+    int d[8] = {};
+    for (size_t i = 0; i < 8; i++) {
+        d[i] = HexDigit(hex[1 + i]);
+        if (d[i] < 0) return false;
     }
-    i = j;
+    outR = static_cast<unsigned char>((d[0] << 4) | d[1]);
+    outG = static_cast<unsigned char>((d[2] << 4) | d[3]);
+    outB = static_cast<unsigned char>((d[4] << 4) | d[5]);
+    outA = static_cast<unsigned char>((d[6] << 4) | d[7]);
     return true;
-}
-
-bool ParseDoubleToken(const std::wstring& s, size_t& i, bool allowNeg, double& out) {
-    size_t start = i;
-    if (allowNeg && i < s.size() && s[i] == L'-') i++;
-    bool hasDigit = false;
-    while (i < s.size() && s[i] >= L'0' && s[i] <= L'9') {
-        hasDigit = true;
-        i++;
-    }
-    if (i < s.size() && s[i] == L'.') {
-        i++;
-        while (i < s.size() && s[i] >= L'0' && s[i] <= L'9') {
-            hasDigit = true;
-            i++;
-        }
-    }
-    if (!hasDigit) {
-        i = start;
-        return false;
-    }
-    try {
-        out = std::stod(s.substr(start, i - start));
-        return true;
-    } catch (...) {
-        i = start;
-        return false;
-    }
-}
-
-bool ParseSeparator(const std::wstring& s, size_t& i, wchar_t alt = L',') {
-    size_t before = i;
-    SkipSpaces(s, i);
-    if (i < s.size() && s[i] == alt) {
-        i++;
-        SkipSpaces(s, i);
-        return true;
-    }
-    return i > before;
-}
-
-bool ParseAlphaSuffix(const std::wstring& s, size_t& i, unsigned char& outA) {
-    SkipSpaces(s, i);
-    if (i < s.size() && s[i] == L')') {
-        i++;
-        outA = 255;
-        return i == s.size();
-    }
-    if (i >= s.size() || (s[i] != L',' && s[i] != L'/')) return false;
-    i++;
-    SkipSpaces(s, i);
-    double val = 0;
-    if (!ParseDoubleToken(s, i, false, val)) return false;
-    if (i < s.size() && s[i] == L'%') {
-        i++;
-        if (val < 0 || val > 100) return false;
-        val /= 100.0;
-    } else if (val < 0 || val > 1) {
-        return false;
-    }
-    SkipSpaces(s, i);
-    if (i >= s.size() || s[i] != L')') return false;
-    i++;
-    if (i != s.size()) return false;
-    outA = static_cast<unsigned char>(std::lround(val * 255.0));
-    return true;
-}
-
-double HueToRgb(double p, double q, double t) {
-    if (t < 0) t += 1.0;
-    if (t > 1) t -= 1.0;
-    if (t < 1.0 / 6.0) return p + (q - p) * 6.0 * t;
-    if (t < 0.5) return q;
-    if (t < 2.0 / 3.0) return p + (q - p) * (2.0 / 3.0 - t) * 6.0;
-    return p;
-}
-
-bool TryParseColorRgba(const std::wstring& text, unsigned char& outR, unsigned char& outG, unsigned char& outB, unsigned char& outA) {
-    if (text.empty()) return false;
-    if (text[0] == L'#') {
-        size_t len = text.size() - 1;
-        if (len != 3 && len != 4 && len != 6 && len != 8) return false;
-        int d[8] = {};
-        for (size_t i = 0; i < len; i++) {
-            d[i] = HexDigit(text[1 + i]);
-            if (d[i] < 0) return false;
-        }
-        if (len == 3 || len == 4) {
-            outR = static_cast<unsigned char>((d[0] << 4) | d[0]);
-            outG = static_cast<unsigned char>((d[1] << 4) | d[1]);
-            outB = static_cast<unsigned char>((d[2] << 4) | d[2]);
-            outA = len == 4 ? static_cast<unsigned char>((d[3] << 4) | d[3]) : 255;
-        } else {
-            outR = static_cast<unsigned char>((d[0] << 4) | d[1]);
-            outG = static_cast<unsigned char>((d[2] << 4) | d[3]);
-            outB = static_cast<unsigned char>((d[4] << 4) | d[5]);
-            outA = len == 8 ? static_cast<unsigned char>((d[6] << 4) | d[7]) : 255;
-        }
-        return true;
-    }
-
-    size_t i = 0;
-    if (MatchWordInsensitive(text, i, L"rgba(") || MatchWordInsensitive(text, i, L"rgb(")) {
-        SkipSpaces(text, i);
-        double r = 0, g = 0, b = 0;
-        if (!ParseDoubleToken(text, i, false, r) || r > 255 || std::floor(r) != r) return false;
-        if (!ParseSeparator(text, i)) return false;
-        if (!ParseDoubleToken(text, i, false, g) || g > 255 || std::floor(g) != g) return false;
-        if (!ParseSeparator(text, i)) return false;
-        if (!ParseDoubleToken(text, i, false, b) || b > 255 || std::floor(b) != b) return false;
-        if (!ParseAlphaSuffix(text, i, outA)) return false;
-        outR = static_cast<unsigned char>(r);
-        outG = static_cast<unsigned char>(g);
-        outB = static_cast<unsigned char>(b);
-        return true;
-    }
-
-    i = 0;
-    if (MatchWordInsensitive(text, i, L"hsla(") || MatchWordInsensitive(text, i, L"hsl(")) {
-        SkipSpaces(text, i);
-        double hDeg = 0, sPct = 0, lPct = 0;
-        if (!ParseDoubleToken(text, i, true, hDeg)) return false;
-        if (!ParseSeparator(text, i)) return false;
-        if (!ParseDoubleToken(text, i, false, sPct) || i >= text.size() || text[i] != L'%' || sPct > 100) return false;
-        i++;
-        if (!ParseSeparator(text, i)) return false;
-        if (!ParseDoubleToken(text, i, false, lPct) || i >= text.size() || text[i] != L'%' || lPct > 100) return false;
-        i++;
-        if (!ParseAlphaSuffix(text, i, outA)) return false;
-        double h = std::fmod(std::fmod(hDeg, 360.0) + 360.0, 360.0) / 360.0;
-        double s = sPct / 100.0;
-        double l = lPct / 100.0;
-        if (s == 0) {
-            outR = outG = outB = static_cast<unsigned char>(std::lround(l * 255.0));
-        } else {
-            double q = l < 0.5 ? l * (1.0 + s) : l + s - l * s;
-            double p = 2.0 * l - q;
-            outR = static_cast<unsigned char>(std::lround(HueToRgb(p, q, h + 1.0 / 3.0) * 255.0));
-            outG = static_cast<unsigned char>(std::lround(HueToRgb(p, q, h) * 255.0));
-            outB = static_cast<unsigned char>(std::lround(HueToRgb(p, q, h - 1.0 / 3.0) * 255.0));
-        }
-        return true;
-    }
-
-    return false;
 }
 
 void PrepareWindow(HWND hwnd, COLORREF border) {
@@ -439,7 +293,7 @@ struct CandidateWindow::Impl {
         for (size_t i = 0; i < view.candidates.size(); i++) {
             float w = TextWidth(candidate, view.candidates[i]);
             unsigned char cr = 0, cg = 0, cb = 0, ca = 0;
-            if (TryParseColorRgba(view.candidates[i], cr, cg, cb, ca)) w += kSwatchGap + kSwatchSize;
+            if (i < view.colors.size() && DecodeRgbaHex(view.colors[i], cr, cg, cb, ca)) w += kSwatchGap + kSwatchSize;
             if (i < view.notes.size() && !view.notes[i].empty()) w += kNoteGap + TextWidth(note, view.notes[i]);
             widest = std::max(widest, w);
         }
@@ -526,7 +380,7 @@ struct CandidateWindow::Impl {
             float textLeft = row.left + kTextInset + kNumberWidth;
             float maxRight = row.right - 8 - noteWidth;
             unsigned char cr = 0, cg = 0, cb = 0, ca = 0;
-            if (TryParseColorRgba(view.candidates[index], cr, cg, cb, ca)) {
+            if (index < static_cast<int>(view.colors.size()) && DecodeRgbaHex(view.colors[index], cr, cg, cb, ca)) {
                 float candWidth = TextWidth(candidate, view.candidates[index]);
                 float swatchX = std::min(textLeft + candWidth + kSwatchGap, maxRight - kSwatchSize);
                 float swatchY = row.top + (kRowHeight - kSwatchSize) * 0.5f;

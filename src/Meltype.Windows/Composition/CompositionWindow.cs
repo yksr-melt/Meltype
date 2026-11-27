@@ -313,7 +313,7 @@ internal sealed class CompositionWindow : PopupForm
             {
                 // 候補の右に注記や色見本を出す分だけ広くする
                 var note = view.Notes?[i].ToDisplayText() is { } n ? TextRenderer.MeasureText(g, n, _hintFont).Width + 12 : 0;
-                var swatch = Utility.ColorConversion.TryParseRgba(items[i], out _) ? SwatchWidth() : 0;
+                var swatch = TryDecodeColor(view.Colors, i, out _) ? SwatchWidth() : 0;
                 width = Math.Max(width, TextRenderer.MeasureText(g, $"9  {items[i]}", _candidateFont).Width + 28 + note + swatch);
             }
             height += Math.Min(items.Count, PageSize) * (_candidateFont.Height + 4) + 6;
@@ -413,7 +413,7 @@ internal sealed class CompositionWindow : PopupForm
                     TextRenderer.DrawText(g, note, _hintFont, new Point(rightEdge - noteWidth, y + (_candidateFont.Height - _hintFont.Height) / 2), Accent, TextFormatFlags.NoPrefix);
                     rightEdge -= noteWidth + 8;
                 }
-                if (Utility.ColorConversion.TryParseRgba(items[i], out var rgba))
+                if (TryDecodeColor(view.Colors, i, out var rgba))
                 {
                     var swatchSize = SwatchSize(rowHeight);
                     var textWidth = TextRenderer.MeasureText(g, rowText, _candidateFont).Width;
@@ -441,6 +441,20 @@ internal sealed class CompositionWindow : PopupForm
         Math.Max(12, Math.Min(rowHeight - 2, (int)Math.Round(14 * _monitorScale)));
 
     private int SwatchWidth() => SwatchSize(_candidateFont.Height + 4) + 14;
+
+    private static bool TryDecodeColor(IReadOnlyList<string?>? colors, int index, out (byte R, byte G, byte B, byte A) rgba)
+    {
+        rgba = default;
+        if (colors is null || index < 0 || index >= colors.Count || colors[index] is not { Length: 9 } hex || hex[0] != '#')
+            return false;
+        if (!byte.TryParse(hex.AsSpan(1, 2), System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out var r) ||
+            !byte.TryParse(hex.AsSpan(3, 2), System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out var g) ||
+            !byte.TryParse(hex.AsSpan(5, 2), System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out var b) ||
+            !byte.TryParse(hex.AsSpan(7, 2), System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out var a))
+            return false;
+        rgba = (r, g, b, a);
+        return true;
+    }
 
     private void DrawColorSwatch(Graphics g, int x, int y, int size, (byte R, byte G, byte B, byte A) rgba)
     {

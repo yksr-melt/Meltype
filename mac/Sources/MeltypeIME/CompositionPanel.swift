@@ -8,190 +8,29 @@ struct ColorSwatchRgba: Equatable {
     let g: UInt8
     let b: UInt8
     let a: UInt8
-}
 
-enum ColorSwatchParser {
-    static func parseRgba(_ text: String) -> ColorSwatchRgba? {
-        guard !text.isEmpty else { return nil }
-        let scalars = Array(text.unicodeScalars)
-        if scalars[0] == "#" {
-            return parseHex(scalars)
-        }
-        if let rgb = parseRgb(scalars) {
-            return rgb
-        }
-        return parseHsl(scalars)
-    }
-
-    private static func parseHex(_ scalars: [UnicodeScalar]) -> ColorSwatchRgba? {
-        let len = scalars.count - 1
-        guard len == 3 || len == 4 || len == 6 || len == 8 else { return nil }
-        var digits = [UInt8]()
-        digits.reserveCapacity(len)
-        for i in 1..<scalars.count {
-            guard let d = hexDigit(scalars[i]) else { return nil }
-            digits.append(d)
-        }
-        if len == 3 || len == 4 {
-            return ColorSwatchRgba(
-                r: (digits[0] << 4) | digits[0],
-                g: (digits[1] << 4) | digits[1],
-                b: (digits[2] << 4) | digits[2],
-                a: len == 4 ? (digits[3] << 4) | digits[3] : 255
-            )
-        }
-        return ColorSwatchRgba(
-            r: (digits[0] << 4) | digits[1],
-            g: (digits[2] << 4) | digits[3],
-            b: (digits[4] << 4) | digits[5],
-            a: len == 8 ? (digits[6] << 4) | digits[7] : 255
-        )
-    }
-
-    private static func parseRgb(_ scalars: [UnicodeScalar]) -> ColorSwatchRgba? {
-        var i = 0
-        guard matchPrefix(scalars, &i, "rgba(") || matchPrefix(scalars, &i, "rgb(") else { return nil }
-        skipSpaces(scalars, &i)
-        guard let r = parseByteComponent(scalars, &i),
-              parseSeparator(scalars, &i),
-              let g = parseByteComponent(scalars, &i),
-              parseSeparator(scalars, &i),
-              let b = parseByteComponent(scalars, &i),
-              let a = parseAlphaSuffix(scalars, &i) else { return nil }
-        return ColorSwatchRgba(r: r, g: g, b: b, a: a)
-    }
-
-    private static func parseHsl(_ scalars: [UnicodeScalar]) -> ColorSwatchRgba? {
-        var i = 0
-        guard matchPrefix(scalars, &i, "hsla(") || matchPrefix(scalars, &i, "hsl(") else { return nil }
-        skipSpaces(scalars, &i)
-        guard let hDeg = parseDouble(scalars, &i, allowNegative: true),
-              parseSeparator(scalars, &i),
-              let sPct = parseDouble(scalars, &i, allowNegative: false),
-              i < scalars.count, scalars[i] == "%", sPct >= 0, sPct <= 100 else { return nil }
-        i += 1
-        guard parseSeparator(scalars, &i),
-              let lPct = parseDouble(scalars, &i, allowNegative: false),
-              i < scalars.count, scalars[i] == "%", lPct >= 0, lPct <= 100 else { return nil }
-        i += 1
-        guard let a = parseAlphaSuffix(scalars, &i) else { return nil }
-
-        let h = ((hDeg.truncatingRemainder(dividingBy: 360.0)) + 360.0).truncatingRemainder(dividingBy: 360.0) / 360.0
-        let s = sPct / 100.0
-        let l = lPct / 100.0
-        if s == 0 {
-            let gray = UInt8(clamping: Int(round(l * 255.0)))
-            return ColorSwatchRgba(r: gray, g: gray, b: gray, a: a)
-        }
-        let q = l < 0.5 ? l * (1.0 + s) : l + s - l * s
-        let p = 2.0 * l - q
-        let r = UInt8(clamping: Int(round(hueToRgb(p, q, h + 1.0 / 3.0) * 255.0)))
-        let g = UInt8(clamping: Int(round(hueToRgb(p, q, h) * 255.0)))
-        let b = UInt8(clamping: Int(round(hueToRgb(p, q, h - 1.0 / 3.0) * 255.0)))
-        return ColorSwatchRgba(r: r, g: g, b: b, a: a)
-    }
-
-    private static func hueToRgb(_ p: Double, _ q: Double, _ tInput: Double) -> Double {
-        var t = tInput
-        if t < 0 { t += 1.0 }
-        if t > 1 { t -= 1.0 }
-        if t < 1.0 / 6.0 { return p + (q - p) * 6.0 * t }
-        if t < 0.5 { return q }
-        if t < 2.0 / 3.0 { return p + (q - p) * (2.0 / 3.0 - t) * 6.0 }
-        return p
-    }
-
-    private static func hexDigit(_ scalar: UnicodeScalar) -> UInt8? {
-        switch scalar.value {
-        case 48...57: return UInt8(scalar.value - 48)
-        case 65...70: return UInt8(scalar.value - 55)
-        case 97...102: return UInt8(scalar.value - 87)
-        default: return nil
-        }
-    }
-
-    private static func skipSpaces(_ scalars: [UnicodeScalar], _ i: inout Int) {
-        while i < scalars.count && (scalars[i] == " " || scalars[i] == "\t") { i += 1 }
-    }
-
-    private static func matchPrefix(_ scalars: [UnicodeScalar], _ i: inout Int, _ word: String) -> Bool {
-        let target = Array(word.unicodeScalars)
-        guard i + target.count <= scalars.count else { return false }
-        for offset in 0..<target.count {
-            let v = scalars[i + offset].value
-            let lower = (v >= 65 && v <= 90) ? v + 32 : v
-            if lower != target[offset].value { return false }
-        }
-        i += target.count
-        return true
-    }
-
-    private static func parseByteComponent(_ scalars: [UnicodeScalar], _ i: inout Int) -> UInt8? {
-        let start = i
-        var value = 0
-        while i < scalars.count && scalars[i].value >= 48 && scalars[i].value <= 57 {
-            value = value * 10 + Int(scalars[i].value - 48)
-            if value > 255 { return nil }
-            i += 1
-        }
-        return i > start ? UInt8(value) : nil
-    }
-
-    private static func parseDouble(_ scalars: [UnicodeScalar], _ i: inout Int, allowNegative: Bool) -> Double? {
-        let start = i
-        if allowNegative && i < scalars.count && scalars[i] == "-" { i += 1 }
-        var hasDigit = false
-        while i < scalars.count && scalars[i].value >= 48 && scalars[i].value <= 57 {
-            hasDigit = true
-            i += 1
-        }
-        if i < scalars.count && scalars[i] == "." {
-            i += 1
-            while i < scalars.count && scalars[i].value >= 48 && scalars[i].value <= 57 {
-                hasDigit = true
-                i += 1
+    /// Core が決めた色見本 (#rrggbbaa) を RGBA に展開する。
+    static func decode(_ hex: String?) -> ColorSwatchRgba? {
+        guard let hex else { return nil }
+        let scalars = Array(hex.unicodeScalars)
+        guard scalars.count == 9, scalars[0] == "#" else { return nil }
+        var d = [UInt8]()
+        d.reserveCapacity(8)
+        for i in 1..<9 {
+            let v = scalars[i].value
+            switch v {
+            case 48...57: d.append(UInt8(v - 48))
+            case 65...70: d.append(UInt8(v - 55))
+            case 97...102: d.append(UInt8(v - 87))
+            default: return nil
             }
         }
-        guard hasDigit else {
-            i = start
-            return nil
-        }
-        let token = String(String.UnicodeScalarView(scalars[start..<i]))
-        return Double(token)
-    }
-
-    private static func parseSeparator(_ scalars: [UnicodeScalar], _ i: inout Int) -> Bool {
-        let before = i
-        skipSpaces(scalars, &i)
-        if i < scalars.count && scalars[i] == "," {
-            i += 1
-            skipSpaces(scalars, &i)
-            return true
-        }
-        return i > before
-    }
-
-    private static func parseAlphaSuffix(_ scalars: [UnicodeScalar], _ i: inout Int) -> UInt8? {
-        skipSpaces(scalars, &i)
-        if i < scalars.count && scalars[i] == ")" {
-            i += 1
-            return i == scalars.count ? 255 : nil
-        }
-        guard i < scalars.count && (scalars[i] == "," || scalars[i] == "/") else { return nil }
-        i += 1
-        skipSpaces(scalars, &i)
-        guard var val = parseDouble(scalars, &i, allowNegative: false) else { return nil }
-        if i < scalars.count && scalars[i] == "%" {
-            i += 1
-            guard val >= 0 && val <= 100 else { return nil }
-            val /= 100.0
-        } else if val < 0 || val > 1 {
-            return nil
-        }
-        skipSpaces(scalars, &i)
-        guard i < scalars.count && scalars[i] == ")" else { return nil }
-        i += 1
-        return i == scalars.count ? UInt8(clamping: Int(round(val * 255.0))) : nil
+        return ColorSwatchRgba(
+            r: (d[0] << 4) | d[1],
+            g: (d[2] << 4) | d[3],
+            b: (d[4] << 4) | d[5],
+            a: (d[6] << 4) | d[7]
+        )
     }
 }
 
@@ -387,6 +226,7 @@ final class CompositionPanel: NSObject, NSTableViewDataSource, NSTableViewDelega
     private struct RowsKey: Equatable {
         let items: [String]
         let notes: [String?]
+        let colors: [String?]
         let numbered: Bool
         let range: Range<Int>
         let width: CGFloat
@@ -488,10 +328,13 @@ final class CompositionPanel: NSObject, NSTableViewDataSource, NSTableViewDelega
         let list = content.list
         let items = list?.items ?? []
         let notes = list?.notes ?? []
+        let colors = list?.colors ?? []
         let numbered = list?.numbered == true
         let numberWidth = numbered ? Self.numberColumnWidth : 0
         let candidates = items.enumerated().map { index, item in
-            candidateText(item, note: notes.indices.contains(index) ? notes[index] : nil)
+            candidateText(item,
+                          note: notes.indices.contains(index) ? notes[index] : nil,
+                          color: colors.indices.contains(index) ? colors[index] : nil)
         }
         // 表示中のパネルの大きさと中身を、途中の状態を見せずに一度に入れ替える。
         if window.isVisible { window.disableScreenUpdatesUntilFlush() }
@@ -572,7 +415,7 @@ final class CompositionPanel: NSObject, NSTableViewDataSource, NSTableViewDelega
 
         guideLabel.toolTip = content.guide
         meaningLabel.toolTip = meaning
-        let key = RowsKey(items: items, notes: notes, numbered: numbered, range: range, width: rowWidth)
+        let key = RowsKey(items: items, notes: notes, colors: colors, numbered: numbered, range: range, width: rowWidth)
         updateRows(newRows, key: key, selected: list?.selected ?? -1, viewportHeight: scrollHeight,
                    documentHeight: documentHeight, revealSelection: selectionWasVisible && viewportShrank)
         // 中身を並べ終えてから大きさを変えて描く。先に大きさを変えると、古い中身のまま広がった枠が一瞬見える。
@@ -608,11 +451,11 @@ final class CompositionPanel: NSObject, NSTableViewDataSource, NSTableViewDelega
         return ceil(label.cell?.cellSize(forBounds: bounds).height ?? 0)
     }
 
-    private func candidateText(_ item: String, note: String?) -> CandidateText {
+    private func candidateText(_ item: String, note: String?, color: String?) -> CandidateText {
         let title = styled(item, font: Self.candidateFont, color: .labelColor)
         measuringLabel.attributedStringValue = title
         let titleWidth = naturalWidth(of: measuringLabel)
-        let swatch = ColorSwatchParser.parseRgba(item)
+        let swatch = ColorSwatchRgba.decode(color)
         guard let note, !note.isEmpty else {
             return CandidateText(title: title, titleWidth: titleWidth, note: nil, noteWidth: 0, swatch: swatch)
         }

@@ -59,6 +59,9 @@ internal sealed record UtilityCandidates(IReadOnlyList<string> Candidates, Utili
 
     public IReadOnlyList<CandidateNote>? Notes { get; init; }
 
+    /// <summary>候補と同じ順・件数の色見本 (#rrggbbaa)。無ければ null。</summary>
+    public IReadOnlyList<string?>? Colors { get; init; }
+
     /// <summary>選んだら学習してよいか。時刻・設定・外の値で変わらない候補 (漢数字) だけ true にする。</summary>
     public bool Learnable { get; init; }
 
