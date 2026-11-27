@@ -14,7 +14,7 @@
 
 必要なもの:
 
-- Xcode、またはコマンドライン ツール (`xcode-select --install`)
+- Swift 6.1 以降を含む Xcode、またはコマンドライン ツール (`xcode-select --install`)
 - .NET 10 SDK (<https://dotnet.microsoft.com/download>。または `curl -sSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel 10.0`)
 - Mozc の変換ヘルパーとライセンスの 3 ファイル (`native/mozc/bin/mac/`)。以下の手順で用意します
 
@@ -90,8 +90,10 @@ bash mac/update.sh
 mac/build/Meltype.app/Contents/MacOS/Meltype --check-inputs mac/Resources/InputChecks.tsv
 mac/build/Meltype.app/Contents/MacOS/Meltype --self-test
 swift test --package-path mac
-sbcl --script tests/test_mac_scripts.lisp
+node --test mac/Tests/scripts.test.ts
 ```
+
+`mac/Tests/scripts.test.ts` (インストールのスクリプトのテスト) は、`.ts` をそのまま実行できる Node.js 22.18 以降で動かします (CI は Node.js 24)。
 
 `--check-inputs` と `--self-test` は、空の一時ディレクトリをデータの保存先にして実行します。利用者の Meltype の設定・学習データ・ユーザー辞書は読み書きせず、検査が終わると一時ディレクトリを削除します。
 
@@ -103,9 +105,15 @@ sbcl --script tests/test_mac_scripts.lisp
 log stream --predicate 'process == "Meltype"' --level debug
 ```
 
-## 配布用の zip を作る
+## 配布ファイルを作る
 
-ビルドした後に `bash mac/package.sh` を実行すると、`dist/` に配布用の zip ができます。zip 全体を展開して、`Install Meltype.command` または `bash install.sh` で入れます。
+ビルドした後に次を実行すると、`dist/` に DMG ができます。開いた DMG の「Install Meltype」から試せます。
+
+```bash
+bash mac/package.sh Meltype-mac-test.dmg
+```
+
+`bash mac/package.sh` は ZIP を作ります。ZIP 全体を展開し、`Install Meltype.command` または `bash install.sh` で入れます。
 
 ## 入力ソースの重複を直す
 
@@ -120,4 +128,4 @@ OS の API で登録し、有効化を要求した後、`com.apple.HIToolbox` �
 ## 版の番号
 
 ビルドの版の番号は、本体のプロジェクトの `Version`、環境変数 `MELTYPE_VERSION`、GitHub Actions ではリリースのタグから決まります。
-ネイティブのビルドとアプリの plist は同じ番号を使い、変換エンジンは版をアプリの plist から読みます。
+ネイティブのビルドとアプリの plist は同じ番号を使い、macOS のアプリ表示は plist、本体の「ばーじょん」の候補は共有 Core の版を使います。リリース前の版合わせは [リリース手順](../docs/dev/RELEASE.md) を参照してください。

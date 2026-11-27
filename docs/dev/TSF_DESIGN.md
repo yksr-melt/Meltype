@@ -8,15 +8,21 @@ Windows 版の Meltype を、Windows 正規の IME の仕組み (TSF, Text Servi
 
 ## 全体の形
 
-```
-アプリのプロセス (メモ帳・Chrome・VS Code …)            Meltype.exe (タスクトレイに常駐)
-┌──────────────────────────────┐            ┌───────────────────────────────┐
-│ MeltypeTip.dll (C++, TSF)       │  名前付き   │ TipServer                        │
-│  - キーを受け取る               │  パイプ     │  - つながり・入力欄ごとに        │
-│  - 未確定の文字を下線付きで置く  │ ◀───────▶ │    ImeHost                       │
-│  - 候補の一覧を描く              │ 1 メッセージ│  - 変換 (Mozc + Zenzai)           │
-│                                  │  = 1 JSON   │  - 学習データ・ユーザー辞書        │
-└──────────────────────────────┘            └───────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph app["入力先のアプリ"]
+        stub["MeltypeTip.dll"]
+        impl["MeltypeTipImpl.dll"]
+        stub --> impl
+    end
+    impl <-->|"名前付きパイプ / JSON"| server
+    subgraph resident["Meltype.exe"]
+        server["TipServer"]
+        host["接続ごとの ImeHost"]
+        runtime["共有の辞書・学習・エンジン"]
+        server --> host
+        host --> runtime
+    end
 ```
 
 | 場所 | 中身 |
@@ -25,7 +31,7 @@ Windows 版の Meltype を、Windows 正規の IME の仕組み (TSF, Text Servi
 | `src/Meltype.Windows/Tip/TipServer.cs` | Meltype.exe の中のパイプのサーバー。DLL が読めない入力欄の事実 (アプリ・ウィンドウのタイトル・UI Automation の要素・ゲームらしさ) を足して `ImeHost` に渡す |
 | `src/Meltype.Windows/Keyboard/KeyboardFront.cs` | もう 1 つのフロント (Meltype キーボード)。キーボードフックのキーを同じ `ImeHost` に渡し、確定を SendInput で入れ、変換ボックスを自分の窓に出す |
 | `packaging/meltype-ime.ps1`・`packaging/setup-ime.ps1` | IME を登録する / 外す。setup.exe (`packaging/Meltype.iss`)・アンインストーラー・Meltype.exe (トレイの「Meltype IME」) が setup-ime.ps1 を実行する |
-| `src/Meltype.Core/Ime/` | フロント (TSF・Meltype キーボード・Mac・IBus・fcitx5) と本体の境目 (`ImeEvent` / `ImeOutput`)。入力モードとモードを切り替えるキーの意味は `ImeSession` が決める |
+| `src/Meltype.Core/Ime/` | フロント (TSF・Meltype キーボード・Mac・IBus・fcitx5・TTY・Android) と本体の境目 (`ImeEvent` / `ImeOutput`)。入力モードとモードを切り替えるキーの意味は `ImeSession` が決める |
 | `src/Meltype.Core.Tests/ImeContractTests.cs` | 境目の契約テスト。判断を持たないフロントで出来事を送り、確定・表示・モード・受け取るキーを確かめる (どの OS でも流れる) |
 | `src/Meltype.Windows.Tests/TipHarness.cs` | `--tip-server` (サーバーだけ動かす)、`--tip-client <打鍵>` (パイプに打鍵を送って応答を出す) |
 | `src/Meltype.Windows.Tests/TipEndToEnd.cs` | `--tip-e2e [画像の保存先]` (登録した DLL を RichEdit の入力欄で動かす。数秒間ウィンドウが前面に出る。Meltype.exe は止めておく。`MELTYPE_E2E_EXTERNAL_SERVER=1` なら常駐している Meltype.exe につなぐ) |
@@ -95,7 +101,8 @@ stub が impl をロードし、Meltype の更新後は、アプリを再起動�
 |---|---|
 | ITfTextInputProcessorEx | IME として起動・終了 |
 | ITfKeyEventSink | キーを受け取り、サーバーに渡して「使ったか」を返す |
-| ITfThreadMgrEventSink / ITfTextEditSink | フォーカスが変わった・キャレットが変換中の文字の外に出た → 確定する。変換していないときにキャレットが動いた・文字が変わった → `CaretMoved` ですぐ伝える (コードの行か・前の語を確定し直すかは本体がキャレットの前の文字で決め、タスクバーの「あ / A」も応答で合わせる) |
+| ITfThreadFocusSink | 文書フォーカスが `null` の間に保持した入力を、スレッドのフォーカス喪失で確定する。キーのフォーカス通知が届かない場合も扱う |
+| ITfThreadMgrEventSink / ITfTextEditSink | 別の入力欄へ移った・キャレットが変換中の文字の外に出た → 確定する。同じ未確定範囲へ戻る一時的な文書フォーカスの切り替えでは入力を続ける。変換していないときにキャレットが動いた・文字が変わった → `CaretMoved` ですぐ伝える (コードの行か・前の語を確定し直すかは本体がキャレットの前の文字で決め、タスクバーの「あ / A」も応答で合わせる) |
 | ITfCompositionSink | アプリの側が変換中の文字を確定したとき (打っている途中で、キャレットがその後ろのままなら、次のキーで変換中に戻して続ける。空のノートに最初の文字を入れたときに、アプリが入力欄を作り直して確定することがあるため) |
 | ITfDisplayAttributeProvider | 下線の種類 (打っている途中は点線、変換した文節は細線、選んでいる文節は太線) |
 | ITfCompartmentEventSink | 日本語 ⇔ 英数 (IME の ON/OFF)。半角/全角 と、タスクバーの「あ / A」のボタン (ITfLangBarItemButton) で切り替える |
@@ -104,6 +111,26 @@ stub が impl をロードし、Meltype の更新後は、アプリを再起動�
 ゲームなど、候補を自分で描くアプリ (UILess) は、スレッドを `TF_TMAE_UIELEMENTENABLEDONLY` で始め、`GUID_TFCAT_TIPCAP_UIELEMENTENABLED` に登録した IME だけを有効にする。
 登録していないと、そのアプリでは IME が動かず、打ったキーがそのまま入る。そのため、このカテゴリに登録し、候補の一覧は必ず `ITfUIElementMgr` を通して出す。
 アプリが自分で描くときに渡すのは候補の一覧だけで、「もしかして」・打ったキー・案内・候補の意味は出ない。ページの区切りは Meltype が決める (`SetPageIndex` は受け付けない)。
+
+### 入力欄のフォーカスと未確定文字
+
+Excel はセルを選択した状態から文字を打ち始めると、同じ `ITfContext` のまま document manager のフォーカスを一度 `null` にして戻す。
+`null` の通知だけで確定すると、最初の子音が残り、`tesuto` が `tえすと` になる。
+未確定文字がある間は行き先が決まるまで候補を隠して入力を保持し、復帰先の COM identity と、選択位置が未確定範囲に収まることを確認して続ける。
+通知中に同期読み取りができなければ移動とは断定せず、次のキーの編集セッションで再確認する。
+選択位置を提供しない欄では、同じコンテキストで入力を続ける。取得失敗や選択が無いことを、範囲外への移動とはみなさない。
+アプリが TSF の変換を終了した場合は、既存の `ResumeOrCommit` が文字とキャレットを照合して再開する。
+
+別のコンテキスト・範囲外の選択位置・所有コンテキストの取り外しが分かったら、元の欄で確定する。
+別アプリへの移動では、文書フォーカスが残っていれば入力を保持する。`null` の間に保持していた入力だけを、キーまたはスレッドのフォーカス喪失で確定する。
+両方の喪失通知が来ても、未確定入力を解決した後は通知を送り直さない。復帰時の `Sync(true)` は既存のキー／文書通知に任せる。
+元の欄を同期編集できなければ、次の入力より先に Core へ `CommitRequested` を 1 回だけ送り、確定の文字を旧欄の変換に結び付けて TSF の変換を切り離す。
+編集ロックが無いと欄の属性は読めないので送らず、Core は直前の欄の属性 (Private など) で確定する。
+旧欄への反映 (確定の文字に置き換えて下線を消す) だけを遅らせ、旧欄が先に同期編集できたら、その編集セッションの冒頭で新しい入力より先に済ませる。
+変換ごと遅らせないので、旧欄の編集を待つ間に同じコンテキストへ戻って打った文字を、遅れた確定が巻き込まない。
+反映するときは範囲の文字が手放したときのままかを確かめ、アプリが書き換えていた・変換を終えていた・コンテキストを取り外していたら書き込まない。Core には確定を送り直さない。選択位置は設定しない。
+背景変換と候補クリックも、実行時に現在のフォーカスと未確定範囲を照合する。
+フォーカスが無い間の結果は適用せず、同じ欄へ戻ったときは現在の変換結果を取り直す。
 
 ### キーの流れ
 
@@ -152,6 +179,27 @@ stub が impl をロードし、Meltype の更新後は、アプリを再起動�
   タスクバーで文字を入力する Windows 10 のアドレス ツールバー (`Edit`) は除く。
 
 ## 通信
+
+状態は応答ごとに置き換え、確定・表示などの結果はその応答の分だけ適用します。JSON の項目は [ImeProtocol.cs](../../src/Meltype.Core/Ime/ImeProtocol.cs)、外側の要求は [TipServer.cs の TipRequest](../../src/Meltype.Windows/Tip/TipServer.cs) が定義します。
+
+```mermaid
+sequenceDiagram
+    participant TSF as TSF の DLL
+    participant Server as TipServer
+    participant Core as ImeHost
+    TSF->>Server: KeyPressed と入力欄の事実
+    Server->>Core: ImeEvent
+    Core-->>Server: ImeOutput
+    Server-->>TSF: state と result
+    Note over TSF: state を置き換え、確定と表示を適用
+    opt 非同期の変換結果が届く
+        Server-->>TSF: 別接続の wait に世代を通知
+        TSF->>Server: ConversionFinished
+        Server->>Core: ImeEvent
+        Core-->>Server: 更新された ImeOutput
+        Server-->>TSF: state と result
+    end
+```
 
 - 名前付きパイプ `\\.\pipe\Meltype.Tip.<ユーザーの SID>`。メッセージ単位で、1 メッセージが 1 JSON。
   要求は `{"impl":impl の SHA-256,"thread":入力スレッド,"x":…,"y":…,"event":{ImeEvent}}` (`TipRequest`)。`thread`・`x`・`y` は Meltype.exe が入力モードの表示と、自分の UI スレッドからの要求を見分けるのに使い、本体には渡さない。
@@ -239,16 +287,17 @@ DLL の中で、Direct2D + DirectWrite で描く (絵文字もカラーで出る
 |---|---|---|---|
 | 入力の本体 (ImeSession) | `src/Meltype.Core.Tests/SessionFacadeTests.cs`・`InputRegressionTests.cs` など | Windows・Linux・Mac | 打鍵ごとの確定・表示、予測の候補と Tab、変換中のショートカット、コードの行、英数の自動判定 |
 | フロントと本体の境目 (ImeHost の JSON) | `src/Meltype.Core.Tests/ImeContractTests.cs` | Windows・Linux・Mac | 入力 → 変換 → 確定 → 続けて入力、BackSpace・Esc、確定で変換を終える、キャレットを動かしたら前の確定を直さない、入力欄 (instance) ごとに分ける・閉じる、つなぎ直したフロントの続きを受け持たない、受け持たなくなったときの確定、入力モードのキー、受け取るキー、選んだ文字の再変換、コードの行 |
-| TipServer の要求と入力モードの表示 | `src/Meltype.Windows.Tests/TipIndicatorTests.cs` | Windows (build.yml の test) | 要求の位置の読み取り、明示的な切り替えで設定が ON のときだけ表示する |
+| TipServer の要求と入力モードの表示 | `src/Meltype.Windows.Tests/TipIndicatorTests.cs` | Windows (`windows.yml` の `test`) | 要求の位置の読み取り、明示的な切り替えで設定が ON のときだけ表示する |
 | パイプ | `--tip-client` | 手で流す | 実際のパイプでのやり取り |
 | DLL を含めた全体 | `--tip-e2e` | 手で流す (人が操作しているデスクトップが要る) | 登録した DLL で、RichEdit の入力欄に実際に打つ |
 
-- **契約テストが通っても、実際の Windows のデスクトップでキーが届き、正しく打てることは保証しない。** DLL (native/tip、C++) の TSF の処理 (キーの受け取り・未確定の文字の表示・フォーカスの通知・候補の一覧の描画) と、OS がキーを IME に配る部分は、自動テストでは通らない
-- 自動テストに無いもの: 設定の読み直し (config.json の書き換え) をはさむ流れ
+- **契約テストが通っても、実際の Windows のデスクトップでキーが届き、正しく打てることは保証しない。** DLL の TSF と OS がキーを IME に配る部分の全体は、Core のテストだけでは確かめられない。`InputEvents.exe` が確認する自動開閉・タスクバーのキー通過・未確定入力のフォーカス切り替えと、対話型デスクトップが必要な `--tip-e2e` を分けて扱う
+- `native/tip/tests/build-input-event-test.ps1` で作る `native/tip/bin/tests/InputEvents.exe --composition-only` は、テストのテキストストアと実際の TSF で未確定範囲を作り、実機で記録した通知順を渡す。先頭文字を保持して続ける場合、アプリが変換を終了した場合、範囲外・別欄・別スレッドへの移動、編集ロック中の離脱 (表示と違う確定の文字を旧欄に入れる・戻ってすぐ打つ・アプリが先に終える)、コンテキストの取り外しを確かめる。パイプの応答と、文書なしの通知時の `GetFocus` の結果を固定し、実際のキー配送や Excel 固有のイベント発生はこのテストに含めない
+- Core の契約テストは設定値の変更も確かめる。実ファイルの `config.json` を書き換えて DLL・常駐側・画面へ反映されるところまでの流れは、実機で確認する
 - DLL まで含めた実際の打鍵のテスト (`--tip-e2e`) を定期的に流すなら、隔離した対話型の Windows で、任意または定期の実行にする。外部の Pull Request のコードを、個人の PC や権限の強いセルフホストランナーで無条件に動かさない
 - 不具合の報告を直したら、Core で確かめられることは Core のテストに、フロントとの境目の受け渡しで起きることは `ImeContractTests` に、操作の順番どおりに足す
 
 ## ビルドに要るもの
 
 - .NET 10 SDK
-- Visual Studio Build Tools の「C++ によるデスクトップ開発」(MSVC と Windows SDK)。無ければ `Build-Package.ps1` は Meltype IME を入れずにインストーラーを作る
+- Visual Studio Build Tools の「C++ によるデスクトップ開発」(MSVC と Windows SDK)。通常版の `Build-Package.ps1` は x64・ARM64X・x86 の DLL を必ず作り、1 つでも失敗したら止まる。手元の `Install-Meltype.ps1` は、その PC に必要なアーキテクチャを作る。必要なコンポーネントは [DEVELOPMENT.md](DEVELOPMENT.md#windows-でビルドして試す) を参照。ポータブル版は DLL を作らない

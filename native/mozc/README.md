@@ -1,7 +1,9 @@
 # Mozc の変換ヘルパー
 
-Meltype は全 OS で、[Mozc](https://github.com/google/mozc)
+Meltype はデスクトップ・TTY で、[Mozc](https://github.com/google/mozc)
 (Google 日本語入力のオープンソース版、BSD-3-Clause) の変換エンジンを使う小さなプログラム `meltype_mozc_helper` を別のプロセスで動かして変換します。
+
+Android では同じプロセス内の Mozc を JNI 経由で使い、ヘルパーと同じ 1 行の要求形式をコールバックで受け渡します ([Android の構成](../../android/README.md#リポジトリ構成))。
 
 | ファイル | 中身 |
 | --- | --- |
@@ -28,7 +30,9 @@ GitHub Actions では `.github/workflows/windows.yml` の `mozc` ジョブが同
 
 Linux・macOS では `native/mozc/build-mozc-helper.sh` でビルドします (macOS は Xcode が要る。`mac.yml` の Mac 版のビルドも同じスクリプト)。GitHub Releases の依存ファイルは Bazel の公式ミラー (`mirror.bazel.build`) を先に試し、なければ元の URL から取得します。取得した内容は、依存関係の定義にあるハッシュで Bazel が検証します。
 
-Meltype は Mozc に学習させません。Mozc のユーザーデータの場所 (`%LOCALAPPDATA%\Meltype\mozc\`) は、Meltype が起動のたびに学習データ (`boundary.db`・`segment.db`) だけを消します。
+Meltype は Mozc に学習させません。Mozc のユーザーデータの場所 (OS ごとの Meltype データフォルダーの `mozc/`) から、Meltype は起動のたびに学習データ (`boundary.db`・`segment.db`) だけを消します。データフォルダーの場所は [共通の使い方](../../docs/USAGE.md#データと学習) を参照してください。
+
+ヘルパーは、Mozc の設定を操作する候補 (`COMMAND_CANDIDATE`) を変換結果から除外します。「シークレットモードをオン」などは入力する文字ではなく、Meltype ではその操作も実行しないためです。
 
 ## Mozc-UT の辞書を使う (任意)
 

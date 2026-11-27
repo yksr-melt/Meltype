@@ -21,7 +21,7 @@ internal interface IUtilityConversion
 /// 変換を始めたときの入力。Reading は入力の全体が日本語の区間 1 つのときの読み (それ以外は null)。
 /// 打った英字は Text.Raw (かな入力では物理キーの表記)。
 /// </summary>
-internal sealed record UtilityInput(CompositionTextState Text, string? Reading, bool Direct, UtilityContext Context);
+internal sealed record UtilityInput(TextReading Text, string? Reading, bool Direct, UtilityContext Context);
 
 /// <summary>変換を始めたときの設定と、候補に使う外の値。</summary>
 internal sealed record UtilityContext(
@@ -59,6 +59,9 @@ internal sealed record UtilityCandidates(IReadOnlyList<string> Candidates, Utili
 
     public IReadOnlyList<CandidateNote>? Notes { get; init; }
 
+    /// <summary>候補と同じ順・件数の色見本 (#rrggbbaa)。無ければ null。</summary>
+    public IReadOnlyList<string?>? Colors { get; init; }
+
     /// <summary>選んだら学習してよいか。時刻・設定・外の値で変わらない候補 (漢数字) だけ true にする。</summary>
     public bool Learnable { get; init; }
 
@@ -76,9 +79,11 @@ internal static class UtilityConversions
     internal static readonly IUtilityConversion[] All =
     [
         new BracketConversion(),
+        new RepeatedPeriodsConversion(),
         new CalculatorConversion(),
         new SlashDateConversion(),
         new GitHubIssueConversion(),
+        new ColorConversion(),
         new TypedDateConversion(),
         new KanjiNumberConversion(),
         new TodayConversion(),
@@ -88,6 +93,7 @@ internal static class UtilityConversions
         new TraditionalUnitConversion(),
         new CurrencyConversion(),
         new ClipboardConversion(),
+        new UuidConversion(),
         new VersionConversion(),
         new KanjiPartsConversion(),
     ];

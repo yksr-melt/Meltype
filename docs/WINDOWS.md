@@ -3,7 +3,8 @@
 </p>
 
 <a name="meltype-for-windows"></a>
-<p align="center"><img src="images/headings/windows/title.svg" alt="Meltype for Windows" height="80"></p>
+
+# Meltype for Windows
 
 <p align="center"><b>雪解けのように、半角/全角の壁を溶かす日本語入力。</b></p>
 
@@ -31,19 +32,17 @@
 
 Windows 版のインストール・設定・困ったときの説明です。キー操作と、どの OS でも共通の機能は [USAGE.md](USAGE.md) にあります。
 
-<br>
-
 <a name="動く環境"></a>
-<img src="images/headings/windows/01.svg" alt="動く環境" height="53"><br>
+
+## 動く環境
 
 - Windows 10 / 11 (64bit)。ARM64 は Windows 11
 
 .NET は同梱しているので、別にインストールする必要はありません。
 
-<br>
-
 <a name="インストール"></a>
-<img src="images/headings/windows/02.svg" alt="インストール" height="53"><br>
+
+## インストール
 
 1. [Releases](https://github.com/yksr-melt/Meltype/releases/latest) から `Meltype-<version>-setup.exe` をダウンロード
 2. 開いて、案内どおりに進める
@@ -51,12 +50,13 @@ Windows 版のインストール・設定・困ったときの説明です。キ
 
 新しい版は自動で入ります。
 
-- 「Windows によって PC が保護されました」と出たら、「詳細情報」→「実行」。コード署名をしていないため表示されます
+- 「Windows によって PC が保護されました」と出たら、公式リリースから取得したことを確認し、「詳細情報」で発行元・ファイル名を確かめてから実行します。SmartScreen の表示は署名の有無だけでは決まりません。署名の扱いは [コード署名](CODE-SIGNING.md) にあります
 - インストールせずに使うときは、ポータブル版 `Meltype-<version>-windows-portable.zip` をフォルダーごと展開して `Meltype.exe` を実行します。設定と学習データは `Meltype.exe` の隣の `data` に入ります。Meltype IME・自動起動・自動更新は使えず、Meltype キーボードで動きます
 - 「Meltype を終了できませんでした」と出たら、タスクトレイの Meltype のアイコンを右クリック →「終了」してから、もう一度インストールしてください
 
 <a name="meltype-ime"></a>
-<img src="images/headings/windows/s01.svg" alt="Meltype IME" height="40">
+
+### Meltype IME
 
 インストールの途中で、Meltype IME を Windows に登録するための管理者権限の確認が出ます。
 「はい」を選ぶと [Meltype IME](#動作モード) で、「いいえ」を選ぶと Meltype キーボードで動きます。あとから登録するときは、タスクトレイのアイコンを右クリック →「Meltype IME」を選びます。
@@ -64,7 +64,8 @@ Windows 版のインストール・設定・困ったときの説明です。キ
 Meltype IME を登録していると、新しい版の Meltype IME が変わっているときだけ、更新の途中でも管理者権限の確認が出ます。「いいえ」を選ぶと、Meltype を更新せずに前の版のまま使い、次に Windows にサインインしたときにもう一度聞きます。
 
 <a name="ウイルスを検出しましたと出たとき"></a>
-<img src="images/headings/windows/s02.svg" alt="「ウイルスを検出しました」と出たとき" height="40">
+
+### 「ウイルスを検出しました」と出たとき
 
 SmartScreen の警告とは別のものです。誤検知のこともありますが、検出名だけでは見分けられません。
 
@@ -74,20 +75,20 @@ SmartScreen の警告とは別のものです。誤検知のこともありま�
 
 ファイルが本物か確かめたいときは、リリースのページにある SHA-256 と比べられます。PowerShell なら `Get-FileHash .\Meltype-<version>-setup.exe` です。
 
-<br>
-
 <a name="動作モード"></a>
-<img src="images/headings/windows/03.svg" alt="動作モード" height="53"><br>
+
+## 動作モード
 
 タスクトレイのアイコンを右クリックして、次の 2 つから選びます。判定・変換・キー操作はどちらも同じです。
 
 | モード | 動き |
 | --- | --- |
 | **Meltype IME** (既定) | Windows の IME として、打った文字が入力欄にそのまま下線付きで入る。変換の候補は入力位置の下に一覧で出る |
-| **Meltype キーボード** (Meltype IME を入れていないときの既定) | カーソルの下に出る変換ボックスで入力する。Enter を押すまで、入力欄には何も入らない |
+| **Meltype キーボード** (Meltype IME を入れていないときの既定) | 変換ボックスで入力する (既定は入力位置に重ねる)。確定した文字を入力欄に送る |
 
 <a name="meltype-ime-で入力する"></a>
-<img src="images/headings/windows/s03.svg" alt="Meltype IME で入力する" height="40">
+
+### Meltype IME で入力する
 
 - 入れると、既定の入力方式が Meltype になります (自分で既定を決めていたときは変えません)。Microsoft IME など、ほかの IME との切り替えは <kbd>Win</kbd> + <kbd>Space</kbd> です
 - 日本語の入力方式が 2 つになるので、<kbd>Ctrl</kbd> + <kbd>Shift</kbd> でも入力方式が切り替わります。ゲームなどで困るときは、「設定」→「時刻と言語」→「入力」→「キーボードの詳細設定」→「入力言語のホット キー」→「キー シーケンスの変更」で、「キーボード レイアウトの切り替え」を「割り当てなし」にしてください
@@ -95,7 +96,7 @@ SmartScreen の警告とは別のものです。誤検知のこともありま�
 - 設定「カッコを打ったら中にカーソルを移動」が ON のとき、`「」`・`（）`・`()` などの空の括弧を <kbd>Enter</kbd> で確定すると、改行せず括弧の中へ移ります。Windows Terminal ではこの移動は未対応です
 - <kbd>Win</kbd> + <kbd>X</kbd> のメニューでは、文字のアクセスキーと <kbd>Space</kbd> による項目の選択を使えます。<kbd>Space</kbd> を入力モードの切り替えに設定していても、メニューの操作を優先します
 - Chrome など一部の入力欄では、空の括弧を <kbd>Space</kbd> で変換し、続けて文字を打って括弧を確定すると、次の文字は閉じ括弧の後ろに入ります。括弧の中に入力するには、先に <kbd>Enter</kbd> で括弧を確定します
-- <kbd>Ctrl</kbd> + <kbd>Enter</kbd> は変換中でもアプリに渡るので、チャットの送信などに使えます
+- 入力・変換中の <kbd>Ctrl</kbd> + <kbd>Enter</kbd> は文字を確定します。チャットなどで送信に使う場合は、確定した後でもう一度押します
 - <kbd>半角/全角</kbd> か <kbd>Alt</kbd> + <kbd>&#96;</kbd> で日本語 ⇔ 英数です (設定の「入力モード切り替えキー」で変えられます)。タスクバーの「あ」「A」をクリックしても切り替わります
 - タスクトレイの Meltype が動いていない・一時停止中・動作モードが Meltype IME でないときは、Meltype IME を選んでいても英字がそのまま入ります
 - 管理者として動いているアプリ・サインインや UAC の画面・パスワードの入力欄・アプリ別設定で OFF にしたアプリでは何もしません (英字がそのまま入ります)
@@ -104,9 +105,12 @@ SmartScreen の警告とは別のものです。誤検知のこともありま�
 - IME の登録は PC 全体です。同じ PC のほかのユーザーも Meltype を使っているときにアンインストールすると、そのユーザーの Meltype IME も使えなくなります (そのユーザーがトレイの「Meltype IME」を選び直せば戻ります)
 
 <a name="今のモード-日本語--英数-の見分け方"></a>
-<img src="images/headings/windows/s04.svg" alt="今のモード (日本語 / 英数) の見分け方" height="40">
+
+### 今のモード (日本語 / 英数) の見分け方
 
 Meltype IME では、タスクバーの「あ」「A」が今のモードです。設定の「入力モードをカーソルの近くに表示」で、切り替えたとき (と入力欄に入ったとき) にカーソルの近くにも出せます。
+
+既定では、英数に切り替えた後はそのまま英数で入力できます。英数状態でローマ字から日本語に自動で戻すには、設定の「判定」で「英数状態でもローマ字を検知」を ON にします。以前から ON の場合は、英数を維持したいときにこの設定を OFF にしてください。
 
 Meltype キーボードのときは、タスクバーの IME の表示は常に「A」になります (故障ではありません)。Meltype が Windows の IME を OFF にして、代わりに入力を受け持っているためです。今のモードは、次のどちらかで確かめてください。
 
@@ -115,34 +119,33 @@ Meltype キーボードのときは、タスクバーの IME の表示は常に�
 
 タスクバーの「A」が紛らわしいときは、Windows の設定で入力インジケーターを非表示にできます (Windows 10: 設定 → 個人用設定 → タスクバー → システム アイコンのオン/オフ →「入力インジケーター」)。
 
+キーボードの ImeOn (Lang1) キーで日本語、ImeOff (Lang2) キーで英数にできます。
+
 <a name="ほかの-ime-と併用するとき"></a>
-<img src="images/headings/windows/s05.svg" alt="ほかの IME と併用するとき" height="40">
+
+### ほかの IME と併用するとき
 
 Meltype IME では、<kbd>Win</kbd> + <kbd>Space</kbd> でほかの IME に切り替えます。
 
 Meltype キーボードのときは、Windows の IME (Microsoft IME・Google 日本語入力など) を自動で OFF にします。ほかの IME を使いたいときは、<kbd>Ctrl</kbd> + <kbd>半角/全角</kbd> で Meltype を一時停止してください。
 
-<br>
-
 <a name="アプリの種類-コードエディターターミナル"></a>
-<img src="images/headings/windows/04.svg" alt="アプリの種類 (コードエディター・ターミナル)" height="53"><br>
+
+## アプリの種類 (コードエディター・ターミナル)
 
 アプリ別設定の「種類」を **コード** にしたアプリ (既定で VS Code・Cursor・Visual Studio・JetBrains の IDE・Sublime Text・Notepad++・Windows Terminal・PowerShell・コマンドプロンプトなど) では、基本は英数のまま通し、日本語を書く場所だけ判定します。Meltype IME でも Meltype キーボードでも同じです。
 
-- コードの中はキーをそのままアプリへ通します (補完もそのまま使えます)
-- 今の行のキャレットより前がコメント (`//` `#` `--` `/* …` `<!-- …` `REM`) か文字列 (`"…` `'…` `` `… ``) の中なら、日本語を判定します。`#include` `#region` のような指令や `x--` はコメントとみなしません
-- コードの行で <kbd>半角/全角</kbd> を押すと、日本語で入力できます (改行しても続きます。もう一度押すか、クリック・矢印でキャレットを別の場所に動かすと戻ります)
-- README.md などの文章ファイル (ウィンドウのタイトルが .md .txt など)、チャット・AI への入力欄 (VS Code の Copilot Chat など)、ターミナルで動く AI の入力行 (Claude Code・Gemini CLI・Codex) では、ふつうどおり日本語を判定します
-
-<br>
+どこで日本語を判定するか、コメントの記号の設定、コードの行で日本語を打つ方法は、[共通の使い方](USAGE.md#コードエディターとターミナル) にあります。
 
 <a name="変換ボックス"></a>
-<img src="images/headings/windows/05.svg" alt="変換ボックス" height="53"><br>
+
+## 変換ボックス
 
 Meltype キーボードで入力するときの変換ボックスの設定と、変換ボックスが出ないときの対処です。
 
 <a name="変換ボックスの見た目と位置"></a>
-<img src="images/headings/windows/s06.svg" alt="変換ボックスの見た目と位置" height="40">
+
+### 変換ボックスの見た目と位置
 
 「Meltype の設定」の「表示」で変えられます。
 
@@ -161,7 +164,8 @@ Meltype キーボードで入力するときの変換ボックスの設定と、
 - 文字の下に小さく出る打ったキーは「打ったキーを表示」で、漢字にする前の形に変えたり消したりできます
 
 <a name="変換ボックスが出ない場面"></a>
-<img src="images/headings/windows/s07.svg" alt="変換ボックスが出ない場面" height="40">
+
+### 変換ボックスが出ない場面
 
 - 文字入力欄以外 (Gmail の `j`/`k` のようなショートカット、エクスプローラー、ゲーム)
 - パスワード欄
@@ -171,48 +175,45 @@ Meltype キーボードで入力するときの変換ボックスの設定と、
 出ない理由はトレイの「ログ / 判定理由」に「フォーカス → 入力欄ではない: …」のように残ります。
 
 <a name="文字を打つ所なのに変換ボックスが出ないアプリ"></a>
-<img src="images/headings/windows/s08.svg" alt="文字を打つ所なのに変換ボックスが出ないアプリ" height="40">
+
+### 文字を打つ所なのに変換ボックスが出ないアプリ
 
 画面をすべて自分で描くアプリ (Premiere Pro など) では、文字を打つ所でも変換ボックスが出ないことがあります。ログに「フォーカス → 入力欄ではない: …」と出ていたら、次のどちらかで打てます。
 
-- 設定の「アプリ」→「アプリ別設定」にプロセス名 (例: `Adobe Premiere Pro.exe`) の行を足し (「実行中のアプリから追加…」でも足せます)、「入力欄とみなす」を ON にする。そのアプリでは `V` `C` のような 1 文字のショートカットも変換ボックスに入るので、ショートカットを使うときは <kbd>Ctrl</kbd> + <kbd>半角/全角</kbd> で一時停止してください
+- 設定の「動作する場面」→「アプリ別設定」にプロセス名 (例: `Adobe Premiere Pro.exe`) の行を足し (「実行中のアプリから追加…」でも足せます)、「入力欄とみなす」を ON にする。そのアプリでは `V` `C` のような 1 文字のショートカットも変換ボックスに入るので、ショートカットを使うときは <kbd>Ctrl</kbd> + <kbd>半角/全角</kbd> で一時停止してください
 - アプリ別設定でそのアプリを OFF にして、Windows の IME で打つ
 
-<br>
-
 <a name="日本語キーボードのときだけ動作させる"></a>
-<img src="images/headings/windows/06.svg" alt="日本語キーボードのときだけ動作させる" height="53"><br>
 
-設定の「全般」→「日本語キーボードのときだけ動作」を ON にすると、前面の入力欄で日本語のキーボード / IME が選ばれているときだけ動作します (既定は OFF)。
+## 日本語キーボードのときだけ動作させる
+
+設定の「動作する場面」→「日本語キーボードのときだけ動作」を ON にすると、前面の入力欄で日本語のキーボード / IME が選ばれているときだけ動作します (既定は OFF)。
 <kbd>Win</kbd> + <kbd>Space</kbd> などで韓国語・英語などに切り替えると Meltype は止まり、日本語に戻すと再開します。判定するのは Windows の入力言語で、物理キーボードの JIS / US 配列ではありません。
 
-<br>
-
 <a name="貼り付けで入力するアプリ"></a>
-<img src="images/headings/windows/07.svg" alt="貼り付けで入力するアプリ" height="53"><br>
 
-確定した文字を 1 文字ずつ送ると取り違えるアプリ (DaVinci Resolve で「あいうえお」→「あああああ」) では、クリップボードを使って貼り付けで入れます。元のクリップボードの中身は 0.5 秒後に戻します。
+## 貼り付けで入力するアプリ
+
+Meltype キーボードで、確定した文字を 1 文字ずつ送ると取り違えるアプリ (DaVinci Resolve で「あいうえお」→「あああああ」) では、クリップボードを使って貼り付けで入れます。元のクリップボードの中身は、貼り付け後に戻します。
 
 - Qt のアプリ (LINE・OBS Studio・Telegram Desktop・DaVinci Resolve など) は自動で貼り付けになります
-- ほかのアプリは、設定の「アプリ」→「アプリ別設定」で「確定した文字の入れ方」を「貼り付け」にします
+- ほかのアプリは、設定の「動作する場面」→「アプリ別設定」で「確定した文字の入れ方」を「貼り付け」にします
 - 貼り付けにしたくないアプリは、「確定した文字の入れ方」を「1 文字ずつ送る」にします
 
-<br>
-
 <a name="zenzai-ニューラルかな漢字変換"></a>
-<img src="images/headings/windows/08.svg" alt="Zenzai (ニューラルかな漢字変換)" height="53"><br>
 
-[Zenzai](https://github.com/ensan-hcl/azooKey) (azooKey の zenz モデル) で、前の文脈を見てかな漢字変換します。**既定で ON** で、llama.cpp の `llama-server.exe` (b11719 の CPU 版) とモデル [zenz-v3.2-small](https://huggingface.co/Miwa-Keita/zenz-v3.2-small-gguf) (Apache-2.0) を Meltype に同梱しています (`app\zenzai\`)。
+## Zenzai (ニューラルかな漢字変換)
+
+[Zenzai](https://github.com/ensan-hcl/azooKey) (azooKey の zenz モデル) で、前の文脈を見てかな漢字変換します。**既定で ON** で、llama.cpp の `llama-server.exe` (CPU 版) とモデル [zenz-v3.2-small](https://huggingface.co/Miwa-Keita/zenz-v3.2-small-gguf) (Apache-2.0) を Meltype に同梱しています (`app\zenzai\`)。
 
 - Meltype が llama-server を 127.0.0.1 で起動します。使えないときは、Mozc で変換します
 - Zenzai の答えを出しているときは、変換ボックスの下の説明の行の頭に「Zenzai」と出ます。候補の一覧では、Zenzai の答えの候補の右に「Zenzai」と出ます。Zenzai の状態はトレイのメニューに出ます
 - CPU の負荷が気になるときは、設定の「Zenzai を使う」を OFF にしてください
 - 自分で用意した llama-server や zenz v3 系のモデルを使うときは、「Zenzai: llama-server の場所」「Zenzai: モデル (GGUF) の場所」に書きます (空なら同梱のもの)。GPU 版 (Vulkan・CUDA) の llama-server なら、「Zenzai: 使う GPU」に `llama-server --list-devices` で出る名前 (例: `Vulkan0`) を書くと GPU で計算します
 
-<br>
-
 <a name="タスクトレイと設定"></a>
-<img src="images/headings/windows/09.svg" alt="タスクトレイと設定" height="53"><br>
+
+## タスクトレイと設定
 
 - <kbd>Ctrl</kbd> + <kbd>半角/全角</kbd>、アイコンのダブルクリック、または <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>F12</kbd> で一時停止 / 再開します (<kbd>F12</kbd> がほかのアプリと重なっていたら <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>F11</kbd> → <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Alt</kbd> + <kbd>A</kbd> → <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>Pause</kbd> の順に使います)
 - 右クリックで、動作モード・プロファイル・ログ / 判定理由・データフォルダ・アンインストールなどを選べます
@@ -223,12 +224,11 @@ Meltype キーボードで入力するときの変換ボックスの設定と、
 - **プレリリース版の自動更新**: 設定の「更新」→「プレリリース版も自動で更新する」を ON にすると、正式版の前に公開するプレリリース版 (`1.3.1-pre.4` など) にも更新します。不具合が含まれることがあります
 - **リリースノート**: 更新したあとの最初の起動で、その版のリリースノートを一度だけ出します。インストール版では、あとから見るときはトレイの「更新」→「リリースノート...」から開けます (ポータブル版には「更新」メニューはありません)。自動で出すかは、設定の「更新」→「更新後にリリースノートを表示する」か、リリースノートの画面の「今後表示しない」で変えられます
 
-<br>
-
 <a name="おかしな動きがあったら"></a>
-<img src="images/headings/windows/10.svg" alt="おかしな動きがあったら" height="53"><br>
 
-Meltype を更新した後、前から開いていたアプリで日本語を入力できない (英字のまま入る) ときは、そのアプリが前の版の Meltype IME を読み込んだままです。PC を再起動してください (そのアプリを閉じて開き直しても直ります。Meltype が見つけたときは、通知と、打っている所の表示でも知らせます)。
+## おかしな動きがあったら
+
+Meltype を更新した後、前から開いていたアプリで日本語を入力できず、Meltype が再起動を求めているときは、そのアプリに古い Meltype IME の DLL が残っています。通常は自動で入れ替わりますが、入れ替えられない DLL の更新では再起動が必要です。PC を再起動してください (そのアプリを閉じて開き直しても直ります。Meltype が見つけたときは、通知と、打っている所の表示でも知らせます)。
 
 漢字に変換されず、ひらがなのまま確定するときは、Meltype が同梱の Mozc (`app\mozc\meltype_mozc_helper.exe`) を起動できていません。ログ (右クリック →「ログ / 判定理由...」) に「Mozc の変換ヘルパーを起動できません」か「Mozc を使えませんでした」と出ていれば、Meltype を入れ直してください。会社の PC でアプリの実行が制限されているときは、管理者に `meltype_mozc_helper.exe` の実行を許可してもらってください。
 
@@ -238,28 +238,27 @@ Meltype を更新した後、前から開いていたアプリで日本語を入
 2. 何と打って (例: `kyouhagoogle` と打って Enter)
 3. どうなったか (例: 「今日はごおｇぇ」になった)
 
-あわせて、右クリック →「ログ / 判定理由...」→「コピー」で、ログを貼り付けてもらえるとさらに助かります。ログには直前に打った文字の一部が含まれるので、気になる部分は消してから送ってください。
+あわせて、右クリック →「ログ / 判定理由...」→「コピー」で、ログを貼り付けてもらえるとさらに助かります。入力した文字は設定「ログに入力した文字を残す」が ON のときだけ残ります。アプリ名・入力欄の名前なども含まれるので、中身を確認し、見られて困る部分を消してから送ってください。
 Meltype IME の不具合のときは、`%LOCALAPPDATA%\Meltype` に `tip-log` という名前の空のファイルを作ると、`tip.log` に Meltype IME の動きが残ります。
 
-<br>
+Chrome・Edge だけで入力方式が Meltype IME に切り替わらないときは、ブラウザーをすべて終了して開き直した後、`tip.log` にそのブラウザーの `Activate` や DLL の読み込みエラーがあるかを確認してください。ESET を使っている環境では、「ツール」→「ログファイル」→「ブラウザーの保護」にも `MeltypeTip.dll`・`MeltypeTipImpl.dll` の読み込み拒否が記録される場合があります。該当する記録があれば報告に添えてください。
 
 <a name="保存されるデータ"></a>
-<img src="images/headings/windows/11.svg" alt="保存されるデータ" height="53"><br>
+
+## 保存されるデータ
 
 設定と学習データは `%LOCALAPPDATA%\Meltype` に保存されます。学習の消し方は [USAGE.md の「データと学習」](USAGE.md#データと学習)、通信については [README の「プライバシー」](../README.md#プライバシー) にあります。
 
-<br>
-
 <a name="制限"></a>
-<img src="images/headings/windows/12.svg" alt="制限" height="53"><br>
+
+## 制限
 
 - カーソルの前後の文字を読めないアプリでは、Meltype が最後に確定した文字列で代用します。Chrome などでは、カーソルの前後を読むために動作が少し重くなることがあります
 - 32bit Windows には対応していません
 
-<br>
-
 <a name="アンインストール"></a>
-<img src="images/headings/windows/13.svg" alt="アンインストール" height="53"><br>
+
+## アンインストール
 
 タスクトレイの Meltype のアイコンを右クリック →「アンインストール...」を選びます。Windows の「設定」→「アプリ」から消すこともできます。
 

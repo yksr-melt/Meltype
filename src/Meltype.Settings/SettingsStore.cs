@@ -24,6 +24,7 @@ internal sealed class SettingsStore
         {
             if (ReferenceEquals(_file.Current, _shown)) return;
             _shown = _file.Current;
+            Updated?.Invoke();
             Changed?.Invoke();
         });
         _watch.Start();
@@ -33,6 +34,12 @@ internal sealed class SettingsStore
 
     /// <summary>画面の値を読み直す (ほかのプロセスが config.json を書いた・設定全体を変えた・保存できなかった)。</summary>
     public event Action? Changed;
+
+    /// <summary>
+    /// config.json の値が変わった (この画面で 1 項目を変えた・ほかのプロセスが書いた)。<see cref="Changed"/> と違い、1 項目を変えたときも出す。
+    /// 作り直さないページ (定型文など) が、打ちかけの入力を残したまま、ほかの項目の値に合わせて表示を変えるのに使う。
+    /// </summary>
+    public event Action? Updated;
 
     /// <summary>保存できなかった (理由)。画面は保存した値 (変える前の値) で出し直す。</summary>
     public event Action<string>? Failed;
@@ -61,6 +68,7 @@ internal sealed class SettingsStore
         {
             if (_file.Edit(operation) is not { } next) return false;
             _shown = next;
+            Updated?.Invoke();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

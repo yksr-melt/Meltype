@@ -14,6 +14,24 @@ internal static class KanaLayoutTests
     private static Keyboard Layout(KanaLayout layout) => new() { Kana = true, KanaLayout = layout };
 
     [Test]
+    public static void KanaLayout_DisplaysKeysAndRecognizesEnglishFromNicola()
+    {
+        var nicola = new Keyboard(typedKeys: Meltype.Config.TypedKeysStyle.Keys) { Kana = true, KanaLayout = KanaLayout.Nicola };
+        nicola.Type("google");
+        Assert.True(nicola.Host.View!.Typed is null, "表示と同じキーの列は重ねて出さない");
+        Assert.Equal("google", nicola.Showing);
+        nicola.Type("\n");
+        Assert.Equal("google", nicola.Host.Document);
+
+        var tsuki = new Keyboard(typedKeys: Meltype.Config.TypedKeysStyle.Keys) { Kana = true, KanaLayout = KanaLayout.Tsuki };
+        tsuki.TypeKanaKeys("dj");
+        Assert.Equal("お", tsuki.Showing);
+        Assert.Equal("dj", tsuki.Host.View!.Typed, "前置シフトのキーも表示する");
+        tsuki.Type("\b");
+        Assert.True(tsuki.Showing is null, "消した読みのキーを残さない");
+    }
+
+    [Test]
     public static void KanaLayout_Tsuki_PrefixShift()
     {
         // 月配列: W = と。D・K は 2 段目、S・L は 3 段目の前置シフト。D の次の J = お、K の次の E = ね、L の次の E = じ
@@ -179,6 +197,113 @@ internal static class KanaLayoutTests
     }
 
     [Test]
+    public static void KanaLayout_NakayubiNicola_DoesNotRewriteEarlierText()
+    {
+        var k = Layout(KanaLayout.NakayubiNicola);
+        k.Key(0x4B);
+        k.Key(0x41);
+        k.Key(0x48);
+        k.Key(0x48, up: true);
+        k.Key(0x41, up: true);
+        k.Key(0x4B, up: true);
+        Assert.Equal("きうは", k.Showing);
+
+        // 先の文字が離された後でも、末尾以外に残った K の文字を削除しない。
+        var next = Layout(KanaLayout.NakayubiNicola);
+        next.Key(0x4B);
+        next.TypeKanaKeys("h");
+        next.TypeKanaKeys("a");
+        next.Key(0x4B, up: true);
+        Assert.Equal("きはを", next.Showing);
+    }
+
+    [Test]
+    public static void KanaLayout_HeldLetterRepeats()
+    {
+        foreach (var (layout, expected) in new[]
+        {
+            (KanaLayout.Nicola, "かかか"),
+            (KanaLayout.NakayubiNicola, "かかか"),
+            (KanaLayout.Tron, "るるる"),
+        })
+        {
+            var k = Layout(layout);
+            k.Key(0x57);
+            k.Key(0x57);
+            k.Key(0x57);
+            k.Key(0x57, up: true);
+            Assert.Equal(expected, k.Showing);
+        }
+        var shifted = Layout(KanaLayout.Nicola);
+        shifted.Key(Convert);
+        shifted.Key(0x57);
+        shifted.Key(0x57);
+        shifted.Key(0x57);
+        shifted.Key(0x57, up: true);
+        shifted.Key(Convert, up: true);
+        Assert.Equal("ががが", shifted.Showing);
+    }
+
+
+    [Test]
+    public static void KanaLayout_OverlappingThumbsUseMostRecent()
+    {
+        foreach (var layout in new[] { KanaLayout.Nicola, KanaLayout.NakayubiNicola, KanaLayout.Tron })
+        {
+            var k = Layout(layout);
+            k.Key(NonConvert);
+            k.Key(0x57);
+            k.Key(Convert);
+            k.Key(0x4B);
+            k.Key(0x57, up: true);
+            k.Key(NonConvert, up: true);
+            k.Key(0x4B, up: true);
+            k.Key(Convert, up: true);
+            Assert.Equal(layout == KanaLayout.Tron ? "そー" : "えの", k.Showing);
+            Assert.True(k.Host.View is { Converting: false }, "文字に使った親指キーを離しても変換しない");
+
+            k = Layout(layout);
+            k.Key(Convert);
+            k.TypeKanaKeys("w");
+            k.Key(NonConvert);
+            k.Key(0x53);
+            k.Key(Convert, up: true);
+            k.Key(0x53, up: true);
+            k.Key(NonConvert, up: true);
+            Assert.Equal(layout == KanaLayout.Tron ? "ぞね" : "があ", k.Showing);
+            Assert.True(k.Host.View is { Converting: false }, "反対の親指キーでも確定しない");
+        }
+    }
+
+    [Test]
+    public static void KanaLayout_LateThumbDoesNotRewriteAnEarlierHeldLetter()
+    {
+        var k = Layout(KanaLayout.Nicola);
+        k.Key(0x41);
+        k.Key(0x4A);
+        k.Key(0x4A, up: true);
+        k.Key(Convert);
+        k.Key(0x41, up: true);
+        k.Key(Convert, up: true);
+        Assert.Equal("うと", k.Showing);
+        Assert.True(k.Host.View is { Converting: true }, "最後の文字を離した後の親指キーは変換する");
+    }
+
+    [Test]
+    public static void KanaLayout_NakayubiNicola_ContinuousShiftSurvivesLetterRollover()
+    {
+        var k = Layout(KanaLayout.NakayubiNicola);
+        k.Key(0x4B);
+        k.TypeKanaKeys("a");
+        k.Key(0x53);
+        k.Key(0x44);
+        k.Key(0x53, up: true);
+        k.Key(0x44, up: true);
+        k.Key(0x4B, up: true);
+        Assert.Equal("をしな", k.Showing);
+    }
+
+    [Test]
     public static void KanaLayout_Tron_ThumbShift()
     {
         // TRON: Q = ら、右親指 + Q = び、左親指 + F = よ
@@ -279,7 +404,6 @@ internal static class KanaLayoutTests
         k.Key(NonConvert, up: true);
         k.TypeKanaKeys("s");
         Assert.Equal("し", k.Showing);
-        // 無変換はアプリに渡したいが、Meltype キーボードは離したときの応答 (consumed: false) を見ないので、アプリに届かない
     }
 
     [Test]

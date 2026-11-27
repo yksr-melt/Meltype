@@ -1,35 +1,35 @@
 # Meltype ホームページ
 
-Meltype の紹介用ウェブサイトと、「問題を報告する」フォーム・報告ダッシュボードです。Cloudflare Workerを使うなら動的サイトにしてもよかったのですが、雪代さんの返信を待っている間に静的で作り始めてしまったのでそのまま静的でいかせてもらいました。
+Meltype の紹介・使い方ガイド・タイピングと、「問題を報告する」フォーム・報告ダッシュボードです。静的ページと Cloudflare Workers・D1 を組み合わせています。
 
 ## テスト
 
 ```bash
+pnpm install
 cp .dev.vars.example .dev.vars
-npm run dev
-npm test
+pnpm test
+pnpm run dev
 ```
 
 → `http://localhost:8787`
 
-`npm test` は D1 の代わりに `node:sqlite` を使うので、Node 22.13 以降で動かしてください (CI は Node 24)。`.dev.vars.example` には手元用の値が入っています。TurnstilehaCloudflareのテスト用キーで、テスト用キーの hostname は `example.com` になるので `TURNSTILE_HOSTNAMES` は空にしてあります。`DASHBOARD_DEV_BYPASS=1` のときは、localhostからのダッシュボードだけアクセス確認を飛ばします。
+`pnpm test` は D1 の代わりに `node:sqlite` を使うので、Node 22.13 以降で動かしてください (CI は Node 24)。`.dev.vars.example` には手元用の値が入っています。Turnstile は Cloudflare のテスト用キーで、テスト用キーの hostname は `example.com` になるので `TURNSTILE_HOSTNAMES` は空にしてあります。`DASHBOARD_DEV_BYPASS=1` のときは、localhostからのダッシュボードだけアクセス確認を飛ばします。
 
 ## 使い方ガイド
 
 `/guide/` の使い方ガイドは、`docs/` の利用者向けの文書 (`USAGE.md`・`WINDOWS.md`・`MACOS.md`・`LINUX.md`) から `scripts/make-guide.mjs` で作ります。中身を変えるときは `docs/` の Markdown を直してください (`public/guide/` は作るたびに作り直すので、コミットしません)。
 
 ```bash
-npm run guide
+pnpm run guide
 ```
 
-`npm run dev`・`npm run deploy` も先に作り直します。ほかの文書へのリンクはガイドのページに、ガイドに無い文書・ソースへのリンクは GitHub に直します。
+`pnpm run dev`・`pnpm run deploy` も先に作り直します。ガイドの描画は Markdown の見出し・表・コードブロックに対応し、Mermaid の描画は組み込んでいません。使い方の比較は表で書き、Mermaid の構成図は開発文書で使います。ほかの文書へのリンクはガイドのページに、ガイドに無い文書・ソースへのリンクは GitHub に直します。
 
 ## 画像を作り直す
 
 リンクを貼ったときの画像 (`public/og.png`) は `scripts/og.html` をブラウザーで 1200x630 に描いて作ります。文字は Google Fonts の Zen Maru Gothic なので、ネットにつながった状態で実行してください。
 
 ```bash
-npm i --no-save playwright-core
 node scripts/make-images.mjs
 ```
 
@@ -42,19 +42,19 @@ Chrome / Edge / Chromium が見つからないときは `CHROMIUM_PATH` に場�
 初回:
 
 ```bash
-npx wrangler login
-npx wrangler deploy
-npm run db:migrate:remote
-npx wrangler secret put IP_HASH_SALT
-npx wrangler secret put TURNSTILE_SECRET
+pnpm exec wrangler login
+pnpm exec wrangler deploy
+pnpm run db:migrate:remote
+pnpm exec wrangler secret put IP_HASH_SALT
+pnpm exec wrangler secret put TURNSTILE_SECRET
 ```
 
 - **R2 は無くても動きます。** R2 を使えないときは `wrangler.jsonc` の `r2_buckets` をコメントにしておくと、報告の画面に添付の欄を出さず、文章だけ受け付けます (添付付きの送信は断ります)。R2 を有効にしたら (Cloudflare のダッシュボード → R2。支払い方法の登録が要ることがあります)、`r2_buckets` のコメントを外してデプロイし直すと、添付も受け付けます。
-- 最初の `wrangler deploy` で D1 (`meltype-reports`・`meltype-typing`)・R2 (`meltype-report-files`)・KV (`CACHE`) が作られ、`database_id` と KV の `id` が `wrangler.jsonc` に書き戻されます。先に自分で作る場合は `npx wrangler d1 create meltype-reports`・`npx wrangler d1 create meltype-typing`・`npx wrangler r2 bucket create meltype-report-files`・`npx wrangler kv namespace create CACHE` を実行して、ID を `wrangler.jsonc` に手動で書いてください。
+- 最初の `wrangler deploy` で D1 (`meltype-reports`・`meltype-typing`)・R2 (`meltype-report-files`)・KV (`CACHE`) が作られ、`database_id` と KV の `id` が `wrangler.jsonc` に書き戻されます。先に自分で作る場合は `pnpm exec wrangler d1 create meltype-reports`・`pnpm exec wrangler d1 create meltype-typing`・`pnpm exec wrangler r2 bucket create meltype-report-files`・`pnpm exec wrangler kv namespace create CACHE` を実行して、ID を `wrangler.jsonc` に手動で書いてください。
 - `workers_dev` を `false` にしているので、`*.workers.dev` では開けません。Cloudflare のダッシュボード → Workers → `meltype-web` → 設定 → ドメインとルート で、`meltype.moe` をカスタム ドメインに追加してください。
 - `IP_HASH_SALT` には長いランダムな文字列 (`openssl rand -base64 32` など) を入れてください。ない場合、報告は503で受け付けません。IPアドレスはこの値と合わせたハッシュにしてから、レートリミットのためにそれぞれ1日間保存します。
 - Turnstile: Cloudflareのダッシュボード → Turnstileでウィジェットを作り (ホスト名は `meltype.moe`)、サイトキーを `wrangler.jsonc` の `TURNSTILE_SITE_KEY` に、シークレットキーを `wrangler secret put TURNSTILE_SECRET` で入れます。`TURNSTILE_SECRET` がない場合、報告は503で受け付けません。
-- GitHub APIの回数制限が気になるときは、`npx wrangler secret put GITHUB_TOKEN` で読み取り専用のトークンを追加可能です。
+- GitHub APIの回数制限が気になるときは、`pnpm exec wrangler secret put GITHUB_TOKEN` で読み取り専用のトークンを追加可能です。
 
 `wrangler.jsonc` の `vars`:
 
@@ -67,9 +67,9 @@ npx wrangler secret put TURNSTILE_SECRET
 | `TURNSTILE_HOSTNAMES` | 空でなければ、Turnstileの確認結果のhostnameがこの中にあるかも確かめます |
 | `FILE_RETENTION_DAYS`・`REPORT_RETENTION_DAYS` | 添付と報告を残す日数 (30 日・180 日) |
 
-2回目以降は `npm run deploy` で変更を反映しデプロイできます。
+2回目以降は `pnpm run deploy` で変更を反映しデプロイできます。
 
-main に `web/` の変更が入ると、GitHub Actions (`.github/workflows/web.yml` の `deploy`) がテストの後に `npm run deploy` を実行して、自動でデプロイします。使うには、リポジトリの Settings → Environments に `web-production` を作り、次の secrets を入れてください (無いときはデプロイのジョブが失敗します)。
+main に `web/` の変更が入ると、GitHub Actions (`.github/workflows/web.yml` の `deploy`) がテストの後に `pnpm run deploy` を実行して、自動でデプロイします。使うには、リポジトリの Settings → Environments に `web-production` を作り、次の secrets を入れてください (無いときはデプロイのジョブが失敗します)。
 
 | 名前 | 中身 |
 |---|---|
@@ -127,5 +127,5 @@ https://meltype.moe/report/?form=bug&os=Windows+11&version=1.4.0
 - 調査は雪代 (Yukishiro) が Meltype のために行い、データの持ち主も雪代です (同意文に書いてある。問い合わせ先は Meltype の Discord と GitHub の Issue)。
 - 研究用に公開するときは、集めたデータ (お手本の文を含む) を CC BY-SA 4.0 で公開します (同意文にもそう書いてある。GPLv3 へは一方向に互換があるので、Meltype の学習にも使える)。同意文の条件を変えると、それより前に送られたデータは新しい条件に同意していないので、変えるときは前のデータの扱いも決める。
 - データは消さずに残します (Cron の掃除の対象外)。ダッシュボードにお手本の文ごとに打たれた数を出し、JSON Lines で書き出せます (書き出すときに、お手本の文と読みを id から引いて付ける) (`/api/dashboard/typing/*`、Access の内側)。
-- お手本は `sentences/*.txt` に、1 行に 1 文の「表示する文|読み」の形で書きます。ファイル名は「並び順-種類の id.txt」(例: `3-chat.txt`) で、先頭に「種類: 表示名」の行を書きます。新しい種類は、ファイルを足せばページの選択肢に出ます。読みはひらがなと「ー、。！？〜…「」（）」(英語の部分は英小文字・数字・「-」・空白) で 40 字まで (「！？〜「」（）」は `!` `?` `~` `[` `]` `(` `)`、「…」は `.` を 3 回打つ)、文と読みの「、。」の数をそろえます。`npm run sentences` (`dev`・`test`・`deploy` でも動く) が確かめて `public/assets/js/typing-sentences.js` を作ります (コミットしない)。
+- お手本は `sentences/*.txt` に、1 行に 1 文の「表示する文|読み」の形で書きます。ファイル名は「並び順-種類の id.txt」(例: `3-chat.txt`) で、先頭に「種類: 表示名」の行を書きます。新しい種類は、ファイルを足せばページの選択肢に出ます。読みはひらがなと「ー、。！？〜…「」（）」(英語の部分は英小文字・数字・「-」・空白) で 40 字まで (「！？〜「」（）」は `!` `?` `~` `[` `]` `(` `)`、「…」は `.` を 3 回打つ)、文と読みの「、。」の数をそろえます。`pnpm run sentences` (`dev`・`test`・`deploy` でも動く) が確かめて `public/assets/js/typing-sentences.js` を作ります (コミットしない)。
 - 文の id は文と読みから作るので、直すと別の文になります。集めたデータは id でお手本を指すので、一度出したお手本の行は消しません。出すのをやめるときは、行の頭に「出さない:」を付けます (ページには出なくなり、id からは引ける)。

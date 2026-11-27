@@ -185,10 +185,6 @@ def drawn_icon(kind, cx, cy):
     """カードの丸の中の絵 (白い線)。kind が絵の名前でなければ、文字のアイコンとして扱う (None を返す)。"""
     st = 'fill="none" stroke="#ffffff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"'
     shapes = {
-        # 鍵: 体と、上のつる
-        "lock": f'<rect x="{cx - 11}" y="{cy - 3}" width="22" height="17" rx="4" {st}/><path d="M{cx - 6} {cy - 3} v-5 a6 6 0 0 1 12 0 v5" {st}/><circle cx="{cx}" cy="{cy + 5}" r="1.8" fill="#ffffff"/>',
-        # 雲
-        "cloud": f'<path d="M{cx - 11} {cy + 9} h22 a7 7 0 0 0 0 -14 a9 9 0 0 0 -17 -2 a6 6 0 0 0 -5 16 z" {st}/>',
         # パソコン: 画面と台
         "pc": f'<rect x="{cx - 14}" y="{cy - 12}" width="28" height="19" rx="3" {st}/><path d="M{cx - 6} {cy + 13} h12 M{cx} {cy + 7} v6" {st}/>',
         # 虫: 体・頭・脚・触角
@@ -240,9 +236,6 @@ def card(icon, title, lines, color, out):
 
 # README の下の方のカード (ファイル名, アイコン (drawn_icon の絵の名前), 題, 説明 2 行, 色)
 MORE_CARDS = [
-    ("privacy-send", "lock", "打った文字は送らない", ["判定も変換も PC の中で完結。", "ネットには出しません"], BLUE),
-    ("privacy-network", "cloud", "既定の通信は 2 つだけ", ["自動更新の確認と、", "自分で開いた報告のフォーム"], PINK),
-    ("privacy-storage", "pc", "保存も PC の中", ["設定・学習データ・辞書は", "%LOCALAPPDATA% の中に"], OUTLINE),
     ("contribute-issue", "exclaim", "不具合の報告", ["どのアプリで・何と打って・", "どうなったかを教えてください"], PINK),
     ("contribute-dictionary", "book", "辞書の追加", ["足りない語・社名は", "Pull Request か Issue で"], BLUE),
     ("contribute-code", "pr", "コードで協力", ["バグの修正も新しい機能も", "Pull Request で大歓迎！"], OUTLINE),

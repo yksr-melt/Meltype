@@ -137,9 +137,9 @@ internal static class ImeContractTests
             _ => throw new ArgumentException($"送れないキー: {key}"),
         };
 
-        public JsonElement Key(int vk, char ch = '\0', bool shift = false, bool ctrl = false, string instance = "t1", bool moved = false, bool omitField = false)
+        public JsonElement Key(int vk, char ch = '\0', bool shift = false, bool ctrl = false, string instance = "t1", bool moved = false, bool omitField = false, bool capsLock = false)
         {
-            var output = Event("KeyPressed", instance, $",\"key\":{{\"vk\":{vk},\"ch\":{(int)ch},\"shift\":{(shift ? "true" : "false")},\"ctrl\":{(ctrl ? "true" : "false")}}}", moved, omitField);
+            var output = Event("KeyPressed", instance, $",\"key\":{{\"vk\":{vk},\"ch\":{(int)ch},\"shift\":{(shift ? "true" : "false")},\"ctrl\":{(ctrl ? "true" : "false")},\"capsLock\":{(capsLock ? "true" : "false")}}}", moved, omitField);
             // 使わなかったキーは、アプリがそのまま入れる
             if (!Consumed(output) && (ch != '\0' || vk == VirtualKeys.Return)) Document += vk == VirtualKeys.Return ? '\n' : ch;
             return output;
@@ -484,6 +484,18 @@ internal static class ImeContractTests
     }
 
     [Test]
+    public static void LangKeys_SelectJapaneseOrAlphanumeric()
+    {
+        var front = new Front();
+        front.Type("ka");
+        Assert.True(Consumed(front.Key(VirtualKeys.ImeOn)) && front.Open && front.Document == "", front.Trace);
+        front.Key(VirtualKeys.ImeOff);
+        Assert.True(!front.Open && front.Document == "か", front.Trace);
+        Assert.True(Consumed(front.Key(VirtualKeys.ImeOff)) && !front.Open, front.Trace);
+        Assert.True(Consumed(front.Key(VirtualKeys.ImeOn)) && front.Open, front.Trace);
+    }
+
+    [Test]
     public static void ConvertKeys_SetTheMode()
     {
         var front = new Front();
@@ -529,6 +541,26 @@ internal static class ImeContractTests
         Assert.True(!toggle.Open, "切り替えキーの変換で英数\n" + toggle.Trace);
         toggle.Key(VirtualKeys.Convert);
         Assert.True(toggle.Open, "もう一度押して日本語\n" + toggle.Trace);
+    }
+
+    [Test]
+    public static void NonConvertAfterProtectedInput_SwitchesToAlphanumeric()
+    {
+        foreach (var cycle in new[] { false, true })
+        {
+            var front = new Front();
+            front.Settings.SeparateKeyRoles = false;
+            front.Settings.NonConvertCyclesKana = cycle;
+            const string url = "https://example.com/abc";
+            front.Type("https");
+            front.Key(0xBA, ':');
+            front.Type("//example");
+            front.Key(VirtualKeys.OemPeriod, '.');
+            front.Type("com/abc");
+            front.Key(VirtualKeys.NonConvert);
+            Assert.Equal(url, front.Document, front.Trace);
+            Assert.True(!front.Open, front.Trace);
+        }
     }
 
     [Test]
@@ -611,6 +643,7 @@ internal static class ImeContractTests
                     _ => Verdict.Undecided,
                 },
             };
+            front.Settings.DirectModeAutoDetect = true;
             front.Type("hel");
             front.Document += "l";
             front.Event("CaretMoved", extra: ",\"caret\":{\"moved\":true,\"passedKey\":76,\"passedChar\":108}");
@@ -642,6 +675,7 @@ internal static class ImeContractTests
                     _ => Verdict.Undecided,
                 },
             };
+            front.Settings.DirectModeAutoDetect = true;
             front.Type("hel");
             // フックの通知を先に処理し、あとからアプリが o を挿入する。
             front.Event("CaretMoved", extra: ",\"caret\":{\"moved\":true,\"passedKey\":79,\"passedChar\":111}");
@@ -660,6 +694,22 @@ internal static class ImeContractTests
         front = new Front { InputMethod = InputMode.Keyboard };
         front.Traits.Add("Game");
         Assert.True(!Active(front.Key('a')), "Meltype キーボードはゲームでは受け持たない (チャットは Windows の IME で打つ)\n" + front.Trace);
+    }
+
+    [Test]
+    public static void KeyboardGame_IsHandledOnlyWhileTheChatIsOpen()
+    {
+        // Meltype キーボードはゲームでは止め、IME の入力コンテキストが結び付いている間 (チャット欄が開いている間) だけ、日本語で受け持つ
+        var front = new Front { InputMethod = InputMode.Keyboard, SendsImeOpen = false };
+        front.Settings.Mode = InputMode.Keyboard;
+        front.Traits.AddRange(["Game", "NonText"]);
+        Assert.True(!Active(front.Event("StateRequested")), "チャット欄が閉じている間は止める\n" + front.Trace);
+        front.Traits.Add("ImeContext");
+        var opened = front.Event("StateRequested");
+        Assert.True(Active(opened) && Japanese(opened), "チャット欄が開いたら日本語で受け持つ\n" + front.Trace);
+        front.Traits.Remove("ImeContext");
+        var closed = front.Event("StateRequested");
+        Assert.True(!Active(closed) && !Japanese(closed), "チャット欄が閉じたら止めて英数に戻す\n" + front.Trace);
     }
 
     [Test]
@@ -956,7 +1006,8 @@ internal static class ImeContractTests
         {
             Converter = converter, Services = new CompositionServices
             {
-                Languages = languages, History = history, Predictor = new Predictor(phrases, null, history),
+                // 学習 OFF でも出る候補 (ユーザー辞書の語) を確定しても覚えないことを見る
+                Languages = languages, History = history, Predictor = new Predictor(phrases, () => [("にほんごでにゅうりょく", "日本語で入力")], history),
                 Translations = TranslationDictionary.Parse("川\tn\triver"), TranslationHistory = translationHistory,
                 MoreCandidates = (reading, _) => reading == "にほんご" ? ["日本語", "日本語文"] : [],
             }
@@ -991,10 +1042,11 @@ internal static class ImeContractTests
         SetField(beforeCommit: false);
         // 最初の Private 通知は打鍵より先に届く。
         front.Event("CaretMoved", extra: Entered);
-        front.Key('n');
-        front.Type("ihongo");
+        // 後の nihongo を英字にしないように、F10 で直す語は別にする
+        front.Key('t');
+        front.Type("ao");
         front.Key(VirtualKeys.F10);
-        Commit("nihongo");
+        Commit("tao");
 
         Select(front.Type("nihongo ")[^1], "日本語文");
         Commit("日本語文");
@@ -1006,13 +1058,13 @@ internal static class ImeContractTests
 
         var learns = mode == "通常";
         LearningSaves.FlushAll();
-        Assert.Equal(learns, languages.Get("nihongo") == true, mode);
+        Assert.Equal(learns, languages.Get("tao") == true, mode);
         Assert.Equal(learns ? "日本語文" : null, history.Get("にほんご"), mode);
         Assert.Equal(learns ? 1 : 0, translationHistory.Get("かわ").Count, mode);
         Assert.Equal(learns ? 2 : 1, phrases.Count, mode);
         Assert.Equal(learns, originalPhrases != File.ReadAllText(phrasePath), mode);
         Assert.Equal(learns ? 4 : 1, Directory.GetFiles(directory).Length, mode);
-        Assert.Equal(languages.Get("nihongo"), new LanguageMemory(languagePath).Get("nihongo"), mode);
+        Assert.Equal(languages.Get("tao"), new LanguageMemory(languagePath).Get("tao"), mode);
         Assert.Equal(history.Get("にほんご"), new ConversionHistory(historyPath).Get("にほんご"), mode);
         Assert.Equal(phrases.Count, new PhraseHistory(phrasePath).Count, mode);
         Assert.Equal(translationHistory.Get("かわ").Count, new TranslationHistory(translationPath).Get("かわ").Count, mode);
@@ -1020,10 +1072,10 @@ internal static class ImeContractTests
         {
             // Private で始めた入力が終わったあと、同じ instance で始め直した通常入力は学習する。
             front.Traits.Clear();
-            front.Type("nihongo");
+            front.Type("tao");
             front.Key(VirtualKeys.F10);
             front.Key('\n');
-            Assert.Equal(true, languages.Get("nihongo"), front.Trace);
+            Assert.Equal(true, languages.Get("tao"), front.Trace);
             LearningSaves.FlushAll();
         }
     }
@@ -1072,6 +1124,32 @@ internal static class ImeContractTests
 
         front.Type("kyou \n");
         Assert.Equal(1, phrases.Count, "次に始めた通常入力は学習する\n" + front.Trace);
+    }
+
+    [Test]
+    public static void CommitRequestedWithoutField_CommitsForTheComposingField()
+    {
+        // TSF は編集ロックを取れない旧欄から離れるとき、欄を読めないまま確定を求め、返った文字をあとで旧欄の変換中の範囲に入れる。
+        // 前の語の確定し直し (i → I) は入れない。欄の事実が無くても、変換中の欄 (Private) として学習しない。
+        const string leave = ",\"caret\":{\"moved\":true,\"passedKey\":0,\"focusLeft\":true}";
+        foreach (var isPrivate in new[] { false, true })
+        {
+            var phrases = new PhraseHistory(null);
+            var front = new Front { Converter = new LearningConverter(), Services = new CompositionServices { Predictor = new Predictor(phrases, null, null) } };
+            front.Settings.PredictiveCandidates = true;
+            if (isPrivate) front.Traits.Add("Private");
+            front.Type("i ");
+            front.Type("kan");
+            var commits = Commits(front.Event("CommitRequested", extra: leave, omitField: true));
+            Assert.Equal(1, commits.GetArrayLength(), front.Trace);
+            Assert.Equal("かん", commits[0].GetProperty("text").GetString(), front.Trace);
+            Assert.Equal(JsonValueKind.Null, commits[0].GetProperty("removeBefore").ValueKind, front.Trace);
+            Assert.True(front.Composition["t1"] is null, front.Trace);
+
+            front.Type("nihongo ");
+            Assert.Equal("日本語", Commits(front.Event("CommitRequested", extra: leave, omitField: true))[0].GetProperty("text").GetString(), front.Trace);
+            Assert.Equal(isPrivate ? 0 : 1, phrases.Count, (isPrivate ? "Private の欄で始めた入力は学習しない\n" : "通常の欄では学習する\n") + front.Trace);
+        }
     }
 
     [Test]
@@ -1224,6 +1302,55 @@ internal static class ImeContractTests
     }
 
     [Test]
+    public static void FieldMode_IsLearnedFromTheSwitchBeforeTyping()
+    {
+        // #1144: 入力欄に入ってまだ何も打たないうちに切り替えたモードを覚え、次にその入力欄に入ったらそのモードにする
+        var front = new Front { Services = new() { FieldModes = new Meltype.Learning.FieldModes(null) }, App = "chat.exe" };
+        Assert.True(Japanese(front.Event("CaretMoved", extra: Entered)), front.Trace);
+        Assert.True(!Japanese(front.Key(0xF0)), "英数キーで英数に" + front.Trace);
+        front.Type("hello ");
+        // 打ち始めてからの切り替えは一時的なもの
+        Assert.True(Japanese(front.Event("JapaneseModeSelected")), front.Trace);
+        front.App = "notepad.exe";
+        Assert.True(Japanese(front.Event("CaretMoved", extra: Entered)), "覚えていない入力欄はそのまま" + front.Trace);
+        front.App = "chat.exe";
+        Assert.True(!Japanese(front.Event("CaretMoved", extra: Entered)), "覚えたモードにする" + front.Trace);
+        // 自動で切り替えた直後に逆へ直したら、覚え直す
+        Assert.True(Japanese(front.Event("JapaneseModeSelected")), front.Trace);
+        front.App = "notepad.exe";
+        front.Event("CaretMoved", extra: Entered);
+        front.App = "chat.exe";
+        Assert.True(Japanese(front.Event("CaretMoved", extra: Entered)), "直したモードを覚え直す" + front.Trace);
+    }
+
+    [Test]
+    public static void FieldMode_KeepsALimitedNumberOfFields()
+    {
+        // 覚える入力欄の数には上限があり、古いものから忘れる
+        var modes = new Meltype.Learning.FieldModes(null);
+        for (var i = 0; i < 1000; i++) modes.Remember($"app{i}.exe\t", false);
+        Assert.True(modes.Count < 1000, modes.Count.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        Assert.Equal(false, modes.Get("app999.exe\t"), "新しいものは残る");
+        Assert.Equal(null, modes.Get("app0.exe\t"), "古いものは忘れる");
+    }
+
+    [Test]
+    public static void CapsLock_TypesCapitalsOnlyWhenTheSettingIsOn()
+    {
+        // #837: 日本語入力中も CapsLock で大文字にしたい人と、CapsLock を ON のまま日本語にしたい人 (#736) がいる
+        foreach (var on in new[] { false, true })
+        {
+            var front = new Front();
+            front.Settings.CapsLockTypesCapitals = on;
+            foreach (var c in "KA") front.Key(c, c, capsLock: true);
+            // CapsLock 中の Shift は小文字
+            front.Key('N', 'n', shift: true, capsLock: true);
+            front.Key('\n');
+            Assert.Equal(on ? "KAn" : "かN", front.Document, front.Trace);
+        }
+    }
+
+    [Test]
     public static void ThumbShift_HoldsTheThumbKeyUntilItIsReleased()
     {
         // ワークアラウンド (KeyReleased): 親指シフトの配列のときだけ、離したことも受け取る
@@ -1234,16 +1361,84 @@ internal static class ImeContractTests
         JsonElement Press(int vk, char ch = '\0') =>
             front.Event("KeyPressed", extra: $",\"key\":{{\"vk\":{vk},\"ch\":{(int)ch},\"releaseFollows\":true}}");
         JsonElement Release(int vk) => front.Event("KeyReleased", extra: $",\"key\":{{\"vk\":{vk}}}");
+        Assert.True(Consumed(Press(VirtualKeys.NonConvert)), front.Trace);
+        Assert.True(!Consumed(Release(VirtualKeys.NonConvert)), "文頭の無変換の単独押しはアプリに渡せる\n" + front.Trace);
         Assert.True(Press(VirtualKeys.Convert).GetProperty("state").GetProperty("capture").GetProperty("keyReleases").GetBoolean(), front.Trace);
         // 右親指 (変換) を押したまま W: 右シフト面の「が」
         Press('W', 'w');
         Release('W');
-        Release(VirtualKeys.Convert);
+        Assert.True(Consumed(Release(VirtualKeys.Convert)), "同時打鍵に使った親指キーはアプリへ渡さない\n" + front.Trace);
         Assert.Equal("が", front.Composition["t1"], "親指キーを離すまでシフト面\n" + front.Trace);
         // 離してから打った W はふつうの面の「か」
         Press('W', 'w');
         Release('W');
         Assert.Equal("がか", front.Composition["t1"], front.Trace);
+    }
+
+    private static string Physical(string type, int code) => type switch
+    {
+        "Evdev" => $"{{\"type\":\"Evdev\",\"code\":{code}}}",
+        "Mac" => $"{{\"type\":\"Mac\",\"keyCode\":{code}}}",
+        "Windows" => $"{{\"type\":\"Windows\",\"scan\":{code},\"extended\":false}}",
+        _ => throw new ArgumentException(type),
+    };
+
+    /// <summary>文字を入力するキーを、仮想キーコードを付けずに物理キーと文字で送る (Linux・macOS のフロント)。</summary>
+    private static JsonElement PhysicalKey(Front front, string physical, char ch, bool shift = false, bool releaseFollows = false) =>
+        front.Event("KeyPressed", extra: $",\"key\":{{\"vk\":0,\"ch\":{(int)ch},\"shift\":{(shift ? "true" : "false")},\"releaseFollows\":{(releaseFollows ? "true" : "false")},\"physical\":{physical}}}");
+
+    [Test]
+    public static void KanaInput_ReadsTheKanaOfThePhysicalKey()
+    {
+        // #2434: 記号の文字からはキーが決まらない (「\」は ¥ キーとろキーのどちらでも出る)。Shift+数字の記号も
+        foreach (var (os, t, at, semicolon, yen, ro, three) in new[]
+        {
+            ("Evdev", 20, 26, 39, 124, 89, 4),
+            ("Mac", 0x11, 0x21, 0x29, 0x5D, 0x5E, 0x14),
+            ("Windows", 0x14, 0x1A, 0x27, 0x7D, 0x73, 0x04),
+        })
+        {
+            var front = new Front();
+            front.Settings.InputStyle = InputStyle.Kana;
+            PhysicalKey(front, Physical(os, t), 't');
+            PhysicalKey(front, Physical(os, at), '@');
+            PhysicalKey(front, Physical(os, semicolon), ';');
+            PhysicalKey(front, Physical(os, yen), '\\');
+            PhysicalKey(front, Physical(os, ro), '\\');
+            PhysicalKey(front, Physical(os, three), '#', shift: true);
+            Assert.Equal("がれーろぁ", front.Composition["t1"], $"{os}\n{front.Trace}");
+        }
+    }
+
+    [Test]
+    public static void PhysicalKey_KanaFollowsThePositionAndRomajiFollowsTheCharacter()
+    {
+        // Dvorak の配列: S の位置のキーで o が入る
+        var kana = new Front();
+        kana.Settings.InputStyle = InputStyle.Kana;
+        PhysicalKey(kana, Physical("Evdev", 31), 'o');
+        Assert.Equal("と", kana.Composition["t1"], kana.Trace);
+        var romaji = new Front();
+        PhysicalKey(romaji, Physical("Evdev", 47), 'k');
+        PhysicalKey(romaji, Physical("Evdev", 31), 'o');
+        Assert.Equal("こ", romaji.Composition["t1"], romaji.Trace);
+        // 中指NICOLA: 離したキーも位置で読む。Dvorak の D の位置は e、J の位置は h。D を押したまま J を先に離すと D+J の「お」
+        var middle = new Front();
+        middle.Settings.InputStyle = InputStyle.Kana;
+        middle.Settings.KanaLayout = KanaLayout.NakayubiNicola;
+        PhysicalKey(middle, Physical("Evdev", 32), 'e', releaseFollows: true);
+        PhysicalKey(middle, Physical("Evdev", 36), 'h', releaseFollows: true);
+        middle.Event("KeyReleased", extra: $",\"key\":{{\"vk\":{(int)'H'},\"physical\":{Physical("Evdev", 36)}}}");
+        middle.Event("KeyReleased", extra: $",\"key\":{{\"vk\":{(int)'E'},\"physical\":{Physical("Evdev", 32)}}}");
+        Assert.Equal("お", middle.Composition["t1"], middle.Trace);
+        // 英数状態で打った語を日本語に戻すときも、かなは位置で決める (Dvorak の k・a は QWERTY の v・a の位置)
+        var direct = new Front { ClassifyDirect = (letters, _, _) => letters == "ka" ? Verdict.Japanese : Verdict.Undecided };
+        direct.Settings.InputStyle = InputStyle.Kana;
+        direct.Settings.DirectModeAutoDetect = true;
+        direct.Event("AlphanumericModeSelected");
+        PhysicalKey(direct, Physical("Evdev", 47), 'k');
+        PhysicalKey(direct, Physical("Evdev", 30), 'a');
+        Assert.Equal("ひち", direct.Composition["t1"], direct.Trace);
     }
 
     [Test]
@@ -1350,7 +1545,8 @@ internal static class ImeContractTests
         Assert.Equal(0, Capture(front.Event("StateRequested")).GetProperty("ctrlKeysWhileComposing").GetArrayLength(), "入力していなければ空\n" + front.Trace);
         var typing = front.Key('k');
         var keys = Capture(typing).GetProperty("ctrlKeysWhileComposing").EnumerateArray().Select(k => (k.GetProperty("vk").GetInt32(), k.GetProperty("modifiers").GetInt32())).ToList();
-        Assert.True(keys.Contains(('U', 2)) && keys.Contains(('H', 2)) && !keys.Contains(('J', 2)), "Ctrl+U・Ctrl+H は変換ボックスで使う\n" + front.Trace);
+        Assert.True(keys.Contains((VirtualKeys.Return, 2)) && keys.Contains(('U', 2)) && keys.Contains(('H', 2)) && !keys.Contains(('J', 2)),
+            "Ctrl+Enter・Ctrl+U・Ctrl+H は変換ボックスで使う\n" + front.Trace);
         front.Settings.ControlKeys = ControlKeyLayout.Mac;
         keys = Capture(front.Key('a')).GetProperty("ctrlKeysWhileComposing").EnumerateArray().Select(k => (k.GetProperty("vk").GetInt32(), k.GetProperty("modifiers").GetInt32())).ToList();
         Assert.True(keys.Contains(('J', 2)) && keys.Contains(('E', 2)), "macOS 風の割り当て\n" + front.Trace);
@@ -1484,11 +1680,14 @@ internal static class ImeContractTests
         Assert.True(HasKey(Capture(front.Event("StateRequested")), VirtualKeys.Space, 0), "全角スペースなら Space も受け取る\n" + front.Trace);
         front.Open = false;
         var english = Capture(front.Event("StateRequested"));
-        Assert.True(english.GetProperty("printableAscii").GetBoolean(), "英数でもローマ字を見分けるので受け取る\n" + front.Trace);
-        front.Settings.DirectModeAutoDetect = false;
-        english = Capture(front.Event("StateRequested"));
-        Assert.True(!english.GetProperty("printableAscii").GetBoolean() && !HasKey(english, VirtualKeys.Space, 1), "見分けないなら通す\n" + front.Trace);
+        Assert.True(!english.GetProperty("printableAscii").GetBoolean() && !HasKey(english, VirtualKeys.Space, 1), "既定の英数ではアプリへ通す\n" + front.Trace);
         Assert.True(HasKey(english, ToggleShortcut.Hankaku, 0), "英数でも切り替えキーは受け取る\n" + front.Trace);
+        front.Type("kyouha");
+        Assert.Equal("kyouha", front.Document, front.Trace);
+        Assert.True(!front.Open && front.Composition["t1"] is null, "英数のまま確定先に入る\n" + front.Trace);
+        front.Settings.DirectModeAutoDetect = true;
+        english = Capture(front.Event("StateRequested"));
+        Assert.True(english.GetProperty("printableAscii").GetBoolean(), "設定を ON にしたときだけ英数でも判定する\n" + front.Trace);
     }
 
     [Test]

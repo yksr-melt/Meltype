@@ -203,6 +203,52 @@ public static unsafe class Exports
         }
     }
 
+    /// <summary>
+    /// Android の設定画面のユーザー辞書の登録で打った読みを、ひらがなにする (設定アプリと同じ <see cref="TypedReading"/>。kigoutou → きごうとう)。
+    /// dataDirectory の dictionaries/romaji.txt (ユーザーのローマ字の表) も使う。英字が無ければ前後の空白を除いただけで返す。
+    /// meltype_free で解放する。変換できなければ NULL。
+    /// </summary>
+    [UnmanagedCallersOnly(EntryPoint = "meltype_typed_reading")]
+    public static byte* TypedReadingToHiragana(byte* dataDirectory, byte* input)
+    {
+        try
+        {
+            var directory = FromUtf8(dataDirectory);
+            if (string.IsNullOrEmpty(directory)) throw new ArgumentException("dataDirectory が空です");
+            // ローマ字の表は、登録の画面を開いているあいだに変わることがまずないので、フォルダーごとに 1 回だけ読む
+            if (s_typedReading is not { } typed || typed.Directory != directory)
+                s_typedReading = typed = (directory, new TypedReading(directory));
+            return ToUtf8(typed.Reading.ToHiragana(FromUtf8(input) ?? ""));
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Error($"読みをひらがなにできませんでした: {ex}");
+            return null;
+        }
+    }
+
+    private static (string Directory, TypedReading Reading)? s_typedReading;
+
+    /// <summary>
+    /// Android の設定画面のユーザー辞書 (dataDirectory の userdict.txt) の一覧・登録・編集・削除。
+    /// 頼みと答えは JSON (<see cref="UserDictionaryRequests"/>)。meltype_free で解放する。失敗なら NULL。
+    /// </summary>
+    [UnmanagedCallersOnly(EntryPoint = "meltype_user_dictionary")]
+    public static byte* HandleUserDictionary(byte* dataDirectory, byte* request)
+    {
+        try
+        {
+            var directory = FromUtf8(dataDirectory);
+            if (string.IsNullOrEmpty(directory)) throw new ArgumentException("dataDirectory が空です");
+            return ToUtf8(UserDictionaryRequests.Handle(directory, FromUtf8(request) ?? ""));
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Error($"ユーザー辞書を読み書きできませんでした: {ex}");
+            return null;
+        }
+    }
+
     [UnmanagedCallersOnly(EntryPoint = "meltype_free")]
     public static void Free(byte* text) => NativeMemory.Free(text);
 
