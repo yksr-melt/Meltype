@@ -98,6 +98,9 @@ internal sealed record CompositionEnv(CompositionDetector Detector, IKanjiConver
     /// <summary>このキーで始める入力の、打ち始めの / を中黒 (・) にするか (<see cref="CompositionTextState.SlashAtStart"/>)。</summary>
     public bool SlashAtStart { get; init; }
 
+    /// <summary>検索欄と分かるときは、ワイルドカードを余分な空白なしで確定できる。</summary>
+    public bool SearchField { get; init; }
+
     /// <summary>ライブ変換の控え (<see cref="CompositionState.LiveCache"/>)。</summary>
     public required Dictionary<string, List<(string Reading, string? Engine, string Text)>> LiveCache { get; init; }
 

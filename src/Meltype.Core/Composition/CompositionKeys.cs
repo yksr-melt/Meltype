@@ -263,8 +263,11 @@ internal static class CompositionKeys
                 }
                 else if (SpaceCommitsMarkdownMarker(input))
                 {
-                    // Markdown の記号だけは、変換せず打った半角 + 空白で確定する
-                    CompositionCommit.CommitText(state, env, ComposedText.English(CompositionText.Raw(CompositionText.Read(input.Text, env)) + " "), english: false, preserveText: true, rule: "Space: Markdown の記号なので打ったまま");
+                    // Markdown の記号は半角 + 空白。検索欄の単独の演算子は、空白なしで検索に使う (#2224)。
+                    var marker = CompositionText.Raw(CompositionText.Read(input.Text, env));
+                    var searchOperator = env.SearchField && marker is "*" or "+" or "-";
+                    CompositionCommit.CommitText(state, env, ComposedText.English(searchOperator ? marker : marker + " "), english: false, preserveText: true,
+                        rule: searchOperator ? "Space: 検索欄の記号を打ったまま" : "Space: Markdown の記号なので打ったまま");
                 }
                 else if (SpaceCommitsAlphanumeric(input.Text, env))
                 {

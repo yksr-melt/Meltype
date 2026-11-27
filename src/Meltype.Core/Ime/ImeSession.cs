@@ -598,6 +598,18 @@ internal static class ImeSession
 
     private static SessionResult Pass => new(false, [], null);
 
+    private static bool IsSearchField(ImeElement? element)
+    {
+        if (element is null) return false;
+        var name = element.Name.Trim();
+        return name.Equals("Search", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("Find", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("Search box", StringComparison.OrdinalIgnoreCase) ||
+            name is "検索" or "検索ボックス" ||
+            element.ClassName.Equals("SearchBox", StringComparison.OrdinalIgnoreCase) ||
+            element.ClassName.Equals("SearchEdit", StringComparison.OrdinalIgnoreCase);
+    }
+
     private static SessionResult Consumed => new(true, [], null);
     private const long UserDictionaryCheckMs = 1000;
 
@@ -619,6 +631,7 @@ internal static class ImeSession
             ClassifyDirect = env.Parts.ClassifyDirect is { } classify ? (letters, final) => classify(letters, final, settings) : null,
             NowMs = env.TimeMs(),
             Selection = state.Field?.Selection,
+            SearchField = IsSearchField(state.Field?.Element),
             CanDeleteBackward = CanDeleteSurrounding(state),
             Clipboard = () => env.Environment.ClipboardText,
             OtherTipVersion = () => env.Environment.OtherTipVersion,

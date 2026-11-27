@@ -296,6 +296,8 @@ internal static class CompositionTests
         /// <summary>コードエディター (VS Code) で打っているか。</summary>
         public bool Code { get; set; }
 
+        public ImeElement? Element { get; init; }
+
         public long Now => _now;
 
         public FakeConverter Converter { get; } = new();
@@ -365,6 +367,7 @@ internal static class CompositionTests
                 Instance = "keyboard",
                 Field = new ImeField
                 {
+                    Element = Element,
                     Before = Host.Before,
                     After = Host.FollowingText,
                     Selection = Host.Selection?.Text,
@@ -4695,6 +4698,21 @@ internal static class CompositionTests
             k.Type(typed);
             k.Press(VirtualKeys.Return); // Space の後に Enter
             Assert.Equal(expected, k.Host.Document, $"「{typed}」+ Space → Enter");
+        }
+    }
+
+    [Test]
+    public static void SearchOperators_DoNotInsertMarkdownSpace()
+    {
+        foreach (var marker in new[] { "*", "+", "-" })
+        {
+            var search = new Keyboard { Element = new ImeElement("検索", "Edit") };
+            search.Type(marker + " ");
+            Assert.Equal(marker, search.Host.Document);
+
+            var body = new Keyboard { Element = new ImeElement("本文", "Edit") };
+            body.Type(marker + " ");
+            Assert.Equal(marker + " ", body.Host.Document);
         }
     }
 
