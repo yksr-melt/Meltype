@@ -815,8 +815,7 @@ internal static class ImeSession
         // 無変換でのカタカナ切り替えは、役割を分ける設定が OFF でも働く (CompositionController 側で NonConvertCyclesKana を見る)
         var settings = env.App;
         if (state.Composition.Scene is not CompositionScene.WithInput input || Direct(state)) return null;
-        // 保護区間ではカタカナに変えられない。役割を分けていなければ、無変換の英数切り替えに戻す (#1966)。
-        if (!(settings.SeparateKeyRoles || vk == VirtualKeys.NonConvert && settings.NonConvertCyclesKana && !CompositionLifecycle.IsProtectedInput(input))) return null;
+        if (!(settings.SeparateKeyRoles || vk == VirtualKeys.NonConvert && CompositionLifecycle.NonConvertCyclesKana(input, settings))) return null;
         return ComposeKey(state, env, vk, vk, null, false, false, false, false);
     }
 
