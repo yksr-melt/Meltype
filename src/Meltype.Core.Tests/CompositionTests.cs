@@ -1157,6 +1157,17 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void Misspelling_KudashiaOffersKudasai()
+    {
+        var keyboard = new Keyboard();
+        keyboard.Type("kudashia");
+        Assert.True(keyboard.Host.View?.Suggestion?.Contains("クダサイ", StringComparison.Ordinal) == true, "Tab で直す提案を出す");
+        keyboard.Press(VirtualKeys.Tab);
+        keyboard.Type("\n");
+        Assert.Equal("ください", keyboard.Host.Document);
+    }
+
+    [Test]
     public static void TypedKeys_ShownWhenEnabled()
     {
         // #224: 設定「打ったキーを表示」が ON なら、変換ボックスに打ったキーを渡す (変換中も)
