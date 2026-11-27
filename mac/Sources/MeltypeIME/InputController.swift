@@ -95,7 +95,8 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         if anchor.length > 0, !hasMarkedText, let selection = client.attributedSubstring(from: anchor)?.string { field["selection"] = selection }
         let start = max(0, anchor.location - Self.beforeLength)
         let requested = NSRange(location: start, length: anchor.location - start)
-        let before = client.attributedSubstring(from: requested)?.string
+        // 文書先頭には直前の文字がない。長さ 0 の範囲に nil を返す入力欄でも、先頭は空文字と分かる。
+        let before = anchor.location == 0 ? "" : client.attributedSubstring(from: requested)?.string
         if let before { field["before"] = before }
         noteBefore(unreadable: before == nil) {
             // 原因を調べるために、短い範囲なら読めるかも書く
@@ -145,6 +146,7 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         let flags = event.modifierFlags
         // flagsChanged (CapsLock) の isARepeat・characters は例外になる。characters は KeyMapping.text が読まない
         var key: [String: Any] = ["vk": KeyMapping.virtualKey(for: event),
+                                  "physical": ["type": "Mac", "keyCode": Int(event.keyCode)],
                                   "shift": flags.contains(.shift), "ctrl": flags.contains(.control),
                                   "alt": flags.contains(.option), "command": flags.contains(.command), "capsLock": flags.contains(.capsLock), "repeat": event.type == .keyDown && event.isARepeat]
         // event.characters は「見た目の 1 文字」で、UTF-16 要素が複数のことがある

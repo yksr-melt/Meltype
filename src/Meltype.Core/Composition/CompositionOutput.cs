@@ -93,7 +93,7 @@ internal static class CompositionOutput
         state.View = new CompositionView(Text(view.Text), [.. view.Candidates.Select(Text)], view.SelectedIndex, view.Converting, view.Hint,
             view.Clauses?.Select(Text).ToList(), view.SelectedClause, view.Notes, view.Meaning,
             view.Suggestion is { } suggestion ? Text(suggestion) : null, view.Predictions?.Select(Text).ToList(), view.SelectedPrediction, view.Typed,
-            view.Committed is { } committed ? Text(committed) : null, view.ContextHint, CaretBack: view.CaretBack);
+            view.Committed is { } committed ? Text(committed) : null, view.ContextHint, CaretBack: view.CaretBack, Colors: view.Colors);
         state.Hidden = false;
     }
 
@@ -145,4 +145,5 @@ internal sealed record ComposedView(
     string? Typed = null,
     ComposedText? Committed = null,
     string? ContextHint = null,
-    int CaretBack = 0);
+    int CaretBack = 0,
+    IReadOnlyList<string?>? Colors = null);

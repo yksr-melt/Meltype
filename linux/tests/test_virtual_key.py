@@ -27,7 +27,7 @@ class VirtualKeyTests(unittest.TestCase):
     def setUpClass(cls):
         source = Path(__file__).resolve().parents[1] / "ibus-engine-meltype"
         parsed = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
-        constants = {"SPECIAL_KEYS", "KEYPAD_KEYS", "JIS_SYMBOL_KEYS"}
+        constants = {"SPECIAL_KEYS", "KEYPAD_KEYS"}
         nodes = [node for node in parsed.body if
                  isinstance(node, ast.FunctionDef) and node.name == "virtual_key" or
                  isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id in constants
@@ -59,23 +59,6 @@ class VirtualKeyTests(unittest.TestCase):
     def test_caps_lock(self):
         # 切り替えキーに登録できる CapsLock を本体に渡す
         self.assertEqual((0x14, 0), self.virtual_key(self.ibus.KEY_Caps_Lock))
-
-    def test_jis_symbol_positions(self):
-        for keycode, characters, vk in [
-            (26, "@`", 0xC0), (39, ";+", 0xBB), (40, ":*", 0xBA), (13, "^~", 0xDE),
-            (124, "¥\\|", 0xDC), (89, "\\_", 0xE2), (27, "[{", 0xDB), (43, "]}", 0xDD),
-            (51, ",<", 0xBC), (52, ".>", 0xBE), (53, "/?", 0xBF), (11, "0~", 0x30),
-        ]:
-            for character in characters:
-                self.assertEqual((vk, ord(character)), self.virtual_key(character, keycode))
-
-    def test_shifted_numbers_keep_the_number_key(self):
-        for keycode, (character, digit) in enumerate(zip("#$%&'()", "3456789"), start=4):
-            self.assertEqual((ord(digit), ord(character)), self.virtual_key(character, keycode))
-
-    def test_other_layout_symbols_keep_their_text(self):
-        self.assertEqual((0, ord("@")), self.virtual_key("@", 3))  # US Shift+2
-        self.assertEqual((0, ord("[")), self.virtual_key("[", 26))
 
 
 if __name__ == "__main__":

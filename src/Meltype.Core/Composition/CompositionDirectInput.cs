@@ -23,9 +23,10 @@ internal static class CompositionDirectInput
 
     // - を付けて使う英語の接頭辞 (e-mail、re-do、co-op、x-ray)
 
-    internal static void Hold(CompositionState state, CompositionScene.Judging judging, CompositionEnv env, KeyEvent e)
+    internal static void Hold(CompositionState state, CompositionScene.Judging judging, CompositionEnv env, KeyEvent e, int position)
     {
         judging.Letters.Append(VirtualKeys.ToLetter(e.Vk));
+        judging.Positions.Add(position);
         judging.LastKeyTime = e.TimeMs;
         Send(state, judging, e);
         Decide(state, judging, env, final: false);
@@ -52,7 +53,7 @@ internal static class CompositionDirectInput
     {
         // 英語の接頭辞の後の - (e-、co-) の後ろだけで判定する。e-mail・co-op のような - の入った英単語なら英語。
         var part = LastHyphenPart(judging);
-        var verdict = env.Detector.IsHyphenatedEnglishWord(CompositionText.LearnedLanguages(env), judging.Letters.ToString()) ? Verdict.English
+        var verdict = env.Detector.Words.IsHyphenatedEnglishWord(CompositionText.LearnedLanguages(env), judging.Letters.ToString()) ? Verdict.English
             : part.Length == 0 ? Verdict.Undecided
             : env.ClassifyDirect!(part, final);
         // 2 文字の英単語 (up、my) でも、ローマ字の打ちかけとして読める (う + p) なら、続きを見てから決める
@@ -73,9 +74,9 @@ internal static class CompositionDirectInput
         // 判定を待たずに送っていた英字を消して、変換ボックスに入れ直す。
         CompositionOutput.DeleteHeld(state.Out, judging.Sent.ToString());
         var input = CompositionLifecycle.BeginFromJudging(state, judging, env);
-        foreach (var c in judging.Letters.ToString())
+        foreach (var (c, position) in judging.Letters.ToString().Zip(judging.Positions))
         {
-            input.Text = input.Text.KanaInput && Detection.KanaDetector.KanaForKey(char.ToUpperInvariant(c), char.IsAsciiLetterUpper(c)) is { } kana
+            input.Text = input.Text.KanaInput && Detection.KanaDetector.KanaForKey(position, char.IsAsciiLetterUpper(c)) is { } kana
                 ? CompositionText.AppendKana(input.Text, c, kana) : CompositionText.Append(input.Text, c);
         }
     }

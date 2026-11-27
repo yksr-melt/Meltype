@@ -69,3 +69,9 @@ internal sealed partial class SnippetJsonContext : JsonSerializerContext;
 [JsonSourceGenerationOptions(WriteIndented = true, AllowTrailingCommas = true)]
 [JsonSerializable(typeof(Meltype.Input.KeyCounter.Data))]
 internal sealed partial class KeyCountJsonContext : JsonSerializerContext;
+
+/// <summary>ユーザー辞書の一覧・登録・編集・削除 (Android の設定画面。<see cref="Dictionary.UserDictionaryRequests"/>) の JSON の受け渡し。</summary>
+[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
+[JsonSerializable(typeof(Dictionary.UserDictionaryRequest))]
+[JsonSerializable(typeof(Dictionary.UserDictionaryResponse))]
+internal sealed partial class UserDictionaryJsonContext : JsonSerializerContext;
