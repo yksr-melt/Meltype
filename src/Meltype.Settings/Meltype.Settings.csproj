@@ -19,14 +19,17 @@
     <BuiltInComInteropSupport>false</BuiltInComInteropSupport>
     <!-- 配布物は NativeAOT で publish する。各 OS の build スクリプトは -r <RID> だけを付ける -->
     <PublishAot>true</PublishAot>
+    <!-- RID なしの build は SkiaSharp・HarfBuzzSharp の全 RID の native アセット (約 550MB) を bin に置くので、ビルドする機械の RID にする -->
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">$(NETCoreSdkPortableRuntimeIdentifier)</RuntimeIdentifier>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia.Desktop" Version="12.2.0" />
-    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.2.0" />
+    <PackageReference Include="FluentAvaloniaUI" Version="3.1.0" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Meltype.Core\Meltype.Core.csproj" />
     <!-- 設定の項目は Settings のプロパティと属性 (DisplayName など) を reflection で読む。NativeAOT で削られないようにする -->
     <TrimmerRootAssembly Include="Meltype.Core" />
+    <IlcArg Include="--substitution:$(MSBuildThisFileDirectory)DataGrid.Substitutions.xml" />
   </ItemGroup>
 </Project>

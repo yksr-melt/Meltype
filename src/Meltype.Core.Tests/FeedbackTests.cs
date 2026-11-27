@@ -491,17 +491,18 @@ internal static class CodeProfileTests
     [Test]
     public static void LineContext_MultiLineStringsAndComments()
     {
+        var settings = new Settings();
         // Python の """ の中の行 (本文) で日本語が打てなかった
-        Assert.Equal(LineKind.String, LineContext.ClassifyText("def f():\n    \"\"\"\n    "));
-        Assert.Equal(LineKind.String, LineContext.ClassifyText("x = '''\nほん"));
-        Assert.Equal(LineKind.Comment, LineContext.ClassifyText("/*\n  説明"));
-        Assert.Equal(LineKind.Comment, LineContext.ClassifyText("<!--\n"));
+        Assert.Equal(LineKind.String, LineContext.ClassifyText("def f():\n    \"\"\"\n    ", settings));
+        Assert.Equal(LineKind.String, LineContext.ClassifyText("x = '''\nほん", settings));
+        Assert.Equal(LineKind.Comment, LineContext.ClassifyText("/*\n  説明", settings));
+        Assert.Equal(LineKind.Comment, LineContext.ClassifyText("<!--\n", settings));
         // 閉じた後はコード
-        Assert.Equal(LineKind.Code, LineContext.ClassifyText("\"\"\"\ndoc\n\"\"\"\nx = "));
-        Assert.Equal(LineKind.Code, LineContext.ClassifyText("/* a */\nint x = "));
+        Assert.Equal(LineKind.Code, LineContext.ClassifyText("\"\"\"\ndoc\n\"\"\"\nx = ", settings));
+        Assert.Equal(LineKind.Code, LineContext.ClassifyText("/* a */\nint x = ", settings));
         // コメント・1 行の文字列の中の """ /* は数えない
-        Assert.Equal(LineKind.Code, LineContext.ClassifyText("# \"\"\" in comment\nx = "));
-        Assert.Equal(LineKind.Code, LineContext.ClassifyText("s = \"/*\"\nx = "));
+        Assert.Equal(LineKind.Code, LineContext.ClassifyText("# \"\"\" in comment\nx = ", settings));
+        Assert.Equal(LineKind.Code, LineContext.ClassifyText("s = \"/*\"\nx = ", settings));
     }
 
     [Test]
@@ -1239,8 +1240,8 @@ internal static class LanguageLearningTests
             {
                 var text = new Composition.CompositionTextState();
                 var env = TestSupport.Env(detector);
-                foreach (var c in "game") CompositionText.Append(text, env, c);
-                return string.Join("|", CompositionText.Segments(text, env).Select(s => (s.IsEnglish ? "EN:" : "JA:") + s.Raw));
+                foreach (var c in "game") text = CompositionText.Append(text, c);
+                return string.Join("|", CompositionText.Segments(CompositionText.Read(text, env), env).Select(s => (s.IsEnglish ? "EN:" : "JA:") + s.Raw));
             }
             Assert.Equal("EN:game", Segments(CompositionDetector.CreateDefault(directory)));
             File.WriteAllText(Path.Combine(directory, "japanese.txt"), "game\n");
@@ -1254,8 +1255,8 @@ internal static class LanguageLearningTests
             {
                 var text = new Composition.CompositionTextState();
                 var env = TestSupport.Env(registered);
-                foreach (var c in typed) CompositionText.Append(text, env, c);
-                Assert.Equal(expected, CompositionText.Display(text, env, true), typed);
+                foreach (var c in typed) text = CompositionText.Append(text, c);
+                Assert.Equal(expected, CompositionText.Display(CompositionText.Read(text, env), env, true), typed);
             }
         }
         finally
@@ -1433,6 +1434,20 @@ internal static class RomajiTypoTests
             ("kore`git status`dekakunin", "これ`git status`でかくにん"),
             ("`npm install`wojikkou", "`npm install`をじっこう"),
             ("`kakko`", "`かっこ`")); // 後ろが日本語でも半角 (#1301 から。以前は ｀)
+    }
+
+    [Test]
+    public static void LeadingSymbolBeforeEnglish_IsHalfWidth()
+    {
+        // Issue #1543・#1544・#1736: 語の頭の \ - / の後ろが英語でも、記号を ￥ ー ・ にしていた (￥ん・ーーexpect・・repro)。
+        // 後ろが日本語 (ーーそれで・・きょう)・語の途中の - (こーひーshop)・\ + 数字 (￥1000) は今までどおり。
+        // \ の後ろの英字は、英単語か 2 文字目から読めないときだけまとめて英語 (\frac)。読めるなら \ + 1 文字の後ろは日本語 (\nです)
+        CompositionTests.AssertCommitted(
+            ("\\n", "\\n"), ("\\t", "\\t"), ("\\frac", "\\frac"), ("\\begin", "\\begin"), ("\\1000", "￥1000"),
+            ("kaigyouha\\ndesu", "かいぎょうは\\nです"), ("sorede\\tde", "それで\\tで"), ("nedanha\\1000desu", "ねだんは￥1000です"),
+            ("--expect", "--expect"), ("--help", "--help"), ("-v", "-v"), ("git --amend", "git --amend"),
+            ("--sorede", "ーーそれで"), ("-ta", "ーた"), ("ko-hi-shop", "こーひーshop"),
+            ("/repro", "/repro"), ("/kyou", "・きょう"));
     }
 
     [Test]

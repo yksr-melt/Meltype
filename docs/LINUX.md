@@ -142,7 +142,7 @@ sudo dnf install ./meltype-<version>-1.x86_64.rpm ./meltype-fcitx5-<version>-1.x
 
 設定は、アプリの一覧の「Meltype の設定」で変えられます。
 
-かな漢字変換は、同梱の Mozc で行います。Zenzai (llama.cpp の llama-server と zenz-v3.2-small、同梱) で、キャレットの前の文を文脈にして変換します (既定で ON。CPU で計算します)。CPU の負荷が気になるときは、設定の「Zenzai を使う」を OFF にしてください。自分の llama-server・モデルを使うときは、`config.json` の `"ZenzaiServerPath"`・`"ZenzaiModelPath"` に場所を書きます。
+かな漢字変換は、同梱の Mozc で行います。Zenzai (llama.cpp の llama-server と zenz-v3.2-small、同梱) で、キャレットの前の文を文脈にして変換します (既定で ON。CPU で計算します)。CPU の負荷が気になるときは、設定の「Zenzai を使う」を OFF にしてください。Vulkan・CUDA 対応の llama-server を使う場合は、「Zenzai: 使う GPU」に `llama-server --list-devices` で表示される名前 (例: `Vulkan0`) を指定できます。自分の llama-server・モデルを使うときは、`config.json` の `"ZenzaiServerPath"`・`"ZenzaiModelPath"` に場所を書きます。
 
 設定「カッコを打ったら中にカーソルを移動」が ON のとき、`「」`・`（）`・`()` などの空の括弧を <kbd>Enter</kbd> で確定すると、改行せず括弧の中へ移ります。
 
