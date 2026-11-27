@@ -600,6 +600,22 @@ internal static class ImeContractTests
     }
 
     [Test]
+    public static void KeyboardGame_IsHandledOnlyWhileTheChatIsOpen()
+    {
+        // Meltype キーボードはゲームでは止め、IME の入力コンテキストが結び付いている間 (チャット欄が開いている間) だけ、日本語で受け持つ
+        var front = new Front { InputMethod = InputMode.Keyboard, SendsImeOpen = false };
+        front.Settings.Mode = InputMode.Keyboard;
+        front.Traits.AddRange(["Game", "NonText"]);
+        Assert.True(!Active(front.Event("StateRequested")), "チャット欄が閉じている間は止める\n" + front.Trace);
+        front.Traits.Add("ImeContext");
+        var opened = front.Event("StateRequested");
+        Assert.True(Active(opened) && Japanese(opened), "チャット欄が開いたら日本語で受け持つ\n" + front.Trace);
+        front.Traits.Remove("ImeContext");
+        var closed = front.Event("StateRequested");
+        Assert.True(!Active(closed) && !Japanese(closed), "チャット欄が閉じたら止めて英数に戻す\n" + front.Trace);
+    }
+
+    [Test]
     public static void Game_StartsAlphanumericAndCanSwitchToJapanese()
     {
         // OS の IME そのもののフロントは、ゲームでも止めない。止めるとチャットで日本語を打てない (#1805)
