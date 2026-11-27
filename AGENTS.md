@@ -1,10 +1,16 @@
-## ほかの文書
+## 語彙
 
-配布用のパッケージを作成する・Windows にインストールして検証するときは [docs/dev/DEVELOPMENT.md](docs/dev/DEVELOPMENT.md) を読む。
-機能を追加するか判断するときは [CONTRIBUTING.md](CONTRIBUTING.md) の「運営の方針」、PR を出すときは「Pull Request を送る場合」を読む。
-`native/tip/`・`src/Meltype.Windows/Tip/` を変更するときは、先に [docs/dev/TSF_DESIGN.md](docs/dev/TSF_DESIGN.md) を読む。
-コード入力 (`src/Meltype.Core/Ime/LineContext.cs`・`ImeSession` のコードの行の判定) を変更するときは、先に [docs/dev/CODE_INPUT.md](docs/dev/CODE_INPUT.md) を読み、変更した仕様を同じ PR で更新する。
-ゲームのチャット欄の判定 (`ImeTrait.ImeContext`・`ImeSession.IsGame`・`KeyboardFront.PollSystemIme`) を変更するときは、先に [docs/dev/GAME_CHAT.md](docs/dev/GAME_CHAT.md) を読む。
+- XY 問題
+- 状態マシン
+- 代数的データ型
+- 疎結合
+- 関心の分離
+- 純粋関数
+- SSOT
+- 根本原因分析
+- fail-fast
+- Parse, don't validate
+- stringly typed
 
 ## 構成
 
@@ -42,7 +48,6 @@
 
 ## Issue に取り組むとき
 
-- XY 問題
 - 機能・設定を追加する要望は、たいてい追加せずに解決できる。
 - 新しい仕組み (bot・設定など) を作る前に、既存の仕組みで解決できないか検討する。
 
@@ -58,19 +63,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 あなたの名前
 ```
-
-### 語彙
-
-- 状態マシン
-- 代数的データ型
-- 疎結合
-- 関心の分離
-- 純粋関数
-- SSOT
-- 根本原因分析
-- fail-fast
-- Parse, don't validate
-- stringly typed
 
 ### コメント
 
@@ -193,3 +185,11 @@ CI は、前提 (署名の鍵などのシークレット) が無くて手順を�
 - PR に関係する箇所の文書が古ければ、利用者向けでも開発者向けでも更新する。利用者向けの文書（ルートの `README.md`・`SECURITY.md` と `docs/*.md`）は常時メンテ対象で、挙動を変更する PR では影響する箇所を探して同じ PR で更新する。
 - 利用者が知る必要がないことを利用者向けの文書に書かない。
 - 機能実装・枠組みの変更・状態や設定の追加は、先に Issue で相談する。
+
+## ほかの文書
+
+配布用のパッケージを作成する・Windows にインストールして検証するときは [docs/dev/DEVELOPMENT.md](docs/dev/DEVELOPMENT.md) を読む。
+機能を追加するか判断するときは [CONTRIBUTING.md](CONTRIBUTING.md) の「運営の方針」、PR を出すときは「Pull Request を送る場合」を読む。
+`native/tip/`・`src/Meltype.Windows/Tip/` を変更するときは、先に [docs/dev/TSF_DESIGN.md](docs/dev/TSF_DESIGN.md) を読む。
+コード入力 (`src/Meltype.Core/Ime/LineContext.cs`・`ImeSession` のコードの行の判定) を変更するときは、先に [docs/dev/CODE_INPUT.md](docs/dev/CODE_INPUT.md) を読み、変更した仕様を同じ PR で更新する。
+ゲームのチャット欄の判定 (`ImeTrait.ImeContext`・`ImeSession.IsGame`・`KeyboardFront.PollSystemIme`) を変更するときは、先に [docs/dev/GAME_CHAT.md](docs/dev/GAME_CHAT.md) を読む。
