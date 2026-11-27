@@ -87,6 +87,12 @@ public sealed record SessionResult(bool Consumed, IReadOnlyList<TextEdit> Commit
             if (i > 0) builder.Append(',');
             AppendNullable(builder, predictions ? null : view.Notes?[i].ToDisplayText());
         }
+        builder.Append("],\"colors\":[");
+        for (var i = 0; i < items.Count; i++)
+        {
+            if (i > 0) builder.Append(',');
+            AppendNullable(builder, view.Colors is { } colors && i < colors.Count ? colors[i] : null);
+        }
         builder.Append("],\"numbered\":").Append(Numbered(view) ? "true" : "false");
         builder.Append(",\"selected\":").Append(predictions ? view.SelectedPrediction : view.SelectedIndex)
             .Append(",\"selectedMeaning\":");
@@ -130,6 +136,7 @@ public sealed record SessionResult(bool Consumed, IReadOnlyList<TextEdit> Commit
             Predictions = predictions ? view.Predictions : null,
             SelectedPrediction = predictions ? view.SelectedPrediction : -1,
             Numbered = candidates && numberKeysSelect,
+            Colors = (candidates || predictions) ? view.Colors : null,
         };
     }
 

@@ -1260,6 +1260,71 @@ internal static class ImeContractTests
         Assert.Equal("がか", front.Composition["t1"], front.Trace);
     }
 
+    private static string Physical(string type, int code) => type switch
+    {
+        "Evdev" => $"{{\"type\":\"Evdev\",\"code\":{code}}}",
+        "Mac" => $"{{\"type\":\"Mac\",\"keyCode\":{code}}}",
+        "Windows" => $"{{\"type\":\"Windows\",\"scan\":{code},\"extended\":false}}",
+        _ => throw new ArgumentException(type),
+    };
+
+    /// <summary>文字を入力するキーを、仮想キーコードを付けずに物理キーと文字で送る (Linux・macOS のフロント)。</summary>
+    private static JsonElement PhysicalKey(Front front, string physical, char ch, bool shift = false, bool releaseFollows = false) =>
+        front.Event("KeyPressed", extra: $",\"key\":{{\"vk\":0,\"ch\":{(int)ch},\"shift\":{(shift ? "true" : "false")},\"releaseFollows\":{(releaseFollows ? "true" : "false")},\"physical\":{physical}}}");
+
+    [Test]
+    public static void KanaInput_ReadsTheKanaOfThePhysicalKey()
+    {
+        // #2434: 記号の文字からはキーが決まらない (「\」は ¥ キーとろキーのどちらでも出る)。Shift+数字の記号も
+        foreach (var (os, t, at, semicolon, yen, ro, three) in new[]
+        {
+            ("Evdev", 20, 26, 39, 124, 89, 4),
+            ("Mac", 0x11, 0x21, 0x29, 0x5D, 0x5E, 0x14),
+            ("Windows", 0x14, 0x1A, 0x27, 0x7D, 0x73, 0x04),
+        })
+        {
+            var front = new Front();
+            front.Settings.InputStyle = InputStyle.Kana;
+            PhysicalKey(front, Physical(os, t), 't');
+            PhysicalKey(front, Physical(os, at), '@');
+            PhysicalKey(front, Physical(os, semicolon), ';');
+            PhysicalKey(front, Physical(os, yen), '\\');
+            PhysicalKey(front, Physical(os, ro), '\\');
+            PhysicalKey(front, Physical(os, three), '#', shift: true);
+            Assert.Equal("がれーろぁ", front.Composition["t1"], $"{os}\n{front.Trace}");
+        }
+    }
+
+    [Test]
+    public static void PhysicalKey_KanaFollowsThePositionAndRomajiFollowsTheCharacter()
+    {
+        // Dvorak の配列: S の位置のキーで o が入る
+        var kana = new Front();
+        kana.Settings.InputStyle = InputStyle.Kana;
+        PhysicalKey(kana, Physical("Evdev", 31), 'o');
+        Assert.Equal("と", kana.Composition["t1"], kana.Trace);
+        var romaji = new Front();
+        PhysicalKey(romaji, Physical("Evdev", 47), 'k');
+        PhysicalKey(romaji, Physical("Evdev", 31), 'o');
+        Assert.Equal("こ", romaji.Composition["t1"], romaji.Trace);
+        // 中指NICOLA: 離したキーも位置で読む。Dvorak の D の位置は e、J の位置は h。D を押したまま J を先に離すと D+J の「お」
+        var middle = new Front();
+        middle.Settings.InputStyle = InputStyle.Kana;
+        middle.Settings.KanaLayout = KanaLayout.NakayubiNicola;
+        PhysicalKey(middle, Physical("Evdev", 32), 'e', releaseFollows: true);
+        PhysicalKey(middle, Physical("Evdev", 36), 'h', releaseFollows: true);
+        middle.Event("KeyReleased", extra: $",\"key\":{{\"vk\":{(int)'H'},\"physical\":{Physical("Evdev", 36)}}}");
+        middle.Event("KeyReleased", extra: $",\"key\":{{\"vk\":{(int)'E'},\"physical\":{Physical("Evdev", 32)}}}");
+        Assert.Equal("お", middle.Composition["t1"], middle.Trace);
+        // 英数状態で打った語を日本語に戻すときも、かなは位置で決める (Dvorak の k・a は QWERTY の v・a の位置)
+        var direct = new Front { ClassifyDirect = (letters, _, _) => letters == "ka" ? Verdict.Japanese : Verdict.Undecided };
+        direct.Settings.InputStyle = InputStyle.Kana;
+        direct.Event("AlphanumericModeSelected");
+        PhysicalKey(direct, Physical("Evdev", 47), 'k');
+        PhysicalKey(direct, Physical("Evdev", 30), 'a');
+        Assert.Equal("ひち", direct.Composition["t1"], direct.Trace);
+    }
+
     [Test]
     public static void Numpad_FollowsTheNumberKeysSetting()
     {

@@ -1181,7 +1181,7 @@ STDMETHODIMP TextService::OnPreservedKey(ITfContext* context, REFGUID guid, BOOL
         *eaten = TRUE;
         const bool repeat = eatenDown_[slot];
         eatenDown_[slot] = true;
-        HandleKey(context, ShortcutKey(binding.key.uVKey, keyParam), 0, repeat, true);
+        HandleKey(context, ShortcutKey(binding.key.uVKey, keyParam), keyParam, 0, repeat, true);
         MaskSystemModifier();
         return S_OK;
     }
@@ -1356,11 +1356,11 @@ STDMETHODIMP TextService::OnKeyDown(ITfContext* context, WPARAM wParam, LPARAM l
     const bool repeat = eatenDown_[slot];
     eatenDown_[slot] = true;
     if (CapturesKey(vk, lParam)) {
-        HandleKey(context, ShortcutKey(vk, lParam), vk == VK_SPACE ? L' ' : 0, repeat, true);
+        HandleKey(context, ShortcutKey(vk, lParam), lParam, vk == VK_SPACE ? L' ' : 0, repeat, true);
         MaskSystemModifier();
         return S_OK;
     }
-    HandleKey(context, vk, CharOf(vk, lParam), repeat, false);
+    HandleKey(context, vk, lParam, CharOf(vk, lParam), repeat, false);
     return S_OK;
 }
 
@@ -1384,7 +1384,7 @@ STDMETHODIMP TextService::OnKeyUp(ITfContext*, WPARAM wParam, LPARAM lParam, BOO
     return S_OK;
 }
 
-void TextService::HandleKey(ITfContext* context, UINT vk, wchar_t ch, bool repeat, bool listed) {
+void TextService::HandleKey(ITfContext* context, UINT vk, LPARAM lParam, wchar_t ch, bool repeat, bool listed) {
     // 8 = Windows キー (Meltype.exe は Mac の Command と同じく、確定してアプリに渡す)
     const bool shift = KeyDown(VK_SHIFT), control = KeyDown(VK_CONTROL), alt = KeyDown(VK_MENU), command = KeyDown(VK_LWIN) || KeyDown(VK_RWIN);
     bool failed = false;
@@ -1409,7 +1409,12 @@ void TextService::HandleKey(ITfContext* context, UINT vk, wchar_t ch, bool repea
         // 受け取るように言われたキーは、入力モードを表示する位置も送る (切り替えたかは Meltype.exe が決める)
         const RECT anchor = listed ? CaretRect(ec, context) : RECT{};
         ownEdit_ = true;
-        const std::string key = std::string(",\"key\":{\"vk\":") + std::to_string(vk) + ",\"ch\":" + std::to_string(ch) +
+        // lParam の 16〜23 ビットはスキャンコード、24 ビットは拡張キー
+        const UINT scan = (static_cast<UINT>(lParam) >> 16) & 0xFF;
+        const std::string physical = scan ? std::string(",\"physical\":{\"type\":\"Windows\",\"scan\":") + std::to_string(scan) +
+                                                ",\"extended\":" + ((lParam >> 24) & 1 ? "true" : "false") + "}"
+                                          : "";
+        const std::string key = std::string(",\"key\":{\"vk\":") + std::to_string(vk) + ",\"ch\":" + std::to_string(ch) + physical +
                                 ",\"shift\":" + (shift ? "true" : "false") + ",\"ctrl\":" + (control ? "true" : "false") +
                                 ",\"alt\":" + (alt ? "true" : "false") + ",\"command\":" + (command ? "true" : "false") +
                                 ((GetKeyState(VK_CAPITAL) & 1) ? ",\"capsLock\":true" : "") +
@@ -2323,6 +2328,7 @@ void TextService::ShowCandidates(TfEditCookie ec, ITfContext* context, const Jso
     const JsonValue& list = view[L"candidates"];
     for (const JsonValue& item : list[L"items"].array) data.candidates.push_back(item.Str());
     for (const JsonValue& item : list[L"notes"].array) data.notes.push_back(item.Str());
+    for (const JsonValue& item : list[L"colors"].array) data.colors.push_back(item.Str());
     data.selected = list.IsNull() ? -1 : list[L"selected"].Int();
     data.numbered = list[L"numbered"].Bool();
     data.meaning = list[L"selectedMeaning"].Str();

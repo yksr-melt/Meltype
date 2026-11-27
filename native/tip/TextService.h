@@ -112,7 +112,7 @@ private:
     // Meltype.exe が、文字に関係なく受け取るように言ったキー (capture.keys) か
     bool CapturesKey(UINT vk, LPARAM lParam) const;
     // listed: capture.keys のキー (入力モードを表示する位置も送る)。repeat: 押したままの自動の繰り返し
-    void HandleKey(ITfContext* context, UINT vk, wchar_t ch, bool repeat, bool listed);
+    void HandleKey(ITfContext* context, UINT vk, LPARAM lParam, wchar_t ch, bool repeat, bool listed);
     // 左右の Alt (VK_LMENU / VK_RMENU) の押下・解放を本体に送る (ImeCapture.AltKeys)。キーのシンクには Alt (WM_SYSKEYDOWN) が届かないので、
     // Meltype.exe の低レベルフックが見て kAltKey で知らせる (TipServer.OnKey)。単独押しかは本体が決め、解放は Meltype.exe が送り直す
     void HandleAltKey(UINT vk, UINT flags);

@@ -72,11 +72,24 @@ struct CandidateList: Decodable {
     let items: [String]
     /// 候補ごとの注記 (無ければ nil)
     let notes: [String?]
+    /// 候補ごとの色見本 (#rrggbbaa。無ければ nil)
+    let colors: [String?]?
     let numbered: Bool
     let selected: Int
     /// 選んでいる候補の意味。候補で meaningDelayMs 止まったら注釈に出す
     let selectedMeaning: String?
     let meaningDelayMs: Int
+
+    init(items: [String], notes: [String?], colors: [String?]? = nil, numbered: Bool, selected: Int,
+         selectedMeaning: String?, meaningDelayMs: Int) {
+        self.items = items
+        self.notes = notes
+        self.colors = colors
+        self.numbered = numbered
+        self.selected = selected
+        self.selectedMeaning = selectedMeaning
+        self.meaningDelayMs = meaningDelayMs
+    }
 }
 
 /// libMeltypeNative.dylib を読み込んで呼ぶ。Meltype.app/Contents/Frameworks に置く (build.sh)。

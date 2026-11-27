@@ -113,6 +113,7 @@ internal static class CompositionConversion
                 Expanded = true,
                 Fixed = true,
                 Notes = utility.Notes,
+                Colors = utility.Colors,
             };
             fixedClause.NotLearned.UnionWith(utility.NotLearned);
             // 続けて入力する前の選択だけを復元し、候補の順 (注記と同じ順) は変えない。
@@ -557,7 +558,7 @@ internal static class CompositionConversion
         var lower = raw.ToLowerInvariant();
         if (!SuruRomajiKeepJapanese.Contains(lower)) return false;
         var reading = env.Detector.Romaji.ConvertLenient(lower, final: true);
-        return CompositionDetector.IsSuruForm(reading);
+        return WordJudge.IsSuruForm(reading);
     }
 
     /// <summary>
@@ -565,7 +566,7 @@ internal static class CompositionConversion
     /// (なら → 奈良、しか → 歯科、なの → 名の、した → 下、したい → 死体)。
     /// </summary>
     private static bool IsParticleAfterEnglish(Clause clause) =>
-        (NounAttachedWords.Contains(clause.Reading) || CompositionDetector.SuruForms.Any(clause.Reading.StartsWith)) &&
+        (NounAttachedWords.Contains(clause.Reading) || WordJudge.SuruForms.Any(clause.Reading.StartsWith)) &&
         clause.Text.Length > 0 && !IsKana(clause.Text[0]) && clause.Text != clause.Reading;
 
     // 名詞に付く付属語。文節の読み全体と比べるので、変換エンジンが 1 つの文節にまとめる形 (には・なので) も並べる。
