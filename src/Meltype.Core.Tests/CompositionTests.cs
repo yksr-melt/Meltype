@@ -1157,6 +1157,17 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void Misspelling_KudashiaOffersKudasai()
+    {
+        var keyboard = new Keyboard();
+        keyboard.Type("kudashia");
+        Assert.True(keyboard.Host.View?.Suggestion?.Contains("クダサイ", StringComparison.Ordinal) == true, "Tab で直す提案を出す");
+        keyboard.Press(VirtualKeys.Tab);
+        keyboard.Type("\n");
+        Assert.Equal("ください", keyboard.Host.Document);
+    }
+
+    [Test]
     public static void TypedKeys_ShownWhenEnabled()
     {
         // #224: 設定「打ったキーを表示」が ON なら、変換ボックスに打ったキーを渡す (変換中も)
@@ -2487,6 +2498,12 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void FunaboriStaysTogetherAsJapanese()
+    {
+        AssertCommitted(("funabori", "ふなぼり"), ("funaborideau", "ふなぼりであう"), ("nab", "nab"));
+    }
+
+    [Test]
     public static void Issue710_UserDictionaryAcceptsOneCharacterReading()
     {
         var dictionary = new UserDictionary(null);
@@ -2640,6 +2657,23 @@ internal static class CompositionTests
         var literal = new Keyboard();
         literal.Type("...\n");
         Assert.Equal("...", literal.Host.Document);
+    }
+
+    [Test]
+    public static void RepeatedPeriods_OfferOneJapaneseStopPerKey()
+    {
+        foreach (var (count, style, period) in new[] { (3, PunctuationStyle.Japanese, '。'), (4, PunctuationStyle.Japanese, '。'), (6, PunctuationStyle.Japanese, '。'), (4, PunctuationStyle.FullWidthCommaPeriod, '．') })
+        {
+            var raw = new string('.', count);
+            var expected = new string(period, count);
+            var keyboard = new Keyboard { Punctuation = style };
+            keyboard.Type(raw + " ");
+            var candidates = keyboard.Host.View!.Candidates;
+            Assert.True(candidates.Contains(raw) && candidates.Contains(expected), string.Join(", ", candidates));
+            keyboard.SelectCandidate(candidates.ToList().IndexOf(expected));
+            keyboard.Type("\n");
+            Assert.Equal(expected, keyboard.Host.Document);
+        }
     }
 
     [Test]
@@ -4764,6 +4798,9 @@ internal static class CompositionTests
             ["wakatte.tv"] = "wakatte.tv",
             ["wakatte.tvdemiru"] = "wakatte.tvでみる",
             ["wakatte."] = "わかって。",
+            ["youtu.be"] = "youtu.be",
+            ["youtu.bedemiru"] = "youtu.beでみる",
+            ["arigatou.benkyouninarimasu"] = "ありがとう。べんきょうになります",
             // 版の番号のプレリリースの名前は英字。x.y.z でない数字の後ろの - は のばす音
             ["ver1.4.1-pre.1"] = "ver1.4.1-pre.1",
             ["v1.10.0-rc.1"] = "v1.10.0-rc.1",
