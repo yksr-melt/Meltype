@@ -58,7 +58,11 @@ public static class AppPaths
 
     public static string ConfigFile => Path.Combine(DataDirectory, "config.json");
     public static string StateFile => Path.Combine(DataDirectory, "state.json");
-    public static string UserDictionaryFile => Path.Combine(DataDirectory, "userdict.txt");
+    public static string UserDictionaryFile => Path.Combine(DataDirectory, UserDictionaryFileName);
+
+    /// <summary>ユーザー辞書のファイル名 (データフォルダの中)。</summary>
+    public const string UserDictionaryFileName = "userdict.txt";
+
     public static string LogFile => Path.Combine(DataDirectory, "meltype.log");
     /// <summary>落ちたときの例外 (ファイルへのログが OFF でも書く)。</summary>
     public static string CrashLogFile => Path.Combine(DataDirectory, "crash.log");

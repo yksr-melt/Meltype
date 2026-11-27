@@ -29,6 +29,9 @@ internal sealed class MeltypeEngine : IDisposable
     /// <summary>動かしている設定 (<see cref="Running"/>) が変わった (前と後)。どのスレッドからも呼ばれる。受け取った側で UI スレッドに移して <see cref="OnSettingsChanged"/> を呼ぶ。</summary>
     public event Action<Settings, Settings>? SettingsChanged;
 
+    /// <summary>動作モードに Meltype IME を選んだが、使えないので Meltype キーボードで動かしている。どのスレッドからも呼ばれる。</summary>
+    public event Action? TsfUnavailable;
+
     /// <summary>Ctrl + 半角/全角 が押された (フックのスレッドから呼ばれる。受け取った側で UI スレッドに移して切り替える)。</summary>
     public event Action? ToggleRequested;
 
@@ -47,8 +50,11 @@ internal sealed class MeltypeEngine : IDisposable
         runtime.SettingsChanged += next =>
         {
             if (_running is not { } previous) return;
+            // 使えなければ Running は Meltype キーボードになるので、選んだかは config.json の設定で比べる
+            var choseTsf = SwitchesToTsf(_settings.Mode, next.Mode);
             Load(next);
             SettingsChanged?.Invoke(previous, _running);
+            if (choseTsf && _running.Mode != InputMode.Tsf) TsfUnavailable?.Invoke();
         };
         Load(runtime.Settings.Current);
         _monitor = new KeyboardMonitor(OnKey, OnMouseButton, OnForegroundChanged, OnFocusChanged);
@@ -123,7 +129,8 @@ internal sealed class MeltypeEngine : IDisposable
         // Meltype 自身が送り直したキーは、印 (InjectedMarker) でフックの入口で除いているので、ここには来ない (自分の出力を処理し直さない)。
         // Chrome リモート デスクトップ・Parsec で操作されている間も同じ (#372)。
         if (e.Injected && (settings.AllowInjectedInput || _remote.Active is not null)) e = e with { Injected = false };
-        else if (e.Injected && e.IsDown && !_injectedHintLogged && settings.Mode == InputMode.Keyboard && KeyText.CharFromKey(e.Vk, e.Scan, false) is { } injected && injected > ' ')
+        else if (e.Injected && e.IsDown && !_injectedHintLogged && settings.Mode == InputMode.Keyboard &&
+            KeyText.CharFromKey(e.Vk, e.Scan, IsDown(VirtualKeys.Shift)) is { } injected && injected > ' ')
         {
             // キー配列を変えるソフト (ULE4JIS: US 配列にする) も、押したキーを別のキーとして送り直すので、ほかのソフトが送ったキーとして届く (issue #250)。
             // Windows のタッチキーボードの打鍵も同じ (issue #729)
