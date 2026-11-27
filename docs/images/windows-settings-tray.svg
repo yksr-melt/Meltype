@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="168" viewBox="0 0 640 168" role="img" aria-labelledby="title desc">
+  <title id="title">Windows のタスクバーから Meltype の設定を開く</title>
+  <desc id="desc">画面右下の青い丸の「あ」を右クリックし、「設定・辞書・学習データ...」を選ぶ。青い丸が見当たらなければ、その左の上向き矢印をクリックする。</desc>
+  <rect x="1" y="1" width="638" height="166" rx="12" fill="#f6f8fc" stroke="#a9b4c4"/>
+  <path d="M2 116h636v39q0 11-11 11H13q-11 0-11-11z" fill="#e2e8f2"/>
+  <g font-family="Yu Gothic UI, Meiryo, Noto Sans CJK JP, sans-serif" fill="#18283d" font-size="15">
+    <rect x="311" y="17" width="278" height="38" rx="6" fill="#fff" stroke="#8494a8"/>
+    <text x="325" y="41">設定・辞書・学習データ...</text>
+    <text x="185" y="85">青い丸を右クリック</text>
+    <text x="24" y="147">Windows のタスクバー（右端）</text>
+    <text x="520" y="146">JPN　　12:00</text>
+  </g>
+  <path d="M335 80h111v42" fill="none" stroke="#005ea7" stroke-width="2"/>
+  <path d="M440 116l6 6 6-6" fill="none" stroke="#005ea7" stroke-width="2" stroke-linejoin="round"/>
+  <path d="m391 144 7-7 7 7" fill="none" stroke="#18283d" stroke-width="2" stroke-linejoin="round"/>
+  <circle cx="446" cy="141" r="13" fill="#0078d4"/>
+  <text x="446" y="147" text-anchor="middle" font-family="Yu Gothic UI, Meiryo, Noto Sans CJK JP, sans-serif" fill="#fff" font-size="17" font-weight="bold">あ</text>
+  <text x="483" y="147" text-anchor="middle" font-family="Yu Gothic UI, Meiryo, Noto Sans CJK JP, sans-serif" fill="#18283d" font-size="17">あ</text>
+</svg>
