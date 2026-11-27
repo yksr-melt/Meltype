@@ -15,7 +15,7 @@ namespace Meltype.Detection;
 /// - 知っている英単語は、英単語の書き方の大文字・小文字 (its・Its・ITS・GitHub) のときだけノードにする (iTs は its にしない)。
 /// - 1 文字の英単語 (a・i・u・r) は、前後を英字以外で区切ったときだけノードにする。
 /// - 自動判定を使わないなら、Shift を押して打った大文字で始まる語だけを英語のノードにする。
-/// - 記号・数字の決まり (ドメイン・拡張子・ユーザー名・- の入った語・数字を挟んだ略語・英文の中の記号) は、コストで比べずにその区間を英語にする。
+/// - 記号・数字の決まり (ドメイン・拡張子・ユーザー名・\ + 英字・- の入った語・数字を挟んだ略語・英文の中の記号) は、コストで比べずにその区間を英語にする。
 /// - 技術用語の綴りのすぐ後ろが する の活用 (share|して・make|します) なら、その綴りを日本語の語 (しゃれ・まけ) として読まない (しゃれする・まけします は日本語でない)。ただし一段動詞の使役形 (make|させた) は日本語のまま。
 /// - ローマ字入力では 1 文字ずつを区切りの位置にする (単位の途中で区切れる: get|Element、medal|s|ha)。かな入力では打った単位の境目だけ。
 /// </summary>
@@ -102,10 +102,10 @@ internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
     }
 
     /// <summary>コストで比べずに、その区間を英語にする記号・数字の決まり (このクラスの説明の「コストで比べない決まり」)。</summary>
-    private enum LexemeRule { None, Dotfile, UserName, HyphenatedWord, Numeronym, ProperNounWithDigits, VersionSuffix }
+    private enum LexemeRule { None, Dotfile, UserName, Escape, HyphenatedWord, Numeronym, ProperNounWithDigits, VersionSuffix }
 
     /// <summary>
-    /// 1 つの位置から始まる字句。Rule が None でなければ、End (単位の番号) までを英語にする。
+    /// 1 つの位置から始まる字句。Rule が None でなければ、End (打った文字の位置) までを英語にする。
     /// DomainEnd はローマ字として読める語 + ドメイン・拡張子の終わり (重みで比べる)、Technical は技術用語の綴り + する の活用の頭。
     /// </summary>
     private readonly record struct Lexeme(LexemeRule Rule, int End, int DomainEnd, bool Technical);
@@ -283,15 +283,18 @@ internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
             var domain = unit >= 0 && !kanaInput && englishLevel ? ReadableStemDotSuffixEnd(prepared, learning, units, unit, pending) : -1;
             if (unit < 0 || kanaInput) return new(LexemeRule.None, -1, domain, technical);
             // 上から順に、先に当てはまった決まりを使う
-            if (LeadingDotfileEnd(prepared, learning, units, unit, pending, manual) is >= 0 and var dotfile) return new(LexemeRule.Dotfile, dotfile, domain, technical);
-            if (UserNameEnd(prepared, units, unit, pending) is >= 0 and var user) return new(LexemeRule.UserName, user, domain, technical);
+            if (LeadingDotfileEnd(prepared, learning, units, unit, pending, manual) is >= 0 and var dotfile) return new(LexemeRule.Dotfile, RawEnd(dotfile), domain, technical);
+            if (UserNameEnd(prepared, units, unit, pending) is >= 0 and var user) return new(LexemeRule.UserName, RawEnd(user), domain, technical);
             if (!englishLevel) return new(LexemeRule.None, -1, domain, technical);
-            if (HyphenatedWordEnd(prepared, learning, units, unit, pending) is >= 0 and var hyphenated) return new(LexemeRule.HyphenatedWord, hyphenated, domain, technical);
-            if (NumeronymEnd(prepared, units, unit, pending) is >= 0 and var numeronym) return new(LexemeRule.Numeronym, numeronym, domain, technical);
-            if (ProperNounWithDigitsEnd(prepared, units, unit, pending) is >= 0 and var proper) return new(LexemeRule.ProperNounWithDigits, proper, domain, technical);
-            if (VersionSuffixEnd(units, unit, pending) is >= 0 and var version) return new(LexemeRule.VersionSuffix, version, domain, technical);
+            if (EscapeEnd(learning, text, p) is >= 0 and var escape) return new(LexemeRule.Escape, escape, domain, technical);
+            if (HyphenatedWordEnd(prepared, learning, units, unit, pending) is >= 0 and var hyphenated) return new(LexemeRule.HyphenatedWord, RawEnd(hyphenated), domain, technical);
+            if (NumeronymEnd(prepared, units, unit, pending) is >= 0 and var numeronym) return new(LexemeRule.Numeronym, RawEnd(numeronym), domain, technical);
+            if (ProperNounWithDigitsEnd(prepared, units, unit, pending) is >= 0 and var proper) return new(LexemeRule.ProperNounWithDigits, RawEnd(proper), domain, technical);
+            if (VersionSuffixEnd(units, unit, pending) is >= 0 and var version) return new(LexemeRule.VersionSuffix, RawEnd(version), domain, technical);
             return new(LexemeRule.None, -1, domain, technical);
         }
+        // 単位の番号 end までの、打った文字の位置 (最後の単位までなら、入力途中の子音も含める)
+        int RawEnd(int end) => end == units.Count ? length : prepared.RawOffsets[end];
         var lexemes = new Lexeme[length];
         for (var p = 0; p < length; p++)
             if (IsBoundary(p)) lexemes[p] = Lex(p);
@@ -313,12 +316,12 @@ internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
                 var key = slot / keep;
                 if (best[p, key, slot % keep] is not { } node) continue;
                 var state = LatticeState.FromKey(key);
-                var end = forced;
+                var to = forced;
                 // ドメイン・拡張子の . の後ろ (tetr.io、MeltypeTip.dll)
-                if (end < 0 && unit > 0 && englishLevel && !kanaInput && units[unit - 1].Raw == "." && state.PreviousEnglish) end = DotSuffixEnd(prepared, learning, units, unit, pending);
-                if (end > unit)
+                if (to < 0 && unit > 0 && englishLevel && !kanaInput && units[unit - 1].Raw == "." && state.PreviousEnglish &&
+                    DotSuffixEnd(prepared, learning, units, unit, pending) is var suffix && suffix > unit) to = RawEnd(suffix);
+                if (to > p)
                 {
-                    var to = end == units.Count ? length : prepared.RawOffsets[end];
                     OfferEdge(node, state, new LatticeEdge(p, to, true, "", false, false), KnownEnglishCost);
                     continue;
                 }
@@ -367,7 +370,7 @@ internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
         {
             trace($"lattice {text} (manual {manual}, preceding {precedingEnglish?.ToString() ?? "-"}, following {followingEnglish?.ToString() ?? "-"}, bias {englishBias})");
             for (var p = 0; p < length; p++)
-                if (lexemes[p].Rule != LexemeRule.None) trace($"  字句 {p}: {lexemes[p].Rule} (単位 {lexemes[p].End} まで英語)");
+                if (lexemes[p].Rule != LexemeRule.None) trace($"  字句 {p}: {lexemes[p].Rule} ({lexemes[p].End} 文字目まで英語)");
             foreach (var (cost, state, node) in finals.OrderBy(f => f.Cost))
                 trace($"  {(node == chosen ? "*" : " ")} {cost:0.00} {state.Side}{(state.Particle ? " particle" : "")}{(state.Sokuon ? " sokuon" : "")}: {DescribePath(node, text, true)}");
         }
@@ -935,6 +938,22 @@ internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
         // 前の語の続きの母音なら、後ろが ん で終わる読み (dai|1|dan) も日本語
         if (headContinuesWord && tail.Length >= 2 && words.Romaji.AnalyzeFragment(tail) is { IsValid: true, Partial: "" or "n" }) return -1;
         return i;
+    }
+
+    /// <summary>
+    /// 打った文字の位置 p の \ と、すぐ後ろに続く英字の終わり (打った文字の位置)。無ければ -1。
+    /// \ の後ろの英字は 1 文字でもローマ字として読まない (￥ん になっていた: issue #1543)。
+    /// 続く英字が英単語 (\begin) か、2 文字目からがかなとして最後まで読めない (\frac) なら英字をまとめて英語にし、
+    /// 読めるなら \ と 1 文字だけを英語にして、その先 (\n|desu・\t|de) の区切りはコストで決める。
+    /// </summary>
+    private int EscapeEnd(LanguageLearning learning, string text, int p)
+    {
+        if (text[p] != '\\' || p + 1 >= text.Length || !char.IsAsciiLetter(text[p + 1])) return -1;
+        var end = p + 1;
+        while (end < text.Length && char.IsAsciiLetter(text[end])) end++;
+        var letters = text[(p + 1)..end].ToLowerInvariant();
+        var whole = words.IsLatticeEnglishWord(learning, letters) || words.Romaji.AnalyzeFragment(letters[1..]) is not { IsValid: true, Partial: "" or "n" };
+        return whole ? end : p + 2;
     }
 
     /// <summary>

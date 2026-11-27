@@ -1157,6 +1157,17 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void Misspelling_KudashiaOffersKudasai()
+    {
+        var keyboard = new Keyboard();
+        keyboard.Type("kudashia");
+        Assert.True(keyboard.Host.View?.Suggestion?.Contains("クダサイ", StringComparison.Ordinal) == true, "Tab で直す提案を出す");
+        keyboard.Press(VirtualKeys.Tab);
+        keyboard.Type("\n");
+        Assert.Equal("ください", keyboard.Host.Document);
+    }
+
+    [Test]
     public static void TypedKeys_ShownWhenEnabled()
     {
         // #224: 設定「打ったキーを表示」が ON なら、変換ボックスに打ったキーを渡す (変換中も)
@@ -4828,6 +4839,10 @@ internal static class CompositionTests
     [Test]
     public static void ReportedWords_AreCandidates()
     {
+        var candidates = CandidateDictionary.Load(null);
+        foreach (var reading in new[] { "すきじご", "すきじがたり", "すきじかたり", "すきじがた" })
+            Assert.True(candidates.Lookup(reading).Contains("隙自語"), reading);
+
         // 報告 (#968): かんそうりつ の候補に 乾燥率
         Assert.True(CandidateDictionary.Load(null).Lookup("かんそうりつ").Contains("乾燥率"), "かんそうりつ → 乾燥率");
         Assert.True(CandidateDictionary.Load(null).Lookup("ぶるあか").Contains("ブルーアーカイブ"), "ぶるあか → ブルーアーカイブ (#1106)");
@@ -5195,7 +5210,7 @@ internal static class CompositionTests
             ("nk\b", "ん"),              // 後ろのキーで決めた ん も決め直す (打ちかけの n は確定される形で見せる)
             ("kyouhagoogle\b", "きょうはgoogl"), // 英語の区間は 1 文字
             ("/k\b", "・"),               // 打ち始めの / を ・ にした単位は残す (打ち直すと / になる)
-            ("/kk\b", "・k"),
+            ("/kk\b", "/k"),              // /k と打ったときと同じ (打ちかけの子音が英語の区間なので / のまま)
             ("/\bka/", "か/"),                // 入力が空になったら、次の / は打ち始めの / ではない (かなの後ろの /)
         })
         {

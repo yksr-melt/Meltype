@@ -1437,6 +1437,20 @@ internal static class RomajiTypoTests
     }
 
     [Test]
+    public static void LeadingSymbolBeforeEnglish_IsHalfWidth()
+    {
+        // Issue #1543・#1544・#1736: 語の頭の \ - / の後ろが英語でも、記号を ￥ ー ・ にしていた (￥ん・ーーexpect・・repro)。
+        // 後ろが日本語 (ーーそれで・・きょう)・語の途中の - (こーひーshop)・\ + 数字 (￥1000) は今までどおり。
+        // \ の後ろの英字は、英単語か 2 文字目から読めないときだけまとめて英語 (\frac)。読めるなら \ + 1 文字の後ろは日本語 (\nです)
+        CompositionTests.AssertCommitted(
+            ("\\n", "\\n"), ("\\t", "\\t"), ("\\frac", "\\frac"), ("\\begin", "\\begin"), ("\\1000", "￥1000"),
+            ("kaigyouha\\ndesu", "かいぎょうは\\nです"), ("sorede\\tde", "それで\\tで"), ("nedanha\\1000desu", "ねだんは￥1000です"),
+            ("--expect", "--expect"), ("--help", "--help"), ("-v", "-v"), ("git --amend", "git --amend"),
+            ("--sorede", "ーーそれで"), ("-ta", "ーた"), ("ko-hi-shop", "こーひーshop"),
+            ("/repro", "/repro"), ("/kyou", "・きょう"));
+    }
+
+    [Test]
     public static void CamelCaseWord_AfterJapanese_SplitsOffJapanese()
     {
         CompositionTests.AssertCommitted(
