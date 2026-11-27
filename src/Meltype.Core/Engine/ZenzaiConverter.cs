@@ -59,7 +59,7 @@ internal sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     private readonly LatestRequestWorker<LiveRequest> _worker;
 
     // 打鍵が続く間は最後の読みだけを推論する (CPU のみのときに推論が積み重ならないように)
-    private const int SettleMs = 60;
+    private const int CpuSettleMs = 60, GpuSettleMs = 10;
 
     // 応答が遅かった (CPU の負荷が高いなど) ときは、しばらく使わず Mozc に任せる。
     private const int DefaultPauseMs = 5000;
@@ -79,8 +79,8 @@ internal sealed class ZenzaiConverter : IKanjiConverter, IDisposable
         _serverPath = serverPath;
         _modelPath = modelPath;
         _timeoutMs = timeoutMs;
-        _device = device;
-        _worker = new LatestRequestWorker<LiveRequest>(ProcessBackground, SettleMs);
+        _device = device.Trim();
+        _worker = new LatestRequestWorker<LiveRequest>(ProcessBackground, _device.Length == 0 ? CpuSettleMs : GpuSettleMs);
     }
 
     /// <summary>
