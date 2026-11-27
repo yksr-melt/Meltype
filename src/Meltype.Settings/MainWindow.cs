@@ -41,7 +41,7 @@ internal sealed class MainWindow : Window
         MinWidth = 640;
         MinHeight = 400;
         // 設定以外のページは、分類の設定を出していても作り直さない (ShowsSettings が false)。作り直すと、打ちかけの定型文などが消える
-        Page[] others = [.. Pages.All(this, () => _addWord, title => SettingsPage.Cards(_catalog.FirstOrDefault(g => g.Category == title).Items ?? [], _store, this)),
+        Page[] others = [.. Pages.All(this, _store, () => _addWord, title => SettingsPage.Cards(_catalog.FirstOrDefault(g => g.Category == title).Items ?? [], _store, this)),
             new Page("プロファイル", () => ProfilesPage.Build(_store, this), ShowsSettings: true)];
         _pages = [.. _catalog.Where(g => others.All(p => p.Title != g.Category))
             .Select(g => new Page(g.Category, () => SettingsPage.Build([g], _store, this, search: false), ShowsSettings: true))

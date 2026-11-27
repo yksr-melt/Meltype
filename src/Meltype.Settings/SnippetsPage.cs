@@ -20,9 +20,11 @@ internal static class SnippetsPage
 
     private static SnippetStore Open() => new(Path.Combine(AppPaths.DataDirectory, "snippets.json"));
 
-    public static Control Build(Window owner, Control settings)
+    public static Control Build(Window owner, SettingsStore store, Control settings)
     {
-        var mark = new SettingsFile(AppPaths.ConfigFile).Current.SnippetMark is { Length: > 0 } m ? m : ";";
+        // 記号は同じページの設定で変えられるので、使うたびに今の値を読む
+        string Mark() => store.Current.SnippetMark is { Length: > 0 } m ? m : ";";
+        string Guide() => $"行の先頭か空白の直後に {Mark()}名前 と打って Space / Tab を押すと、登録した文に置き換えます。直後に Esc で元に戻します。";
         var name = new TextBox { PlaceholderText = "名前 (半角の英数字・記号。例: sig)", Width = 280, HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left };
         var text = new TextBox { PlaceholderText = "文 (複数行でもよい)", AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, MinHeight = 100 };
         var message = Pages.Message();
@@ -33,7 +35,7 @@ internal static class SnippetsPage
             ItemTemplate = new FuncDataTemplate<Item>((item, _) => new TextBlock
             {
                 // 複数行の文は 1 行目だけを出す
-                Text = item is null ? "" : $"{mark}{item.Name}　{item.Text.Split('\n')[0]}{(item.Text.Contains('\n') ? " …" : "")}",
+                Text = item is null ? "" : $"{Mark()}{item.Name}　{item.Text.Split('\n')[0]}{(item.Text.Contains('\n') ? " …" : "")}",
                 TextTrimming = TextTrimming.CharacterEllipsis,
             }),
         };
@@ -42,6 +44,7 @@ internal static class SnippetsPage
 
         void Register()
         {
+            var mark = Mark();
             var key = (name.Text ?? "").Trim();
             if (key.StartsWith(mark, StringComparison.Ordinal)) key = key[mark.Length..];
             var body = text.Text ?? "";
@@ -107,10 +110,21 @@ internal static class SnippetsPage
         });
 
         Reload();
-        return Pages.Layout(Title, $"行の先頭か空白の直後に {mark}名前 と打って Space / Tab を押すと、登録した文に置き換えます。直後に Esc で元に戻します。",
+        var guide = Pages.Hint(Guide());
+        var page = Pages.Layout(Title, "",
+            guide,
             settings,
             Pages.Card(name, text, Pages.Row(SettingEditors.Button("登録", Register)), message),
             list,
             Pages.Row(SettingEditors.Button("選んだ定型文を削除", RemoveSelected), import, export));
+        // 記号を変えたら、案内と一覧を今の記号で出し直す (打ちかけの名前・文は残す)
+        void Show()
+        {
+            guide.Text = Guide();
+            Reload();
+        }
+        page.AttachedToVisualTree += (_, _) => store.Updated += Show;
+        page.DetachedFromVisualTree += (_, _) => store.Updated -= Show;
+        return page;
     }
 }

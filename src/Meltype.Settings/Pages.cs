@@ -17,10 +17,10 @@ internal static class Pages
 {
     /// <param name="newWord">ユーザー辞書の登録欄に入れておく語 (MainWindow の --add-word)。</param>
     /// <param name="settings">ページと同じ名前の分類の設定のカード。ページの上に並べる。</param>
-    public static IEnumerable<Page> All(Window owner, Func<Dictionary.UserWord?> newWord, Func<string, Control> settings) =>
+    public static IEnumerable<Page> All(Window owner, SettingsStore store, Func<Dictionary.UserWord?> newWord, Func<string, Control> settings) =>
     [
         new(UserDictionaryPage.Title, () => UserDictionaryPage.Build(owner, newWord())),
-        new(SnippetsPage.Title, () => SnippetsPage.Build(owner, settings(SnippetsPage.Title))),
+        new(SnippetsPage.Title, () => SnippetsPage.Build(owner, store, settings(SnippetsPage.Title))),
         new(LearningPage.Title, () => LearningPage.Build(owner, settings(LearningPage.Title))),
         new("バックアップ", () => BackupPage.Build(owner)),
         new("Meltype について", () => AboutPage.Build(owner)),
