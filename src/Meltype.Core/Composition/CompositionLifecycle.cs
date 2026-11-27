@@ -170,6 +170,8 @@ internal static class CompositionLifecycle
             Private = Private(state) || privateInput,
             Reconversion = reconversion,
         };
+        // ライブ変換の控えは 1 回の入力の間だけ使う (前の入力の後に登録した語・変わった設定・変換エンジンの失敗を持ち越さない)
+        state.LiveCache.Clear();
         state.Scene = new CompositionScene.Typing(input);
         return input;
     }
@@ -200,7 +202,7 @@ internal static class CompositionLifecycle
     /// <summary>打った文字がすべて消えたら、入力を終える。</summary>
     internal static void FinishIfEmpty(CompositionState state, CompositionInput input)
     {
-        if (CompositionText.IsEmpty(input.Text)) Finish(state);
+        if (input.Text.IsEmpty) Finish(state);
     }
 
     /// <summary>入力を終える (確定した・取り消した)。</summary>
@@ -211,7 +213,6 @@ internal static class CompositionLifecycle
     {
         Finish(state);
         ForgetLastCommit(state);
-        state.LiveCache.Clear();
         state.Pressed.Clear();
         state.KanaLayout.Reset();
         CompositionOutput.Begin(state.Out);

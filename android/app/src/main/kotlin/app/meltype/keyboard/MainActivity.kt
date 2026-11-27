@@ -20,10 +20,16 @@ import android.window.OnBackInvokedDispatcher
 import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
+import android.text.Editable
+import android.text.TextWatcher
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Switch
 import android.widget.TextView
+import app.meltype.keyboard.dictionary.TypedReading
+import app.meltype.keyboard.dictionary.CoreUserDictionary
+import app.meltype.keyboard.dictionary.UserWord
 import app.meltype.keyboard.layout.LayoutId
 
 /**
@@ -34,15 +40,21 @@ class MainActivity : Activity() {
     private val settings by lazy { Settings(this) }
     private val density by lazy { resources.displayMetrics.density }
     private fun dp(n: Int) = (n * density + .5f).toInt()
-    private enum class Page { HOME, LANGUAGES, GENERAL, CORRECTION, EMOJI }
+    private enum class Page { HOME, LANGUAGES, GENERAL, CORRECTION, EMOJI, DICTIONARY, WORD_EDIT }
     private var page = Page.HOME
+    /** 単語の画面で直している語。null なら新しく登録する。 */
+    private var editingWord: UserWord? = null
 
     // Android 13+ gesture Back dispatches through this callback. Earlier
     // Android versions still call the onBackPressed() compatibility override.
     private var systemBackCallback: OnBackInvokedCallback? = null
 
     private fun navigateBack() {
-        if (page == Page.HOME) finish() else navigate(Page.HOME)
+        when (page) {
+            Page.HOME -> finish()
+            Page.WORD_EDIT -> navigate(Page.DICTIONARY)
+            else -> navigate(Page.HOME)
+        }
     }
 
     /**
@@ -115,6 +127,8 @@ class MainActivity : Activity() {
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
         page = state?.getString("page")?.let { runCatching { Page.valueOf(it) }.getOrNull() } ?: Page.HOME
+        // 直していた語は覚えていないので、作り直された画面では一覧に戻る。
+        if (page == Page.WORD_EDIT) page = Page.DICTIONARY
         // Let our root own *all* bar insets. Android 15+ is edge-to-edge
         // regardless of target window flags; explicitly match that behavior
         // on Android 11-14 so our layout receives unconsumed status insets.
@@ -357,6 +371,8 @@ class MainActivity : Activity() {
             Page.GENERAL -> general(content)
             Page.CORRECTION -> correction(content)
             Page.EMOJI -> emoji(content)
+            Page.DICTIONARY -> dictionary(content)
+            Page.WORD_EDIT -> wordEditor(content)
         }
         return ScrollView(this).apply {
             isFillViewport = true
@@ -397,6 +413,10 @@ class MainActivity : Activity() {
             entry("絵文字", if (settings.emojiEnabled) "有効" else "無効", "☺", selected = selected == Page.EMOJI) {
                 navigate(Page.EMOJI)
             }
+        }
+        card(content) {
+            entry("ユーザー辞書", "読みから変換する単語の一覧と登録", "✎",
+                selected = selected == Page.DICTIONARY || selected == Page.WORD_EDIT) { navigate(Page.DICTIONARY) }
         }
         card(content) {
             entry("ライセンス", "オープンソースに関する情報", "ⓘ") {
@@ -450,5 +470,120 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun dictionary(content: LinearLayout) {
+        title(content, "ユーザー辞書")
+        card(content) {
+            entry("単語を登録", "読みと単語を入力する", "+") {
+                editingWord = null
+                navigate(Page.WORD_EDIT)
+            }
+        }
+        // 読めなければ words が null で、一覧の代わりに理由を出す
+        val listed = CoreUserDictionary.list(this)
+        val words = listed.words
+        card(content, "登録した単語") {
+            val empty = when {
+                words == null -> listed.error ?: "ユーザー辞書を読み込めませんでした"
+                words.isEmpty() -> "登録した単語はありません"
+                else -> null
+            }
+            if (empty != null) addView(text(empty, 14f, muted = true).apply { setPadding(dp(18), dp(18), dp(18), dp(18)) })
+            // 設定アプリ (Windows・Mac・Linux) と同じく、新しく登録したものから
+            words.orEmpty().asReversed().forEachIndexed { index, word ->
+                if (index > 0) divider()
+                entry(word.word, if (word.pos == UserWord.NOUN) word.reading else word.reading + "・" + word.pos) {
+                    editingWord = word
+                    navigate(Page.WORD_EDIT)
+                }
+            }
+        }
+        hint(content, "登録した単語は、読みを入力すると変換候補に出る。ほかの端末やクラウドには送らない。")
+    }
+
+    private fun inputField(container: LinearLayout, label: String, value: String, example: String): EditText {
+        container.addView(text(label, 13f, muted = true), LinearLayout.LayoutParams(-1, -2).apply {
+            marginStart = dp(18); topMargin = dp(14)
+        })
+        val input = EditText(this).apply {
+            setText(value)
+            hint = example
+            setSingleLine(true)
+            setTextColor(theme.text)
+            setHintTextColor(theme.secondary)
+        }
+        container.addView(input, LinearLayout.LayoutParams(-1, -2).apply {
+            marginStart = dp(14); marginEnd = dp(14); bottomMargin = dp(8)
+        })
+        return input
+    }
+
+    private fun button(container: LinearLayout, label: String, action: (TextView) -> Unit) {
+        container.addView(text(label, 16f, strong = true).apply {
+            gravity = Gravity.CENTER
+            background = this@MainActivity.background(theme.card)
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { action(this) }
+        }, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(10) })
+    }
+
+    private fun wordEditor(content: LinearLayout) {
+        val original = editingWord
+        title(content, if (original == null) "単語を登録" else "単語を編集")
+        lateinit var reading: EditText
+        lateinit var word: EditText
+        card(content) {
+            setPadding(0, 0, 0, dp(8))
+            reading = inputField(this, "読み", original?.reading.orEmpty(), "めるたいぷ (ローマ字でも可)")
+            // ローマ字で打ったら、登録する読み (ひらがな) を出す。設定アプリと同じ
+            val preview = text("", 13f, muted = true).apply { visibility = View.GONE }
+            addView(preview, LinearLayout.LayoutParams(-1, -2).apply { marginStart = dp(18) })
+            reading.addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+                override fun afterTextChanged(s: Editable?) {
+                    val typed = s?.toString().orEmpty()
+                    val hasLetters = typed.any { it in 'a'..'z' || it in 'A'..'Z' }
+                    val kana = if (hasLetters) TypedReading.toHiragana(this@MainActivity, typed) else null
+                    preview.text = if (kana != null) "→ " + kana else ""
+                    preview.visibility = if (kana != null) View.VISIBLE else View.GONE
+                }
+            })
+            word = inputField(this, "単語", original?.word.orEmpty(), "Meltype")
+        }
+        val error = text("", 13f, muted = true).apply { visibility = View.GONE }
+        content.addView(error, LinearLayout.LayoutParams(-1, -2).apply { marginStart = dp(8) })
+        fun failed(message: String) {
+            error.text = message
+            error.visibility = View.VISIBLE
+        }
+        button(content, "保存") {
+            // 英字の読みをひらがなにできなければ、登録しない (英字のまま残ると変換に出ない)
+            val kana = TypedReading.toHiragana(this@MainActivity, reading.text.toString())
+            if (kana == null) {
+                failed(CoreUserDictionary.UNAVAILABLE)
+                return@button
+            }
+            // 登録できない理由 (読みの先頭の # など) は Core が返す。設定アプリと同じ文
+            val result = if (original == null) CoreUserDictionary.add(this@MainActivity, kana, word.text.toString())
+                else CoreUserDictionary.edit(this@MainActivity, original, kana, word.text.toString())
+            val problem = result.error
+            if (problem == null) navigate(Page.DICTIONARY) else failed(problem)
+        }
+        if (original != null) {
+            // 確かめの画面を出さず、2 回目のタップで消す。
+            var confirming = false
+            button(content, "削除") { label ->
+                if (!confirming) {
+                    confirming = true
+                    label.text = "もう一度タップして削除"
+                } else {
+                    val problem = CoreUserDictionary.remove(this@MainActivity, original).error
+                    if (problem == null) navigate(Page.DICTIONARY) else failed(problem)
+                }
+            }
+        }
+        button(content, "キャンセル") { navigate(Page.DICTIONARY) }
+    }
 
 }

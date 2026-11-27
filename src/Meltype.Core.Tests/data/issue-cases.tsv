@@ -17,6 +17,10 @@ meta	meta
 claudecode	claudecode
 kwo	くぉ
 funyaosu	ふにゃオス
+すきじご	隙自語
+すきじがたり	隙自語
+すきじかたり	隙自語
+すきじがた	隙自語
 karenda-	カレンダー
 pure	pure
 ninatta	になった
@@ -300,3 +304,8 @@ dottoe	ドット絵
 dottoha	ドットは
 #2392de	#2392で
 budda	ブッダ
+bugw	bugw
+\n	\n
+--expect	--expect
+/repro	/repro
+kaigyouha\ndesu	開業は\nです
