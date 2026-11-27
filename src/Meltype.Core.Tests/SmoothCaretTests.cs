@@ -14,7 +14,7 @@ internal static class SmoothCaretTests
     }
 
     [Test]
-    public static void SmoothCaretMotion_GlidesWithSpringAndHandsOffSmoothly()
+    public static void SmoothCaretMotion_GlidesSoftlyAndHandsOffWithoutOverlap()
     {
         var motion = new SmoothCaretMotion();
         Assert.True(!motion.SetTarget(100, 200, 20), "初回位置では飛ばさずに現在位置だけ記録する");
@@ -26,9 +26,9 @@ internal static class SmoothCaretTests
         Assert.True(motion.Opacity > 0.5f, "移動開始時は鮮明な不透明度になる");
 
         motion.Step(16f);
-        Assert.True(motion.CurrentX > 100f && motion.CurrentX < 115f, $"1 フレーム目は柔らかく加速し始める: {motion.CurrentX}");
+        Assert.True(motion.CurrentX > 105f && motion.CurrentX < 115f, $"1 フレーム後はゆったり中間に位置する: {motion.CurrentX}");
 
-        // ターゲット近傍に達した時点でオーバーシュートせず滑らかにネイティブキャレットへ引き継ぐ
+        // ゆったり減速しながらターゲット近傍へ達し、オーバーシュートせずにネイティブキャレットへ引き継ぐ
         var steps = 0;
         var maxX = motion.CurrentX;
         while (motion.Step(8.33f) && steps < 40)
@@ -37,8 +37,8 @@ internal static class SmoothCaretTests
             steps++;
         }
 
-        Assert.True(maxX <= 124.01f, $"臨界減衰なのでオーバーシュートしない: maxX={maxX}");
-        Assert.True(steps is >= 6 and < 25, $"Word 風の余韻 (~90〜160ms) で収束して引き継ぐ: steps={steps}");
+        Assert.True(maxX <= 124.01f, $"指数減衰なのでオーバーシュートしない: maxX={maxX}");
+        Assert.True(steps is >= 10 and < 30, $"ゆったりふわっとした余韻 (~110〜200ms) で収束する: steps={steps}");
         Assert.Equal(124f, motion.CurrentX);
         Assert.True(!motion.IsActive, "到着ハンドオフ後は即座に非アクティブになる");
         Assert.Equal(0f, motion.Opacity);
