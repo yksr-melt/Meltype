@@ -231,7 +231,7 @@ internal static class CompositionKeys
                 input.Text = CompositionText.Settle(input.Text);
                 CompositionConversion.StartConversion(state, input, env, ConversionTrigger.Space);
                 return;
-            case VirtualKeys.NonConvert when env.Settings.NonConvertCyclesKana && !CompositionLifecycle.IsProtectedInput(scene):
+            case VirtualKeys.NonConvert when CompositionLifecycle.NonConvertCyclesKana(scene, env.Settings):
                 // ひらがな → 全角カタカナ → 半角カタカナ → ひらがな の順に循環する。自動判定中は、表示中の文字列にひらがな (長音を含む) があれば全角カタカナにし、なければひらがなにする。
                 SetMode(state, scene, NextKanaCycleMode(scene, env));
                 input.ModeByKey = true;
