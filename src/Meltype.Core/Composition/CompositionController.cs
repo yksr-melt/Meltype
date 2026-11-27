@@ -24,16 +24,16 @@ internal static class CompositionController
         CompositionDirectInput.Tick(state, env, key.TimeMs);
         env = env.WaitingForInput();
         var consumed = CompositionKeys.Handle(state, env, key);
-        if (!releaseFollows) CompositionKeys.HandleRelease(state, env, key.Vk);
+        if (!releaseFollows) CompositionKeys.HandleRelease(state, env, key.Vk, key.Position);
         Settle(state, env);
         return Result(state, env, consumed);
     }
 
     /// <summary>ワークアラウンド: releaseFollows を付けて押したキーを離した (親指シフトの親指キー・中指NICOLA のシフトのキー)。</summary>
-    public static SessionResult Release(CompositionState state, CompositionEnv env, int vk)
+    public static SessionResult Release(CompositionState state, CompositionEnv env, int vk, int position)
     {
         CompositionOutput.Begin(state.Out);
-        CompositionKeys.HandleRelease(state, env, vk);
+        CompositionKeys.HandleRelease(state, env, vk, position);
         Settle(state, env);
         // 離したことはフロントが押下のとおりに通す。Consumed が false なら、離したことで今のキーの働きをした (文字に使わずに離した親指キー)
         return Result(state, env, consumed: true);
