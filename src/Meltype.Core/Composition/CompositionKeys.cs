@@ -116,7 +116,12 @@ internal static class CompositionKeys
             // 設定「Control キーの割り当て」: 組み込みの割り当てより先に見る (issue #63・#209)
             if (BoundControlKey(env, vk) is { } bound)
             {
-                vk = bound == ControlKeyBindingParser.HalfWidth ? HalfWidthKey(withInput, env) : bound;
+                vk = bound switch
+                {
+                    ControlKeyTarget.Key key => key.Vk,
+                    ControlKeyTarget.HalfWidth => HalfWidthKey(withInput, env),
+                    _ => throw new System.Diagnostics.UnreachableException(),
+                };
             }
             // 設定「Control キーの割り当て」が macOS 風: 組み込みの Ctrl+U/I/O/P/H より先に見る (issue #643)
             else if (env.Settings.ControlKeys == Config.ControlKeyLayout.Mac && MacControlShortcut(vk) is { } mac)
@@ -873,12 +878,13 @@ internal static class CompositionKeys
     {
         var shown = scene is CompositionScene.Converting { Conversion.SelectedClause: var selected }
             ? selected.Text : CompositionPresentation.CurrentDisplay(scene.Input, env, final: false);
+        // 半角カタカナにある記号 (。「」、・) もかなとして見る。見ないと、句読点を含むかな (そうですね。) が半角英数 (soudesune.) になる
         return shown.Length > 0 && shown.All(c => Libraries.Chars.KanaChars.IsHiraganaOrLongMark(c) ||
-            Libraries.Chars.KanaChars.IsKatakana(c) || c is >= 'ｦ' and <= 'ﾟ') ? VirtualKeys.F8 : VirtualKeys.F10;
+            Libraries.Chars.KanaChars.IsKatakana(c) || c is '。' or '「' or '」' or '、' or '・' or >= '｡' and <= 'ﾟ') ? VirtualKeys.F8 : VirtualKeys.F10;
     }
 
-    /// <summary>設定「Control キーの割り当て」(T=F6;Y=F7 …) で、Control + vk に割り当てたキー。無ければ null。</summary>
-    private static int? BoundControlKey(CompositionEnv env, int vk)
+    /// <summary>設定「Control キーの割り当て」(T=F6;Y=F7 …) で、Control + vk に割り当てた働き。無ければ null。</summary>
+    private static ControlKeyTarget? BoundControlKey(CompositionEnv env, int vk)
     {
         var text = env.Settings.ControlKeyBindings;
         if (string.IsNullOrWhiteSpace(text)) return null;

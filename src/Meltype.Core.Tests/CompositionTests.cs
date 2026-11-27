@@ -3083,6 +3083,7 @@ internal static class CompositionTests
             ("birudhingu", VirtualKeys.F7, "ﾋﾞﾙﾃﾞｨﾝｸﾞ"),
             ("123", VirtualKeys.F9, "123"),
             ("meltype", VirtualKeys.F9, "meltype"),
+            ("soudesune.", VirtualKeys.F6, "ｿｳﾃﾞｽﾈ｡"),
         })
         {
             var k = new Keyboard { ControlKeyBindings = "O=HalfWidth" };
