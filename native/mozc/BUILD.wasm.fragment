@@ -1,0 +1,43 @@
+# Meltype のブラウザー版 (web-engine/) 用の変換ヘルパー。native/mozc/build-mozc-wasm.sh が converter/BUILD.bazel に足す。
+# deps は BUILD.fragment と同じ (ソースが同じなので)。
+mozc_cc_binary(
+    name = "meltype_mozc_wasm_bin",
+    srcs = ["meltype_mozc_helper.cc"],
+    linkopts = [
+        "-sMODULARIZE=1",
+        "-sEXPORT_ES6=1",
+        "-sEXPORT_NAME=createMozc",
+        "-sALLOW_MEMORY_GROWTH=1",
+        "-sENVIRONMENT=web,worker",
+        "-sEXPORTED_RUNTIME_METHODS=cwrap,ccall,UTF8ToString",
+        "-sEXPORTED_FUNCTIONS=_main,_meltype_mozc_init,_meltype_mozc_request",
+    ],
+    deps = [
+        ":attribute",
+        ":converter_interface",
+        ":segments",
+        "//base:init_mozc",
+        "//base:system_util",
+        "//base:util",
+        "//composer",
+        "//config:config_handler",
+        "//dictionary:dictionary_interface",
+        "//dictionary:user_dictionary_util",
+        "//dictionary:user_dictionary_importer",
+        "//engine",
+        "//engine:engine_factory",
+        "//protocol:commands_cc_proto",
+        "//protocol:config_cc_proto",
+        "//protocol:user_dictionary_storage_cc_proto",
+        "//request:conversion_request",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+load("@emsdk//emscripten_toolchain:wasm_rules.bzl", "wasm_cc_binary")
+
+wasm_cc_binary(
+    name = "meltype_mozc_wasm",
+    cc_target = ":meltype_mozc_wasm_bin",
+)

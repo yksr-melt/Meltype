@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk.WebAssembly">
+  <!--
+    Meltype.Core をブラウザーで動かす (WebAssembly)。web-engine/ の meltype.js が読み込む。
+      dotnet publish src/Meltype.Web -c Release
+    Mozc は別の WebAssembly (native/mozc/build-mozc-wasm.sh) で動かし、変換ヘルパーの要求 1 行を JS の関数で答える (Android 版と同じ形)。
+    ブラウザーの .NET は 1 つのスレッドで動くので、Core の裏の処理はキーの処理が返った後に同じスレッドで動く。
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RuntimeIdentifier>browser-wasm</RuntimeIdentifier>
+    <OutputType>Exe</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AssemblyName>MeltypeWeb</AssemblyName>
+    <RootNamespace>Meltype.Web</RootNamespace>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <!-- 日本語の照合規則だけあれば足りる (ICU のデータを小さくする) -->
+    <HybridGlobalization>false</HybridGlobalization>
+    <PublishTrimmed>true</PublishTrimmed>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Meltype.Core\Meltype.Core.csproj" />
+  </ItemGroup>
+</Project>

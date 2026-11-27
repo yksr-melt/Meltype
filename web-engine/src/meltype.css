@@ -1,0 +1,196 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+/* Copyright (C) 2026 hisiragi */
+/*
+ * Meltype Web Engine の見た目。エンジンが Shadow DOM (meltype-ui) の中にだけ当てるので、ページの CSS とは混ざらない。
+ * 色と字は、ページで --meltype-* の変数を決めれば変えられる (Shadow DOM の中にも受け継がれる)。
+ * ページが決めていなければ、ここの既定の値 (--_*) を使う。
+ */
+
+:host {
+  --_bg: var(--meltype-bg, #ffffff);
+  --_fg: var(--meltype-fg, #1f2328);
+  --_muted: var(--meltype-muted, #656d76);
+  --_accent: var(--meltype-accent, #0969da);
+  --_on-accent: var(--meltype-on-accent, #ffffff);
+  --_border: var(--meltype-border, #d0d7de);
+  --_key-bg: var(--meltype-key-bg, #ffffff);
+  --_keyboard-bg: var(--meltype-keyboard-bg, #f2f4f7);
+  --_font: var(--meltype-font, system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif);
+  /* 画面のキーボードのキー 1 つの高さ。キーボードは 5 段 */
+  --_key-height: var(--meltype-key-height, 44px);
+  --_keyboard-height: calc(5 * var(--_key-height) + 4 * 6px + 16px + env(safe-area-inset-bottom, 0px));
+  /* ページの文字の設定を受け継がない */
+  all: initial;
+  /* all: initial で消えるので、フォームの部品なども OS の明るさに合わせ直す */
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :host {
+    --_bg: var(--meltype-bg, #161b22);
+    --_fg: var(--meltype-fg, #e6edf3);
+    --_muted: var(--meltype-muted, #8d96a0);
+    --_accent: var(--meltype-accent, #4493f8);
+    --_on-accent: var(--meltype-on-accent, #0d1117);
+    --_border: var(--meltype-border, #30363d);
+    --_key-bg: var(--meltype-key-bg, #21262d);
+    --_keyboard-bg: var(--meltype-keyboard-bg, #0d1117);
+  }
+}
+
+[hidden] {
+  display: none !important;
+}
+
+/* 変換中の文字と候補の一覧 */
+.meltype-box {
+  position: absolute;
+  box-sizing: border-box;
+  width: max-content;
+  min-width: 8em;
+  max-width: min(32em, calc(100vw - 16px));
+  padding: 6px 0;
+  background: var(--_bg);
+  color: var(--_fg);
+  border: 1px solid var(--_border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.16);
+  font: 16px/1.5 var(--_font);
+  text-align: left;
+}
+
+.meltype-text {
+  padding: 2px 12px;
+}
+
+.meltype-text span {
+  text-decoration: underline 1px;
+  text-underline-offset: 4px;
+}
+
+.meltype-text .meltype-selected-clause {
+  text-decoration-color: var(--_accent);
+  text-decoration-thickness: 3px;
+}
+
+.meltype-typed,
+.meltype-hint {
+  padding: 0 12px;
+  font-size: 12px;
+  color: var(--_muted);
+}
+
+.meltype-candidates {
+  margin: 6px 0 4px;
+  padding: 4px 0 0;
+  list-style: none;
+  border-top: 1px solid var(--_border);
+  /* 9 件 (数字キーで選べる数) を見せ、残りはスクロールする */
+  max-height: calc(9 * (1.5em + 4px));
+  overflow-y: auto;
+  /* スクロールバーの色を箱に合わせる (color-scheme だけでは、ページによってダークでも白くなる) */
+  scrollbar-color: var(--_border) transparent;
+  scrollbar-width: thin;
+}
+
+.meltype-candidates li {
+  padding: 2px 12px;
+  cursor: pointer;
+}
+
+.meltype-candidates li:hover {
+  background: color-mix(in srgb, var(--_accent) 12%, transparent);
+}
+
+.meltype-candidates li.meltype-selected {
+  color: var(--_on-accent);
+  background: var(--_accent);
+}
+
+/* 画面のキーボード (指で操作する端末)。画面の下に固定する */
+.meltype-vkeys {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  box-sizing: border-box;
+  display: grid;
+  gap: 6px;
+  padding: 8px max(6px, env(safe-area-inset-right, 0px)) calc(8px + env(safe-area-inset-bottom, 0px)) max(6px, env(safe-area-inset-left, 0px));
+  background: var(--_keyboard-bg);
+  border-top: 1px solid var(--_border);
+  box-shadow: 0 -6px 18px rgb(0 0 0 / 0.1);
+  font-family: var(--_font);
+}
+
+.meltype-vkeys-row {
+  display: flex;
+  gap: 5px;
+}
+
+.meltype-vkeys button {
+  flex: 1 1 0;
+  min-width: 0;
+  height: var(--_key-height);
+  padding: 0;
+  font: 600 17px var(--_font);
+  color: var(--_fg);
+  background: var(--_key-bg);
+  border: 1px solid var(--_border);
+  border-bottom-width: 3px;
+  border-radius: 8px;
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.meltype-vkeys button.meltype-func {
+  font-size: 15px;
+  color: var(--_muted);
+}
+
+.meltype-vkeys button:active,
+.meltype-vkeys button.meltype-pressed {
+  color: var(--_on-accent);
+  background: var(--_accent);
+}
+
+/* キーボードを出している間は、候補をキャレットの下ではなくキーボードのすぐ上に出す (キーを隠さないように) */
+:host(.vkeys-open) .meltype-box {
+  position: fixed;
+  left: 8px;
+  right: 8px;
+  bottom: calc(var(--_keyboard-height) + 8px);
+  width: auto;
+  max-width: none;
+}
+
+:host(.vkeys-open) .meltype-candidates {
+  max-height: calc(4 * (1.5em + 4px));
+}
+
+:host(.vkeys-open) .meltype-hint {
+  display: none;
+}
+
+/* readonly にした入力欄に描くカーソル */
+.meltype-caret {
+  position: absolute;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--_accent);
+  border-radius: 1px;
+  pointer-events: none;
+  animation: meltype-blink 1s steps(1) infinite;
+}
+
+@keyframes meltype-blink {
+  50% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .meltype-caret {
+    animation: none;
+  }
+}

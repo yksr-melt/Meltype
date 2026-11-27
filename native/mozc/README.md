@@ -12,6 +12,7 @@ Android では同じプロセス内の Mozc を JNI 経由で使い、ヘルパ�
 | `MOZC_COMMIT` | ビルドする Mozc の commit (動作を確かめた版に固定)。版を上げるときは、`src/data/dictionary_oss/BUILD.bazel` に `"dictionary09.txt",` の行が 1 か所だけあることを確かめる (`dictionary_ut.txt` を足す処理が目印にしている。直す場所は `build-mozc-helper.sh` のコメントに書いてある) |
 | `Build-MozcHelper.ps1` | Mozc を取得してヘルパーをビルドし、`bin\` にライセンスと一緒に置く |
 | `build-mozc-helper.sh` | 同じことを Linux・macOS で行う (`bin/linux/`・`bin/mac/` に置く) |
+| `build-mozc-wasm.sh`・`BUILD.wasm.fragment`・`thread-inline.patch` | ブラウザー版 (`web-engine/`) のために、ヘルパーを Emscripten で WebAssembly にする (`bin/wasm/` に置く)。要求は標準入出力ではなく関数で受ける。スレッドを使うと埋め込むページに Cross-Origin-Opener-Policy などのヘッダーが要るので、`thread-inline.patch` でスレッドで動かす処理をその場で動かす |
 | `bazel-downloader.cfg` | Linux・macOS の Bazel が、GitHub Releases の依存ファイルを公式ミラーからも取得するための設定 |
 | `merge-ut-dictionary.py` | Mozc-UT の辞書 (`mozcdic-ut.txt`) を Mozc の辞書に統合する (下の「Mozc-UT の辞書を使う」) |
 | `tests/` | `merge-ut-dictionary.py` のテスト。本物の Mozc も UT の辞書も要らない |

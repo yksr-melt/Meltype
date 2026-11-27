@@ -17,8 +17,9 @@
 | Linux: fcitx5 | `linux/fcitx5/meltype.cpp` | `libMeltypeNative.so` を dlopen する |
 | 端末 (pty) | `tui/meltype-tty` | 同じフォルダーの `libMeltypeNative.so` を dlopen する。`tui/build.sh` が同梱する |
 | Android | `android/app/src/main/kotlin/app/meltype/keyboard/KeyboardService.kt`・`core/ImeJson.kt` (出来事と応答の JSON) | `src/Meltype.Core.CApi` を Android 向けにビルドした `libMeltypeNative.so` を JNI (`android/app/src/main/cpp/meltype_jni.cpp`) から呼ぶ |
+| ブラウザー (Web エンジン) | `web-engine/src/meltype.js` | `src/Meltype.Web` をブラウザーの .NET (WebAssembly) でビルドして、同じページで呼ぶ |
 
-変換エンジンは Core が別プロセスで動かす。Mozc は `meltype_mozc_helper`、Zenzai は llama.cpp の `llama-server`。Android だけは Mozc をアプリのプロセスで動かし、`meltype_mozc_helper` と同じ 1 行の要求を JNI のコールバック (`core/CoreMozcCallbacks.kt`) で答える。
+変換エンジンは Core が別プロセスで動かす。Mozc は `meltype_mozc_helper`、Zenzai は llama.cpp の `llama-server`。Android だけは Mozc をアプリのプロセスで動かし、`meltype_mozc_helper` と同じ 1 行の要求を JNI のコールバック (`core/CoreMozcCallbacks.kt`) で答える。ブラウザーも Mozc を同じページで (WebAssembly にして) 動かし、同じ 1 行の要求を JS の関数で答える。
 
 `src/Meltype.Core` の namespace は `Ime` → `Composition` (と `Composition.Utility`) → `Detection`・`Learning`・`Engine`・`Dictionary`・`Notation` → `Libraries.Chars`・`Libraries.Lexicon` の向きにだけ参照する。`Detection`・`Learning`・`Engine`・`Dictionary`・`Notation` どうしと、`Libraries` の中どうしは参照しない。どこからでも使えるのは `Config`・`Input`・`Diagnostics`。
 

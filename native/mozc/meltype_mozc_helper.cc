@@ -13,6 +13,7 @@
 //       語はメモリにだけ置き、起動し直したら Meltype が送り直す。
 //   Q   終了する。
 // 起動が終わったら "READY" を 1 行出す。引数 1 つ目は学習データの保存先 (省略可)。
+// ブラウザー版は同じ要求を関数で受ける (ファイルの末尾の __EMSCRIPTEN__)。
 
 #include <iostream>
 #include <memory>
@@ -173,8 +174,53 @@ class Helper {
   mozc::composer::Composer composer_;
 };
 
+// 要求 1 行 (Q を除く) に答える。標準入出力で動くデスクトップ版と、関数で呼ぶブラウザー版 (下の __EMSCRIPTEN__) が共有する。
+std::string Answer(Helper& helper, absl::string_view line) {
+  const std::vector<absl::string_view> fields = absl::StrSplit(line, '\t');
+  if (fields[0] == "C" && fields.size() >= 3) return helper.Convert(fields[1], fields[2]);
+  if (fields[0] == "L" && fields.size() >= 3) return helper.Learn(fields[1], fields[2]) ? "OK" : "NG";
+  if (fields[0] == "R" && fields.size() >= 2) return helper.Reverse(fields[1]);
+  if (fields[0] == "D" && fields.size() >= 2) return helper.SetDictionary(fields[1]) ? "OK" : "NG";
+  if (fields[0] == "S") return helper.Save() ? "OK" : "NG";
+  return "";
+}
+
 }  // namespace
 
+#ifdef __EMSCRIPTEN__
+// ブラウザー版 (web-engine/) は Mozc を WebAssembly にして同じページで動かし、要求 1 行を標準入出力ではなく関数で受ける
+// (native/mozc/build-mozc-wasm.sh がビルドする)。
+//   meltype_mozc_init() → 最初の要求の前に 1 回呼ぶ。Engine を作れなければ 0
+//   meltype_mozc_request("C\t前の文字列\t読み") → 答えの 1 行 (次の呼び出しまで有効)
+// 学習データはブラウザーのメモリー上の /mozc に置く。
+#include <emscripten/emscripten.h>
+
+#include <filesystem>
+
+namespace {
+Helper* g_helper = nullptr;
+std::string g_answer;
+}  // namespace
+
+extern "C" EMSCRIPTEN_KEEPALIVE int meltype_mozc_init() {
+  if (g_helper != nullptr) return 1;
+  // 置き場が無いと、Mozc は学習データを開けず、何も覚えない (デスクトップ版は Meltype が作ってから起動する)
+  std::filesystem::create_directories("/mozc");
+  mozc::SystemUtil::SetUserProfileDirectory("/mozc");
+  auto engine = mozc::EngineFactory::Create();
+  if (!engine.ok()) return 0;
+  g_helper = new Helper(*std::move(engine));
+  return 1;
+}
+
+extern "C" EMSCRIPTEN_KEEPALIVE const char* meltype_mozc_request(const char* line) {
+  g_answer = Answer(*g_helper, line);
+  return g_answer.c_str();
+}
+
+// Emscripten は main が無いと実行時の初期化をしない
+int main() { return 0; }
+#else
 int main(int argc, char** argv) {
   mozc::InitMozc(argv[0], &argc, &argv);
 #ifdef _WIN32
@@ -211,3 +257,4 @@ int main(int argc, char** argv) {
   }
   return 0;
 }
+#endif

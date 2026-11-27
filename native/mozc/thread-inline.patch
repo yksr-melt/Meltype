@@ -1,0 +1,50 @@
+--- a/base/thread.h
++++ b/base/thread.h
+@@ -43,11 +43,13 @@
+ #include "absl/synchronization/mutex.h"
+ #include "absl/synchronization/notification.h"
+ 
++// Meltype のブラウザー版: スレッドを使わずにビルドし、スレッドで動かす処理はその場で動かす
++// (スレッドを使うと、埋め込むページに Cross-Origin-Opener-Policy などのヘッダーが要るため)。
+ #if defined(__wasm__) && !defined(__EMSCRIPTEN_PTHREADS__)
+-#error "Please build with -pthreads for thread."
+-#endif  // defined(__wasm__) && !defined(__EMSCRIPTEN_PTHREADS__)
+-
++#define MOZC_THREAD_RUNS_INLINE 1
++#else
+ #include <thread>  // NOLINT(build/c++11): this is external environment only.
++#endif
+ 
+ namespace mozc {
+ 
+@@ -64,6 +66,22 @@
+  public:
+   Thread() noexcept = default;
+ 
++#ifdef MOZC_THREAD_RUNS_INLINE
++  template <class Function, class... Args>
++  explicit Thread(Function&& f, Args&&... args) {
++    std::invoke(std::forward<Function>(f), std::forward<Args>(args)...);
++  }
++
++  Thread(Thread&&) noexcept = default;
++  Thread& operator=(Thread&&) noexcept = default;
++  Thread(const Thread&) = delete;
++  Thread& operator=(const Thread&) = delete;
++
++  bool Joinable() const noexcept { return false; }
++
++  void Join() {}
++};
++#else
+   template <class Function, class... Args>
+   explicit Thread(Function&& f, Args&&... args)
+       : thread_(std::forward<Function>(f), std::forward<Args>(args)...) {}
+@@ -95,6 +113,7 @@
+   // for now.
+   std::thread thread_;
+ };
++#endif  // MOZC_THREAD_RUNS_INLINE
+ 
+ // Represents a value that will be available in the future. This class spawns
+ // a dedicated background thread to execute the provider function.
