@@ -156,7 +156,7 @@ def provenance(package, files, settings):
                               for name in ("ibus", "xdotool", "xvfb")},
             "playwright": command(["node", str(ROOT / "node_modules/@playwright/test/cli.js"), "--version"]),
             "browser": command(["node", "--input-type=module", "-e",
-                "import { chromium } from 'playwright'; import { execFileSync } from 'node:child_process'; "
+                "import { chromium } from '@playwright/test'; import { execFileSync } from 'node:child_process'; "
                 "process.stdout.write(execFileSync(chromium.executablePath(), ['--version'], {encoding:'utf8'}))"]),
             "package": str(package),
             "settings": {"requested": settings, "productSaved": None},
