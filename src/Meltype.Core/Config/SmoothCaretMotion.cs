@@ -5,22 +5,28 @@ namespace Meltype.Config;
 
 /// <summary>
 /// スムースカーソルの位置補間と距離連動ハンドオフを計算する純粋な状態マシン。
-/// 指数減衰イージングでターゲット位置へ素早く滑らかに追従し、到着直前の数 px で透明へ溶け込むことで
-/// アプリ本来のキャレットとの二重表示・ぼやけ・残像ちらつきを防ぐ。
+/// 臨界減衰スプリング (Critically Damped Spring) の解析解で Word のようにふわっと滑り出して
+/// 柔らかく減速し、連続入力時は速度を引き継いで途切れなく追従する。
+/// 到着直前の数 px で smoothstep により透明へ溶け込むことで、元のキャレットとの二重表示やぼやけを防ぐ。
 /// </summary>
 public sealed class SmoothCaretMotion
 {
-    private const float TauMs = 17f;
-    private const float InitialStepRatio = 0.18f;
-    private const float ArriveSnapPx = 0.75f;
-    private const float FadeStartDistancePx = 3.2f;
+    // 臨界減衰スプリングの時定数 (32ms で 1 文字移動が約 90〜105ms、長距離移動が約 115ms で柔らかく収束する)
+    private const float SmoothTimeMs = 32f;
+    private const float Omega = 2f / SmoothTimeMs;
+    private const float ArriveSnapPx = 0.35f;
+    private const float SettleSpeedPxPerMs = 0.015f;
+    private const float FadeStartDistancePx = 2.4f;
     private const float MinGlideDistancePx = 3.0f;
     private const float SameLineTolerancePx = 3.0f;
     private const float MinLineJumpPx = 6.0f;
     private const float MaxGlideDistancePx = 300f;
-    private const float ActiveOpacity = 0.92f;
+    private const float ActiveOpacity = 0.90f;
 
     private bool _initialized;
+    private float _velocityX;
+    private float _velocityY;
+    private float _velocityHeight;
 
     public float CurrentX { get; private set; }
     public float CurrentY { get; private set; }
@@ -75,23 +81,18 @@ public sealed class SmoothCaretMotion
         {
             CurrentY = y;
             CurrentHeight = height;
+            _velocityY = 0f;
+            _velocityHeight = 0f;
         }
 
         if (!IsActive)
         {
-            // キャレット位置の検出ラグを相殺するため、初回フレームでわずかに前進させて遅延感をなくす
-            CurrentX += (TargetX - CurrentX) * InitialStepRatio;
-            CurrentY += (TargetY - CurrentY) * InitialStepRatio;
+            _velocityX = 0f;
+            _velocityY = 0f;
+            _velocityHeight = 0f;
         }
 
-        var remaining = Distance(TargetX - CurrentX, TargetY - CurrentY);
-        if (remaining <= ArriveSnapPx)
-        {
-            SnapTo(x, y, height, width);
-            return false;
-        }
-
-        Opacity = ComputeOpacity(remaining);
+        Opacity = ComputeOpacity(distance);
         IsActive = true;
         return true;
     }
@@ -101,13 +102,14 @@ public sealed class SmoothCaretMotion
     {
         if (!IsActive || dtMs <= 0f) return false;
 
-        var alpha = 1f - MathF.Exp(-dtMs / TauMs);
-        CurrentX += (TargetX - CurrentX) * alpha;
-        CurrentY += (TargetY - CurrentY) * alpha;
-        CurrentHeight += (TargetHeight - CurrentHeight) * alpha;
+        var exp = MathF.Exp(-Omega * dtMs);
+        CurrentX = AdvanceSpring(CurrentX, TargetX, ref _velocityX, dtMs, exp);
+        CurrentY = AdvanceSpring(CurrentY, TargetY, ref _velocityY, dtMs, exp);
+        CurrentHeight = AdvanceSpring(CurrentHeight, TargetHeight, ref _velocityHeight, dtMs, exp);
 
         var remaining = Distance(TargetX - CurrentX, TargetY - CurrentY);
-        if (remaining <= ArriveSnapPx)
+        var speed = Distance(_velocityX, _velocityY);
+        if (remaining <= ArriveSnapPx && speed <= SettleSpeedPxPerMs)
         {
             // ネイティブキャレットが既に TargetX に描画されているため、重なって太くぼやける手前で完全に消して引き継ぐ
             SnapTo(TargetX, TargetY, TargetHeight, TargetWidth);
@@ -121,6 +123,9 @@ public sealed class SmoothCaretMotion
     public void Reset()
     {
         _initialized = false;
+        _velocityX = 0f;
+        _velocityY = 0f;
+        _velocityHeight = 0f;
         Opacity = 0f;
         IsActive = false;
     }
@@ -131,8 +136,20 @@ public sealed class SmoothCaretMotion
         CurrentY = TargetY = y;
         CurrentHeight = TargetHeight = height;
         CurrentWidth = TargetWidth = width;
+        _velocityX = 0f;
+        _velocityY = 0f;
+        _velocityHeight = 0f;
         Opacity = 0f;
         IsActive = false;
+    }
+
+    /// <summary>臨界減衰スプリングの解析解。フレームレートに依存せずオーバーシュートなしで滑らかに加減速する。</summary>
+    private static float AdvanceSpring(float current, float target, ref float velocity, float dtMs, float exp)
+    {
+        var displacement = current - target;
+        var temp = (velocity + Omega * displacement) * dtMs;
+        velocity = (velocity - Omega * temp) * exp;
+        return target + (displacement + temp) * exp;
     }
 
     private static float ComputeOpacity(float remainingPx)
@@ -140,7 +157,8 @@ public sealed class SmoothCaretMotion
         if (remainingPx >= FadeStartDistancePx) return ActiveOpacity;
         if (remainingPx <= ArriveSnapPx) return 0f;
         var t = (remainingPx - ArriveSnapPx) / (FadeStartDistancePx - ArriveSnapPx);
-        return ActiveOpacity * t;
+        // smoothstep で到着直前をふわっと自然に溶け込ませる
+        return ActiveOpacity * t * t * (3f - 2f * t);
     }
 
     private static float Distance(float dx, float dy) => MathF.Sqrt(dx * dx + dy * dy);

@@ -14,7 +14,7 @@ internal static class SmoothCaretTests
     }
 
     [Test]
-    public static void SmoothCaretMotion_GlidesSmoothlyAndHandsOffWithoutDestinationLinger()
+    public static void SmoothCaretMotion_GlidesWithSpringAndHandsOffSmoothly()
     {
         var motion = new SmoothCaretMotion();
         Assert.True(!motion.SetTarget(100, 200, 20), "初回位置では飛ばさずに現在位置だけ記録する");
@@ -22,18 +22,23 @@ internal static class SmoothCaretTests
 
         Assert.True(motion.SetTarget(124, 200, 20), "近くの移動ではアニメーションを開始する");
         Assert.True(motion.IsActive, "アニメーション中になる");
-        Assert.True(motion.CurrentX > 100f && motion.CurrentX < 124f, $"初回フレームで遅延防止の初期前進が入る: {motion.CurrentX}");
+        Assert.Equal(100f, motion.CurrentX);
         Assert.True(motion.Opacity > 0.5f, "移動開始時は鮮明な不透明度になる");
 
-        motion.Step(8.33f);
-        Assert.True(motion.CurrentX > 104f && motion.CurrentX < 124f, $"1 フレーム後は中間に位置する: {motion.CurrentX}");
+        motion.Step(16f);
+        Assert.True(motion.CurrentX > 100f && motion.CurrentX < 115f, $"1 フレーム目は柔らかく加速し始める: {motion.CurrentX}");
 
-        // ターゲット近傍に達した時点で残り時間待ちをせず即座に透明・非アクティブへ引き継ぐ (二重表示防止)
+        // ターゲット近傍に達した時点でオーバーシュートせず滑らかにネイティブキャレットへ引き継ぐ
         var steps = 0;
-        while (motion.Step(8.33f) && steps < 30)
+        var maxX = motion.CurrentX;
+        while (motion.Step(8.33f) && steps < 40)
+        {
+            maxX = MathF.Max(maxX, motion.CurrentX);
             steps++;
+        }
 
-        Assert.True(steps < 15, $"約 120ms 以内に素早くネイティブキャレットへ引き継ぐ: steps={steps}");
+        Assert.True(maxX <= 124.01f, $"臨界減衰なのでオーバーシュートしない: maxX={maxX}");
+        Assert.True(steps is >= 6 and < 25, $"Word 風の余韻 (~90〜160ms) で収束して引き継ぐ: steps={steps}");
         Assert.Equal(124f, motion.CurrentX);
         Assert.True(!motion.IsActive, "到着ハンドオフ後は即座に非アクティブになる");
         Assert.Equal(0f, motion.Opacity);

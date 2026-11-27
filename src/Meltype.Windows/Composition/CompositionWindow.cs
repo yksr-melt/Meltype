@@ -80,6 +80,7 @@ internal sealed class CompositionWindow : PopupForm
     private bool _caretInitialized;
     private float _caretX;
     private float _caretTargetX;
+    private float _caretVelocityX;
     private long _caretLastTicks;
     private System.Windows.Forms.Timer? _caretTimer;
 
@@ -92,6 +93,7 @@ internal sealed class CompositionWindow : PopupForm
         {
             _caretTimer?.Stop();
             _caretInitialized = false;
+            _caretVelocityX = 0f;
         }
     }
 
@@ -102,11 +104,13 @@ internal sealed class CompositionWindow : PopupForm
         {
             _caretInitialized = true;
             _caretX = targetX;
+            _caretVelocityX = 0f;
             return;
         }
-        if (MathF.Abs(_caretTargetX - _caretX) < 0.4f)
+        if (MathF.Abs(_caretTargetX - _caretX) < 0.3f && MathF.Abs(_caretVelocityX) < 0.015f)
         {
             _caretX = _caretTargetX;
+            _caretVelocityX = 0f;
             return;
         }
         if (_caretTimer is null)
@@ -117,16 +121,22 @@ internal sealed class CompositionWindow : PopupForm
                 if (!Visible || !_smoothCaret)
                 {
                     _caretTimer.Stop();
+                    _caretVelocityX = 0f;
                     return;
                 }
+                const float omega = 2f / 32f;
                 var now = System.Diagnostics.Stopwatch.GetTimestamp();
                 var dtMs = Math.Clamp((now - _caretLastTicks) * 1000f / System.Diagnostics.Stopwatch.Frequency, 1f, 50f);
                 _caretLastTicks = now;
-                var alpha = 1f - MathF.Exp(-dtMs / 17f);
-                _caretX += (_caretTargetX - _caretX) * alpha;
-                if (MathF.Abs(_caretTargetX - _caretX) < 0.4f)
+                var exp = MathF.Exp(-omega * dtMs);
+                var displacement = _caretX - _caretTargetX;
+                var temp = (_caretVelocityX + omega * displacement) * dtMs;
+                _caretVelocityX = (_caretVelocityX - omega * temp) * exp;
+                _caretX = _caretTargetX + (displacement + temp) * exp;
+                if (MathF.Abs(_caretTargetX - _caretX) < 0.3f && MathF.Abs(_caretVelocityX) < 0.015f)
                 {
                     _caretX = _caretTargetX;
+                    _caretVelocityX = 0f;
                     _caretTimer.Stop();
                 }
                 Invalidate();
