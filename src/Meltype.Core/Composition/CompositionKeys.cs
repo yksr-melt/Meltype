@@ -263,7 +263,7 @@ internal static class CompositionKeys
                 if (CompositionConversion.HasRegisteredReading(input.Text, env) ||
                     (!input.Text.KanaInput && input.Text.Mode == DisplayMode.Auto &&
                      CompositionText.Raw(CompositionText.Read(input.Text, env)) is var rawForUtility &&
-                     (Utility.ColorConversion.Matches(rawForUtility) || Utility.UuidConversion.Matches(rawForUtility))))
+                     Utility.UtilityConversions.Call(rawForUtility, env.Services.Now()) is not null))
                 {
                     CompositionConversion.StartConversion(state, input, env, ConversionTrigger.Space);
                 }

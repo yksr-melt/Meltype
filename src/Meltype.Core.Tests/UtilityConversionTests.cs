@@ -40,7 +40,13 @@ internal static class UtilityConversionTests
         var types = typeof(IUtilityConversion).Assembly.GetTypes().Where(t => t.IsClass && !t.IsAbstract && typeof(IUtilityConversion).IsAssignableFrom(t));
         foreach (var type in types)
             Assert.True(UtilityConversions.All.Any(c => c.GetType() == type), $"{type.Name} が UtilityConversions.All に無い");
+        var functions = typeof(IFunctionConversion).Assembly.GetTypes().Where(t => t.IsClass && !t.IsAbstract && typeof(IFunctionConversion).IsAssignableFrom(t));
+        foreach (var type in functions)
+            Assert.True(UtilityConversions.Functions.Any(c => c.GetType() == type), $"{type.Name} が UtilityConversions.Functions に無い");
     }
+
+    private static IEnumerable<string> FunctionCandidates(string raw) =>
+        UtilityConversions.Call(raw, Tuesday)?.Candidates.Select(c => c.Text) ?? [];
 
     [Test]
     public static void Today_IsOfferedOnlyForTheWholeInput()
@@ -276,18 +282,18 @@ internal static class UtilityConversionTests
     [Test]
     public static void ColorConversion_ConvertsHexRgbAndHsl()
     {
-        Assert.Equal("#dadada|#DADADA|rgb(218, 218, 218)|hsl(0, 0%, 85%)", string.Join("|", ColorConversion.Candidates("hex(dadada)")));
-        Assert.Equal("#dadada|#DADADA|rgb(218, 218, 218)|hsl(0, 0%, 85%)", string.Join("|", ColorConversion.Candidates("HEX(dadada)")));
-        Assert.Equal("#000000|rgb(0, 0, 0)|hsl(0, 0%, 0%)", string.Join("|", ColorConversion.Candidates("hex(000000)")));
-        Assert.Equal("#f00|#ff0000|#FF0000|rgb(255, 0, 0)|hsl(0, 100%, 50%)", string.Join("|", ColorConversion.Candidates("hex(f00)")));
-        Assert.Equal("#f008|#ff000088|#FF000088|rgba(255, 0, 0, 0.533)|hsla(0, 100%, 50%, 0.533)", string.Join("|", ColorConversion.Candidates("hex(f008)")));
-        Assert.Equal("#3b82f6|#3B82F6|rgb(59, 130, 246)|hsl(217, 91%, 60%)", string.Join("|", ColorConversion.Candidates("rgb(59,130,246)")));
-        Assert.Equal("#3c83f6|#3C83F6|rgb(60, 131, 246)|hsl(217, 91%, 60%)", string.Join("|", ColorConversion.Candidates("hsl(217,91%,60%)")));
-        Assert.Equal("#ff000080|#FF000080|rgba(255, 0, 0, 0.5)|hsla(0, 100%, 50%, 0.5)", string.Join("|", ColorConversion.Candidates("rgba(255,0,0,0.5)")));
+        Assert.Equal("#dadada|#DADADA|rgb(218, 218, 218)|hsl(0, 0%, 85%)", string.Join("|", FunctionCandidates("hex(dadada)")));
+        Assert.Equal("#dadada|#DADADA|rgb(218, 218, 218)|hsl(0, 0%, 85%)", string.Join("|", FunctionCandidates("HEX(dadada)")));
+        Assert.Equal("#000000|rgb(0, 0, 0)|hsl(0, 0%, 0%)", string.Join("|", FunctionCandidates("hex(000000)")));
+        Assert.Equal("#f00|#ff0000|#FF0000|rgb(255, 0, 0)|hsl(0, 100%, 50%)", string.Join("|", FunctionCandidates("hex(f00)")));
+        Assert.Equal("#f008|#ff000088|#FF000088|rgba(255, 0, 0, 0.533)|hsla(0, 100%, 50%, 0.533)", string.Join("|", FunctionCandidates("hex(f008)")));
+        Assert.Equal("#3b82f6|#3B82F6|rgb(59, 130, 246)|hsl(217, 91%, 60%)", string.Join("|", FunctionCandidates("rgb(59,130,246)")));
+        Assert.Equal("#3c83f6|#3C83F6|rgb(60, 131, 246)|hsl(217, 91%, 60%)", string.Join("|", FunctionCandidates("hsl(217,91%,60%)")));
+        Assert.Equal("#ff000080|#FF000080|rgba(255, 0, 0, 0.5)|hsla(0, 100%, 50%, 0.5)", string.Join("|", FunctionCandidates("rgba(255,0,0,0.5)")));
 
         // 逆向きの例: 裸の #・未登録の関数名・不正な引数は色変換しない
         foreach (var nonColor in new[] { "#cafe", "#2422", "#dadada", "#3b82f6", "#123456", "myhex(dadada)", "rgb(akamidoriao)", "rgb(256,0,0)", "hex(12345)" })
-            Assert.Equal(0, ColorConversion.Candidates(nonColor).Count, $"{nonColor} は色変換しない");
+            Assert.Equal("", string.Join("|", FunctionCandidates(nonColor)), $"{nonColor} は色変換しない");
 
         // hex(dadada) で Space 1 回押すと #dadada が第一候補になり確定できる
         var spaceHex = new Keyboard();

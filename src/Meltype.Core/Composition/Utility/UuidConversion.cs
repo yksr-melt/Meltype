@@ -6,41 +6,28 @@ namespace Meltype.Composition.Utility;
 /// <summary>
 /// UUID v4 / v7 生成ユーティリティ。
 /// - `uuid` / `guid` / `ゆーゆーあいでぃー`: 通常候補の後ろに新しい UUID 候補を足す (Append)
-/// - `uuid()` / `guid()` / `uuid(v4)` / `uuid(v7)` / `uuid(n)`: UUID 候補だけを先頭に出す (Replace)
-/// ランダム生成のため学習には登録しない。
+/// - `uuid()` / `guid()` / `uuid(v4)` / `uuid(v7)` / `uuid(n)`: UUID 候補だけを先頭に出す (関数記法)
+/// ランダム生成のため学習には登録せず、予測の候補にも出さない。
 /// </summary>
-internal sealed class UuidConversion : IUtilityConversion
+internal sealed class UuidConversion : IUtilityConversion, IFunctionConversion
 {
     public UtilityCandidates? Convert(UtilityInput input)
     {
-        var raw = CompositionText.Raw(input.Text);
-        if (!input.Text.KanaInput && TryGenerate(raw, input.Context.Now) is { Count: > 0 } funcCandidates)
-            return new(funcCandidates, UtilityPlacement.Replace) { Learnable = false };
-
         if (input.Reading is "ゆーゆーあいでぃー" ||
-            (!input.Text.KanaInput && raw.ToLowerInvariant() is "uuid" or "guid"))
+            (!input.Text.KanaInput && CompositionText.Raw(input.Text).ToLowerInvariant() is "uuid" or "guid"))
         {
             return new(GenerateAll(input.Context.Now, mode: ""), UtilityPlacement.Append) { Learnable = false };
         }
         return null;
     }
 
-    /// <summary>関数記法に一致するか (Space での変換開始判定用)。</summary>
-    internal static bool Matches(string raw) =>
-        ParseFunction(raw) is not null;
+    public bool Predictable => false;
 
-    private static List<string>? TryGenerate(string raw, DateTime now) =>
-        ParseFunction(raw) is { } mode ? GenerateAll(now, mode) : null;
-
-    private static string? ParseFunction(string raw)
+    public IReadOnlyList<FunctionCandidate> Call(string name, string args, DateTime now)
     {
-        var trimmed = raw.Trim();
-        var open = trimmed.IndexOf('(');
-        if (open <= 0 || !trimmed.EndsWith(')')) return null;
-        var name = trimmed[..open].ToLowerInvariant();
-        if (name is not ("uuid" or "guid")) return null;
-        var arg = ToHalfWidthAscii(trimmed[(open + 1)..^1]).Trim().ToLowerInvariant();
-        return arg is "" or "v4" or "v7" or "n" ? arg : null;
+        if (name is not ("uuid" or "guid")) return [];
+        var mode = ToHalfWidthAscii(args).Trim().ToLowerInvariant();
+        return mode is "" or "v4" or "v7" or "n" ? GenerateAll(now, mode).Select(c => new FunctionCandidate(c)).ToList() : [];
     }
 
     private static List<string> GenerateAll(DateTime now, string mode)

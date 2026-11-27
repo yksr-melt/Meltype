@@ -8,10 +8,9 @@ namespace Meltype.Composition.Utility;
 
 /// <summary>
 /// 関数形式のカラー表記 (hex(dadada)・rgb(59,130,246)・hsl(217,91%,60%)) を相互変換して候補に出す。
-/// 未確定の原文全体が 関数名(引数) に一致し、引数を色として解釈できたときだけ反応する。
 /// 各候補の色見本 (#rrggbbaa) も Core で決めて返す。
 /// </summary>
-internal sealed partial class ColorConversion : IUtilityConversion
+internal sealed partial class ColorConversion : IFunctionConversion
 {
     [GeneratedRegex(@"^#?(?<hex>[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")]
     private static partial Regex HexArgsPattern();
@@ -22,37 +21,15 @@ internal sealed partial class ColorConversion : IUtilityConversion
     [GeneratedRegex(@"^(?<h>-?\d+(?:\.\d+)?)\s*(?:,\s*|\s+)(?<s>\d+(?:\.\d+)?)%\s*(?:,\s*|\s+)(?<l>\d+(?:\.\d+)?)%(?:\s*(?:,|/)\s*(?<a>\d+(?:\.\d+)?%?|\.\d+%?))?$")]
     private static partial Regex HslArgsPattern();
 
-    public UtilityCandidates? Convert(UtilityInput input)
+    public bool Predictable => true;
+
+    public IReadOnlyList<FunctionCandidate> Call(string name, string args, DateTime now)
     {
-        var raw = CompositionText.Raw(input.Text);
-        if (input.Text.KanaInput || input.Text.Mode != DisplayMode.Auto) return null;
-        var pairs = CandidatesWithColors(raw);
-        if (pairs.Count == 0) return null;
-        var candidates = pairs.Select(p => p.Text).ToList();
-        var colors = pairs.Select(p => (string?)p.Color).ToList();
-        if (!candidates.Contains(raw))
-        {
-            candidates.Add(raw);
-            colors.Add(null);
-        }
-        return new(candidates, UtilityPlacement.Replace) { Colors = colors };
-    }
-
-    /// <summary>原文全体が有効な色変換の関数呼び出しに一致するか。</summary>
-    internal static bool Matches(string raw) => CandidatesWithColors(raw).Count > 0;
-
-    internal static List<string> Candidates(string raw) =>
-        CandidatesWithColors(raw).Select(p => p.Text).ToList();
-
-    internal static List<(string Text, string Color)> CandidatesWithColors(string raw)
-    {
-        if (!TrySplitFunctionCall(raw, out var name, out var args)) return [];
-
         switch (name)
         {
             case "hex" when TryParseHexArgs(args, out var hexColor):
                 {
-                    var results = new List<(string Text, string Color)>();
+                    var results = new List<FunctionCandidate>();
                     var exactColor = FormatRgbaHex(hexColor.R, hexColor.G, hexColor.B, ToAlphaByte(hexColor.Alpha));
                     if (hexColor.RawHex.Length is 3 or 4)
                         AddUnique(results, "#" + hexColor.RawHex.ToLowerInvariant(), exactColor);
@@ -61,14 +38,14 @@ internal sealed partial class ColorConversion : IUtilityConversion
                 }
             case "rgb" or "rgba" when TryParseRgbArgs(args, out var rgbColor):
                 {
-                    var results = new List<(string Text, string Color)>();
+                    var results = new List<FunctionCandidate>();
                     AddFormattedCandidates(results, rgbColor.R, rgbColor.G, rgbColor.B, rgbColor.Alpha, includeHex: true, includeRgb: true, includeHsl: true);
                     return results;
                 }
             case "hsl" or "hsla" when TryParseHslArgs(args, out var hslColor):
                 {
                     var (r, g, b) = HslToRgb(hslColor.H, hslColor.S, hslColor.L);
-                    var results = new List<(string Text, string Color)>();
+                    var results = new List<FunctionCandidate>();
                     AddFormattedCandidates(results, r, g, b, hslColor.Alpha, includeHex: true, includeRgb: true, includeHsl: true);
                     return results;
                 }
@@ -77,23 +54,7 @@ internal sealed partial class ColorConversion : IUtilityConversion
         }
     }
 
-    private static bool TrySplitFunctionCall(string raw, out string name, out string args)
-    {
-        name = "";
-        args = "";
-        if (raw.Length < 4 || !raw.EndsWith(')')) return false;
-        var open = raw.IndexOf('(');
-        if (open <= 0) return false;
-        for (var i = 0; i < open; i++)
-        {
-            if (!char.IsAsciiLetter(raw[i])) return false;
-        }
-        name = raw[..open].ToLowerInvariant();
-        args = raw[(open + 1)..^1].Trim();
-        return args.Length > 0;
-    }
-
-    private static void AddFormattedCandidates(List<(string Text, string Color)> results, byte r, byte g, byte b, double? alpha, bool includeHex, bool includeRgb, bool includeHsl)
+    private static void AddFormattedCandidates(List<FunctionCandidate> results, byte r, byte g, byte b, double? alpha, bool includeHex, bool includeRgb, bool includeHsl)
     {
         var alphaByte = ToAlphaByte(alpha);
         var exactColor = FormatRgbaHex(r, g, b, alphaByte);
@@ -129,10 +90,10 @@ internal sealed partial class ColorConversion : IUtilityConversion
         }
     }
 
-    private static void AddUnique(List<(string Text, string Color)> results, string text, string color)
+    private static void AddUnique(List<FunctionCandidate> results, string text, string color)
     {
         if (!results.Any(r => r.Text == text))
-            results.Add((text, color));
+            results.Add(new(text, color));
     }
 
     private static byte ToAlphaByte(double? alpha) =>
