@@ -149,9 +149,9 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
                 Enqueue(input with { Key = null, Notice = true });
                 return false;
             }
-            if (Captures(e)) return Enqueue(input);
+            if (input.Event is { } key && Captures(e, key)) return Enqueue(input);
             // アプリに通したキーはキャレットを動かすかもしれない (後のキーより先に本体に知らせる)
-            if (!VirtualKeys.IsModifier(e.Vk)) Enqueue(new Input(Caret: new ImeCaret { Moved = true, PassedKey = e.Vk, Ctrl = IsDown(VirtualKeys.Control) }));
+            if (!VirtualKeys.IsModifier(e.Vk)) Enqueue(new Input(Caret: new ImeCaret { Moved = true, PassedKey = e.Vk, Ctrl = input.Event?.Ctrl == true }));
         }
         return false;
     }
@@ -196,20 +196,20 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
     // 受け取るキーか。本体の状態 (capture) どおりにする。ただし、フォーカスが移ってから本体の状態をまだ受け取っていないときと、
     // 本体が受け持っていないのに入力欄にフォーカスがある (UI Automation の通知が遅れた・来なかった) ときは、
     // Ctrl・Alt・Win と一緒でないキーを本体に聞く (本体が使わなければ送り直す)
-    private bool Captures(KeyEvent e)
+    private bool Captures(KeyEvent e, ImeKey key)
     {
         if (VirtualKeys.IsModifier(e.Vk)) return false;
         var state = _state;
-        var mods = (IsDown(VirtualKeys.Shift) ? 1 : 0) | (IsDown(VirtualKeys.Control) ? 2 : 0) | (IsDown(VirtualKeys.Menu) ? 4 : 0) |
-            (IsDown(VirtualKeys.LWin) || IsDown(VirtualKeys.RWin) ? 8 : 0);
+        var mods = (key.Shift ? (int)ShortcutModifiers.Shift : 0) | (key.Ctrl ? (int)ShortcutModifiers.Control : 0) |
+            (key.Alt ? (int)ShortcutModifiers.Alt : 0) | (key.Command ? (int)ShortcutModifiers.Win : 0);
         if (state.HandlesInput && !_stale)
         {
-            if (state.Capture.Shortcuts.Any(key => ToggleShortcut.NormalizeKey(key.Vk) == ToggleShortcut.NormalizeKey(e.ShortcutKey) && key.Modifiers == mods)) return true;
+            if (state.Capture.Shortcuts.Any(shortcut => ToggleShortcut.NormalizeKey(shortcut.Vk) == key.Vk && shortcut.Modifiers == mods)) return true;
             // テンキー (0x60〜0x6F) は文字を生んでも受け取らない (ImeCapture の契約)
-            return (mods & ~1) == 0 && e.Vk is not (>= 0x60 and <= 0x6F) && KeyText.CharFromKey(e.Vk, e.Scan, (mods & 1) != 0) is { } c && c is > ' ' and <= '~' &&
-                state.Capture.PrintableAscii && !state.Capture.PrintableAsciiExcept.Contains(c);
+            return (mods & ~(int)ShortcutModifiers.Shift) == 0 && e.Vk is not (>= 0x60 and <= 0x6F) && key.Ch is > ' ' and <= '~' &&
+                state.Capture.PrintableAscii && !state.Capture.PrintableAsciiExcept.Contains((char)key.Ch);
         }
-        if ((mods & ~1) != 0) return false;
+        if ((mods & ~(int)ShortcutModifiers.Shift) != 0) return false;
         return _stale || TextFocusRechecked();
     }
 
@@ -231,7 +231,14 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
 
     private ImeKey KeyOf(KeyEvent e, bool repeat)
     {
-        bool shift = IsDown(VirtualKeys.Shift), ctrl = IsDown(VirtualKeys.Control), alt = IsDown(VirtualKeys.Menu), command = IsDown(VirtualKeys.LWin) || IsDown(VirtualKeys.RWin);
+        bool shift, ctrl, alt, command;
+        lock (_gate)
+        {
+            shift = IsDown(VirtualKeys.LShift) || IsDown(VirtualKeys.RShift);
+            ctrl = IsDown(VirtualKeys.LControl) || IsDown(VirtualKeys.RControl);
+            alt = IsDown(VirtualKeys.LMenu) || IsDown(VirtualKeys.RMenu);
+            command = IsDown(VirtualKeys.LWin) || IsDown(VirtualKeys.RWin);
+        }
         var ch = !ctrl && !alt && !command && KeyText.CharFromKey(e.Vk, e.Scan, shift) is { } c && !char.IsControl(c) ? c : 0;
         return new ImeKey { Vk = e.ShortcutKey, Ch = ch, Physical = Physical(e), Shift = shift, Ctrl = ctrl, Alt = alt, Command = command, CapsLock = KeyText.CapsLockOn, Repeat = repeat };
     }
@@ -481,25 +488,31 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         return capture;
     }
 
-    // 押している修飾キーか。変換中はフックが修飾キーの押下も止めて並べ、本体に聞いてから送り直すので、
-    // 送り直すまでは GetAsyncKeyState に表れない (止めたキーは反映されない)。そうしないと、変換中に Shift + / を打つと
-    // Shift が離れて見え、? が / (・) になる。GetAsyncKeyState に表れないのは、並べてまだ送り直していない押下 (処理中のものと _queue) だけなので、
-    // それも見る (同じ物理キーの解放が後ろに並んでいれば、離している)。並びが空なら GetAsyncKeyState だけで決まる
+    // GetAsyncKeyState はフックが止めた押下・解放を反映しない。左右の修飾キーを別々に調べ、
+    // 処理待ちの解放は、そのキーをまだ押しているように見える OS の状態より優先する。
+    // 呼び出す間は _gate を保持する。
     private bool IsDown(int vk)
     {
-        if ((Native.GetAsyncKeyState(vk) & 0x8000) != 0) return true;
-        var down = new HashSet<int>();
-        lock (_gate)
-        {
-            foreach (var input in _processing is { } current ? _queue.Prepend(current) : _queue)
-            {
-                if (input.Key is not { } key || key.Vk != vk && GenericModifier(key.Vk) != vk) continue;
-                if (key.IsDown) down.Add(key.PhysicalId);
-                else down.Remove(key.PhysicalId);
-            }
-        }
-        return down.Count > 0;
+        var systemDown = (Native.GetAsyncKeyState(vk) & 0x8000) != 0;
+        if (_waiting == 0 && _processing?.Key is null) return systemDown;
+        return ModifierAfterPendingKeys(vk, systemDown, _queue.Select(input => input.Key).Prepend(_processing?.Key));
     }
+
+    internal static bool ModifierAfterPendingKeys(int vk, bool down, IEnumerable<KeyEvent?> pending)
+    {
+        foreach (var key in pending)
+            if (key is { } modifier && ModifierSide(modifier) == vk) down = modifier.IsDown;
+        return down;
+    }
+
+    // 一部の注入打鍵は汎用の仮想キーを含む。Shift はスキャンコード、Ctrl と Alt は拡張フラグで左右を区別する。
+    private static int ModifierSide(KeyEvent key) => key.Vk switch
+    {
+        VirtualKeys.Shift => key.Scan == 0x36 ? VirtualKeys.RShift : VirtualKeys.LShift,
+        VirtualKeys.Control => key.Extended ? VirtualKeys.RControl : VirtualKeys.LControl,
+        VirtualKeys.Menu => key.Extended ? VirtualKeys.RMenu : VirtualKeys.LMenu,
+        _ => key.Vk,
+    };
 
     /// <summary>左右を区別する修飾キーの、区別しない仮想キー (修飾キーでなければ 0)。</summary>
     private static int GenericModifier(int vk) => vk switch

@@ -123,7 +123,8 @@ internal sealed class MeltypeEngine : IDisposable
         // Meltype 自身が送り直したキーは、印 (InjectedMarker) でフックの入口で除いているので、ここには来ない (自分の出力を処理し直さない)。
         // Chrome リモート デスクトップ・Parsec で操作されている間も同じ (#372)。
         if (e.Injected && (settings.AllowInjectedInput || _remote.Active is not null)) e = e with { Injected = false };
-        else if (e.Injected && e.IsDown && !_injectedHintLogged && settings.Mode == InputMode.Keyboard && KeyText.CharFromKey(e.Vk, e.Scan, false) is { } injected && injected > ' ')
+        else if (e.Injected && e.IsDown && !_injectedHintLogged && settings.Mode == InputMode.Keyboard &&
+            KeyText.CharFromKey(e.Vk, e.Scan, IsDown(VirtualKeys.Shift)) is { } injected && injected > ' ')
         {
             // キー配列を変えるソフト (ULE4JIS: US 配列にする) も、押したキーを別のキーとして送り直すので、ほかのソフトが送ったキーとして届く (issue #250)。
             // Windows のタッチキーボードの打鍵も同じ (issue #729)

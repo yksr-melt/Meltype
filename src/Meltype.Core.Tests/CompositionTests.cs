@@ -6428,8 +6428,21 @@ internal static class CompositionTests
             ("I want to go", null, null, "I want to go"),          // 英文はそのまま
         })
         {
-            Assert.Equal(expected, EnglishSpacing.Spaced(text, before, after), text);
+            Assert.Equal(expected, EnglishSpacing.Apply(ComposedText.Of(SpanKind.Japanese, text), before, after, english: true, numbers: false).Text, text);
         }
+    }
+
+    [Test]
+    public static void SpaceAroundEnglish_AroundKanaCandidatesOfEnglishClauses()
+    {
+        // 英語の文節のかな・漢字の入った候補は日本語の区間。中の英字の前後と、前の英語の区間との間に空白を入れる
+        var settings = new Settings { SpaceAroundEnglish = true };
+        string Commit(ComposedText text) => NotationRules.Commit(text, null, null, settings).Text;
+        Assert.Equal("今日は midi か", Commit(ComposedText.Kana("今日は") + CompositionPresentation.Candidate(new Clause("midika", true, ["midiか"]), "midiか")));
+        Assert.Equal("GitHub ハロー", Commit(ComposedText.English("GitHub") + CompositionPresentation.Candidate(new Clause("hello", true, ["ハロー"]), "ハロー")));
+        Assert.Equal("GitHubHello", Commit(ComposedText.English("GitHub") + CompositionPresentation.Candidate(new Clause("hello", true, ["Hello"]), "Hello")));
+        // 互換漢字 (U+FA11 の 﨑) も日本語の文字
+        Assert.Equal("\uFA11 Lab", Commit(CompositionPresentation.Candidate(new Clause("zh", true, ["\uFA11Lab"]), "\uFA11Lab")));
     }
 
     [Test]
@@ -6451,7 +6464,7 @@ internal static class CompositionTests
             ("買う", null, "15Pro", false, "買う"),                     // キャレットの後ろの語も同じ
         })
         {
-            Assert.Equal(expected, EnglishSpacing.Spaced(text, before, after, english, numbers: true), text);
+            Assert.Equal(expected, EnglishSpacing.Apply(ComposedText.Of(SpanKind.Japanese, text), before, after, english, numbers: true).Text, text);
         }
     }
 
