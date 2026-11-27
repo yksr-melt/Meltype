@@ -2,6 +2,7 @@
 #   csharp         … フォーマット: すべての .cs を dotnet format whitespace で調べ、違反があれば失敗
 #                    静的解析: Roslyn の解析 (AnalysisLevel=latest-recommended) の警告が 1 件でもあれば失敗。重要度は .editorconfig で変える。
 #                    SDK (10.0.x) が上がって新しいルールが増えると、main でも失敗する。
+#   typescript     … 開発用のスクリプトとテスト (tsconfig.json の include) の型検査
 #   license-header … Pull Request で足したソースファイルの先頭に、ライセンス・著作権の表記があるか (.github/bot/license-header.mjs)
 name: lint
 
@@ -43,6 +44,22 @@ jobs:
         run: |
           dotnet build src/Meltype.Core.CApi -c Release -p:IsAotCompatible=true -p:TreatWarningsAsErrors=true
           dotnet build src/Meltype.Settings -c Release -p:IsAotCompatible=true -p:TreatWarningsAsErrors=true
+
+  typescript:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # 版は package.json の packageManager に合わせる
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec tsc
 
   license-header:
     if: github.event_name == 'pull_request'
