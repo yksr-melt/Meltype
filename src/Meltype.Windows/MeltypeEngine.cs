@@ -142,7 +142,7 @@ internal sealed class MeltypeEngine : IDisposable
         }
         if (e.Injected) return false;
         KeyCounter.Count(e, DateTime.Now, KeyCountAllowed(settings));
-        if (settings.SmoothCaret && e.IsDown) CaretActivity?.Invoke();
+        if (settings.UsesSmoothCaret && e.IsDown) CaretActivity?.Invoke();
         if (e.IsUp && _toggleKeyDown.Remove(e.Vk)) return true;
         // Ctrl + 半角/全角: Meltype 全体の有効/無効 (どちらのモードでも)。変換ボックスの後始末が要るので切り替え自体は UI スレッドで行う。
         if (VirtualKeys.IsHankakuZenkaku(e.Vk) && e.IsDown && IsDown(VirtualKeys.Control))

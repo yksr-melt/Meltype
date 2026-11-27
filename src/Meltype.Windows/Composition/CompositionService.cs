@@ -31,11 +31,11 @@ internal sealed class CompositionService : IDisposable
         Runtime = runtime;
         _settings = settings;
         _smoothCaret = new SmoothCaretWindow(invoker, () => Focus.CaretBounds(waitMs: 25));
-        _smoothCaret.SetEnabled(settings().SmoothCaret);
-        runtime.SettingsChanged += loaded =>
+        _smoothCaret.SetEnabled(settings().UsesSmoothCaret);
+        runtime.SettingsChanged += _ =>
         {
             if (!_invoker.IsDisposed && _invoker.IsHandleCreated)
-                _invoker.BeginInvoke(() => _smoothCaret.SetEnabled(loaded.SmoothCaret));
+                _invoker.BeginInvoke(() => _smoothCaret.SetEnabled(_settings().UsesSmoothCaret));
         };
         // Mozc (同梱の mozc\meltype_mozc_helper.exe) と Zenzai (zenzai\)
         runtime.StartConverter(AppContext.BaseDirectory);
@@ -69,6 +69,7 @@ internal sealed class CompositionService : IDisposable
     /// <summary>TSF 等からの入力・キャレット移動を受けてスムースカーソルを追従させる。</summary>
     public void NotifyCaretActivity()
     {
+        if (!_settings().UsesSmoothCaret) return;
         if (!_invoker.IsDisposed && _invoker.IsHandleCreated)
             _invoker.BeginInvoke(() => _smoothCaret.NotifyActivity());
     }
@@ -352,7 +353,7 @@ internal sealed class CompositionService : IDisposable
 
     public void Show(CompositionView view)
     {
-        var smooth = _settings().SmoothCaret;
+        var smooth = _settings().UsesSmoothCaret;
         _window.SetSmoothCaret(smooth);
         _smoothCaret.SetEnabled(smooth);
         _smoothCaret.SetSuppressed(true);

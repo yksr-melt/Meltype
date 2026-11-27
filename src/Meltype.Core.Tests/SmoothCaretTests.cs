@@ -8,9 +8,19 @@ namespace Meltype.Tests;
 internal static class SmoothCaretTests
 {
     [Test]
-    public static void SmoothCaret_DefaultSettingIsOff()
+    public static void SmoothCaret_DefaultSettingIsOffAndOnlyActiveInTsfWhenEnabled()
     {
         Assert.True(!new Settings().SmoothCaret, "スムースカーソルは既定で OFF");
+        Assert.True(!new Settings().UsesSmoothCaret, "既定では無効");
+
+        var tsf = new Settings { SmoothCaret = true, Mode = InputMode.Tsf, Enabled = true };
+        Assert.True(tsf.UsesSmoothCaret, "Meltype IME 有効時のみ反映される");
+
+        var paused = new Settings { SmoothCaret = true, Mode = InputMode.Tsf, Enabled = false };
+        Assert.True(!paused.UsesSmoothCaret, "一時停止中は反映されない");
+
+        var keyboard = new Settings { SmoothCaret = true, Mode = InputMode.Keyboard, Enabled = true };
+        Assert.True(!keyboard.UsesSmoothCaret, "Meltype キーボード使用時は反映されない");
     }
 
     [Test]
