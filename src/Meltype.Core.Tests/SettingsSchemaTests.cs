@@ -43,6 +43,22 @@ internal static class SettingsSchemaTests
     }
 
     [Test]
+    public static void Descriptions_ShowThisPcDataDirectory()
+    {
+        // Linux 版の設定画面に Windows のパス (%LOCALAPPDATA%\Meltype) が出ていた (#2109)
+        var schema = JsonNode.Parse(SettingsSchema.Create())!["properties"]!.AsObject();
+        var catalog = SettingsCatalog.ForThisPlatform().SelectMany(c => c.Items).ToDictionary(i => i.Property.Name, i => i.Description);
+        foreach (var key in new[] { nameof(Settings.FileLog), nameof(Settings.PredictiveCandidates) })
+        {
+            foreach (var description in new[] { schema[key]!["description"]!.GetValue<string>(), catalog[key] })
+            {
+                Assert.True(description.Contains($"({AppPaths.DataDirectory})"), $"{key}: 説明にこの PC のデータフォルダーを出す");
+                Assert.True(!description.Contains("%LOCALAPPDATA%") && !description.Contains(AppPaths.DataDirectoryMark), $"{key}: OS ごとに違うパスや印のまま出さない");
+            }
+        }
+    }
+
+    [Test]
     public static void Platforms_AreSomeButNotAllPlatforms()
     {
         var all = Enum.GetValues<Platform>().Aggregate((a, b) => a | b);
