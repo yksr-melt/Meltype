@@ -172,18 +172,18 @@ internal static class CompositionConversion
                     clauses.Add(new Clause(segment.Raw, true, [segment.Raw]));
                     continue;
                 }
+                var english = Distinct([.. env.Services.UserDictionary?.Lookup(segment.Raw.ToLowerInvariant()) ?? [], .. EnglishCandidates(env, segment.Raw, typed[s].Text)]);
                 // LINE WORKS などでは、メンションの宛先が日本語の名前になる。明示的に変換したときは @ を残して後ろだけを読む。
                 if (preferJapanese && segment.IsProtected && segment.Raw.StartsWith('@') && segment.Raw.Skip(1).All(char.IsAsciiLetter) &&
                     RomajiReading(env, segment.Raw[1..], allowFinalN: true) is { } mention)
                 {
                     var names = JapaneseCandidates(env, mention, null, SegmentBefore(env, string.Concat(clauses.Select(c => c.Text))), zenzai);
-                    var mentionCandidates = Distinct([.. names.Select(name => "@" + name), segment.Raw]);
+                    var mentionCandidates = Distinct([.. names.Select(name => "@" + name), .. english]);
                     var mentionClause = new Clause(segment.Raw, false, mentionCandidates) { Raw = segment.Raw, Expanded = true, Fixed = true };
                     mentionClause.NotLearned.UnionWith(mentionCandidates);
                     clauses.Add(mentionClause);
                     continue;
                 }
-                var english = Distinct([.. env.Services.UserDictionary?.Lookup(segment.Raw.ToLowerInvariant()) ?? [], .. EnglishCandidates(env, segment.Raw, typed[s].Text)]);
                 // 子音の略入力 (ast → 明日): 英字のまま見える語にも、candidates.txt の英字の読みの候補を足す (issue #62)
                 if (env.Settings.ConsonantAbbreviations && segment.Raw.Length >= 2 && segment.Raw.All(char.IsAsciiLetter) && env.Services.Candidates is { } abbreviations)
                 {
