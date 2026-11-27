@@ -856,7 +856,7 @@ public sealed class Settings
     public bool ExcludeFullscreen { get; set; } = true;
 
     [Category("11. アプリ"), DisplayName("ゲームでは止める"), Platforms(Platform.Windows),
-     Description("Steam・Epic Games・Riot Games・EA・Ubisoft・Battle.net・Xbox のゲームのフォルダーにあるアプリ (ウィンドウ表示のゲームも) では、Meltype キーボードは、チャット欄が開くまで何もしません (キーを横取りせず、Windows の IME にも触らないので、移動などの操作はそのままゲームに届きます)。チャット欄が開くと日本語入力になり、閉じると英数に戻ります。Meltype IME は英数で始め、英数ではキーを横取りしません (チャットでは 半角/全角 で日本語にできます)。ほかのゲームは、アプリ別設定で種類を「ゲーム」にしてください。")]
+     Description("Steam・Epic Games・Riot Games・EA・Ubisoft・Battle.net・Xbox のゲームのフォルダーにあるアプリ (ウィンドウ表示のゲームも) では、Meltype キーボードは、チャット欄が開くまで何もしません (キーを横取りせず、Windows の IME にも触らないので、移動などの操作はそのままゲームに届きます)。チャット欄を開いたときだけ IME を使うゲーム (Unity など) では、チャット欄が開くと日本語入力になり、閉じると英数に戻ります。Meltype IME は英数で始め、英数ではキーを横取りしません (チャットでは 半角/全角 で日本語にできます)。ほかのゲームは、アプリ別設定で種類を「ゲーム」にしてください。")]
     public bool StopInGames { get; set; } = true;
 
     [Category("11. アプリ"), DisplayName("アプリ別設定"), Description("アプリ (Windows はプロセス名、macOS は bundle ID、Linux はプログラム名) ごとに、ON/OFF・種類・確定した文字の入れ方・入力欄とみなすかを指定します。種類「コード」(コードエディター・ターミナル) では基本は英数のままで、コメント (// # -- など) と文字列 (\"…\" など) の中だけ日本語を判定します。コードの行で 半角/全角 を押すと、その行だけ日本語で入力できます。README.md などの文章ファイルを開いているときは一般として扱います。")]

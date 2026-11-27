@@ -564,9 +564,13 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
             SystemImeState = state;
             // 外れているのを見たウィンドウだけ、結び付いたことを知らせる。入力欄の外でも外さないアプリ・ゲーム (Minecraft 26.3 の SDL3 や Unreal など) は、
             // 常に結び付いているので、知らせると、ゲームではずっとチャット欄が開いているとみなして移動のキーまで取ってしまう
-            var attached = state.Mode == WindowsIme.ImeMode.Open || state.ConversionMode != 0;
-            if (!attached) _detachedSeenIn = target.TopLevel;
-            SetImeContext(attached && _detachedSeenIn == target.TopLevel);
+            // 読めなかった (相手が忙しくて時間内に答えない) ときは、外れたのか分からないので、何も判断しない
+            if (state.Mode != WindowsIme.ImeMode.Unknown)
+            {
+                var attached = state.Mode == WindowsIme.ImeMode.Open || state.ConversionMode != 0;
+                if (!attached) _detachedSeenIn = target.TopLevel;
+                SetImeContext(attached && _detachedSeenIn == target.TopLevel);
+            }
             var layout = Native.GetKeyboardLayout(target.ThreadId);
             if (layout != _lastLayout)
             {
