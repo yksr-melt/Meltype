@@ -107,6 +107,7 @@ internal class CoreConfig(private val directory: File) {
 
         /** Settings.LiveConversion: convert to kanji while typing. */
         const val LIVE_CONVERSION = "LiveConversion"
+        const val PARTIAL_COMMIT = "PartialCommit"
 
         /** Settings.SpaceWidth: whether Space in Japanese mode puts a full-width space. */
         const val SPACE_WIDTH = "SpaceWidth"

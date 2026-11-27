@@ -160,9 +160,9 @@ class KeyboardService : InputMethodService(), KeyListener {
     }
 
     /** A key without a character (Back 0x08, Enter 0x0D, ← 0x25, → 0x27). Returns whether the Core consumed it. */
-    private fun coreVirtualKey(vk: Int): Boolean {
+    private fun coreVirtualKey(vk: Int, shift: Boolean = false): Boolean {
         val instance = coreHost() ?: return false
-        return coreSend(instance, ImeJson.virtualKey(vk, fieldFacts()))
+        return coreSend(instance, ImeJson.virtualKey(vk, fieldFacts(), shift))
     }
 
     /** An event that changes the language mode (あa, the language menu). */
@@ -319,6 +319,8 @@ class KeyboardService : InputMethodService(), KeyListener {
         createdAtNanos = System.nanoTime()
         active = WeakReference(this)
         Settings(this).registerChangeListener(settingsListener)
+        // 候補のタップでその文節までを確定する (Core が config.json を読み直すので、次に打つキーから効く)。
+        Settings(this).usePartialCommit()
         // 辞書を写すので時間がかかる。開き終わるまで、Core の変換は待つ。
         val mozc = mozc(this)
         worker.execute { mozc.value }
@@ -396,7 +398,11 @@ class KeyboardService : InputMethodService(), KeyListener {
             val instance = core
             val choice = coreInput.choices.getOrNull(index)
             // The Core decides what the tap does (a prediction commits; a conversion candidate is chosen for its clause).
-            if (instance != null && choice != null) coreSend(instance, ImeJson.candidateClicked(choice.nativeIndex, fieldFacts()))
+            if (instance != null && choice != null && coreSend(instance, ImeJson.candidateClicked(choice.nativeIndex, fieldFacts()))) {
+                // 変換の候補なら、続けてその文節までを確定する (Shift + Enter。Core の PartialCommit)。残りの文節は未確定のまま。
+                // 最後の文節の候補なら、全部を確定する。予測候補のタップは Core が確定済みなので、変換中ではない。
+                if (coreInput.view?.converting == true) coreSend(instance, ImeJson.virtualKey(ImeJson.VK_RETURN, fieldFacts(), shift = true))
+            }
         } }
         val keys = KeyboardView(this).also { it.listener = this }
         // 絵文字の画面は、開いているあいだ、候補バーとキーの代わりに同じ場所に出る（高さは同じ）。
@@ -727,7 +733,10 @@ class KeyboardService : InputMethodService(), KeyListener {
         languagePopup.dismiss()
     }
 
-    /** 変換中は、空白キーの長押しで動かすと、選ぶ文節を動かす（Core に ← → を送る）。 */
+    /**
+     * 変換中は、空白キーの長押しで動かすと、選んでいる文節の区切りを伸び縮みさせる（Core に Shift + ← → を送る）。
+     * 文節を先頭から決めて、候補のタップでその文節までを確定していく。変換していない未確定の文字では、読みの中を動く（← →）。
+     */
     override fun onCursorModeStart(): Boolean {
         cursorPosition = null
         return true
@@ -735,7 +744,8 @@ class KeyboardService : InputMethodService(), KeyListener {
 
     override fun onCursorMove(steps: Int) {
         if (coreInput.composing) {
-            repeat(abs(steps)) { coreVirtualKey(if (steps < 0) ImeJson.VK_LEFT else ImeJson.VK_RIGHT) }
+            val resize = coreInput.view?.converting == true
+            repeat(abs(steps)) { coreVirtualKey(if (steps < 0) ImeJson.VK_LEFT else ImeJson.VK_RIGHT, shift = resize) }
             return
         }
         // 最初の1回は、入力欄が知らせてきた位置から。範囲を選んであれば、動かす向きの端から。

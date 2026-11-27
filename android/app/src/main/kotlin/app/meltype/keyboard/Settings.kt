@@ -31,6 +31,14 @@ class Settings(private val context: Context) {
         set(value) { prefs.edit().putBoolean(KEY_HAPTIC_ENABLED, value).apply() }
 
     /** ライブ変換（Core の設定 LiveConversion。config.json に書く）。次に打つキーから効く。 */
+    /**
+     * 候補のタップで、その文節までを確定する (Core の設定 PartialCommit。Shift + Enter で選んだ文節までを確定)。
+     * Android には Shift + Enter を打つキーが無く、候補のタップがその操作になるので、いつも ON にしておく。
+     */
+    fun usePartialCommit() {
+        core.set(CoreConfig.PARTIAL_COMMIT, true)
+    }
+
     var liveConversionEnabled: Boolean
         get() = core.boolean(CoreConfig.LIVE_CONVERSION) ?: LIVE_CONVERSION_DEFAULT
         set(value) { core.set(CoreConfig.LIVE_CONVERSION, value) }
