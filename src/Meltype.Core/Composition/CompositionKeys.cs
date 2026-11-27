@@ -475,7 +475,7 @@ internal static class CompositionKeys
 
     /// <summary>
     /// JIS かな以外のかな配列 (月・花・NICOLA・中指NICOLA・TRON) と SKY 配列の打鍵 (issue #1415)。配列のキーとして扱ったら true。
-    /// 打ったキーの英字は英単語の判定に使わない (刻印と違う配列なので)。かなをそのまま原文にする。
+    /// 単打は打ったキーの表記も持つ。前置シフト・同時打鍵のキーは表示にだけ使う。
     /// </summary>
     private static bool HandleKanaLayout(CompositionState state, CompositionEnv env, KeyEvent e, int position)
     {
@@ -519,7 +519,7 @@ internal static class CompositionKeys
         var input = state.Scene is not CompositionScene.WithInput scene ? CompositionLifecycle.Begin(state, env)
             : stroke.RemoveLast == 0 ? CommitBeforeTyping(state, scene, env) : scene.Input;
         for (var i = 0; i < stroke.RemoveLast && !input.Text.IsEmpty; i++) input.Text = CompositionText.RemoveLast(input.Text, env);
-        input.Text = CompositionText.AppendReading(input.Text, stroke.Kana);
+        input.Text = CompositionText.AppendLayoutKana(input.Text, stroke.Kana, stroke.Keys, stroke.Repeat);
         CompositionLifecycle.FinishIfEmpty(state, input);
     }
 
