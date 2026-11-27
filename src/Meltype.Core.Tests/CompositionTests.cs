@@ -4825,6 +4825,10 @@ internal static class CompositionTests
     [Test]
     public static void ReportedWords_AreCandidates()
     {
+        var candidates = CandidateDictionary.Load(null);
+        foreach (var reading in new[] { "すきじご", "すきじがたり", "すきじかたり", "すきじがた" })
+            Assert.True(candidates.Lookup(reading).Contains("隙自語"), reading);
+
         // 報告 (#968): かんそうりつ の候補に 乾燥率
         Assert.True(CandidateDictionary.Load(null).Lookup("かんそうりつ").Contains("乾燥率"), "かんそうりつ → 乾燥率");
         Assert.True(CandidateDictionary.Load(null).Lookup("ぶるあか").Contains("ブルーアーカイブ"), "ぶるあか → ブルーアーカイブ (#1106)");
