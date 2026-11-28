@@ -31,6 +31,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private CorrectionReportDialog? _correctionDialog;
     private KeyCountForm? _keyCountForm;
     private WelcomeForm? _welcomeForm;
+    private UpdateCheckForm? _updateCheckForm;
+    private Task<string>? _updateCheck;
     private readonly Updater _updater;
     private int _exclusionNotificationScheduled;
     private volatile bool _exiting;
@@ -137,15 +139,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
     /// <summary>Meltype IME をインストール先の setup-ime.ps1 で登録できるか (ポータブル版・tip フォルダーの無い Meltype.exe では登録できない)。</summary>
     private static bool CanRegisterTsf => !AppPaths.IsPortable &&
         File.Exists(Path.Combine(AppContext.BaseDirectory, "setup-ime.ps1")) && Directory.Exists(Path.Combine(AppContext.BaseDirectory, "tip"));
-
-    /// <summary>設定アプリの「Meltype IME を使う」を押した。使えなければ、登録するかを聞いてから切り替える。</summary>
-    private void UseTsf()
-    {
-        if (Tip.TipServer.IsUsable) SwitchToTsf();
-        else if (CanRegisterTsf) EnableTsf("Meltype IME を Windows に登録しますか？\n\n" +
-            "Meltype IME は Windows の IME として、打った文字を入力欄に直接入れます。変換ボックスが出ないアプリでも入力できます。");
-        else MessageBox.Show("Meltype IME を登録するためのファイルがありません。Meltype をインストールし直してください。", "Meltype IME", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-    }
 
     /// <summary>Meltype IME を登録するかを聞き、使えるようになったら動作モードを Meltype IME にする。</summary>
     private async void EnableTsf(string question)
@@ -322,7 +315,26 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     private async void CheckForUpdate()
     {
-        var result = await _updater.CheckNowAsync();
+        // 確認している間にもう一度押されたら、確認し直さずに窓を前に出す
+        if (_updateCheckForm is { IsDisposed: false })
+        {
+            _updateCheckForm.Activate();
+            return;
+        }
+        _updateCheckForm = new UpdateCheckForm();
+        _updateCheckForm.Show();
+        // 窓を閉じてから押し直したときは、続いている確認を待つ (Updater は確認を 1 つずつしか動かさない。結果は最初に押した方で出す)
+        if (_updateCheck is { IsCompleted: false }) return;
+        _updateCheck = _updater.CheckNowAsync();
+        string result;
+        try
+        {
+            result = await _updateCheck;
+        }
+        finally
+        {
+            _updateCheckForm.Close();
+        }
         if (Updater.Staged(Prerelease) is { } staged)
         {
             if (MessageBox.Show($"Meltype {staged.Version} に更新できます。今すぐ更新しますか？ (Meltype が再起動します)", "Meltype の更新", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes) ApplyUpdate();
@@ -388,7 +400,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
                 case AppWindow.KeyCount: ShowKeyCount(); break;
                 case AppWindow.ReleaseNotes: ReleaseNotesDialog.ShowFor(AppInfo.Version, updated: false, _engine); break;
                 case AppWindow.CheckForUpdate: CheckForUpdate(); break;
-                case AppWindow.RegisterIme: UseTsf(); break;
                 default: throw new ArgumentOutOfRangeException(nameof(window), window, null);
             }
         });
@@ -457,7 +468,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         else if (tsf)
         {
             _tray.Icon = _onIcon;
-            status = Tip.TipServer.IsRegistered ? "Meltype IME (Win + Space で Meltype を選んで入力)" : "Meltype IME が登録されていません (アイコンをクリックして開く「Meltype」で登録できます)";
+            status = Tip.TipServer.IsRegistered ? "Meltype IME (Win + Space で Meltype を選んで入力)" : "Meltype IME が登録されていません (「Meltype」の動作モードで Meltype IME を選び直すと登録できます)";
         }
         else
         {
@@ -538,6 +549,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _reportDialog?.Close();
         _correctionDialog?.Close();
         _welcomeForm?.Close();
+        _updateCheckForm?.Close();
         _updater.Dispose();
         _hotkey.Dispose();
         _registerHotkey.Dispose();

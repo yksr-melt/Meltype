@@ -191,7 +191,7 @@ begin
       exit;
     end;
   end
-  // 登録を断っても、Meltype キーボードで使える。あとから設定アプリの「Meltype IME を使う」で登録できる
+  // 登録を断っても、Meltype キーボードで使える。あとから設定アプリで動作モードを Meltype IME にすると登録できる
   else if WizardIsTaskSelected('meltypeime') then
     RegisterMeltypeIme();
 #endif

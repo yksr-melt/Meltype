@@ -16,5 +16,4 @@ public enum AppWindow
     KeyCount,
     ReleaseNotes,
     CheckForUpdate,
-    RegisterIme,
 }

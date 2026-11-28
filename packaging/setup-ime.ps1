@@ -2,7 +2,7 @@
 # Copyright (C) 2026 MuNeNICK
 #
 # Meltype IME を登録する / 登録を外す。元のユーザーの権限で実行する (PC 全体への登録だけ meltype-ime.ps1 が昇格する)。
-#   setup-ime.ps1 -Source <tip フォルダー> [-Explain]   setup.exe (PrepareToInstall)・Meltype.exe (設定アプリの「Meltype IME を使う」)
+#   setup-ime.ps1 -Source <tip フォルダー> [-Explain]   setup.exe (PrepareToInstall)・Meltype.exe (設定アプリで動作モードを Meltype IME にしたとき)
 #   setup-ime.ps1 -Uninstall [-Explain]                アンインストーラー (インストール先を消す前)
 # -Explain: UAC の前に、Meltype からの確認だと分かる説明を出す (ウィザードを出さない自動更新・winget で、説明なしに UAC が出ないように: #970)。
 # 登録できなければ終了コード 1。setup.exe は、このユーザーが使っている Meltype IME を更新できなければ本体も入れ替えない。

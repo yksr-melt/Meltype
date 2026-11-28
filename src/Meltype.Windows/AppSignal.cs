@@ -73,9 +73,7 @@ internal sealed class AppSignal : NativeWindow, IDisposable
     {
         var window = FindWindow(null, Caption);
         if (window == IntPtr.Zero) return false;
-        // 押した設定アプリの後ろに開かないように、このプロセス (前面の設定アプリが起動した) が持つ、前面の窓を変える権利を渡す
-        _ = GetWindowThreadProcessId(window, out var process);
-        AllowSetForegroundWindow(process);
+        // 開いた画面を前に出す権利は、前面にいる設定アプリが Meltype.exe に渡す (WindowsCards.Open)
         return PostMessage(window, OpenMessage, (int)open, IntPtr.Zero);
     }
 
@@ -95,10 +93,4 @@ internal sealed class AppSignal : NativeWindow, IDisposable
 
     [DllImport("user32.dll")]
     private static extern bool PostMessage(IntPtr hwnd, uint message, IntPtr wParam, IntPtr lParam);
-
-    [DllImport("user32.dll")]
-    private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);
-
-    [DllImport("user32.dll")]
-    private static extern bool AllowSetForegroundWindow(uint processId);
 }

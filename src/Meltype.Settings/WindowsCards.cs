@@ -3,6 +3,7 @@
 
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Avalonia;
 using Avalonia.Automation;
@@ -70,14 +71,13 @@ internal static class WindowsCards
         }
     }
 
-    /// <summary>設定の項目のすぐ後ろに並べるカード。ポータブル版は起動の登録・Meltype IME・更新を扱わない。</summary>
+    /// <summary>設定の項目のすぐ後ろに並べるカード。ポータブル版は起動の登録・更新を扱わない。</summary>
     public static IEnumerable<Control> After(SettingItem item) => item.Property.Name switch
     {
         nameof(Settings.KeyCount) => [WindowCard("打鍵数を見る", "キーごと・日ごと・時間帯ごとの打鍵数です。", AppWindow.KeyCount)],
         nameof(Settings.FileLog) => [WindowCard("ログ / 判定理由", "動作のログと、打った英字を日本語・英語のどちらと判定したかの理由です。", AppWindow.Log)],
         _ when AppPaths.IsPortable => [],
         nameof(Settings.Enabled) => [StartupCard()],
-        nameof(Settings.Mode) => [WindowCard("Meltype IME を使う", "動作モードを Meltype IME にします。Windows に登録されていなければ登録します (管理者権限の確認が出ます)。", AppWindow.RegisterIme, "使う…")],
         nameof(Settings.AutoUpdate) => [WindowCard("今すぐ更新を確認", "新しい版があれば、ダウンロードしてから、更新するかを聞きます。結果は別の画面に出ます。", AppWindow.CheckForUpdate, "確認")],
         nameof(Settings.ShowReleaseNotesAfterUpdate) => [WindowCard("リリースノート", "今の版で変わったことです。", AppWindow.ReleaseNotes)],
         _ => [],
@@ -164,10 +164,30 @@ internal static class WindowsCards
         return new Border { Classes = { "card" }, Child = grid };
     }
 
+    /// <summary>
+    /// 動いている Meltype.exe に、画面を前面に出す権利を渡す (押した設定アプリの後ろに開かないように)。
+    /// 権利を渡せるのは前面にいるプロセスだけで、--open を送るだけの Meltype.exe (このプロセスが起動する) からは渡せないことがあった。
+    /// </summary>
+    private static void AllowMeltypeToForeground()
+    {
+        var session = Process.GetCurrentProcess().SessionId;
+        foreach (var process in Process.GetProcessesByName("Meltype"))
+        {
+            using (process)
+            {
+                if (process.SessionId == session) AllowSetForegroundWindow((uint)process.Id);
+            }
+        }
+    }
+
+    [DllImport("user32.dll")]
+    private static extern bool AllowSetForegroundWindow(uint processId);
+
     /// <summary>動いている Meltype.exe に画面を開いてもらう (Meltype.exe --open)。動いていなければ message に出す。</summary>
     private static async void Open(AppWindow window, TextBlock message)
     {
         Pages.Show(message, "");
+        AllowMeltypeToForeground();
         try
         {
             var start = new ProcessStartInfo(MeltypeExe, ["--open", window.ToString()]) { UseShellExecute = false };
