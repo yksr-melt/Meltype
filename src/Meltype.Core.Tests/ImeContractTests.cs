@@ -1327,6 +1327,18 @@ internal static class ImeContractTests
     }
 
     [Test]
+    public static void KanaInput_GravePositionDoesNotChangeShortcuts()
+    {
+        var front = new Front();
+        front.Settings.InputStyle = InputStyle.Kana;
+        front.Event("KeyPressed", extra: ",\"key\":{\"vk\":0,\"ch\":116}");
+        front.Event("KeyPressed", extra: ",\"key\":{\"vk\":0,\"ch\":96}");
+        Assert.Equal("かろ", front.Composition["t1"], front.Trace);
+        var shortcut = front.Event("KeyPressed", extra: ",\"key\":{\"vk\":0,\"ch\":96,\"alt\":true,\"physical\":{\"type\":\"Evdev\",\"code\":41}}");
+        Assert.True(!Consumed(shortcut) && front.Open, front.Trace);
+    }
+
+    [Test]
     public static void PhysicalKey_KanaFollowsThePositionAndRomajiFollowsTheCharacter()
     {
         // Dvorak の配列: S の位置のキーで o が入る

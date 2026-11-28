@@ -419,6 +419,10 @@ internal static class ImeSession
         // 補助面の文字 (絵文字など) は char に入らないので、未確定の内容を確定してからアプリに通す
         if (key.Ch >= 0x10000) return CommitForPassThrough(state, env);
         var position = Position(vk, key.Physical);
+        // US 配列のバッククォートはかな配列の位置にだけ対応づける。ショートカット用の仮想キーは変えない。
+        if (settings.InputStyle == InputStyle.Kana && settings.KanaLayout == KanaLayout.Jis &&
+            key.Ch is '`' or '~' && (key.Physical?.IsGravePosition == true || key.Physical is null && key.Vk == 0))
+            position = 0xE2;
         // US 配列の Shift+- は _。JIS かなでは、US 配列にない ¥ キーの長音をこの位置で打てるようにする。
         if (settings.InputStyle == InputStyle.Kana && settings.KanaLayout == KanaLayout.Jis &&
             position == VirtualKeys.OemMinus && key.Shift && key.Ch == '_') position = 0xDC;
@@ -462,7 +466,6 @@ internal static class ImeSession
     {
         >= 'a' and <= 'z' => ch - 0x20,
         >= 'A' and <= 'Z' or >= '0' and <= '9' or ' ' => ch,
-        '`' or '~' => ToggleShortcut.Grave,
         ',' => VirtualKeys.OemComma,
         '.' => VirtualKeys.OemPeriod,
         '-' => VirtualKeys.OemMinus,
@@ -808,8 +811,7 @@ internal static class ImeSession
     /// キーの位置 (<see cref="KeyPress.Position"/>)。物理キーが分からないフロント (端末・Android) と文字の無いキーは、仮想キーコードの位置のキーとみなす
     /// (Vk を文字から決めたなら、QWERTY のキーボードでその文字を打つキー)。
     /// </summary>
-    private static int Position(int vk, PhysicalKey? physical) =>
-        vk == ToggleShortcut.Grave && physical?.IsGravePosition == true ? 0xE2 : physical?.JisPosition() ?? vk;
+    private static int Position(int vk, PhysicalKey? physical) => physical?.JisPosition() ?? vk;
 
     /// <summary>
     /// 変換・無変換・ひらがな/カタカナ キー。設定「入力中のキーの役割を分ける」が ON (無変換は「無変換でカタカナを切り替える」が ON でもよい) で入力中なら、変換ボックスで処理する (issue #199)。
