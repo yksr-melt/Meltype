@@ -949,6 +949,14 @@ void TextService::SendCaretPosition(const RECT& caret) {
     caretPipe_.Transact(request, response, 50, true);
 }
 
+void TextService::PostCaretPosition(const RECT& caret) {
+    if (deactivated_ || !smoothCaret_ || !state_.Active() || window_ == nullptr) return;
+    if (caret.bottom <= caret.top || caret.bottom - caret.top >= 200 || (caret.left == 0 && caret.top == 0)) return;
+    const bool alreadyPending = pendingCaret_.has_value();
+    pendingCaret_ = caret;
+    if (!alreadyPending) PostMessageW(window_, kSendCaret, 0, 0);
+}
+
 void TextService::QueryAndSendCaretAsync() {
     if (deactivated_ || disabled_ || !smoothCaret_ || !state_.Active() || threadMgr_ == nullptr) return;
     Microsoft::WRL::ComPtr<ITfDocumentMgr> documentMgr;
@@ -957,7 +965,7 @@ void TextService::QueryAndSendCaretAsync() {
     Microsoft::WRL::ComPtr<TextService> self = this;
     RunEditSession(context.Get(), clientId_, TF_ES_ASYNCDONTCARE | TF_ES_READ, [self, context](TfEditCookie ec) {
         if (self->deactivated_ || !self->smoothCaret_ || !self->state_.Active() || self->ContextDisabled(context.Get())) return S_OK;
-        self->SendCaretPosition(self->CaretRect(ec, context.Get()));
+        self->PostCaretPosition(self->CaretRect(ec, context.Get()));
         return S_OK;
     });
 }
@@ -1053,6 +1061,12 @@ LRESULT CALLBACK TextService::MessageWindowProc(HWND window, UINT message, WPARA
         self->HandleAltKey(static_cast<UINT>(wParam), static_cast<UINT>(lParam));
         return 0;
     }
+    if (message == kSendCaret && self) {
+        const auto caret = self->pendingCaret_;
+        self->pendingCaret_.reset();
+        if (caret) self->SendCaretPosition(*caret);
+        return 0;
+    }
     if (message == WM_TIMER && wParam == kDeferredCaretTimer && self) {
         KillTimer(window, kDeferredCaretTimer);
         self->QueryAndSendCaretAsync();
@@ -1071,6 +1085,7 @@ void TextService::CreateMessageWindow() {
 }
 
 void TextService::DestroyMessageWindow() {
+    pendingCaret_.reset();
     if (window_) {
         DestroyWindow(window_);
         window_ = nullptr;
@@ -1143,7 +1158,7 @@ void TextService::FinishConversionWait() {
                 if (reply[L"result"][L"consumed"].Bool()) {
                     self->ownEdit_ = true;
                     self->ApplyOutput(ec, context.Get(), reply);
-                    if (self->smoothCaret_ && self->state_.Active()) self->SendCaretPosition(self->CaretRect(ec, context.Get()));
+                    if (self->smoothCaret_ && self->state_.Active()) self->PostCaretPosition(self->CaretRect(ec, context.Get()));
                 } else if (!reply[L"result"][L"view"].IsNull()) {
                     // 候補選択中は背景変換を使わず、現在の表示を返す。同じ欄への復帰で隠した候補だけを戻す。
                     self->ApplyState(reply[L"state"]);
@@ -2362,7 +2377,7 @@ void TextService::CommitInSession(TfEditCookie ec, ITfContext* context, bool kee
         EndComposition(ec);
         if (smoothCaret_ && state_.Active() && !left) {
             const RECT caret = CaretRect(ec, context);
-            if (caret.bottom > caret.top) SendCaretPosition(caret);
+            if (caret.bottom > caret.top) PostCaretPosition(caret);
             else if (window_ != nullptr) SetTimer(window_, kDeferredCaretTimer, 16, nullptr);
         }
     }
@@ -2400,7 +2415,7 @@ void TextService::SelectCandidate(int index) {
         JsonValue reply;
         if (self->Send("CandidateClicked", field, ",\"index\":" + std::to_string(index), reply)) {
             self->ApplyOutput(ec, context.Get(), reply, field);
-            if (self->smoothCaret_ && self->state_.Active()) self->SendCaretPosition(self->CaretRect(ec, context.Get()));
+            if (self->smoothCaret_ && self->state_.Active()) self->PostCaretPosition(self->CaretRect(ec, context.Get()));
         }
         return S_OK;
     });
