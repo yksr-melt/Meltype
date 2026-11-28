@@ -47,6 +47,7 @@ internal static class ChemicalCompoundDictionaryTests
             Assert.Equal(113.999m, technetiumOxide, "上書きした Tc=98 を使う");
             Assert.True(ChemicalFormula.TryCalculateMass("(CH3COO)2Ca", weights, out var calciumAcetate), "括弧付きの示性式を計算できる");
             Assert.Equal(158.166m, calciumAcetate, "括弧内の元素数を掛けて計算する");
+            Assert.Equal("(COOH)₂·10H₂O", ChemicalFormula.ToSubscript("(COOH)2·10H2O"), "水和物の係数は下付きにしない");
         }
         finally { Directory.Delete(directory, recursive: true); }
     }
@@ -79,8 +80,8 @@ internal static class ChemicalCompoundDictionaryTests
             Assert.Equal(0, chemicals.Lookup("4-methylpropane", []).Count, "主鎖外の置換位置を推測しない");
 
             var hydrate = chemicals.Lookup("硫酸銅(II)五水和物", []);
-            Assert.True(hydrate.Contains("CuSO₄·₅H₂O"), "水和数を式に保持する");
-            Assert.True(hydrate.Contains("CuSO₄·₅H₂O (FW=249.677)"), "水和水を式量に含める");
+            Assert.True(hydrate.Contains("CuSO₄·5H₂O"), "水和数を係数として表示する");
+            Assert.True(hydrate.Contains("CuSO₄·5H₂O (FW=249.677)"), "水和水を式量に含める");
         }
         finally { Directory.Delete(directory, recursive: true); }
     }
@@ -162,7 +163,7 @@ internal static class ChemicalCompoundDictionaryTests
             Assert.True(chemicals.Lookup("あえんか", []).Contains("ZnO (FW=81.379)"), "一覧の別名と式量を出す");
             Assert.True(chemicals.Lookup("あくりるさん", []).Contains("CH₂=CHCOOH (MW=72.063)"), "結合式を示性式のまま表示して質量を計算する");
             Assert.True(chemicals.Lookup("えんかあんもにうむ", []).Contains("NH₄Cl (FW=53.489)"), "アンモニウム塩を式量として計算する");
-            Assert.True(chemicals.Lookup("りゅうさんどう2ごすいわぶつ", []).Contains("CuSO₄·₅H₂O (FW=249.677)"), "一覧の水和数を保持して式量を計算する");
+            Assert.True(chemicals.Lookup("りゅうさんどう2ごすいわぶつ", []).Contains("CuSO₄·5H₂O (FW=249.677)"), "一覧の水和数を正しい大きさで表示して式量を計算する");
 
             var polymer = chemicals.Lookup("きちん", []);
             Assert.True(polymer.Contains("(C₈H₁₃NO₅)n") && !polymer.Any(candidate => candidate.Contains("MW=", StringComparison.Ordinal) || candidate.Contains("FW=", StringComparison.Ordinal)), "重合度が未指定の式は質量を決めつけない");

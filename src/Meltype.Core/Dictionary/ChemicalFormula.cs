@@ -14,8 +14,20 @@ internal static class ChemicalFormula
     public static string ToSubscript(string formula)
     {
         var result = new StringBuilder(formula.Length);
+        var hydrateCoefficient = false;
         foreach (var character in formula)
-            result.Append(character is >= '0' and <= '9' ? Subscripts[character - '0'] : character);
+        {
+            if (character is '·' or '.')
+                hydrateCoefficient = true;
+            else if (character is >= '0' and <= '9')
+            {
+                result.Append(hydrateCoefficient ? character : Subscripts[character - '0']);
+                continue;
+            }
+            else
+                hydrateCoefficient = false;
+            result.Append(character);
+        }
         return result.ToString();
     }
 
