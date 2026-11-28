@@ -1427,6 +1427,22 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void ParticleAfterACommittedPath()
+    {
+        const string path = "/usr/bin/php";
+        foreach (var forceAlphanumeric in new[] { false, true })
+        {
+            var keyboard = new Keyboard();
+            keyboard.Type(path);
+            if (forceAlphanumeric) keyboard.Press(VirtualKeys.F10);
+            keyboard.Type("\nwo");
+            Assert.Equal("を", keyboard.Showing, path);
+            keyboard.Type("\n");
+            Assert.Equal((forceAlphanumeric ? path.ToUpperInvariant() : path) + "を", keyboard.Host.Document, path);
+        }
+    }
+
+    [Test]
     public static void F10_CaseResetsAfterCommit()
     {
         var k = new Keyboard();
@@ -6006,6 +6022,24 @@ internal static class CompositionTests
         var k = new Keyboard();
         k.Type("nihon\n");
         Assert.Equal("にほん", k.Host.Output.Single());
+    }
+
+    [Test]
+    public static void TypedNn_IsNotSplitBetweenJapaneseWords()
+    {
+        // 打った nn は ん。日本語の語のあいだで ん|な と読み直さない (issue #2526)。nnn は ん + n、英語の後ろの単位は読み直す。
+        // 逆向き: n を 1 つだけ打った na は な (kaizenan = かいぜなん、kousinan = こうしなん)
+        var expected = new Dictionary<string, string>
+        {
+            ["kaizennann"] = "かいぜんあん", ["kaizennannda"] = "かいぜんあんだ", ["sinnann"] = "しんあん",
+            ["kaizennnann"] = "かいぜんなん", ["baconni"] = "baconに", ["kaizenan"] = "かいぜなん", ["kousinan"] = "こうしなん",
+        };
+        foreach (var (typed, kana) in expected)
+        {
+            var k = new Keyboard();
+            k.Type(typed);
+            Assert.Equal(kana, k.Showing, $"「{typed}」");
+        }
     }
 
     [Test]
