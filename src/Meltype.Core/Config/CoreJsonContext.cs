@@ -50,7 +50,7 @@ internal sealed class InputModeJsonConverter() : RemovedChoiceJsonConverter<Inpu
 /// <summary>入力方式の「両方を判定」(IME 自動切替でしか効かなかったので消した) は、ローマ字入力として読む。</summary>
 internal sealed class InputStyleJsonConverter() : RemovedChoiceJsonConverter<InputStyle>("Both", InputStyle.Romaji);
 
-/// <summary>学習データ (languages.json・translations.json・fieldmodes.json) の JSON の読み書き (issue #151)。</summary>
+/// <summary>学習データ (languages.json・translations.json・utility-formats.json・fieldmodes.json) の JSON の読み書き (issue #151)。</summary>
 [JsonSerializable(typeof(Dictionary<string, LanguageMemory.Entry>), TypeInfoPropertyName = "Languages")]
 [JsonSerializable(typeof(Dictionary<string, Dictionary<string, int>>), TypeInfoPropertyName = "Translations")]
 [JsonSerializable(typeof(Dictionary<string, bool>), TypeInfoPropertyName = "FieldModes")]

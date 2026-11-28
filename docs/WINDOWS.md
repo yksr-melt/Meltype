@@ -135,6 +135,8 @@ Meltype キーボードのときは、Windows の IME (Microsoft IME・Google �
 
 アプリ別設定の「種類」を **コード** にしたアプリ (既定で VS Code・Cursor・Visual Studio・JetBrains の IDE・Sublime Text・Notepad++・Windows Terminal・PowerShell・コマンドプロンプトなど) では、基本は英数のまま通し、日本語を書く場所だけ判定します。Meltype IME でも Meltype キーボードでも同じです。
 
+Notepad++ で Meltype キーボードがキャレットの直前の文字を読めないときは、キャレットを移したあとに打った文字で判定します。たとえば `//` から続けて打つとコメントとして判定できます。既存のコメントや文字列の途中にキャレットを移した場合は英数のままになることがあるので、<kbd>半角/全角</kbd> を押して日本語を入力してください。
+
 どこで日本語を判定するか、コメントの記号の設定、コードの行で日本語を打つ方法は、[共通の使い方](USAGE.md#コードエディターとターミナル) にあります。
 
 <a name="変換ボックス"></a>
