@@ -31,7 +31,7 @@ internal static class Punctuation
         return text.Replace(comma, '、').Replace(period, '。');
     }
 
-    private static (char Comma, char Period) Marks(PunctuationStyle style) => style switch
+    internal static (char Comma, char Period) Marks(PunctuationStyle style) => style switch
     {
         PunctuationStyle.Japanese => ('、', '。'),
         PunctuationStyle.FullWidthCommaPeriod => ('，', '．'),

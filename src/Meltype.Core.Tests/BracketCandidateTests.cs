@@ -338,4 +338,109 @@ internal static class BracketCandidateTests
         single.Type("[ \n");
         Assert.True(!single.Host.Events.Contains("down:25"), "片括弧ではカーソルを戻さない");
     }
+
+    [Test]
+    public static void Brackets_ClosingMatchesUnclosedOpenerInSameGroup()
+    {
+        var cases = new (string Preceding, string Typed, string ExpectedFirst, CandidateNote ExpectedNote)[]
+        {
+            ("【文", "」", "】", CandidateNote.None),
+            ("『文", "」", "』", CandidateNote.None),
+            ("［文", "」", "］", CandidateNote.FullWidth),
+            ("[abc", "」", "]", CandidateNote.HalfWidth),
+            ("〔文", "」", "〕", CandidateNote.None),
+            ("｢文", "」", "｣", CandidateNote.HalfWidth),
+            ("（文", ")", "）", CandidateNote.FullWidth),
+            ("(abc", "）", ")", CandidateNote.HalfWidth),
+            ("｛文", "}", "｝", CandidateNote.FullWidth),
+            ("{abc", "｝", "}", CandidateNote.HalfWidth),
+            ("《文", ">", "》", CandidateNote.None),
+            ("〈文", ">", "〉", CandidateNote.None),
+            ("＜文", ">", "＞", CandidateNote.FullWidth),
+            ("<abc", "＞", ">", CandidateNote.HalfWidth),
+        };
+        foreach (var (preceding, typed, expectedFirst, expectedNote) in cases)
+        {
+            var actual = BracketCandidates.For(typed, preceding);
+            Assert.True(actual is not null, $"{preceding} + {typed}");
+            Assert.Equal(expectedFirst, actual!.Candidates[0], $"{preceding} + {typed}");
+            Assert.Equal(expectedNote, actual.Notes[0], $"{preceding} + {typed}");
+            Assert.Equal(string.Join(" ", BracketCandidates.For(expectedFirst)!.Candidates), string.Join(" ", actual.Candidates), $"{preceding} + {typed}");
+        }
+    }
+
+    [Test]
+    public static void Brackets_ClosingTracksNestingLineBreakAndGroupBoundaries()
+    {
+        Assert.Equal("」", BracketCandidates.For("」", "【「文")!.Candidates[0]);
+        Assert.Equal("】", BracketCandidates.For("」", "【「文」")!.Candidates[0]);
+        Assert.Equal("」", BracketCandidates.For("」", "「文「文」")!.Candidates[0]);
+        Assert.Equal("」", BracketCandidates.For("」", "【「文】")!.Candidates[0]);
+        Assert.Equal("】", BracketCandidates.For("」", "【1) 文")!.Candidates[0]);
+        Assert.Equal("）", BracketCandidates.For(")", "【（文")!.Candidates[0]);
+        Assert.Equal("】", BracketCandidates.For("」", "【（文")!.Candidates[0]);
+        Assert.Equal("」", BracketCandidates.For("」", "【文】")!.Candidates[0]);
+        Assert.Equal("」", BracketCandidates.For("」", "【文】文")!.Candidates[0]);
+        Assert.Equal("」", BracketCandidates.For("」", "【文\n文")!.Candidates[0]);
+        Assert.Equal("」", BracketCandidates.For("」", "【文\r\n文")!.Candidates[0]);
+        Assert.Equal("「", BracketCandidates.For("「", "【文")!.Candidates[0]);
+        Assert.Equal("「」", BracketCandidates.For("「」", "【文")!.Candidates[0]);
+    }
+
+    [Test]
+    public static void Brackets_SpaceAndTabPreferMatchingClosingBracket()
+    {
+        foreach (var tab in new[] { false, true })
+        {
+            var k = new CompositionTests.Keyboard(tabConversion: tab);
+            k.Type("[ ");
+            k.SelectCandidate(5);
+            k.Press(VirtualKeys.Return);
+            k.Type("ka\n");
+            k.Type("]");
+            k.Press(tab ? VirtualKeys.Tab : VirtualKeys.Space);
+            Assert.Equal("】", k.Host.View!.Text, $"Tab={tab}");
+            Assert.Equal(0, k.Host.View.SelectedIndex, $"Tab={tab}");
+            Assert.Equal("】", k.Host.View.Candidates[0], $"Tab={tab}");
+            k.Press(VirtualKeys.Return);
+            Assert.Equal("【か】", k.Host.Document, $"Tab={tab}");
+            k.Type("]");
+            k.Press(tab ? VirtualKeys.Tab : VirtualKeys.Space);
+            Assert.Equal("」", k.Host.View!.Text, $"Tab={tab}");
+            k.Press(VirtualKeys.Return);
+        }
+        var square = new CompositionTests.Keyboard { SquareBrackets = true };
+        square.Type("[ ");
+        square.SelectCandidate(4);
+        Assert.Equal("【", square.Host.View!.Text);
+        square.Press(VirtualKeys.Return);
+        square.Type("ka\n] ");
+        Assert.Equal("】", square.Host.View!.Text);
+        square.Press(VirtualKeys.Return);
+        square.Type("] ");
+        Assert.Equal("］", square.Host.View!.Text);
+        square.Press(VirtualKeys.Return);
+        var round = new CompositionTests.Keyboard { FullWidthParentheses = false };
+        round.Type("( ");
+        round.SelectCandidate(1);
+        round.Press(VirtualKeys.Return);
+        round.Type("ka\n) ");
+        Assert.Equal("）", round.Host.View!.Text);
+        round.Press(VirtualKeys.Return);
+        Assert.Equal("（か）", round.Host.Document);
+        var explicitClose = new CompositionTests.Keyboard();
+        explicitClose.Type("[ ");
+        explicitClose.SelectCandidate(5);
+        explicitClose.Press(VirtualKeys.Return);
+        explicitClose.Type("z] ");
+        Assert.Equal("』", explicitClose.Host.View!.Text);
+        explicitClose.Press(VirtualKeys.Escape);
+        explicitClose.Press(VirtualKeys.Escape);
+        explicitClose.Type("[ ");
+        Assert.Equal("「", explicitClose.Host.View!.Text);
+        explicitClose.Press(VirtualKeys.Escape);
+        explicitClose.Press(VirtualKeys.Escape);
+        explicitClose.Type("[] ");
+        Assert.Equal("「」", explicitClose.Host.View!.Text);
+    }
 }

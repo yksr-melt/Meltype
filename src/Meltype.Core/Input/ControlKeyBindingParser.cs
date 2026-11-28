@@ -3,6 +3,18 @@
 
 namespace Meltype.Input;
 
+/// <summary>Control + 英字に割り当てた働き。</summary>
+internal abstract record ControlKeyTarget
+{
+    private ControlKeyTarget() { }
+
+    /// <summary>別のキー (F6〜F10・矢印・Enter など) と同じ働き。</summary>
+    public sealed record Key(int Vk) : ControlKeyTarget;
+
+    /// <summary>表示がかなだけなら半角カタカナ (F8)、それ以外は半角英数 (F10)。</summary>
+    public sealed record HalfWidth : ControlKeyTarget;
+}
+
 /// <summary>Control キーの割り当てを、入力処理とショートカットの競合検証で同じ規則で読み取る。</summary>
 internal static class ControlKeyBindingParser
 {
@@ -14,15 +26,19 @@ internal static class ControlKeyBindingParser
         ["Esc"] = VirtualKeys.Escape, ["Tab"] = VirtualKeys.Tab,
     };
 
+    private static ControlKeyTarget? Target(string name) =>
+        name.Equals("HalfWidth", StringComparison.OrdinalIgnoreCase) ? new ControlKeyTarget.HalfWidth()
+        : BindableKeys.TryGetValue(name, out var vk) ? new ControlKeyTarget.Key(vk) : null;
+
     /// <summary>英字=キー名の一覧を読む。不正な項目は無視し、同じ英字の有効な割り当ては後のものを優先する。</summary>
-    internal static Dictionary<int, int> Parse(string? text)
+    internal static Dictionary<int, ControlKeyTarget> Parse(string? text)
     {
-        var result = new Dictionary<int, int>();
+        var result = new Dictionary<int, ControlKeyTarget>();
         if (string.IsNullOrWhiteSpace(text)) return result;
         foreach (var part in text.Split([';', ',', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
             var pair = part.Split('=', 2, StringSplitOptions.TrimEntries);
-            if (pair.Length == 2 && pair[0].Length == 1 && char.IsAsciiLetter(pair[0][0]) && BindableKeys.TryGetValue(pair[1], out var target))
+            if (pair.Length == 2 && pair[0].Length == 1 && char.IsAsciiLetter(pair[0][0]) && Target(pair[1]) is { } target)
                 result[char.ToUpperInvariant(pair[0][0])] = target;
         }
         return result;
