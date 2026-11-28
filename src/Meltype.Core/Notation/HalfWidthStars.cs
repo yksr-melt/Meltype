@@ -4,9 +4,16 @@
 
 namespace Meltype.Notation;
 
-/// <summary>打った * が 2 個以上あるときだけ、表示の ＊ を打った半角の * にする (強調 **bold**・*italic*)。</summary>
+/// <summary>
+/// 表示の ＊ ＋ を打った半角にする。* が 2 個以上 (強調 **bold**・*italic*) と、* か + だけ (検索欄のワイルドカード・演算子。#2224)。
+/// * + だけの Space は Markdown の記号と空白で確定するので、空白なしの半角は Enter で確定する。
+/// </summary>
 internal static class HalfWidthStars
 {
-    public static ComposedText Apply(ComposedText text, string typed) =>
-        typed.Count(c => c == '*') >= 2 ? text.MapChars(chars => chars.Replace('＊', '*')) : text;
+    public static ComposedText Apply(ComposedText text, string typed) => typed switch
+    {
+        "*" or "+" => text.MapChars(chars => chars.Replace('＊', '*').Replace('＋', '+')),
+        _ when typed.Count(c => c == '*') >= 2 => text.MapChars(chars => chars.Replace('＊', '*')),
+        _ => text,
+    };
 }

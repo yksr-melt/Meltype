@@ -708,6 +708,11 @@ internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
     /// <summary>選んだ候補の並びを、英語・日本語の区間の並びにする (続いた日本語の候補は 1 つの区間にする。英語の候補は 1 つずつの区間)。</summary>
     private List<CompositionSegment> ToSegments(Prepared prepared, string text, int[] unitAt, int unitsEnd, List<LatticeEdge> edges)
     {
+        // 先頭の * + は、後ろの英語の区間に入れる (検索欄のワイルドカード・演算子の *abc・+abc を ＊abc にしない。#2224)。
+        // ほかの記号は英語の区間に入れると、固有名詞の表記 (...github → ...GitHub) が語を引けなくなる。
+        var lead = edges.TakeWhile(e => e.Neutral && text[e.Start..e.End] is "*" or "+").Count();
+        if (lead > 0 && lead < edges.Count && edges[lead].English)
+            edges = [edges[lead] with { Start = edges[0].Start }, .. edges.Skip(lead + 1)];
         var segments = new List<CompositionSegment>();
         foreach (var edge in edges)
         {
