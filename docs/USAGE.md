@@ -54,7 +54,7 @@ kyouhagoogledekensaku  →  今日はgoogleで検索
 
 確定した後でも、続きを打つと直ることがあります (`i` → `want` と打つと「I want」)。
 
-`/review`・`$skill`・`@src/app.ts` のように `/` `$` `@` で始まる語は、そのまま入ります。
+`/review`・`$skill`・`@src/app.ts` のように `/` `$` `@` で始まる語は、そのまま入ります。Discord などの絵文字コード (例: `:pregnant_man:`) も打ったまま入ります。
 
 <a name="自動判定を使わない"></a>
 
@@ -201,6 +201,8 @@ kyouhagoogledekensaku  →  今日はgoogleで検索
 設定「入力方式」でかな入力 (JIS) を選べます。Windows の Meltype キーボードでは、「ローマ字の配列」で SKY 配列、「かな配列」で月配列・花配列・NICOLA・中指NICOLA・TRON 配列も選べます。SKY 配列は英語の自動判定を使わず、日本語として読みます。どれも試験中です。 設定「打ったキーを表示」では、かな配列の前置シフト・同時打鍵も確認できます。
 
 ローマ字の綴りを足す場合は、データフォルダーの `dictionaries/romaji.txt` に「綴り<Tab>かな」の形で書き、Meltype を起動し直します。組み込みの綴りより優先します。[AZIK の一部の規則を入れた見本](romaji-azik-sample.txt) もあります。
+
+英語 (US) 配列で JIS かなを使うときも、キーの位置でかなを入力します。<kbd>&#96;</kbd> で「ろ」、<kbd>\</kbd> で「む」、<kbd>Shift</kbd> + <kbd>-</kbd> で「ー」が入ります。
 
 <a name="ほかの-ime-から移るとき"></a>
 

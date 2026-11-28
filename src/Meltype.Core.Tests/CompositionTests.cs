@@ -4875,6 +4875,16 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void EmojiShortcodesAreKeptBetweenJapaneseWords()
+    {
+        AssertCommitted(("reibunn:pregnant_man:", "れいぶん:pregnant_man:"),
+            (":saigenshinai:", ":saigenshinai:"), (":+1:arigatou", ":+1:ありがとう"));
+        Assert.True(!ProtectedSpanScanner.CoversWhole("::"), "空のコロンは絵文字コードではない");
+        Assert.True(!ProtectedSpanScanner.CoversWhole(":arigatou"), "片方のコロンだけでは保護しない");
+        Assert.True(ProtectedSpanScanner.CoversWhole("https://example.com/:wave:"), "URL の保護を優先する");
+    }
+
+    [Test]
     public static void ReadableToolNames_StayEnglish()
     {
         // 報告 (#301 / #457): おぺんこで・tむx に割れず、ツール名のまま英字にする
