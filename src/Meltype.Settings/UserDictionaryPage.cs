@@ -42,6 +42,7 @@ internal static class UserDictionaryPage
             ItemTemplate = new FuncDataTemplate<UserWord>((w, _) => new TextBlock { Text = w is null ? "" : $"{w.Reading}　→　{w.Word}" + (w.Category.Length > 0 ? $"　［{w.Category}］" : "") }),
         };
         var count = Pages.Hint("");
+        var editingHint = Pages.Hint("");
         UserWord? editing = null;
 
         // 絞り込みの一覧を作り直すと SelectionChanged が出るので、作り直している間は読み直さない
@@ -81,6 +82,12 @@ internal static class UserDictionaryPage
 
         var edit = new Button { Content = "編集" };
         var update = new Button { Content = "更新" };
+        var cancel = new Button { Content = "編集を終了" };
+        cancel.Click += (_, e) =>
+        {
+            e.Handled = true;
+            EndEditing();
+        };
         edit.Click += (_, e) =>
         {
             e.Handled = true;
@@ -98,6 +105,9 @@ internal static class UserDictionaryPage
             var kana = typed.ToHiragana(reading.Text ?? "").Trim();
             var text = (word.Text ?? "").Trim();
             update.IsEnabled = editing is { } target && CanUpdate(target, kana, text);
+            cancel.IsVisible = editing is not null;
+            editingHint.IsVisible = editing is not null;
+            editingHint.Text = editing is { } entry ? $"編集中: {entry.Reading} → {entry.Word}" : "";
         }
 
         static bool CanUpdate(UserWord target, string kana, string text) =>
@@ -121,20 +131,19 @@ internal static class UserDictionaryPage
             var kana = typed.ToHiragana(reading.Text ?? "").Trim();
             var text = (word.Text ?? "").Trim();
             if (!CanUpdate(target, kana, text)) return;
-            try
+            if (Open().Edit(target, kana, text) is { } error)
             {
-                if (Open().Edit(target, kana, text) is { } error)
-                {
-                    Pages.Show(message, error, error: true);
-                    return;
-                }
-            }
-            catch (IOException ex)
-            {
-                Pages.Show(message, $"更新できませんでした: {ex.Message}", error: true);
+                Pages.Show(message, error, error: true);
                 return;
             }
             FinishEntry("更新しました。");
+        }
+
+        void EndEditing()
+        {
+            editing = null;
+            Pages.Show(message, "");
+            RefreshButtons();
         }
 
         void FinishEntry(string text)
@@ -203,15 +212,19 @@ internal static class UserDictionaryPage
             RefreshButtons();
         };
         word.TextChanged += (_, _) => RefreshButtons();
-        list.SelectionChanged += (_, _) => RefreshButtons();
+        list.SelectionChanged += (_, _) =>
+        {
+            if (editing is { } target && (list.SelectedItems?.Count != 1 || !Equals(list.SelectedItem, target))) EndEditing();
+            else RefreshButtons();
+        };
         filter.TextChanged += (_, _) => Reload();
         foreach (var box in new[] { reading, word })
         {
             box.KeyDown += (_, e) =>
             {
                 if (e.Key != Key.Enter) return;
-                if (editing is null) Register();
-                else UpdateWord();
+                e.Handled = true;
+                Register();
             };
         }
         list.KeyDown += (_, e) =>
@@ -254,7 +267,8 @@ internal static class UserDictionaryPage
                 Pages.Row(reading, preview),
                 Pages.Row(word),
                 Pages.Row(category),
-                Pages.Row(update),
+                editingHint,
+                Pages.Row(update, cancel),
                 Pages.Row(SettingEditors.Button("登録", Register)),
                 message),
             Pages.Row(filter, categoryFilter, count),
