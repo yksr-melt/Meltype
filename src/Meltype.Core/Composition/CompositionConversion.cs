@@ -293,7 +293,7 @@ internal static class CompositionConversion
     private static UtilityCandidates? Utilities(CompositionInput input, CompositionEnv env, IReadOnlyList<CompositionSegment> segments)
     {
         var reading = segments is [{ IsEnglish: false, Kana.Length: > 0 } only] ? only.Kana : null;
-        var context = new UtilityContext(env.Settings, env.Services.Now(), env.Clipboard, env.NowPlaying, env.Services.GitHubTitles(), env.OtherTipVersion);
+        var context = new UtilityContext(env.Settings, env.Services.Now(), env.Clipboard, env.NowPlaying, env.Services.GitHubTitles(), env.OtherTipVersion, env.Context().PrecedingText);
         return UtilityConversions.Convert(new UtilityInput(CompositionText.Read(input.Text, env), reading, input.Direct, context));
     }
 

@@ -30,7 +30,8 @@ internal sealed record UtilityContext(
     Func<string?> Clipboard,
     Func<(string Title, string Artist)?> NowPlaying,
     GitHubIssueTitles? GitHubTitles,
-    Func<string?> OtherTipVersion);
+    Func<string?> OtherTipVersion,
+    string? PrecedingText);
 
 internal enum UtilityPlacement
 {
