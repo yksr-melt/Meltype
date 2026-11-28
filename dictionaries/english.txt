@@ -275,3 +275,5 @@ stats
 assignee assignees sideload sideloading linpeas ver
 # 三角関数 (cos・tan はローマ字として読める)
 cos sin tan
+# 辞書追加リクエストのメモの語
+unlicense licence

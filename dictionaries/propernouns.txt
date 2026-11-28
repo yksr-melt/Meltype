@@ -95,3 +95,6 @@ picco nqrse
 holoX
 # Issue #2389 (まとめ) のサービス名・アプリ名
 Mergify Antigravity Obsidian KonomiTV
+
+# 辞書追加リクエストのメモ (Linux・開発ツール)
+IBus Xwayland Codex
