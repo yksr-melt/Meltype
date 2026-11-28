@@ -44,7 +44,7 @@ const symbols = { '，': '、', '．': '。', '－': 'ー', '／': '・', '［':
 
 function read(file) {
   const bytes = fs.readFileSync(path.join(dir, file));
-  return bytes[0] === 0xff && bytes[1] === 0xfe ? new TextDecoder('utf-16le').decode(bytes.subarray(2)) 
+  return bytes[0] === 0xff && bytes[1] === 0xfe ? new TextDecoder('utf-16le').decode(bytes.subarray(2))
     : (() => {
       // UTF-8 のファイルと Shift_JIS のファイルがある
       try { return new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { return new TextDecoder('shift_jis').decode(bytes); }

@@ -70,7 +70,7 @@ internal static class SkyLayout
 /// <param name="Handled">配列のキーとして扱った (false ならふつうのキーとして処理する)。</param>
 /// <param name="RemoveLast">先に入力中の文字から消す音の数 (後から押した親指キー・中指キーで、前の文字を打ち直すとき)。</param>
 /// <param name="Kana">入力するかな (空なら何も足さない。前置シフトのキーなど)。</param>
-internal readonly record struct KanaStroke(bool Handled, int RemoveLast = 0, string Kana = "")
+internal readonly record struct KanaStroke(bool Handled, int RemoveLast = 0, string Kana = "", string Keys = "", bool Repeat = false)
 {
     public static KanaStroke NotHandled => default;
     public static KanaStroke Consumed => new(true);
@@ -192,6 +192,13 @@ internal sealed class KanaLayoutEngine(KanaLayout layout)
 
     private bool IsShiftOnly(int vk) => _table?.ShiftOnly.Contains(vk) == true;
 
+    private static string KeyLabel(int vk) => vk switch
+    {
+        LeftThumb => "［左親指］",
+        RightThumb => "［右親指］",
+        _ => Array.IndexOf(JisKeys.Vks, vk) is >= 0 and var index ? char.ToLowerInvariant(JisKeys.Names[index]).ToString() : "",
+    };
+
     /// <summary>打ちかけ (前置シフト・同時打鍵の打ち直し) を忘れる。入力を確定・取り消したときに呼ぶ。押したままの親指キーは離すまで覚えておく。</summary>
     public void Reset()
     {
@@ -217,7 +224,7 @@ internal sealed class KanaLayoutEngine(KanaLayout layout)
             repeated.Emitted = kana?.Length ?? 0;
             repeated.Target = thumb is not null;
             _lastOutput = repeated;
-            return kana is null ? KanaStroke.Consumed : new KanaStroke(true, 0, kana);
+            return kana is null ? KanaStroke.Consumed : new KanaStroke(true, 0, kana, (thumb is null ? "" : KeyLabel(thumb.Vk)) + KeyLabel(vk), Repeat: true);
         }
         return _table.Chords.Count > 0 ? Chord(vk, time) : Sequence(vk);
     }
@@ -231,7 +238,8 @@ internal sealed class KanaLayoutEngine(KanaLayout layout)
             _sequence = sequence;
             return KanaStroke.Consumed;
         }
-        if (_table.Sequences.TryGetValue(sequence, out var kana)) return new KanaStroke(true, 0, kana);
+        if (_table.Sequences.TryGetValue(sequence, out var kana))
+            return new KanaStroke(true, 0, kana, string.Concat(sequence.Split(',').Select(key => KeyLabel(int.Parse(key, System.Globalization.CultureInfo.InvariantCulture)))));
         // 前置シフトの次の、表に無いキーは何も入れない。前置シフトでもないキーはふつうのキー
         return sequence.Contains(',') ? KanaStroke.Consumed : KanaStroke.NotHandled;
     }
@@ -276,7 +284,7 @@ internal sealed class KanaLayoutEngine(KanaLayout layout)
                 last.Emitted = shifted.Length;
                 last.Target = true;
                 thumb.Shifting = true;
-                return new KanaStroke(true, remove, shifted);
+                return new KanaStroke(true, remove, shifted, KeyLabel(last.Vk) + KeyLabel(vk));
             }
             return KanaStroke.Consumed;
         }
@@ -288,7 +296,7 @@ internal sealed class KanaLayoutEngine(KanaLayout layout)
             var thumbKana = table.Chords.GetValueOrDefault(($"{held.Vk}", vk));
             _lastOutput = new Held(vk, time, thumbKana?.Length ?? 0) { Target = true };
             _held.Add(_lastOutput);
-            return thumbKana is not null ? new KanaStroke(true, 0, thumbKana) : KanaStroke.Consumed;
+            return thumbKana is not null ? new KanaStroke(true, 0, thumbKana, KeyLabel(held.Vk) + KeyLabel(vk)) : KanaStroke.Consumed;
         }
         // 中指NICOLA: D・K を押したままの文字キーは、ふつうの文字にしておき、先に離したら打ち直す
         if (layout == KanaLayout.NakayubiNicola)
@@ -302,7 +310,7 @@ internal sealed class KanaLayoutEngine(KanaLayout layout)
                 press.OnRelease = (middle, shift, press.Emitted + (ReferenceEquals(_lastOutput, shift) ? shift.Emitted : 0));
             _held.Add(press);
             _lastOutput = press;
-            return plain is null ? KanaStroke.NotHandled : new KanaStroke(true, 0, plain);
+            return plain is null ? KanaStroke.NotHandled : new KanaStroke(true, 0, plain, KeyLabel(vk));
         }
         // 2 キーは、表の文字キーが後か先かの両方を見る。
         foreach (var chord in Subsets(shifts))
@@ -332,7 +340,7 @@ internal sealed class KanaLayoutEngine(KanaLayout layout)
         if (plain is null) return KanaStroke.NotHandled;
         _lastOutput = new Held(vk, time, plain.Length);
         _held.Add(_lastOutput);
-        return new KanaStroke(true, 0, plain);
+        return new KanaStroke(true, 0, plain, KeyLabel(vk));
     }
 
     /// <summary>押したままのキーの組み合わせ (2 キー、1 キーの順。新しく押したキーを含むものを先に)。文字キーにしたキーだけをシフトにはしない。</summary>
@@ -357,7 +365,7 @@ internal sealed class KanaLayoutEngine(KanaLayout layout)
         {
             shift.Emitted = 0;
             shift.Shifting = true;
-            return new KanaKeyUp(false, new KanaStroke(true, remove, kana));
+            return new KanaKeyUp(false, new KanaStroke(true, remove, kana, KeyLabel(shift.Vk) + KeyLabel(vk)));
         }
         return new KanaKeyUp(IsShiftOnly(vk) && !held.Shifting, KanaStroke.NotHandled);
     }

@@ -26,6 +26,24 @@ internal static class KanaLayoutTests
     }
 
     [Test]
+    public static void KanaLayout_DisplaysKeysAndRecognizesEnglishFromNicola()
+    {
+        var nicola = new Keyboard(typedKeys: Meltype.Config.TypedKeysStyle.Keys) { Kana = true, KanaLayout = KanaLayout.Nicola };
+        nicola.Type("google");
+        Assert.True(nicola.Host.View!.Typed is null, "表示と同じキーの列は重ねて出さない");
+        Assert.Equal("google", nicola.Showing);
+        nicola.Type("\n");
+        Assert.Equal("google", nicola.Host.Document);
+
+        var tsuki = new Keyboard(typedKeys: Meltype.Config.TypedKeysStyle.Keys) { Kana = true, KanaLayout = KanaLayout.Tsuki };
+        tsuki.TypeKanaKeys("dj");
+        Assert.Equal("お", tsuki.Showing);
+        Assert.Equal("dj", tsuki.Host.View!.Typed, "前置シフトのキーも表示する");
+        tsuki.Type("\b");
+        Assert.True(tsuki.Showing is null, "消した読みのキーを残さない");
+    }
+
+    [Test]
     public static void KanaLayout_Tsuki_PrefixShift()
     {
         // 月配列: W = と。D・K は 2 段目、S・L は 3 段目の前置シフト。D の次の J = お、K の次の E = ね、L の次の E = じ

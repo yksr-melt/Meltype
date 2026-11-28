@@ -230,6 +230,10 @@ internal static class CompositionLifecycle
     internal static bool IsProtectedInput(CompositionScene.WithInput scene) =>
         scene is CompositionScene.Typing { Input.Text: { Mode: DisplayMode.Auto } text } && CompositionText.HasProtectedTail(text);
 
+    /// <summary>無変換でかなの種類を切り替えるか。保護区間はカタカナに変えない (#1966)。</summary>
+    internal static bool NonConvertCyclesKana(CompositionScene.WithInput scene, Config.Settings settings) =>
+        settings.NonConvertCyclesKana && !IsProtectedInput(scene);
+
     /// <summary>キャレットが動いたかもしれないとき (Meltype を通らなかったキー・クリック)。直前の語は確定し直さない。</summary>
     internal static void ForgetLastCommit(CompositionState state)
     {

@@ -13,6 +13,7 @@ Meltype のソースコード (このリポジトリ) には、次のものを�
 | [Mozc](https://github.com/google/mozc) の変換エンジンと辞書 (`meltype_mozc_helper.exe`。Meltype 用の小さな入出力部分 `native/mozc/meltype_mozc_helper.cc` を足してビルドしたもの) | Mozc: BSD-3-Clause (Copyright Google Inc.)。辞書: IPAdic (NAIST)・ICOT・沖縄辞書 のライセンス。組み込みのライブラリ: Abseil (Apache-2.0)・Protocol Buffers (BSD-3-Clause)・Japanese Usage Dictionary など | `app\mozc\` (ライセンス: `app\mozc\MOZC-LICENSE.txt`、辞書とライブラリの全文: `app\mozc\MOZC-CREDITS.html`。Qt は使っていない) |
 | [llama.cpp](https://github.com/ggml-org/llama.cpp) の `llama-server.exe` と DLL (CPU 版。Zenzai に使う。版とハッシュは `native/zenzai/Get-Zenzai.ps1` で固定。横に置く Visual C++ のランタイムの一覧は `app\zenzai\VC-RUNTIME.txt`) | MIT License (Copyright The ggml authors)。組み込みの LLVM OpenMP (`libomp.dll`): Apache-2.0 WITH LLVM-exception | `app\zenzai\` (ライセンス: `app\zenzai\LICENSE-llama.cpp.txt`・`LICENSE-LLVM-OpenMP`、`app\zenzai\ZENZAI-NOTICE.txt`) |
 | [zenz-v3.2-small](https://huggingface.co/Miwa-Keita/zenz-v3.2-small-gguf) (Zenzai のかな漢字変換モデル。`zenz-v3.2-small-Q5_K_M.gguf`) | Apache License 2.0 (Miwa-Keita) | `app\zenzai\` (ライセンス: `app\zenzai\LICENSE-zenz.txt`) |
+| 設定アプリの UI ライブラリ: [Avalonia](https://github.com/AvaloniaUI/Avalonia) (DataGrid・ColorPicker を含む)・[FluentAvaloniaUI](https://github.com/amwx/FluentAvalonia)・[SkiaSharp・HarfBuzzSharp](https://github.com/mono/SkiaSharp) | MIT License (Avalonia: Copyright The AvaloniaUI Project。FluentAvaloniaUI: Copyright amwx。SkiaSharp・HarfBuzzSharp: Copyright Microsoft Corporation) | `app\` (`MeltypeSettings.exe` に組み込まれる。SkiaSharp・HarfBuzzSharp のネイティブライブラリは横の DLL) |
 
 ポータブル版も通常版と同じフォルダー構成で配布します。アプリと .NET ランタイムに関するライセンス・第三者通知、および Mozc をビルドに含める場合のライセンス・辞書クレジットは、各配布物に同梱します。Mozc の変換ヘルパーと llama-server の横に置く VC ランタイム DLL は元のバイナリを変更せずに置き、対象ファイルの一覧をそれぞれの `VC-RUNTIME.txt` に記載します。
 
@@ -24,6 +25,7 @@ Meltype のソースコード (このリポジトリ) には、次のものを�
 | [Mozc](https://github.com/google/mozc) の変換エンジンと辞書 (`meltype_mozc_helper`。Windows 版と同じソース) | Windows 版と同じ | `Meltype.app/Contents/Resources/mozc/` (ライセンス: `MOZC-LICENSE.txt`、辞書とライブラリの全文: `MOZC-CREDITS.html`) |
 | [llama.cpp](https://github.com/ggml-org/llama.cpp) の `llama-server` と dylib (Zenzai に使う。版とハッシュは `native/zenzai/zenzai.env` で固定) | MIT License (Copyright The ggml authors) | `Meltype.app/Contents/Resources/zenzai/` (ライセンス: `LICENSE-llama.cpp.txt`) |
 | [zenz-v3.2-small](https://huggingface.co/Miwa-Keita/zenz-v3.2-small-gguf) (Zenzai のモデル) | Apache License 2.0 (Miwa-Keita) | `Meltype.app/Contents/Resources/zenzai/` (ライセンス: `LICENSE-zenz.txt`) |
+| 設定アプリの UI ライブラリ: [Avalonia](https://github.com/AvaloniaUI/Avalonia) (DataGrid・ColorPicker を含む)・[FluentAvaloniaUI](https://github.com/amwx/FluentAvalonia)・[SkiaSharp・HarfBuzzSharp](https://github.com/mono/SkiaSharp) | MIT License (Avalonia: Copyright The AvaloniaUI Project。FluentAvaloniaUI: Copyright amwx。SkiaSharp・HarfBuzzSharp: Copyright Microsoft Corporation) | `Meltype Settings.app/Contents/MacOS/` (`MeltypeSettings` に組み込まれる。SkiaSharp・HarfBuzzSharp のネイティブライブラリは横の dylib) |
 
 ## Linux 版 (linux/) に同梱するもの
 
@@ -33,6 +35,7 @@ Meltype のソースコード (このリポジトリ) には、次のものを�
 | [Mozc](https://github.com/google/mozc) の変換エンジンと辞書 (`meltype_mozc_helper`。Windows 版と同じソース) | Windows 版と同じ | `/opt/meltype/mozc/` (ライセンス: `MOZC-LICENSE.txt`、辞書とライブラリの全文: `MOZC-CREDITS.html`) |
 | [llama.cpp](https://github.com/ggml-org/llama.cpp) の `llama-server` と共有ライブラリ (CPU 版。Zenzai に使う。`native/zenzai/zenzai.env` で固定した版のソースからビルド) | MIT License (Copyright The ggml authors) | `/opt/meltype/zenzai/` (ライセンス: `LICENSE-llama.cpp.txt`) |
 | [zenz-v3.2-small](https://huggingface.co/Miwa-Keita/zenz-v3.2-small-gguf) (Zenzai のモデル) | Apache License 2.0 (Miwa-Keita) | `/opt/meltype/zenzai/` (ライセンス: `LICENSE-zenz.txt`) |
+| 設定アプリの UI ライブラリ: [Avalonia](https://github.com/AvaloniaUI/Avalonia) (DataGrid・ColorPicker を含む)・[FluentAvaloniaUI](https://github.com/amwx/FluentAvalonia)・[SkiaSharp・HarfBuzzSharp](https://github.com/mono/SkiaSharp) | MIT License (Avalonia: Copyright The AvaloniaUI Project。FluentAvaloniaUI: Copyright amwx。SkiaSharp・HarfBuzzSharp: Copyright Microsoft Corporation) | `/opt/meltype/` (`meltype-settings` に組み込まれる。SkiaSharp・HarfBuzzSharp のネイティブライブラリは `libSkiaSharp.so`・`libHarfBuzzSharp.so`) |
 
 ## 実行時に使う Windows の機能 (同梱しない)
 
