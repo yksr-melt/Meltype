@@ -41,7 +41,7 @@ internal static class AboutPage
                         "このプログラムは無保証です。詳しくは GNU GPL を参照してください。\n" +
                         "GPL v3 の条件で使えない (非公開で利用したい) 場合は、メールでご相談ください: " + ProjectInfo.Contact + "\n\n" +
                         "変換エンジン Mozc は BSD-3-Clause ライセンスです。\n" +
-                        "英訳の候補・英字で書く語の候補・打ち間違いを直すための読みの一覧は JMdict (Electronic Dictionary Research and Development Group) を元にしています (CC BY-SA 4.0)。\n" +
+                        "英訳の候補・英字で書く語の候補・よく使う語の読みの一覧は JMdict (Electronic Dictionary Research and Development Group) を元にしています (CC BY-SA 4.0)。\n" +
                         "候補の意味はウィクショナリー日本語版 (Wiktionary の執筆者) を元にしています (CC BY-SA 4.0)。\n" +
                         "よく使う英単語の一覧は SCOWL (Copyright 2000-2018 by Kevin Atkinson) を元にしています。\n" +
                         "絵文字の読みは Unicode CLDR を元にしています (Unicode License v3)。\n" +

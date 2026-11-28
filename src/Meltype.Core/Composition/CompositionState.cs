@@ -10,8 +10,8 @@ using Meltype.Notation;
 
 namespace Meltype.Composition;
 
-/// <summary>入力中の文字列の処理 (<see cref="CompositionText"/>) が使う、入力欄の状態でないもの (判定器・入力欄のアプリの設定・ローマ字の打ち間違いの直し方)。</summary>
-internal record TextEnv(CompositionDetector Detector, Config.Settings Settings, RomajiTypoCorrector? RomajiTypos, ConversionHistory? History = null, LanguageMemory? Languages = null)
+/// <summary>入力中の文字列の処理 (<see cref="CompositionText"/>) が使う、入力欄の状態でないもの (判定器・入力欄のアプリの設定)。</summary>
+internal record TextEnv(CompositionDetector Detector, Config.Settings Settings, ConversionHistory? History = null, LanguageMemory? Languages = null)
 {
     /// <summary>打った英字を読み直す断片なら、読み直す元の入力 (<see cref="CompositionText.FragmentEnv"/>)。断片でなければ null。</summary>
     public FragmentOrigin? Fragment { get; init; }
@@ -56,7 +56,7 @@ internal sealed record FragmentOrigin(LanguageLearning Languages);
 /// 変換ボックスの処理が使う、入力欄の状態でないもの (判定器・変換エンジン・辞書・学習データ・入力欄のアプリの設定・OS の機能)。出来事ごとに作って渡す。
 /// </summary>
 internal sealed record CompositionEnv(CompositionDetector Detector, IKanjiConverter Converter, CompositionServices Services, Config.Settings Settings)
-    : TextEnv(Detector, Settings, Services.RomajiTypos, Services.History, Services.Languages)
+    : TextEnv(Detector, Settings, Services.History, Services.Languages)
 {
     public CompositionLearning Learning { get; } = new(Services, Detector.ProperNouns);
 
@@ -99,7 +99,7 @@ internal sealed record CompositionEnv(CompositionDetector Detector, IKanjiConver
     public bool SlashAtStart { get; init; }
 
     /// <summary>ライブ変換の控え (<see cref="CompositionState.LiveCache"/>)。</summary>
-    public required Dictionary<string, List<(string Reading, string? Engine, string Text)>> LiveCache { get; init; }
+    public required Dictionary<string, List<TypingClause.Converted>> LiveCache { get; init; }
 
     /// <summary>
     /// 入力欄の確定済みの文字を消せるか。消せない入力欄 (Linux で周りの文字の削除に対応していないアプリ) では、
@@ -185,7 +185,7 @@ internal sealed class CompositionState
     public KanaLayoutEngine KanaLayout = new(Input.KanaLayout.Jis);
 
     /// <summary>ライブ変換の控え (<see cref="CompositionConversion.LiveClauses"/>)。入力を始めるときに空にする。</summary>
-    public readonly Dictionary<string, List<(string Reading, string? Engine, string Text)>> LiveCache = new(StringComparer.Ordinal);
+    public readonly Dictionary<string, List<TypingClause.Converted>> LiveCache = new(StringComparer.Ordinal);
 
     // 最後に押したキーの修飾キー (Shift は大文字・文節の区切り・Shift+Space に使う)。
     // 次のキーを押すまで、ほかの出来事 (離した親指キーのもとの働きなど) もこの値で処理する。

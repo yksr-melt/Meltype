@@ -11,16 +11,23 @@ using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 using Avalonia.Styling;
 using FluentAvalonia.Styling;
+using Meltype.Config;
+using Meltype.Diagnostics;
 
 namespace Meltype.SettingsApp;
 
 internal static class Program
 {
     [STAThread]
-    public static int Main(string[] args) =>
-        AppBuilder.Configure<App>().UsePlatformDetect()
+    public static int Main(string[] args)
+    {
+        // OS の設定 (GNOME の入力ソースなど) から開くと、標準エラー出力はどこにも残らない
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+            CrashLog.Write($"Meltype の設定 {ProjectInfo.WithCommit(ProjectInfo.CoreVersion)}", e.ExceptionObject);
+        return AppBuilder.Configure<App>().UsePlatformDetect()
             .With(new FontManagerOptions { DefaultFamilyName = JapaneseFont() })
             .StartWithClassicDesktopLifetime(args);
+    }
 
     /// <summary>
     /// 画面の既定のフォント。日本語のフォントにする: OS の既定のフォントに漢字が無いと、Avalonia は代わりに中国語の字形のフォントで漢字を描くことがある。
