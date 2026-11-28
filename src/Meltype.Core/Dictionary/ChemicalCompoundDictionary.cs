@@ -23,6 +23,8 @@ internal sealed class ChemicalCompoundDictionary
         {
             var shownFormula = ChemicalFormula.ToSubscript(compound.PreferredFormula ?? compound.Formula);
             candidates.Add(shownFormula);
+            if (compound.PreferredFormula is not null && compound.PreferredFormula != compound.Formula)
+                candidates.Add(ChemicalFormula.ToSubscript(compound.Formula));
             if (ChemicalFormula.TryCalculateMass(compound.Formula, _atomicWeights, out var mass))
             {
                 var kind = compound.IsMolecule ? "MW" : "FW";

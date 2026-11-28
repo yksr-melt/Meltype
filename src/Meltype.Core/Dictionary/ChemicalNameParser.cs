@@ -11,10 +11,11 @@ internal static class ChemicalNameParser
 {
     private static readonly Cation[] Cations = CreateCations();
     private static readonly Anion[] Anions = CreateAnions();
-    private static readonly NamedFormula[] Acids =
+    private static readonly NamedFormula[] NamedFormulas =
     [
         new(["水", "みず", "water"], "H2O", true),
         new(["塩酸", "えんさん", "hydrochloric acid"], "HCl", true),
+        new(["塩化水素", "えんかすいそ", "hydrogen chloride"], "HCl", true),
         new(["臭化水素酸", "しゅうかすいそさん", "hydrobromic acid"], "HBr", true),
         new(["フッ化水素酸", "ふっかすいそさん", "hydrofluoric acid"], "HF", true),
         new(["硫酸", "りゅうさん", "sulfuric acid"], "H2SO4", true),
@@ -24,6 +25,13 @@ internal static class ChemicalNameParser
         new(["炭酸", "たんさん", "carbonic acid"], "H2CO3", true),
         new(["リン酸", "燐酸", "りんさん", "phosphoric acid"], "H3PO4", true),
         new(["酢酸", "さくさん", "acetic acid", "ethanoic acid"], "C2H4O2", true, "CH3COOH"),
+        new(["ギ酸", "ぎさん", "formic acid", "methanoic acid"], "CH2O2", true, "HCOOH"),
+        new(["吉草酸", "きっそうさん", "valeric acid"], "C5H10O2", true, "CH3(CH2)3COOH"),
+        new(["アニリン", "あにりん", "aniline", "aminobenzene", "benzeneamine"], "C6H7N", true, "C6H5NH2"),
+        new(["アセトアニリド", "あせとあにりど", "acetanilide", "n-phenylacetamide", "n-phenylethanamide"], "C8H9NO", true, "C6H5NHCOCH3"),
+        new(["フェノール", "ふぇのーる", "phenol", "hydroxybenzene"], "C6H6O", true, "C6H5OH"),
+        new(["トルエン", "とるえん", "toluene", "methylbenzene"], "C7H8", true, "C6H5CH3"),
+        new(["ベンゼンヘキサクロリド", "べんぜんへきさくろりど", "benzene hexachloride", "benzenehexachloride", "hexachlorocyclohexane"], "C6H6Cl6", true),
         new(["過酸化水素", "かさんかすいそ", "hydrogen peroxide"], "H2O2", true),
         new(["アンモニア", "あんもにあ", "ammonia"], "NH3", true),
     ];
@@ -58,6 +66,14 @@ internal static class ChemicalNameParser
     private static readonly ParentName[] Parents = CreateParents();
     private static readonly Substituent[] Substituents = CreateSubstituents();
     private static readonly string[] PrefixNumbers = ["mono", "di", "tri", "tetra", "penta", "hexa", "hepta", "octa", "nona", "deca"];
+    private static readonly AlkylGroup[] AlkylGroups =
+    [
+        new("methyl", "めちる", "CH3", "CH3"),
+        new("ethyl", "えちる", "CH2CH3", "CH3CH2"),
+        new("propyl", "ぷろぴる", "CH2CH2CH3", "CH3CH2CH2"),
+        new("isopropyl", "いそぷろぴる", "CH(CH3)2", "CH(CH3)2"),
+        new("butyl", "ぶちる", "CH2CH2CH2CH3", "CH3CH2CH2CH2"),
+    ];
 
     public static IReadOnlyList<ChemicalCompound> Parse(string input)
     {
@@ -71,7 +87,7 @@ internal static class ChemicalNameParser
             hydrateCount = waters;
         }
 
-        var parsed = FindNamedAcid(name) ?? TryParseJapaneseStoichiometry(name) ?? TryParseEnglishStoichiometry(name) ?? TryParseIonic(name) ?? TryParseOrganic(name);
+        var parsed = FindNamedFormula(name) ?? TryParseEther(name) ?? TryParseJapaneseStoichiometry(name) ?? TryParseEnglishStoichiometry(name) ?? TryParseIonic(name) ?? TryParseOrganic(name);
         if (parsed is null) return [];
         if (hydrateCount == 0) return parsed;
 
@@ -83,11 +99,43 @@ internal static class ChemicalNameParser
         }).ToArray();
     }
 
-    private static ChemicalCompound[]? FindNamedAcid(string name)
+    private static ChemicalCompound[]? FindNamedFormula(string name)
     {
-        foreach (var entry in Acids)
+        foreach (var entry in NamedFormulas)
             if (entry.Aliases.Any(alias => Normalize(alias) == name)) return [Compound(entry.Formula, entry.IsMolecule, entry.PreferredFormula)];
         return null;
+    }
+
+    private static ChemicalCompound[]? TryParseEther(string name)
+    {
+        var suffix = name.EndsWith("ether", StringComparison.Ordinal) ? "ether" : name.EndsWith("えーてる", StringComparison.Ordinal) ? "えーてる" : null;
+        if (suffix is null) return null;
+        var groups = name[..^suffix.Length];
+
+        foreach (var alkyl in AlkylGroups.OrderByDescending(group => group.Alias.Length))
+        {
+            if (groups == "di" + alkyl.Alias || groups == "じ" + alkyl.JapaneseAlias)
+            {
+                var preferredFormula = alkyl.TerminalFirstFormula + "O" + alkyl.Formula;
+                return EtherCompound(preferredFormula);
+            }
+        }
+
+        foreach (var first in AlkylGroups.OrderByDescending(group => group.Alias.Length))
+            foreach (var second in AlkylGroups.OrderByDescending(group => group.Alias.Length))
+            {
+                if (groups != first.Alias + second.Alias && groups != first.JapaneseAlias + second.JapaneseAlias) continue;
+                var preferredFormula = first.TerminalFirstFormula + "O" + second.Formula;
+                return EtherCompound(preferredFormula);
+            }
+        return null;
+    }
+
+    private static ChemicalCompound[]? EtherCompound(string preferredFormula)
+    {
+        if (!ChemicalFormula.TryParse(preferredFormula, out var counts)) return null;
+        var molecularFormula = FormulaFromCounts(counts.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal));
+        return [Compound(molecularFormula, molecular: true, preferredFormula)];
     }
 
     private static ChemicalCompound[]? TryParseJapaneseStoichiometry(string name)
@@ -262,7 +310,37 @@ internal static class ChemicalNameParser
                 counts[symbol] = counts.GetValueOrDefault(symbol) + count;
             if (counts.Any(pair => pair.Value < 0) || !counts.TryGetValue("C", out var carbons) || carbons == 0) continue;
 
-            return [Compound(FormulaFromCounts(counts), molecular: true)];
+            return [Compound(FormulaFromCounts(counts), molecular: true, PreferredOrganicFormula(name, parent, before, suffix))];
+        }
+        return null;
+    }
+
+    private static string? PreferredOrganicFormula(string name, ParentName parent, string before, OrganicSuffix suffix)
+    {
+        if (parent.FixedFormula == "C6H6" && AlkylGroups.FirstOrDefault(group => group.Alias == before || group.JapaneseAlias == before) is { } alkyl)
+            return "C6H5" + alkyl.Formula;
+
+        if (before.Length != 0) return null;
+        if (suffix.Kind == "carboxylic-acid")
+        {
+            return parent.CarbonCount switch
+            {
+                1 => "HCOOH",
+                2 => "CH3COOH",
+                3 => "CH3CH2COOH",
+                >= 4 and <= 10 => "CH3(CH2)" + (parent.CarbonCount - 2).ToString(CultureInfo.InvariantCulture) + "COOH",
+                _ => null,
+            };
+        }
+        if (suffix.Kind == "alcohol" && !name.Any(char.IsAsciiDigit))
+        {
+            return parent.CarbonCount switch
+            {
+                1 => "CH3OH",
+                2 or 3 => "CH3" + string.Concat(Enumerable.Repeat("CH2", parent.CarbonCount - 1)) + "OH",
+                >= 4 and <= 10 => "CH3(CH2)" + (parent.CarbonCount - 2).ToString(CultureInfo.InvariantCulture) + "OH",
+                _ => null,
+            };
         }
         return null;
     }
@@ -301,12 +379,12 @@ internal static class ChemicalNameParser
     private static readonly OrganicSuffix[] OrganicSuffixes =
     [
         new([""], new Dictionary<string, int>(StringComparer.Ordinal)),
-        new(["ol", "おーる"], new Dictionary<string, int>(StringComparer.Ordinal) { ["O"] = 1 }),
+        new(["ol", "おーる", "のーる"], new Dictionary<string, int>(StringComparer.Ordinal) { ["O"] = 1 }, "alcohol"),
         new(["diol", "じおーる"], new Dictionary<string, int>(StringComparer.Ordinal) { ["O"] = 2 }),
         new(["triol", "さんおーる"], new Dictionary<string, int>(StringComparer.Ordinal) { ["O"] = 3 }),
         new(["one", "おん"], new Dictionary<string, int>(StringComparer.Ordinal) { ["H"] = -2, ["O"] = 1 }),
         new(["al", "あーる"], new Dictionary<string, int>(StringComparer.Ordinal) { ["H"] = -2, ["O"] = 1 }),
-        new(["oicacid", "さん"], new Dictionary<string, int>(StringComparer.Ordinal) { ["H"] = -2, ["O"] = 2 }),
+        new(["oicacid", "さん", "酸"], new Dictionary<string, int>(StringComparer.Ordinal) { ["H"] = -2, ["O"] = 2 }, "carboxylic-acid"),
         new(["amine", "あみん"], new Dictionary<string, int>(StringComparer.Ordinal) { ["H"] = 1, ["N"] = 1 }),
         new(["thiol", "ちおーる"], new Dictionary<string, int>(StringComparer.Ordinal) { ["S"] = 1 }),
         new(["oxy", "ろきし"], new Dictionary<string, int>(StringComparer.Ordinal) { ["O"] = 1 }),
@@ -418,7 +496,7 @@ internal static class ChemicalNameParser
     }
 
     private static ChemicalCompound Compound(string formula, bool molecular, string? preferredFormula = null) =>
-        new(formula + (molecular ? ":MW" : ":FW"), formula, preferredFormula, molecular);
+        new(formula + (molecular ? ":MW:" : ":FW:") + (preferredFormula ?? formula), formula, preferredFormula, molecular);
 
     private static int GreatestCommonDivisor(int first, int second)
     {
@@ -532,16 +610,16 @@ internal static class ChemicalNameParser
         List<ParentName> parents =
         [
             new(["benzene", "べんぜん"], 6, 0, 0, "C6H6"),
-            new(["methane", "methan", "めたん"], 1),
-            new(["ethane", "ethan", "えたん"], 2),
-            new(["propane", "propan", "ぷろぱん"], 3),
-            new(["butane", "butan", "ぶたん"], 4),
-            new(["pentane", "pentan", "ぺんたん"], 5),
-            new(["hexane", "hexan", "へきさん"], 6),
-            new(["heptane", "heptan", "へぷたん"], 7),
-            new(["octane", "octan", "おくたん"], 8),
-            new(["nonane", "nonan", "のなん"], 9),
-            new(["decane", "decan", "でかん"], 10),
+            new(["methane", "methan", "めたん", "めた"], 1),
+            new(["ethane", "ethan", "えたん", "えた"], 2),
+            new(["propane", "propan", "ぷろぱん", "ぷろぱ"], 3),
+            new(["butane", "butan", "ぶたん", "ぶた"], 4),
+            new(["pentane", "pentan", "ぺんたん", "ぺんた"], 5),
+            new(["hexane", "hexan", "へきさん", "へきさ"], 6),
+            new(["heptane", "heptan", "へぷたん", "へぷた"], 7),
+            new(["octane", "octan", "おくたん", "おくた"], 8),
+            new(["nonane", "nonan", "のなん", "のな"], 9),
+            new(["decane", "decan", "でかん", "でか"], 10),
             new(["undecane", "undecan", "うんでかん"], 11),
             new(["dodecane", "dodecan", "どでかん"], 12),
             new(["tridecane", "tridecan", "とりでかん"], 13),
@@ -578,6 +656,7 @@ internal static class ChemicalNameParser
         {
             Alias = alias,
             RequiresSuffix = alias is "methan" or "ethan" or "propan" or "butan" or "pentan" or "hexan" or "heptan" or "octan" or "nonan" or "decan"
+                or "めた" or "えた" or "ぷろぱ" or "ぶた" or "ぺんた" or "へきさ" or "へぷた" or "おくた" or "のな" or "でか"
                 or "undecan" or "dodecan" or "tridecan" or "tetradecan" or "pentadecan" or "hexadecan" or "heptadecan" or "octadecan" or "nonadecan" or "eicosan"
                 or "ethen" or "propen" or "buten" or "penten" or "hexen" or "hepten" or "octen" or "nonen" or "decen"
                 or "ethyn" or "propyn" or "butyn" or "pentyn" or "hexyn" or "heptyn" or "octyn" or "nonyn" or "decyn"
@@ -600,8 +679,11 @@ internal static class ChemicalNameParser
         new(["tetraethyl", "よんえちる"], ("C", 8), ("H", 16)),
         new(["triethyl", "さんえちる"], ("C", 6), ("H", 12)),
         new(["diethyl", "じえちる"], ("C", 4), ("H", 8)),
-        new(["dichloro", "じくろろ"], ("H", -2), ("Cl", 2)),
+        new(["hexachloro", "ろくくろろ"], ("H", -6), ("Cl", 6)),
+        new(["pentachloro", "ごくろろ"], ("H", -5), ("Cl", 5)),
+        new(["tetrachloro", "よんくろろ"], ("H", -4), ("Cl", 4)),
         new(["trichloro", "さんくろろ"], ("H", -3), ("Cl", 3)),
+        new(["dichloro", "じくろろ"], ("H", -2), ("Cl", 2)),
         new(["difluoro", "じふるおろ"], ("H", -2), ("F", 2)),
         new(["dibromo", "じぶろも"], ("H", -2), ("Br", 2)),
         new(["methyl", "めちる"], ("C", 1), ("H", 2)),
@@ -623,12 +705,13 @@ internal static class ChemicalNameParser
     private sealed record Anion(string[] Aliases, string GroupFormula, int Charge, string? EnglishName, bool AnionFirst, string? StoichiometricName = null, string? EnglishStoichiometricSuffix = null);
     private sealed record NamedFormula(string[] Aliases, string Formula, bool IsMolecule, string? PreferredFormula = null);
     private sealed record ElementName(string[] Aliases, string Symbol, bool AllowMolecularCompound);
+    private sealed record AlkylGroup(string Alias, string JapaneseAlias, string Formula, string TerminalFirstFormula);
     private sealed record ParentName(string[] Aliases, int CarbonCount, int DoubleBonds = 0, int TripleBonds = 0, string? FixedFormula = null, string Alias = "", bool RequiresSuffix = false);
     private sealed record Substituent(string[] Aliases, Dictionary<string, int> CountDelta)
     {
         public Substituent(string[] aliases, params (string Symbol, int Count)[] delta) : this(aliases, delta.ToDictionary(pair => pair.Symbol, pair => pair.Count, StringComparer.Ordinal)) { }
     }
-    private sealed record OrganicSuffix(string[] Aliases, Dictionary<string, int> CountDelta)
+    private sealed record OrganicSuffix(string[] Aliases, Dictionary<string, int> CountDelta, string? Kind = null)
     {
         public static readonly OrganicSuffix None = new([], new Dictionary<string, int>(StringComparer.Ordinal));
     }

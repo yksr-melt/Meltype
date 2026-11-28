@@ -85,6 +85,59 @@ internal static class ChemicalCompoundDictionaryTests
     }
 
     [Test]
+    public static void CommonNames_IncludeCondensedFormulas()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "meltype-chemical-common-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var chemicals = new ChemicalCompoundDictionary(directory);
+            var compounds = new (string Name, string Formula, string MolecularFormula)[]
+            {
+                ("塩化水素", "HCl", "HCl"),
+                ("ベンゼンヘキサクロリド", "C₆H₆Cl₆", "C₆H₆Cl₆"),
+                ("アニリン", "C₆H₅NH₂", "C₆H₇N"),
+                ("アセトアニリド", "C₆H₅NHCOCH₃", "C₈H₉NO"),
+                ("ギ酸", "HCOOH", "CH₂O₂"),
+                ("吉草酸", "CH₃(CH₂)₃COOH", "C₅H₁₀O₂"),
+                ("エタノール", "CH₃CH₂OH", "C₂H₆O"),
+                ("ジエチルエーテル", "CH₃CH₂OCH₂CH₃", "C₄H₁₀O"),
+                ("トルエン", "C₆H₅CH₃", "C₇H₈"),
+                ("フェノール", "C₆H₅OH", "C₆H₆O"),
+                ("エチルベンゼン", "C₆H₅CH₂CH₃", "C₈H₁₀"),
+            };
+            foreach (var (name, formula, molecularFormula) in compounds)
+            {
+                var candidates = chemicals.Lookup(name, []);
+                Assert.True(candidates.Contains(formula), $"{name} の示性式を出す: {string.Join(",", candidates)}");
+                Assert.True(candidates.Contains(molecularFormula), $"{name} の分子式も残す: {string.Join(",", candidates)}");
+                Assert.True(candidates.Any(candidate => candidate.StartsWith(formula + " (MW=", StringComparison.Ordinal)), $"{name} の分子量も出す");
+            }
+
+            var carboxylicAcids = new (string Name, string Formula)[]
+            {
+                ("methanoic acid", "HCOOH"),
+                ("ethanoic acid", "CH₃COOH"),
+                ("propanoic acid", "CH₃CH₂COOH"),
+                ("butanoic acid", "CH₃(CH₂)₂COOH"),
+                ("pentanoic acid", "CH₃(CH₂)₃COOH"),
+                ("hexanoic acid", "CH₃(CH₂)₄COOH"),
+                ("heptanoic acid", "CH₃(CH₂)₅COOH"),
+                ("octanoic acid", "CH₃(CH₂)₆COOH"),
+                ("nonanoic acid", "CH₃(CH₂)₇COOH"),
+                ("decanoic acid", "CH₃(CH₂)₈COOH"),
+                ("デカン酸", "CH₃(CH₂)₈COOH"),
+            };
+            foreach (var (name, formula) in carboxylicAcids)
+                Assert.True(chemicals.Lookup(name, []).Contains(formula), $"{name} の示性式を出す");
+
+            var copperOxide = chemicals.Lookup("酸化銅", []);
+            Assert.True(copperOxide.Contains("CuO") && copperOxide.Contains("Cu₂O"), "漢字入力でも酸化銅の価数候補を出す");
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
+
+    [Test]
     public static void ChemicalFormulaCandidates_AppearInTheConversionList()
     {
         var directory = Path.Combine(Path.GetTempPath(), "meltype-chemical-input-" + Guid.NewGuid().ToString("N"));
@@ -96,6 +149,9 @@ internal static class ChemicalCompoundDictionaryTests
 
             var acetate = SessionFacadeTests.Type(NewSession(), "sakusannnatoriumu ")[^1].View;
             Assert.True(acetate?.Candidates.Take(CompositionConversion.CandidatePageSize).Contains("CH₃COONa") == true, "酢酸ナトリウムの式が候補の最初のページに出る: " + string.Join(",", acetate?.Candidates ?? []));
+
+            var aniline = SessionFacadeTests.Type(NewSession(), "anirin ")[^1].View;
+            Assert.True(aniline?.Candidates.Contains("C₆H₅NH₂") == true && aniline?.Candidates.Contains("C₆H₇N") == true, "アニリンの示性式と分子式が変換候補に出る: " + string.Join(",", aniline?.Candidates ?? []));
 
             var copperIi = SessionFacadeTests.Type(NewSession(), "sannkadou2 ")[^1].View;
             Assert.True(copperIi?.Candidates.Contains("CuO") == true, "価数を付けた酸化銅の式が変換候補に出る: " + string.Join(",", copperIi?.Candidates ?? []));
