@@ -2408,6 +2408,12 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void AptAutoremoveStaysEnglish()
+    {
+        AssertCommitted(("autoremove", "autoremove"), ("aptnoautoremove", "aptのautoremove"), ("autoninaru", "あうとになる"));
+    }
+
+    [Test]
     public static void Issue1132_ShortEnglishThenJapanese()
     {
         // 短い英単語の後ろが読める日本語でも、#537 の補正で全文英字に戻っていた。

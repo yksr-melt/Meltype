@@ -29,6 +29,7 @@ printenv	printenv
 mainnipushsuru	mainにpushする
 exe	exe
 dlsite	DLsite
+autoremove	autoremove
 meado	メアド
 siri-zu	シリーズ
 image	image
