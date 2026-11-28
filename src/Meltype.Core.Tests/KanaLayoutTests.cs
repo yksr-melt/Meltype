@@ -14,6 +14,24 @@ internal static class KanaLayoutTests
     private static Keyboard Layout(KanaLayout layout) => new() { Kana = true, KanaLayout = layout };
 
     [Test]
+    public static void KanaLayout_DisplaysKeysAndRecognizesEnglishFromNicola()
+    {
+        var nicola = new Keyboard(typedKeys: Meltype.Config.TypedKeysStyle.Keys) { Kana = true, KanaLayout = KanaLayout.Nicola };
+        nicola.Type("google");
+        Assert.True(nicola.Host.View!.Typed is null, "表示と同じキーの列は重ねて出さない");
+        Assert.Equal("google", nicola.Showing);
+        nicola.Type("\n");
+        Assert.Equal("google", nicola.Host.Document);
+
+        var tsuki = new Keyboard(typedKeys: Meltype.Config.TypedKeysStyle.Keys) { Kana = true, KanaLayout = KanaLayout.Tsuki };
+        tsuki.TypeKanaKeys("dj");
+        Assert.Equal("お", tsuki.Showing);
+        Assert.Equal("dj", tsuki.Host.View!.Typed, "前置シフトのキーも表示する");
+        tsuki.Type("\b");
+        Assert.True(tsuki.Showing is null, "消した読みのキーを残さない");
+    }
+
+    [Test]
     public static void KanaLayout_Tsuki_PrefixShift()
     {
         // 月配列: W = と。D・K は 2 段目、S・L は 3 段目の前置シフト。D の次の J = お、K の次の E = ね、L の次の E = じ
@@ -76,14 +94,16 @@ internal static class KanaLayoutTests
     public static void KanaLayout_Shingetsu_NextInput()
     {
         // ; K の後が続かなければ き で決め、K (☆) から読み直す (; K A = きあ)。; K B = きゃ
-        var k = Layout(KanaLayout.Shingetsu);
+        var k = new Keyboard(typedKeys: Meltype.Config.TypedKeysStyle.Keys) { Kana = true, KanaLayout = KanaLayout.Shingetsu };
         k.Press(Semicolon);
         k.TypeKanaKeys("ka");
         Assert.Equal("きあ", k.Showing);
-        var y = Layout(KanaLayout.Shingetsu);
+        Assert.Equal(";ka", k.Host.View!.Typed);
+        var y = new Keyboard(typedKeys: Meltype.Config.TypedKeysStyle.Keys) { Kana = true, KanaLayout = KanaLayout.Shingetsu };
         y.Press(Semicolon);
         y.TypeKanaKeys("kb");
         Assert.Equal("きゃ", y.Showing);
+        Assert.Equal(";kb", y.Host.View!.Typed);
     }
 
     [Test]
