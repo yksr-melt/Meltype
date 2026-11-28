@@ -14,6 +14,8 @@ internal abstract record TypedKey
 
     public abstract char Raw { get; }
 
+    public virtual string KeyLabel => Raw.ToString();
+
     /// <summary>この要素を、前の要素までの読み reading に足す。</summary>
     internal abstract void ReadInto(TextReading reading, TextEnv env);
 
@@ -48,9 +50,10 @@ internal abstract record TypedKey
     }
 
     /// <summary>キー以外から入った読み (選んだ候補の読み・再変換・NICOLA・打ち直した文節・もしかしての修正)。</summary>
-    public sealed record Reading(char Value) : TypedKey
+    public sealed record Reading(char Value, string? PhysicalKeys = null) : TypedKey
     {
         public override char Raw => Value;
+        public override string KeyLabel => PhysicalKeys ?? base.KeyLabel;
         internal override void ReadInto(TextReading reading, TextEnv env) => CompositionText.ReadKana(reading, Value, Value);
     }
 }
@@ -102,6 +105,9 @@ internal sealed record CompositionTextState
 
     /// <summary>打った文字そのもの。</summary>
     public string TypedRaw => string.Concat(Keys.Take(Caret ?? Keys.Count).Select(k => k.Raw));
+
+    /// <summary>かな配列で押したキーを表示する。シフトの組み合わせは、読みの先頭の要素にまとめて持つ。</summary>
+    public string KanaKeyLabels => string.Concat(Keys.Take(Caret ?? Keys.Count).Select(k => k.KeyLabel));
 }
 
 /// <summary>

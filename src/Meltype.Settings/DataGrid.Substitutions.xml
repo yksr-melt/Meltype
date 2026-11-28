@@ -1,0 +1,13 @@
+<!--
+  ワークアラウンド: FluentAvalonia のテーマは DataGrid のスタイルを必ず読み込むので、使わない DataGrid も NativeAOT のビルドに入る。
+  DataGrid の列の値を property path から reflection で探すこのメソッドが、trim と AOT の警告 (IL2104・IL3053) を出す。
+  設定アプリは DataGrid を使わないので、body="remove" で中身を例外を投げるだけにして警告を消す (ILC の body="stub" は参照型を返すメソッドに使えない)。
+  ILC はこのファイルの変更でビルドし直さないので、変えたら obj を消して publish する
+-->
+<linker>
+  <assembly fullname="Avalonia.Controls.DataGrid">
+    <type fullname="Avalonia.Controls.Utils.TypeHelper">
+      <method signature="System.Reflection.PropertyInfo GetPropertyOrIndexer(System.Type,System.String,System.Object[]&amp;)" body="remove" />
+    </type>
+  </assembly>
+</linker>
