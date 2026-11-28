@@ -2262,6 +2262,27 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void Issue2017_MineralNames_StayEnglish()
+    {
+        // #2017: Fluorite が Flu + おりて に割れていた。英単語の一覧に無い鉱物の名前は、頭の英単語 + 日本語の語に割れる
+        foreach (var (typed, expected) in new[]
+        {
+            ("Fluorite", "Fluorite"), ("fluorite", "fluorite"), ("Hematite", "Hematite"), ("Magnetite", "Magnetite"), ("Moonstone", "Moonstone"),
+            ("Galena", "Galena"), ("Serpentine", "Serpentine"), ("Wolframite", "Wolframite"), ("Bloodstone", "Bloodstone"),
+            ("Agate", "Agate"), ("agate", "agate"),
+            // 後ろに続く日本語は日本語のまま
+            ("Fluoritewokatta", "Fluoriteをかった"), ("fluoritenoiro", "fluoriteのいろ"),
+            // 逆向き: 英単語 + 日本語の語は割れたまま
+            ("Flunikakatta", "Fluにかかった"), ("Tofuoisii", "Tofuおいしい"), ("Pythonkaku", "Pythonかく"), ("oritekara", "おりてから"),
+        })
+        {
+            var k = new Keyboard();
+            k.Type(typed + "\n");
+            Assert.Equal(expected, k.Host.Document, typed);
+        }
+    }
+
+    [Test]
     public static void DictionaryAdditions2_ReportedWords()
     {
         // #1609: 固有名詞がかなに割れる

@@ -78,6 +78,9 @@ const dictionaries = {
   'english-words.txt': {
     format: words(w => /^[a-z]{2,}$/.test(w) ? null : `「${w}」が小文字の英字の語でない`),
   },
+  'english-minerals.txt': {
+    format: words(w => /^[a-z][a-z-]+$/.test(w) ? null : `「${w}」が鉱物の英語名でない`),
+  },
   // ローマ字として最後まで読めても英語にする語。ファイル冒頭の決まりどおり 3 文字以上だけ。Core は小文字にして読む
   'english-readable.txt': {
     format: words(w => /^[A-Za-z]{3,}$/.test(w) ? null : `「${w}」が 3 文字以上の英字の語でない`),

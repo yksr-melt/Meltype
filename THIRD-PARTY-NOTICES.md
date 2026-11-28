@@ -119,6 +119,10 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 - ライセンス: [Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)](https://creativecommons.org/licenses/by-sa/4.0/)
 - この派生データ (dictionaries/meanings.txt) も CC BY-SA 4.0 です。
 
+### 鉱物・天然石の英語名 (dictionaries/english-minerals.txt)
+
+Wikipedia の [List of minerals](https://en.wikipedia.org/w/index.php?title=List_of_minerals&oldid=1383057146) (2026年10月31日の版、Wikipedia contributors) の A〜Z の箇条書きから `tools/make-mineral-words.mjs` で作りました。括弧内の説明を外し、単独の別名は残し、アクセントを ASCII に直し、複合名は空白で分けています。出典の履歴はリンク先から参照できます。この派生データは [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) で配布します。
+
 ### よく使う英単語 (dictionaries/english-words.txt)
 
 全 OS で英単語を知るのに使います。[SCOWL](http://wordlist.aspell.net/) (Spell Checker Oriented Word Lists、2020.12.07) の大きさ 35 までの english / american の語のうち、小文字の英字だけの語を `tools/make-english-words.mjs` で取り出して作りました。SCOWL の Copyright ファイルの全文:
