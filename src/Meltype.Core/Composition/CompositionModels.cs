@@ -45,7 +45,7 @@ internal sealed class Clause(string reading, bool isEnglish, List<string> candid
     public bool Fixed { get; init; }
 
     /// <summary>
-    /// ユーティリティ変換の Prepend で、候補の先頭に足した候補の数。変換エンジンの候補の一覧 (Expand) は、その後ろに入れる
+    /// 最初に並ぶ候補の数。ユーティリティ変換の Prepend と、選ぶ回数を覚えて上げた候補の前に、変換エンジンの候補を割り込ませない
     /// (先頭に足した漢字の間に 言偏にふるとり が入らないように)。
     /// </summary>
     public int Leading { get; set; }
@@ -55,6 +55,9 @@ internal sealed class Clause(string reading, bool isEnglish, List<string> candid
 
     /// <summary>候補と同じ順・件数の色見本 (#rrggbbaa)。無ければ null。</summary>
     public IReadOnlyList<string?>? Colors { get; init; }
+
+    /// <summary>ユーティリティ変換の候補と、その候補を出す書式の ID (<see cref="Utility.UtilityCandidates.RankingKeys"/>)。</summary>
+    public Dictionary<string, IReadOnlyList<Utility.UtilityFormat>> UtilityRankingKeys { get; } = new(StringComparer.Ordinal);
 
     /// <summary>候補のうち、選んでも学習しないユーティリティ変換の候補 (<see cref="Utility.UtilityCandidates.NotLearned"/>)。</summary>
     public HashSet<string> NotLearned { get; } = new(StringComparer.Ordinal);

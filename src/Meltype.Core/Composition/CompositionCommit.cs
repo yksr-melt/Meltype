@@ -3,6 +3,7 @@
 // Copyright (C) 2026 yksr-melt
 
 using Meltype.Detection;
+using Meltype.Libraries.Chars;
 using Meltype.Notation;
 
 namespace Meltype.Composition;
@@ -61,7 +62,11 @@ internal static class CompositionCommit
         }
         CompositionSpelling.RecordCorrection(scene, env, text.Text, suffix);
         if (clauses is not null) LearnClauses(state, input, clauses, env);
-        else if (CompositionLifecycle.Learning(state, input, env) && !input.EscReverted) env.Learning.LearnLanguage(CompositionText.Read(input.Text, env), CompositionText.Segments(CompositionText.Read(CompositionText.Automatic(input.Text), env), env), CompositionText.LearningContext(env));
+        else if (CompositionLifecycle.Learning(state, input, env) && !input.EscReverted)
+        {
+            env.Learning.LearnLanguage(CompositionText.Read(input.Text, env), CompositionText.Segments(CompositionText.Read(CompositionText.Automatic(input.Text), env), env), CompositionText.LearningContext(env));
+            LearnKanaForm(input, env);
+        }
         if (clauses is null || clauses.All(CompositionLearning.Learnable))
             RememberPhrase(state, input, env, clauses is not null ? string.Concat(clauses.Select(c => c.IsEnglish ? "" : c.Reading)) : CompositionText.AllKana(CompositionText.Read(input.Text, env), env, final: true), NotationRules.Write(text, env.Settings.Punctuation), english);
         CommitText(state, env, text + ComposedText.English(suffix), english, CompositionText.Raw(CompositionText.Read(input.Text, env)), chosen, preserveText, string.Join("、", rules));
@@ -97,12 +102,43 @@ internal static class CompositionCommit
         if (scene is CompositionScene.Converting { Conversion: var conversion }) return [.. conversion.Clauses.Select(c => new CommittedClause(c.Reading, c.Engine, c.Text))];
         var input = scene.Input;
         var mode = input.Text.Mode;
-        var left = input.LeftConversion is { } kept && kept.Raw == input.Text.TypedRaw
-            ? [.. kept.Conversion.Clauses.Select(c => new CommittedClause(c.Reading, c.Engine, c.Text))]
-            : AutoClauses(input, env);
+        var left = ClausesBeforeForm(input, env, final: true, shownOnly: false).Select(c => c.Clause).ToList();
         if (!IsKanaMode(mode)) return [.. left.Select(c => c with { Text = mode == DisplayMode.Auto ? c.Text : null })];
-        var matches = string.Concat(left.Select(c => c.Reading)) == CompositionText.AllKana(CompositionText.Read(input.Text, env), env, final: true);
+        var matches = ReadingsMatch(input, env, left);
         return [.. left.Select(c => c with { Text = matches ? KanaForm(mode, c.Reading) : null })];
+    }
+
+    /// <summary>
+    /// 形を当てる前の文節 (F6〜F8 を押す前の変換。変換していなければ自動の表示のライブ変換) と、日本語の文節か・変換した文節か。
+    /// final が false なら、打っている間に見えていた並び (末尾の n は ん にしない)。shownOnly なら変換エンジンに頼まず、見せたライブ変換の答え (1 回の入力の間の控え) だけを使う。
+    /// </summary>
+    private static List<(CommittedClause Clause, bool Japanese, bool Converted)> ClausesBeforeForm(CompositionInput input, CompositionEnv env, bool final, bool shownOnly) =>
+        input.LeftConversion is { } kept && kept.Raw == input.Text.TypedRaw
+            ? [.. kept.Conversion.Clauses.Select(c => (new CommittedClause(c.Reading, c.Engine, c.Text), !c.IsEnglish, !c.IsEnglish))]
+            : AutoClauses(input, env, final, shownOnly);
+
+    /// <summary>文節の読みをつなげたものが、入力全体のかなと合うか (合わなければ、文節ごとのかなの形が分からない)。</summary>
+    private static bool ReadingsMatch(CompositionInput input, CompositionEnv env, IEnumerable<CommittedClause> clauses) =>
+        string.Concat(clauses.Select(c => c.Reading)) == CompositionText.AllKana(CompositionText.Read(input.Text, env), env, final: true);
+
+    /// <summary>
+    /// F6〜F8 で入力全体をかなにして確定したとき、日本語の文節が 1 つで、その文節を変換して見せていたなら、見えていた文字と違えばその読みをかなの形で覚える (#1570)。
+    /// 文節が 2 つ以上なら、どの文節を直したのか分からないので覚えない (記憶して言ってくれる を F6 にすると、直したい 言って のほかに 記憶 もかなになる)。
+    /// 変換していないかな (ライブ変換が OFF・1 拍の区間) は、句読点・数字も入った読みのまま 1 つの文節なので覚えない。読みがかなだけでない文節 (へっぉ、・5きょう) も覚えない。
+    /// 見えていた文字に漢字が無ければ (変換エンジンがかなを返した です)、漢字を直したのではないので覚えない。
+    /// 見えていた並び (final: false) と、見せたライブ変換の答えだけで決める。確定の並び (final: true) は末尾の n を ん にするので、見えていない かん・かんたん から覚えてしまう。
+    /// 見せていない答えを変換エンジンに頼むと、確定のたびに要求が増える。
+    /// F8 の半角カタカナは F9・F10 と同じく幅の形なので覚えない。
+    /// </summary>
+    private static void LearnKanaForm(CompositionInput input, CompositionEnv env)
+    {
+        var mode = input.Text.Mode;
+        if (mode is not (DisplayMode.Hiragana or DisplayMode.Katakana)) return;
+        var shown = ClausesBeforeForm(input, env, final: false, shownOnly: true);
+        if (shown.Where(c => c.Japanese).ToList() is not [(var clause, _, true)] || !clause.Reading.All(KanaChars.IsHiraganaOrLongMark) ||
+            clause.Text?.Any(KanaChars.IsKanji) != true || !ReadingsMatch(input, env, shown.Select(c => c.Clause))) return;
+        var kana = KanaForm(mode, clause.Reading);
+        if (kana != clause.Text) env.Learning.LearnKana(clause.Reading, kana);
     }
 
     private static bool IsKanaMode(DisplayMode mode) => mode is DisplayMode.Hiragana or DisplayMode.Katakana or DisplayMode.HalfWidthKatakana;
@@ -115,15 +151,15 @@ internal static class CompositionCommit
     };
 
     // 自動の表示の文節: 確定するときと同じ並び (自動の表示で確定したときの文字。F6〜F8 なら当てる前の形)
-    private static List<CommittedClause> AutoClauses(CompositionInput input, CompositionEnv env)
+    private static List<(CommittedClause Clause, bool Japanese, bool Converted)> AutoClauses(CompositionInput input, CompositionEnv env, bool final, bool shownOnly)
     {
         var original = input.Text;
         input.Text = CompositionText.Automatic(input.Text);
         try
         {
             // F6〜F8 の確定は自動の表示の答えを待たずに確定するので、見えていた答え
-            var clauses = CompositionPresentation.AutoClauses(input, env, final: true);
-            return [.. clauses.Select(c => c.Committed)];
+            var clauses = CompositionPresentation.AutoClauses(input, env, final, shownOnly);
+            return [.. clauses.Select(c => (c.Committed, c is TypingClause.Japanese, c is TypingClause.Converted))];
         }
         finally
         {

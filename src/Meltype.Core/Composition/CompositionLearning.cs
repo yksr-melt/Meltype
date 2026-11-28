@@ -65,6 +65,12 @@ internal sealed partial class CompositionLearning(CompositionServices services, 
         {
             services.TranslationHistory?.Remember(clause.Reading, clause.Text);
         }
+        foreach (var clause in clauses)
+        {
+            // 1 つの文字を複数の書式が出すときは、どの書式を選んだか区別できないので、すべての書式を覚える
+            if (!clause.UtilityRankingKeys.TryGetValue(clause.Text, out var keys)) continue;
+            foreach (var format in keys) services.UtilityFormats?.Remember(format.Id, format.Format);
+        }
         if (services.History is not { } history) return;
         foreach (var clause in clauses.Where(c => !c.IsEnglish && c.Changed && ConversionHistory.IsLearnableReading(c.Reading)))
         {
@@ -75,6 +81,12 @@ internal sealed partial class CompositionLearning(CompositionServices services, 
             if (!Learnable(clause)) continue;
             history.Remember(clause.Reading, clause.Text);
         }
+    }
+
+    /// <summary>入力全体をかなにして確定した文節の読みを、そのかなの形で覚える (候補からかなを選んで確定したのと同じ)。</summary>
+    public void LearnKana(string reading, string kana)
+    {
+        if (ConversionHistory.IsLearnableReading(reading) && !StaleWords.IsStale(reading, kana)) services.History?.Remember(reading, kana);
     }
 
     /// <summary>

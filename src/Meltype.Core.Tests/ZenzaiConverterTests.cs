@@ -375,18 +375,6 @@ internal static class ZenzaiConverterTests
     }
 
     [Test]
-    public static void Deadline_DoesNotNotifyWhenThereIsNoNewText()
-    {
-        using var server = new FakeServer { Answer = p => "かんたん</s>" };
-        using var zenzai = new ZenzaiConverter(server.Endpoint);
-        var notified = 0;
-        zenzai.ResultReady += () => Interlocked.Increment(ref notified);
-        // 読みのまま (変換していない) の答えは表示を変えない
-        Assert.True(zenzai.ConvertClauses("かんたん", null, deadline: Environment.TickCount64 + 3000) is null, "変換していない");
-        Assert.Equal(0, Volatile.Read(ref notified));
-    }
-
-    [Test]
     public static void NoContext_UsesNeutralSentenceStart()
     {
         // 前の文脈が無い入力は、モデルが迷う (文脈なしの きょう → 強) ので、文の始まりの合図「。」を文脈として渡す
@@ -400,12 +388,19 @@ internal static class ZenzaiConverterTests
     }
 
     [Test]
-    public static void UnchangedAnswer_IsNotUsed_AndDoesNotCountAsFailure()
+    public static void UnchangedAnswer_IsUsedWhenMozcHasTheKana()
     {
-        using var server = new FakeServer { Answer = p => "かんたんなもんだい" };
+        // #1975: 読みのままが正しい答え (python + なら、になってしまう) を、Mozc の 1 番目 (奈良・担ってしまう) にしない
+        using var server = new FakeServer { Answer = p => "なら" };
         using var zenzai = new ZenzaiConverter(server.Endpoint);
-        for (var i = 0; i < 4; i++) Assert.True(zenzai.ConvertClauses("かんたんなもんだい", "前の文") is null, "読みのままなら null");
-        Assert.True(zenzai.IsAvailable, "変換しなかっただけでは諦めない");
+        var kana = zenzai.ConvertClauses("なら", "python")!;
+        Assert.True(kana is [{ Text: "なら" }], "読みのままの答えも返す");
+        Assert.Equal("なら", HybridConverter.Choose("なら", [(new("なら", "奈良"), ["奈良", "なら"])], kana)!.Single().Text);
+        Assert.Equal("になってしまう", HybridConverter.Choose("になってしまう", [(new("になってしまう", "担ってしまう"), ["担ってしまう", "になってしまう"])],
+            [new ConversionClause("になってしまう", "になってしまう", Zenzai: true)])!.Single().Text);
+        // 逆向き: Zenzai が漢字にした答えは今までどおり使う
+        Assert.Equal("簡単", HybridConverter.Choose("かんたん", [(new("かんたん", "かんたん"), ["かんたん", "簡単"])],
+            [new ConversionClause("かんたん", "簡単", Zenzai: true)])!.Single().Text);
     }
 
     [Test]

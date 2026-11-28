@@ -431,7 +431,15 @@ internal static class ImeSession
             return CommitCombiningForPassThrough(state, env, preserveLatinRaw: key.Ch is >= 0x0300 and <= 0x036F);
         // 補助面の文字 (絵文字など) は char に入らないので、未確定の内容を確定してからアプリに通す
         if (key.Ch >= 0x10000) return CommitForPassThrough(state, env);
-        var result = ComposeKey(state, env, vk, Position(vk, key.Physical), key.Ch > 0 ? (char)key.Ch : null, key.Shift, key.Ctrl, key.Alt, key.Command, key.ReleaseFollows);
+        var position = Position(vk, key.Physical);
+        // US 配列のバッククォートはかな配列の位置にだけ対応づける。ショートカット用の仮想キーは変えない。
+        if (settings.InputStyle == InputStyle.Kana && settings.KanaLayout == KanaLayout.Jis &&
+            key.Ch is '`' or '~' && (key.Physical?.IsGravePosition == true || key.Physical is null && key.Vk == 0))
+            position = 0xE2;
+        // US 配列の Shift+- は _。JIS かなでは、US 配列にない ¥ キーの長音をこの位置で打てるようにする。
+        if (settings.InputStyle == InputStyle.Kana && settings.KanaLayout == KanaLayout.Jis &&
+            position == VirtualKeys.OemMinus && key.Shift && key.Ch == '_') position = 0xDC;
+        var result = ComposeKey(state, env, vk, position, key.Ch > 0 ? (char)key.Ch : null, key.Shift, key.Ctrl, key.Alt, key.Command, key.ReleaseFollows);
         // アプリに通したキーはキャレットを動かすかもしれない (Core が通すと決めたので、フロントからは送られてこない)
         if (!result.Consumed) CaretMoved(state, vk, key.Ctrl);
         return result;
