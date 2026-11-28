@@ -161,7 +161,16 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
             }
             if (input.Event is { } key && Captures(e, key)) return Enqueue(input);
             // アプリに通したキーはキャレットを動かすかもしれない (後のキーより先に本体に知らせる)
-            if (!VirtualKeys.IsModifier(e.Vk)) Enqueue(new Input(Caret: new ImeCaret { Moved = true, PassedKey = e.Vk, Ctrl = input.Event?.Ctrl == true }));
+            if (!VirtualKeys.IsModifier(e.Vk))
+            {
+                Enqueue(new Input(Caret: new ImeCaret
+                {
+                    Moved = true,
+                    PassedKey = e.Vk,
+                    PassedChar = input.Event?.Ch ?? 0,
+                    Ctrl = input.Event?.Ctrl == true,
+                }));
+            }
         }
         return false;
     }

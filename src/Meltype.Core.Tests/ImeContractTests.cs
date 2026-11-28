@@ -621,6 +621,71 @@ internal static class ImeContractTests
     }
 
     [Test]
+    public static void DirectEnglish_CaretDistinguishesTextFromMovement()
+    {
+        foreach (var (before, notification) in new[]
+        {
+            ("hellka ", ",\"caret\":{\"moved\":true,\"passedKey\":32,\"passedChar\":32}"),
+            // Alt+F で、同じ f で終わる別の位置へ移動する。文字の追加はない。
+            ("hellka staff", ",\"caret\":{\"moved\":true,\"passedKey\":70}"),
+            // アプリが文字を追加せず、同じ a で終わる別の位置へキャレットだけを移動する。
+            ("hellka data", ",\"caret\":{\"moved\":true,\"passedKey\":0}"),
+        })
+        {
+            var front = new Front
+            {
+                InputMethod = InputMode.Tsf,
+                Open = false,
+                ClassifyDirect = (letters, _, _) => letters switch
+                {
+                    "hel" => Verdict.English,
+                    "ka" => Verdict.Japanese,
+                    _ => Verdict.Undecided,
+                },
+            };
+            front.Settings.DirectModeAutoDetect = true;
+            front.Type("hel");
+            front.Document += "l";
+            front.Event("CaretMoved", extra: ",\"caret\":{\"moved\":true,\"passedKey\":76,\"passedChar\":108}");
+            front.Type("ka");
+            Assert.Equal("hellka", front.Document, "空白のない続きは英字のまま\n" + front.Trace);
+
+            front.Document = before;
+            front.Event("CaretMoved", extra: notification);
+            front.Type("ka");
+            Assert.Equal("か", front.Composition["t1"], "空白またはキャレット移動の後では日本語を検知する\n" + front.Trace);
+            Assert.Equal(before, front.Document, front.Trace);
+        }
+    }
+
+    [Test]
+    public static void DirectEnglish_KeyboardCaretMayArriveBeforeTheAppInsertsText()
+    {
+        foreach (var sends in new[] { "Document", null })
+        {
+            var front = new Front
+            {
+                InputMethod = InputMode.Keyboard,
+                Open = false,
+                Sends = sends,
+                ClassifyDirect = (letters, _, _) => letters switch
+                {
+                    "hel" => Verdict.English,
+                    "ka" => Verdict.Japanese,
+                    _ => Verdict.Undecided,
+                },
+            };
+            front.Settings.DirectModeAutoDetect = true;
+            front.Type("hel");
+            // フックの通知を先に処理し、あとからアプリが o を挿入する。
+            front.Event("CaretMoved", extra: ",\"caret\":{\"moved\":true,\"passedKey\":79,\"passedChar\":111}");
+            front.Document += "o";
+            front.Type("ka");
+            Assert.Equal("heloka", front.Document, front.Trace);
+            Assert.True(!front.Open && front.Composition["t1"] is null, front.Trace);
+        }
+    }
+    [Test]
     public static void InputFieldTraits_DecideWhatCoreDoes()
     {
         var front = new Front();

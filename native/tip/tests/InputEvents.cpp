@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 cet-t
 
-// 実際の TSF コンパートメントと入力欄で、自動開閉・明示的な切り替え・タスクバーのメニューへのキーの受け渡しを確かめる。
+// 実際の TSF コンパートメントと入力欄で、自動開閉・明示的な切り替え・キーの受け渡し・キャレット通知を確かめる。
 // タスクバーはテストのプロセスに同じクラス名のウィンドウを作って再現する。パイプだけを記録用に置き換え、
 // 文書なしのフォーカス通知もテスト側で固定し、通常のユーザーの Meltype・辞書・設定には接続しない。
 #include "TextService.h"
@@ -9,12 +9,14 @@
 #include <cstdio>
 #include <cstring>
 #include <cwchar>
+#include <functional>
 #include <textstor.h>
 
 namespace meltype {
 HINSTANCE g_module = nullptr;
 int toggleRequests = 0;
 double revision = 0;
+std::vector<JsonValue> caretEvents;
 bool composingTest = false;
 std::wstring pendingText;
 std::vector<std::wstring> committedText;
@@ -67,12 +69,14 @@ bool PipeClient::Transact(const std::string& request, std::string& response, DWO
     }
     const bool toggle = type == L"ModeToggleRequested" || (type == L"KeyPressed" && event[L"key"][L"vk"].Int() == 0xF3);
     if (toggle) ++toggleRequests;
+    if (type == L"CaretMoved") caretEvents.push_back(event[L"caret"]);
     const bool open = (request.find("\"imeOpen\":true") != std::string::npos) != toggle;
     const char* shown = open ? "true" : "false";
+    // l の打鍵は、アプリの編集からキャレット通知を送るテストのためにアプリへ通す。
     response = std::string("{\"version\":1,\"state\":{\"handlesInput\":true,\"imeOpen\":") + shown +
                ",\"languageMode\":\"" + (open ? "Japanese" : "Alphanumeric") + "\"" +
                ",\"modeIndicatorMs\":" + (toggle ? "1200" : "0") +
-               ",\"capture\":{\"printableAscii\":true,\"printableAsciiExcept\":\"\",\"shortcuts\":[{\"vk\":32,\"modifiers\":0}]},\"revision\":" +
+               ",\"capture\":{\"printableAscii\":true,\"printableAsciiExcept\":\"l\",\"shortcuts\":[{\"vk\":32,\"modifiers\":0}]},\"revision\":" +
                std::to_string(++revision) + "},\"result\":{\"consumed\":true,\"commits\":" + commits + ",\"view\":" + view + "}}";
     return true;
 }
@@ -208,6 +212,78 @@ static void Pump() {
         TranslateMessage(&message);
         DispatchMessageW(&message);
     }
+}
+
+static void CheckCaretNotifications(ITfContext* context, TfClientId client, meltype::TextService& service,
+                                    const std::function<void(bool, const char*)>& check) {
+    using Microsoft::WRL::ComPtr;
+    using namespace meltype;
+    const auto edit = [&](const wchar_t* text, LONG position) {
+        return RunEditSession(context, client, TF_ES_SYNC | TF_ES_READWRITE, [&](TfEditCookie cookie) {
+            ComPtr<ITfRange> range;
+            HRESULT hr;
+            if (text) {
+                // アプリが文字を追加し、同じ編集セッションでキャレットをその直後へ進める。
+                if (FAILED(hr = context->GetEnd(cookie, &range))) return hr;
+                if (FAILED(hr = range->SetText(cookie, 0, text, static_cast<LONG>(std::wcslen(text))))) return hr;
+                if (FAILED(hr = context->GetEnd(cookie, &range))) return hr;
+            } else {
+                if (FAILED(hr = context->GetStart(cookie, &range))) return hr;
+                LONG shifted = 0;
+                if (FAILED(hr = range->ShiftStart(cookie, position, &shifted, nullptr))) return hr;
+                if (shifted != position) return E_FAIL;
+                if (FAILED(hr = range->Collapse(cookie, TF_ANCHOR_START))) return hr;
+            }
+            TF_SELECTION selection{};
+            selection.range = range.Get();
+            selection.style.ase = TF_AE_NONE;
+            return context->SetSelection(cookie, 1, &selection);
+        });
+    };
+    const auto expect = [&](UINT key, const wchar_t* text, LONG position, UINT expectedKey, wchar_t expectedChar, const char* label) {
+        caretEvents.clear();
+        if (key != 0) {
+            // 小文字の l を打つ条件を固定する。Caps Lock や修飾キーの状態はこのスレッドのキー判定の間だけ変える。
+            BYTE savedKeys[256]{};
+            BYTE unmodifiedKeys[256]{};
+            if (!GetKeyboardState(savedKeys) || !SetKeyboardState(unmodifiedKeys)) {
+                check(false, "set unmodified keyboard state for the test key");
+                return;
+            }
+            BOOL eaten = TRUE;
+            const HRESULT keyResult = service.OnTestKeyDown(context, key, 0, &eaten);
+            const BOOL restored = SetKeyboardState(savedKeys);
+            if (FAILED(keyResult) || eaten || !restored) {
+                check(false, label);
+                return;
+            }
+        }
+        const HRESULT edited = edit(text, position);
+        if (FAILED(edited) || caretEvents.size() != 1) {
+            std::printf("  edit: 0x%08lX, caret notifications: %zu\n", static_cast<unsigned long>(edited), caretEvents.size());
+            check(false, label);
+            return;
+        }
+        const auto& caret = caretEvents.front();
+        const auto& passedKey = caret[L"passedKey"];
+        const auto& passedChar = caret[L"passedChar"];
+        const bool charMatches = expectedChar != 0 ? passedChar.type == JsonValue::Type::Number && passedChar.Int() == expectedChar
+                                                  : caret.object.count(L"passedChar") == 0;
+        check(caret[L"moved"].Bool() && passedKey.type == JsonValue::Type::Number && passedKey.number == expectedKey && charMatches, label);
+    };
+
+    const SHORT letter = VkKeyScanW(L'l');
+    const bool ready = letter != -1 && HIBYTE(letter) == 0 && SUCCEEDED(edit(L"sample", 0));
+    check(ready, "caret test context accepts text and an unmodified l key");
+    if (!ready) return;
+    const UINT letterKey = LOBYTE(letter);
+
+    expect(0, nullptr, 1, 0, 0, "selection without a key sends only the caret movement");
+    expect(VK_ESCAPE, nullptr, 2, VK_ESCAPE, 0, "Esc keeps its key number without a text edit");
+    expect(VK_RETURN, nullptr, 3, VK_RETURN, 0, "Enter keeps its key number without a text edit");
+    expect(letterKey, nullptr, 4, 0, 0, "selection after a printable key does not report text input");
+    expect(letterKey, L"l", 0, letterKey, L'l', "insertion before the caret sends the printable key and character");
+    expect(0, nullptr, 5, 0, 0, "selection after insertion does not repeat the printable key or character");
 }
 
 // 文書なしの通知は SetFocus(null) では作れないため、GetFocus の結果だけを固定する。
@@ -591,8 +667,36 @@ int main(int argc, char** argv) {
                 check(toggleRequests == i, "each explicit toggle is sent once (Meltype.exe shows the indicator)");
             }
         }
+
         service->Deactivate();
         service->Release();
+
+        if (!compositionOnly) {
+            ComPtr<ITfDocumentMgr> caretDocument;
+            ComPtr<ITfContext> caretContext;
+            TfEditCookie caretEdit = TF_INVALID_EDIT_COOKIE;
+            if (FAILED(manager->CreateDocumentMgr(&caretDocument)) ||
+                FAILED(caretDocument->CreateContext(client, 0, nullptr, &caretContext, &caretEdit)) ||
+                FAILED(caretDocument->Push(caretContext.Get()))) return 1;
+            // 先行テストで通したキーを持ち込まないよう、別のテキストサービスで通知を確かめる。
+            // 所有者のない TSF コンテキストを、文字を入力できる欄として扱う。
+            ComPtr<ITfCompartmentMgr> contextCompartments;
+            if (FAILED(caretContext.As(&contextCompartments))) return 1;
+            for (const GUID* id : {&GUID_COMPARTMENT_KEYBOARD_DISABLED, &GUID_COMPARTMENT_EMPTYCONTEXT}) {
+                ComPtr<ITfCompartment> compartment;
+                VARIANT enabled{};
+                enabled.vt = VT_I4;
+                if (FAILED(contextCompartments->GetCompartment(*id, &compartment)) ||
+                    FAILED(compartment->SetValue(client, &enabled))) return 1;
+            }
+            ComPtr<TextService> caretService;
+            caretService.Attach(new TextService(nullptr));
+            if (FAILED(caretService->ActivateEx(manager.Get(), client, 0)) ||
+                FAILED(manager->SetFocus(caretDocument.Get()))) return 1;
+            CheckCaretNotifications(caretContext.Get(), client, *caretService.Get(), check);
+            caretService->Deactivate();
+            caretDocument->Pop(TF_POPF_ALL);
+        }
         manager->Deactivate();
     }
     DestroyWindow(window);

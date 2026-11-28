@@ -273,6 +273,8 @@ public sealed record ImeCaret
     public bool Moved { get; init; }
     /// <summary>キャレットを動かした、フロントがアプリに通したキー。0 はキーなし (クリックなど)。null は文字が変わっただけ。</summary>
     public int? PassedKey { get; init; }
+    /// <summary>キャレット通知に対応する印字文字のコード。文字の事実が無ければ 0。</summary>
+    public int PassedChar { get; init; }
     /// <summary>PassedKey のとき Ctrl を押していたか。</summary>
     public bool Ctrl { get; init; }
     /// <summary>フォーカスが入力欄に入った (設定によっては入力モードを表示する)。</summary>

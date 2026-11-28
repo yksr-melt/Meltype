@@ -146,6 +146,12 @@ internal static class CompositionController
 
     internal static bool InEnglishWord(CompositionState state) => CompositionLifecycle.InEnglishWord(state);
 
+    /// <summary>同じ英単語への打鍵が続いたら、保留中の打鍵は捨て、英数判定を保つ。</summary>
+    internal static void KeepEnglishWord(CompositionState state)
+    {
+        if (state.Scene is CompositionScene.Judging { InEnglishWord: true }) CompositionLifecycle.StartEnglishWord(state);
+    }
+
     internal static void LeaveEnglishWord(CompositionState state) => CompositionLifecycle.LeaveEnglishWord(state);
 
     internal static void ForgetDirectInput(CompositionState state) => CompositionLifecycle.ForgetDirectInput(state);
