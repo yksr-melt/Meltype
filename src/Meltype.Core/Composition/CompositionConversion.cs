@@ -293,7 +293,7 @@ internal static class CompositionConversion
     private static UtilityCandidates? Utilities(CompositionInput input, CompositionEnv env, IReadOnlyList<CompositionSegment> segments)
     {
         var reading = segments is [{ IsEnglish: false, Kana.Length: > 0 } only] ? only.Kana : null;
-        var context = new UtilityContext(env.Settings, env.Services.Now(), env.Clipboard, env.NowPlaying, env.Services.GitHubTitles(), env.OtherTipVersion);
+        var context = new UtilityContext(env.Settings, env.Services.Now(), env.Clipboard, env.NowPlaying, env.Services.GitHubTitles(), env.OtherTipVersion, env.Context().PrecedingText);
         return UtilityConversions.Convert(new UtilityInput(CompositionText.Read(input.Text, env), reading, input.Direct, context));
     }
 
@@ -314,6 +314,16 @@ internal static class CompositionConversion
         {
             if (clause.Candidates.Contains(text)) continue;
             clause.Candidates.Insert(at++, text);
+            if (utility.RankingKeys.TryGetValue(text, out var key)) clause.UtilityRankingKeys.Add(text, key);
+        }
+        // 2 回以上選んだ書式のうち、いちばん多く選んだ書式の候補を 2 番目に上げる
+        if (env.Services.UtilityFormats is { } formats && clause.UtilityRankingKeys
+                .SelectMany(pair => pair.Value.Select(format => (Text: pair.Key, Count: formats.Get(format.Id).FirstOrDefault(c => c.Word == format.Format).Count)))
+                .DefaultIfEmpty().MaxBy(c => c.Count) is { Count: >= 2, Text: var ranked })
+        {
+            clause.Candidates.Remove(ranked);
+            clause.Candidates.Insert(1, ranked);
+            clause.Leading = 2;
         }
         if (utility.Placement == UtilityPlacement.Prepend)
         {
@@ -881,6 +891,8 @@ internal static class CompositionConversion
         clause.Expanded = false;
         clause.Raw = null;
         clause.Translations.Clear();
+        clause.UtilityRankingKeys.Clear();
+        clause.Leading = 0;
         if (env.Learning.LearnedConversion(clause.Reading) is { } learned) Prefer(clause, learned);
         KeepTypedSymbols(input, [clause], clause.Reading);
     }

@@ -324,10 +324,6 @@ public sealed class Settings
      Description("Keyboard モードで、Space を押さなくても打ったそばから漢字に変換して表示します。")]
     public bool LiveConversion { get; set; } = true;
 
-    [Category("変換"), DisplayName("打ち間違いを直す"),
-     Description("Space・Enter で変換・確定するときに、ローマ字の打ち間違いを直します。読めない子音が残ったとき、隣のキーの押し間違い・入れ替わり・抜けを 1 文字だけ直します (onegaishimsu → お願いします、sumimasne → すみません。よく使う語の読みになるときだけ)。")]
-    public bool CorrectTypos { get; set; } = true;
-
     [Category("変換"), DisplayName("予測変換の候補"),
      Description("打っている途中に、続きの候補を変換ボックスの下に出します (前に確定した語句・ユーザー辞書・選び直した変換の学習・よく使うあいさつ・英単語の続き)。Tab / Shift+Tab で選んで Enter で確定します。確定した語句は %LOCALAPPDATA%\\Meltype\\phrases.txt に暗号化せずに覚え (この PC の外には送りません)、「学習データをリセット」で消えます。")]
     public bool PredictiveCandidates { get; set; } = true;
@@ -529,6 +525,14 @@ public sealed class Settings
     [Category("表示"), DisplayName("打ったキーを表示"), Platforms(Platform.Windows),
      Description("打ったキーを小さく出します。Meltype キーボードでは変換ボックスの文字の下に、Meltype IME では候補の一覧の上に出します。「打ったキー」はローマ字のまま (kyouhagoogle) で、打ち間違いに気づきやすくなります。「漢字変換前」は英語と日本語に分けたあと・漢字にする前の形 (きょうはgoogle) で、ライブ変換の前に何と読んだかを確かめられます。")]
     public TypedKeysStyle TypedKeys { get; set; } = TypedKeysStyle.Keys;
+
+    [Category("表示"), DisplayName("カーソルを滑らかに動かす (スムーズカーソル)"), Platforms(Platform.Windows),
+     Description("Meltype IME で入力や矢印移動をするとき、テキストカーソルが滑らかに追従するアニメーションを表示します。")]
+    public bool SmoothCaret { get; set; }
+
+    /// <summary>スムーズカーソルを有効にするか (Meltype が有効で、Meltype IME を使っているときだけ)。</summary>
+    [JsonIgnore, Browsable(false)]
+    public bool UsesSmoothCaret => Enabled && Mode == InputMode.Tsf && SmoothCaret;
 
     [Category("動作する場面"), DisplayName("日本語キーボードのときだけ動作"), Platforms(Platform.Windows),
      Description("Windows の入力言語が日本語のときだけ動作します。韓国語・英語などでは入力処理と IME の自動制御を停止し、日本語に戻すと再開します。物理キーボードの JIS / US 配列や IME の「あ」「A」の状態は問いません。全プロファイル共通です。")]

@@ -471,6 +471,11 @@ internal sealed class TipServer : IDisposable
                     {
                         reply = $"{{\"generation\":{await _conversion.WaitAsync(since, ConversionWaitMs, _stop.Token).ConfigureAwait(false)}}}";
                     }
+                    else if (request.CaretOnly && request.Caret is { } caretRect)
+                    {
+                        _composition.NotifyCaretRect(request.Thread, caretRect);
+                        reply = "{}";
+                    }
                     else
                     {
                         var started = Environment.TickCount64;
@@ -550,7 +555,23 @@ internal sealed class TipServer : IDisposable
         if (output.State.HandlesInput && connection.Process is { } process) Greet(process);
         if (output.State.ModeIndicatorMs > 0 && request.Thread != 0)
             _composition.ShowMode(output.State.LanguageMode == ImeLanguageMode.Japanese, output.State.ModeIndicatorMs, request.Thread, request.Anchor);
-        return output.ToJson();
+        if (!output.State.HandlesInput || e is ImeEvent.WithCaret { Caret.FocusLeft: true } or ImeEvent.InstanceDestroyed)
+        {
+            if (request.Thread != 0) _composition.ClearCaretThread(request.Thread);
+        }
+        else if (_composition.UsesSmoothCaret && request.Thread != 0)
+        {
+            var focusEntered = e is ImeEvent.WithCaret { Caret.FocusEntered: true };
+            var isInput = e is ImeEvent.KeyPressed or ImeEvent.CommitRequested or ImeEvent.CandidateClicked
+                or ImeEvent.ConversionFinished or ImeEvent.WithCaret { Caret.Moved: true, Caret.FocusEntered: false };
+            // KeyPressed に付く caret は編集前の位置なので、編集後の位置通知と競合して逆戻りしないよう使わない
+            var caret = e is ImeEvent.KeyPressed ? null : request.Caret;
+            _composition.NotifyImeCaret(request.Thread, caret, isInput, focusEntered);
+        }
+        var json = output.ToJson();
+        if (output.State.HandlesInput && _composition.UsesSmoothCaret)
+            json = "{\"smoothCaret\":true," + json[1..];
+        return json;
     }
 
     // ---- 左右の Alt (ImeCapture.AltKeys) ----
@@ -758,12 +779,12 @@ internal sealed class TipServer : IDisposable
 }
 
 /// <summary>
-/// パイプの 1 メッセージ。{"thread":…,"x":…,"y":…,"event":{ImeEvent}} か、変換の結果を待つ {"wait":世代}。
-/// thread は DLL の入力スレッド、x / y は入力モードを表示する画面の位置 (分からなければ省く)。どちらも Meltype.exe の側で使い、本体には渡さない。
+/// パイプの 1 メッセージ。{"thread":…,"x":…,"y":…,"caret":[l,t,r,b],"event":{ImeEvent}}、編集後の位置通知 {"thread":…,"caret":[l,t,r,b]}、
+/// または変換の結果を待つ {"wait":世代}。thread は DLL の入力スレッド、x / y は入力モードを表示する画面の位置、caret はキャレットの四角形。
 /// </summary>
-internal sealed record TipRequest(uint Thread, Point? Anchor, ImeEvent Event, long? WaitSince)
+internal sealed record TipRequest(uint Thread, Point? Anchor, Rectangle? Caret, ImeEvent Event, long? WaitSince, bool CaretOnly = false)
 {
-    public string Type => WaitSince is null ? Event.GetType().Name : "wait";
+    public string Type => WaitSince is not null ? "wait" : CaretOnly ? "caret" : Event.GetType().Name;
 
     /// <summary>読めない・形の違う要求なら null。</summary>
     public static TipRequest? Parse(string json)
@@ -773,20 +794,37 @@ internal sealed record TipRequest(uint Thread, Point? Anchor, ImeEvent Event, lo
             using var document = JsonDocument.Parse(json);
             var root = document.RootElement;
             if (root.ValueKind != JsonValueKind.Object) return null;
-            if (root.TryGetProperty("wait", out var wait)) return wait.TryGetInt64(out var since) ? new(0, null, Waiting, since) : null;
-            if (!root.TryGetProperty("event", out var body) || ImeHost.Parse(body.GetRawText()) is not { } e) return null;
+            if (root.TryGetProperty("wait", out var wait)) return wait.TryGetInt64(out var since) ? new(0, null, null, Waiting, since) : null;
             // 数でない値 (null・文字列) は TryGet… が例外を投げるので、先に種類を見る
             static bool Number(JsonElement root, string name, out JsonElement value) =>
                 root.TryGetProperty(name, out value) && value.ValueKind == JsonValueKind.Number;
             var thread = Number(root, "thread", out var t) && t.TryGetUInt32(out var id) ? id : 0;
+            var caret = ParseCaret(root);
+            if (!root.TryGetProperty("event", out var body))
+                return thread != 0 && caret is not null ? new(thread, null, caret, Waiting, null, CaretOnly: true) : null;
+            if (ImeHost.Parse(body.GetRawText()) is not { } e) return null;
             var anchor = Number(root, "x", out var x) && x.TryGetInt32(out var left) && Number(root, "y", out var y) && y.TryGetInt32(out var bottom)
                 ? new Point(left, bottom) : (Point?)null;
-            return new(thread, anchor, e, null);
+            return new(thread, anchor, caret, e, null);
         }
         catch (JsonException)
         {
             return null;
         }
+    }
+
+    private static Rectangle? ParseCaret(JsonElement root)
+    {
+        if (!root.TryGetProperty("caret", out var arr) || arr.ValueKind != JsonValueKind.Array || arr.GetArrayLength() != 4)
+            return null;
+        if (arr[0].ValueKind != JsonValueKind.Number || !arr[0].TryGetInt32(out var left) ||
+            arr[1].ValueKind != JsonValueKind.Number || !arr[1].TryGetInt32(out var top) ||
+            arr[2].ValueKind != JsonValueKind.Number || !arr[2].TryGetInt32(out var right) ||
+            arr[3].ValueKind != JsonValueKind.Number || !arr[3].TryGetInt32(out var bottom))
+            return null;
+        var height = bottom - top;
+        if (height is <= 0 or >= 200 || right < left) return null;
+        return new Rectangle(left, top, Math.Max(1, right - left), height);
     }
 
     private static readonly ImeEvent Waiting = new ImeEvent.StateRequested();

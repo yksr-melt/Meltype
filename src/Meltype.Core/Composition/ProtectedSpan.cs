@@ -11,6 +11,7 @@ internal enum ProtectedKind
     Email,
     PosixPath,
     WindowsPath,
+    EmojiShortcode,
 }
 
 /// <summary>
@@ -23,13 +24,13 @@ internal readonly record struct ProtectedSpan(int Start, int Length, ProtectedKi
 }
 
 /// <summary>
-/// 未確定の原文から、技術的な文字列 (メンション・URL・メール・パス) の区間を見つける。
+/// 未確定の原文から、技術的な文字列 (メンション・URL・メール・パス・絵文字コード) の区間を見つける。
 /// 「ネットワーク上で妥当か」ではなく「構造の強い開始条件を満たすか」だけを見る (妥当性の検証ではない)。
 /// 初期実装は読みやすい線形スキャン。
 /// </summary>
 internal static class ProtectedSpanScanner
 {
-    /// <summary>この位置から始まる保護区間を、優先順 (URL → WindowsPath → Email → Mention → PosixPath) で返す。</summary>
+    /// <summary>この位置から始まる保護区間を、優先順 (URL → WindowsPath → Email → Mention → PosixPath → EmojiShortcode) で返す。</summary>
     public static IReadOnlyList<ProtectedSpan> Scan(string raw)
     {
         var spans = new List<ProtectedSpan>();
@@ -63,7 +64,7 @@ internal static class ProtectedSpanScanner
         if (TryWindowsPath(raw, start) is { } windowsPath) return windowsPath;
         // メールのローカル部は @ から左へ探す。先に保護したメンション等の文字を再利用しない。
         if (TryEmail(raw, start) is { } email && email.Start >= previousEnd) return email;
-        return TryMention(raw, start) ?? TryPosixPath(raw, start);
+        return TryMention(raw, start) ?? TryPosixPath(raw, start) ?? TryEmojiShortcode(raw, start);
     }
 
     // ---- URL ----
@@ -151,6 +152,22 @@ internal static class ProtectedSpanScanner
     }
 
     private static bool IsMentionChar(char c) => char.IsAsciiLetterOrDigit(c) || c is '_' or '-';
+
+    // ---- Discord・Slack などの :emoji_name: ----
+    private static ProtectedSpan? TryEmojiShortcode(string raw, int start)
+    {
+        if (raw[start] != ':') return null;
+        var end = start + 1;
+        var hasLetterOrDigit = false;
+        while (end < raw.Length && (IsMentionChar(raw[end]) || raw[end] == '+'))
+        {
+            hasLetterOrDigit |= char.IsAsciiLetterOrDigit(raw[end]);
+            end++;
+        }
+        return hasLetterOrDigit && end < raw.Length && raw[end] == ':'
+            ? new ProtectedSpan(start, end - start + 1, ProtectedKind.EmojiShortcode)
+            : null;
+    }
 
     // ---- POSIX パス ----
     private static ProtectedSpan? TryPosixPath(string raw, int start)
