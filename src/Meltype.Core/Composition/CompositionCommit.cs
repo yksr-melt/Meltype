@@ -159,7 +159,7 @@ internal static class CompositionCommit
     /// <summary>予測変換の候補を確定する。日本語なら覚え直して、次からより前に出す。</summary>
     internal static void CommitPrediction(CompositionState state, CompositionInput input, CompositionEnv env, Prediction prediction)
     {
-        if (!prediction.Text.All(c => c < 0x80) && CompositionLifecycle.Learning(state, input, env))
+        if (!prediction.NoLearning && !prediction.Text.All(c => c < 0x80) && CompositionLifecycle.Learning(state, input, env))
             env.Services.Predictor?.Phrases?.Remember(PredictionReading(env, prediction.Text, prediction.Reading), prediction.Text);
         // 最後の文節の続きの候補なら、前の文節 (見えているとおり) とつなげて確定する
         var text = CompositionPresentation.PredictionText(prediction);

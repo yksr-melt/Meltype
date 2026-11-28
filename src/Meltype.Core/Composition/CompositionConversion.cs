@@ -141,7 +141,7 @@ internal static class CompositionConversion
         if (clauses.Count == 0) return null;
         if (alternatives.Count > 1 && WholeSentenceClause(input, env, [clauses, .. OtherAlternatives(input, env, alternatives, preferJapanese)]) is { } whole)
             clauses = [whole];
-        if (utility is not null) clauses = [WithUtility(input, env, clauses, utility, segments[0].Kana)];
+        if (utility is not null) clauses = [WithUtility(input, env, clauses, utility, segments[0].IsEnglish ? segments[0].Raw : segments[0].Kana)];
         // 変換したあとに続けて打っていたら、前に選んでいた候補を同じ読みの文節で使う
         foreach (var clause in clauses)
             if (input.KeptChoices.TryGetValue(clause.Reading, out var kept) && clause.Candidates.Contains(kept)) Prefer(clause, kept);

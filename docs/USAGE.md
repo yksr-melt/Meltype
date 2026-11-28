@@ -182,6 +182,8 @@ kyouhagoogledekensaku  →  今日はgoogleで検索
 | hex(dadada) | `#dadada`・`rgb(218, 218, 218)` など (色変換と色見本。`rgb(59,130,246)`・`hsl(217,91%,60%)` にも対応) |
 | uuid() | 新しい UUID v4・v7・大文字・ハイフンなし (`uuid(v7)` で v7 先頭、`uuid(n)` でハイフンなし先頭、`guid()` も可) |
 | uuid | 通常の英字候補に加えて、新しい UUID 候補も後ろに出す (`guid`・`ゆーゆーあいでぃー` も可) |
+| unix(1795782215) | UNIX 時刻をローカル日時・UTC の ISO 8601 に変換。ミリ秒・マイクロ秒・ナノ秒にも対応 |
+| iso() / unix() / epoch() | 現在時刻の ISO 8601・UNIX 秒・ミリ秒。引数に ISO 8601・日付・now / today / tomorrow / yesterday を指定可能 |
 | ばーじょん | Meltype の版と、使っている入力方式・Zenzai の設定 (不具合の報告に貼ってください) |
 
 <a name="自分の語を足す"></a>

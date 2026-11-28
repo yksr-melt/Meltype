@@ -262,8 +262,9 @@ internal static class CompositionKeys
                 // 関数形式のユーティリティ変換 (hex(dadada)・uuid() など) なら、英語と判定しても変換する
                 if (CompositionConversion.HasRegisteredReading(input.Text, env) ||
                     (!input.Text.KanaInput && input.Text.Mode == DisplayMode.Auto &&
-                     CompositionText.Raw(CompositionText.Read(input.Text, env)) is var rawForUtility &&
-                     (Utility.ColorConversion.Matches(rawForUtility) || Utility.UuidConversion.Matches(rawForUtility))))
+                     CompositionText.Raw(CompositionText.Read(input.Text, env)) is var raw &&
+                     (Utility.ColorConversion.Matches(raw) || Utility.UuidConversion.Matches(raw) || Utility.TimestampConversion.IsName(raw) ||
+                      Utility.TimestampConversion.FromFunction(raw, env.Services.Now()) is not null)))
                 {
                     CompositionConversion.StartConversion(state, input, env, ConversionTrigger.Space);
                 }
