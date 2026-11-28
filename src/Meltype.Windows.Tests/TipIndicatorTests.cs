@@ -21,6 +21,13 @@ internal static class TipIndicatorTests
             Assert.True(request is not null && request.Anchor is null, "位置なし・不正な座標では、常駐側で位置を探す: " + position);
         }
         Assert.True(Tip.TipRequest.Parse("{\"op\":\"indicator\",\"thread\":1}") is null, "古い DLL の要求は読まない");
+
+        // スムーズカーソル用のキャレット矩形 (イベント同送と位置単独通知の両方)
+        var withCaret = Tip.TipRequest.Parse(Request(",\"caret\":[-400,120,-399,140]"));
+        Assert.Equal<Rectangle?>(new Rectangle(-400, 120, 1, 20), withCaret?.Caret, "TSF のキャレット矩形を保持する");
+        var caretOnly = Tip.TipRequest.Parse("{\"impl\":\"abc\",\"thread\":42,\"caret\":[100,200,102,218]}");
+        Assert.True(caretOnly is { CaretOnly: true, Thread: 42 } && caretOnly.Caret == new Rectangle(100, 200, 2, 18), "編集後の位置単独通知を読む");
+        Assert.True(Tip.TipRequest.Parse("{\"impl\":\"abc\",\"thread\":42,\"caret\":[100,200,102,200]}") is null, "高さ 0 の不正な矩形は読まない");
     }
 
     [Test]

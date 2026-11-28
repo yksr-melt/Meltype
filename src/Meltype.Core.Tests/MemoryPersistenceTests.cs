@@ -25,7 +25,7 @@ internal static class MemoryPersistenceTests
             File.WriteAllText(translationsPath, "{\"すし\":{\"sushi\":2}}");
             var languages = new LanguageMemory(languagesPath);
             var conversions = new ConversionHistory(conversionsPath);
-            var translations = new TranslationHistory(translationsPath);
+            var translations = new ChoiceCounts(translationsPath, "英訳の学習データ");
             Assert.Equal(true, languages.Get("sushi"));
             Assert.Equal("鮨", conversions.Get("すし"));
             Assert.Equal(2, translations.Get("すし").Single().Count);
@@ -40,7 +40,7 @@ internal static class MemoryPersistenceTests
             Assert.Equal(false, restoredLanguages.Get("cafe"));
             Assert.Equal("鮨", restoredConversions.Get("すし"));
             Assert.Equal("クラウド", restoredConversions.Get("くらいど"));
-            Assert.Equal(3, new TranslationHistory(translationsPath).Get("すし").Single().Count);
+            Assert.Equal(3, new ChoiceCounts(translationsPath, "英訳の学習データ").Get("すし").Single().Count);
         }
         finally { Directory.Delete(directory, recursive: true); }
     }
@@ -81,7 +81,7 @@ internal static class MemoryPersistenceTests
             var snippets = new SnippetStore(snippetsPath);
             var languages = new LanguageMemory(languagesPath);
             var conversions = new ConversionHistory(conversionsPath);
-            var translations = new TranslationHistory(translationsPath);
+            var translations = new ChoiceCounts(translationsPath, "英訳の学習データ");
             snippets.Set("ty", "ありがとうございます。");
             languages.Remember("cafe", english: false, explicitChoice: true);
             conversions.Remember("くらいど", "クラウド");
@@ -138,10 +138,10 @@ internal static class MemoryPersistenceTests
             Assert.True(reloadedPhrases.StartingWith("きょ").Contains("今日は"), "前に覚えた語句は残す");
 
             // 英訳の記録も、リセットで消して読み込み直しても戻らない
-            var translations = new TranslationHistory(translationsPath);
+            var translations = new ChoiceCounts(translationsPath, "英訳の学習データ");
             translations.Remember("すし", "sushi");
             translations.Clear();
-            Assert.True(new TranslationHistory(translationsPath).Get("すし").Count == 0, "英訳の記録を消す");
+            Assert.True(new ChoiceCounts(translationsPath, "英訳の学習データ").Get("すし").Count == 0, "英訳の記録を消す");
         }
         finally { Directory.Delete(directory, recursive: true); }
     }

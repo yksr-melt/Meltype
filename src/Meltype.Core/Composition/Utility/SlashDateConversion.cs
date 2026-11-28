@@ -21,6 +21,6 @@ internal sealed partial class SlashDateConversion : IUtilityConversion
         var raw = CompositionText.Raw(input.Text);
         if (input.Text.KanaInput || input.Text.Mode != DisplayMode.Auto || SlashDate().Match(raw) is not { Success: true } date) return null;
         var dates = TypedDateConversion.Dates(int.Parse(date.Groups["m"].Value, CultureInfo.InvariantCulture), int.Parse(date.Groups["d"].Value, CultureInfo.InvariantCulture), input.Context.Now);
-        return dates is null ? null : new([raw, .. dates, CompositionText.ToFullWidth(raw)], UtilityPlacement.Replace);
+        return dates is null ? null : new([raw, .. dates.Select(d => d.Text), CompositionText.ToFullWidth(raw)], UtilityPlacement.Replace);
     }
 }

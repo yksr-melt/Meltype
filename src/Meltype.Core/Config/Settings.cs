@@ -526,6 +526,14 @@ public sealed class Settings
      Description("打ったキーを小さく出します。Meltype キーボードでは変換ボックスの文字の下に、Meltype IME では候補の一覧の上に出します。「打ったキー」はローマ字のまま (kyouhagoogle) で、打ち間違いに気づきやすくなります。「漢字変換前」は英語と日本語に分けたあと・漢字にする前の形 (きょうはgoogle) で、ライブ変換の前に何と読んだかを確かめられます。")]
     public TypedKeysStyle TypedKeys { get; set; } = TypedKeysStyle.Keys;
 
+    [Category("表示"), DisplayName("カーソルを滑らかに動かす (スムーズカーソル)"), Platforms(Platform.Windows),
+     Description("Meltype IME で入力や矢印移動をするとき、テキストカーソルが滑らかに追従するアニメーションを表示します。")]
+    public bool SmoothCaret { get; set; }
+
+    /// <summary>スムーズカーソルを有効にするか (Meltype が有効で、Meltype IME を使っているときだけ)。</summary>
+    [JsonIgnore, Browsable(false)]
+    public bool UsesSmoothCaret => Enabled && Mode == InputMode.Tsf && SmoothCaret;
+
     [Category("動作する場面"), DisplayName("日本語キーボードのときだけ動作"), Platforms(Platform.Windows),
      Description("Windows の入力言語が日本語のときだけ動作します。韓国語・英語などでは入力処理と IME の自動制御を停止し、日本語に戻すと再開します。物理キーボードの JIS / US 配列や IME の「あ」「A」の状態は問いません。全プロファイル共通です。")]
     public bool JapaneseKeyboardOnly { get; set; }

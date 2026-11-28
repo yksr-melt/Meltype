@@ -9,7 +9,7 @@ namespace Meltype.Ime;
 
 /// <summary>
 /// データフォルダーの学習データ: 選び直した変換 (conversions.json)・英字 / かなに直した語 (languages.json)・
-/// 予測変換の語句 (phrases.txt)・選んだ英訳 (translations.json)・入力欄ごとの入力モード (fieldmodes.json)。
+/// 予測変換の語句 (phrases.txt)・選んだ英訳 (translations.json)・ユーティリティ変換で選んだ書式 (utility-formats.json)・入力欄ごとの入力モード (fieldmodes.json)。
 /// 入力する Meltype は <see cref="MeltypeRuntime"/> の中に 1 つ持ち、設定アプリは <see cref="OpenStandalone"/> で開く。
 /// どちらも、ほかのプロセスが書き換えたファイルは保存せずに読み直す (<see cref="Config.FileStamp"/>)。一覧を返す前・消す前にも読み直す。
 /// </summary>
@@ -21,7 +21,9 @@ public sealed class LearningData(string dataDirectory)
 
     internal PhraseHistory Phrases { get; } = new(Path.Combine(dataDirectory, "phrases.txt"));
 
-    internal TranslationHistory Translations { get; } = new(Path.Combine(dataDirectory, "translations.json"));
+    internal ChoiceCounts Translations { get; } = new(Path.Combine(dataDirectory, "translations.json"), "英訳の学習データ");
+
+    internal ChoiceCounts UtilityFormats { get; } = new(Path.Combine(dataDirectory, "utility-formats.json"), "ユーティリティ変換の書式の学習データ");
 
     internal FieldModes FieldModes { get; } = new(Path.Combine(dataDirectory, "fieldmodes.json"));
 
@@ -68,7 +70,7 @@ public sealed class LearningData(string dataDirectory)
 
     /// <summary>
     /// sinceUtc より後に覚えたものだけを消す (一時的な入力・間違えて覚えたものを、全体をリセットせずに消す: issue #277)。消した数を返す。
-    /// 選び直した変換・英字 / かなに直した語・予測変換の語句が対象。英訳の記録は覚えた時刻を持たないので、<see cref="Reset"/> で消す。
+    /// 選び直した変換・英字 / かなに直した語・予測変換の語句が対象。英訳とユーティリティ変換の書式の記録は覚えた時刻を持たないので、<see cref="Reset"/> で消す。
     /// </summary>
     public int ForgetSince(DateTime sinceUtc)
     {
@@ -84,6 +86,7 @@ public sealed class LearningData(string dataDirectory)
         LanguageMemory.Clear();
         Phrases.Clear();
         Translations.Clear();
+        UtilityFormats.Clear();
         FieldModes.Clear();
         Diagnostics.Log.Info("学習データをリセットしました。");
     }
@@ -98,6 +101,7 @@ public sealed class LearningData(string dataDirectory)
         LanguageMemory.Refresh();
         Phrases.Refresh();
         Translations.Refresh();
+        UtilityFormats.Refresh();
         FieldModes.Refresh();
     }
 }

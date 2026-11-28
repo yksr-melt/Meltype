@@ -71,6 +71,88 @@ internal static class CommittedClausesTests
         Assert.Equal("きょうは|-|キョウハ", Joined(CompositionCommit.CommittedClauses(Scene(state), env)));
     }
 
+    [Test]
+    public static void WholeKanaOfOneClause_IsLearnedInThatForm()
+    {
+        // #1570: 入力全体を F6・F7 でかなにして確定したら、文節が 1 つなら候補からかなを選んだのと同じく覚える
+        foreach (var (key, kana) in new[] { (VirtualKeys.F6, "いって"), (VirtualKeys.F7, "イッテ") })
+        {
+            var history = new ConversionHistory(null);
+            var (state, env) = Composing("itte", liveConversion: true, new ItteConverter(), new CompositionServices { History = history });
+            Press(state, env, key);
+            Press(state, env, VirtualKeys.Return, '\r');
+            Assert.Equal(kana, history.Get("いって"), kana);
+        }
+    }
+
+    [Test]
+    public static void WholeKanaAfterSpaceConversion_IsLearned()
+    {
+        // Space で変換して見せた文節を F6 にしたときも、ライブ変換の ON・OFF によらず覚える (変換を抜けた LeftConversion の文節)
+        foreach (var live in new[] { true, false })
+        {
+            var history = new ConversionHistory(null);
+            var (state, env) = Composing("itte", liveConversion: live, new ItteConverter(), new CompositionServices { History = history });
+            Press(state, env, VirtualKeys.Space, ' ');
+            Press(state, env, VirtualKeys.F6);
+            Press(state, env, VirtualKeys.Return, '\r');
+            Assert.Equal("いって", history.Get("いって"), live ? "ライブ変換 ON" : "ライブ変換 OFF");
+        }
+    }
+
+    [Test]
+    public static void WholeKanaOfSeveralClauses_IsNotLearned()
+    {
+        // 記憶して言ってくれる を F6 にすると、直したい 言って のほかに 記憶 もかなになる。どの文節を直したのか分からないので覚えない
+        var history = new ConversionHistory(null);
+        var (state, env) = Composing("kiokusiteittekureru", liveConversion: true, new ItteConverter(), new CompositionServices { History = history });
+        Press(state, env, VirtualKeys.F6);
+        Press(state, env, VirtualKeys.Return, '\r');
+        Assert.Equal(0, history.Count);
+    }
+
+    [Test]
+    public static void WholeKanaOfShownKana_IsNotLearned()
+    {
+        // ライブ変換が OFF なら、変換して見せた文節が無い。見えていたかなのまま F6・F7 で確定したのは、漢字を直したのではない
+        foreach (var (typed, key) in new[] { ("itte", VirtualKeys.F6), ("itte", VirtualKeys.F7), ("kan,kan", VirtualKeys.F7) })
+        {
+            var history = new ConversionHistory(null);
+            var (state, env) = Composing(typed, liveConversion: false, new ItteConverter(), new CompositionServices { History = history });
+            Press(state, env, key);
+            Press(state, env, VirtualKeys.Return, '\r');
+            Assert.Equal(0, history.Count, typed);
+        }
+    }
+
+    [Test]
+    public static void WholeKanaOfUnshownOrKanaAnswer_IsNotLearned()
+    {
+        // ライブ変換が ON でも、見えていた文字に漢字が無い (変換エンジンがかなを返した です) なら、漢字を直したのではない。
+        // kan・kantan は かn・かんたn と見えていて、確定するときだけ末尾の n が ん になる。見えていない かん・かんたん の答えからは覚えない
+        foreach (var (typed, key) in new[] { ("desu", VirtualKeys.F7), ("kan", VirtualKeys.F6), ("kantan", VirtualKeys.F6) })
+        {
+            var history = new ConversionHistory(null);
+            var (state, env) = Composing(typed, liveConversion: true, new ItteConverter(), new CompositionServices { History = history });
+            Press(state, env, key);
+            Press(state, env, VirtualKeys.Return, '\r');
+            Assert.Equal(0, history.Count, typed);
+        }
+    }
+
+    private sealed class ItteConverter : TestConverter
+    {
+        public override IReadOnlyList<Engine.ConversionClause>? ConvertClauses(string hiragana, string? before) => hiragana switch
+        {
+            "いって" => [new("いって", "言って")],
+            "です" => [new("です", "です")],
+            "かん" => [new("かん", "缶")],
+            "かんたん" => [new("かんたん", "簡単")],
+            "きおくしていってくれる" => [new("きおくして", "記憶して"), new("いってくれる", "言ってくれる")],
+            _ => null,
+        };
+    }
+
     private static (CompositionState State, CompositionEnv Env) Composing(string typed, bool liveConversion, Engine.IKanjiConverter? converter = null, CompositionServices? services = null)
     {
         var state = new CompositionState();

@@ -30,7 +30,8 @@ internal sealed record UtilityContext(
     Func<string?> Clipboard,
     Func<(string Title, string Artist)?> NowPlaying,
     GitHubIssueTitles? GitHubTitles,
-    Func<string?> OtherTipVersion);
+    Func<string?> OtherTipVersion,
+    string? PrecedingText);
 
 internal enum UtilityPlacement
 {
@@ -65,6 +66,20 @@ internal sealed record UtilityCandidates(IReadOnlyList<string> Candidates, Utili
     /// <summary>選んだら学習してよいか。時刻・設定・外の値で変わらない候補 (漢数字) だけ true にする。</summary>
     public bool Learnable { get; init; }
 
+    /// <summary>
+    /// 候補の文字と、その文字を出す書式。時刻や版番号などの候補の文字は保存せず、選んだ書式だけを覚える。
+    /// 1 つの文字を複数の書式が出すことがある (10 時台の H:mm と HH:mm はどちらも 10:30)。
+    /// </summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<UtilityFormat>> RankingKeys { get; init; } = new Dictionary<string, IReadOnlyList<UtilityFormat>>();
+
+    /// <summary>通常の候補の後ろに足す、書式が一定のユーティリティ変換。id と書式の名前は学習データに残るので変えない。</summary>
+    public static UtilityCandidates Rankable(string id, IReadOnlyList<(string Format, string Text)> candidates) =>
+        new(candidates.Select(c => c.Text).Distinct(StringComparer.Ordinal).ToList(), UtilityPlacement.Append)
+        {
+            RankingKeys = candidates.GroupBy(c => c.Text, StringComparer.Ordinal)
+                .ToDictionary(g => g.Key, g => (IReadOnlyList<UtilityFormat>)g.Select(c => new UtilityFormat(id, c.Format)).ToList(), StringComparer.Ordinal),
+        };
+
     /// <summary>選んでも学習しない候補。</summary>
     public IReadOnlyList<string> NotLearned
     {
@@ -72,6 +87,9 @@ internal sealed record UtilityCandidates(IReadOnlyList<string> Candidates, Utili
         init => _notLearned = value;
     }
 }
+
+/// <summary>ユーティリティ変換の候補の書式。Id はユーティリティ変換、Format はその中の書式の名前。</summary>
+internal readonly record struct UtilityFormat(string Id, string Format);
 
 internal static class UtilityConversions
 {
@@ -95,6 +113,7 @@ internal static class UtilityConversions
         new ClipboardConversion(),
         new UuidConversion(),
         new VersionConversion(),
+        new RelatedTermsConversion(),
         new KanjiPartsConversion(),
     ];
 
@@ -129,6 +148,8 @@ internal static class UtilityConversions
         {
             Reading = replace?.Reading,
             NotLearned = matches.SelectMany(m => m.NotLearned).ToList(),
+            RankingKeys = matches.SelectMany(m => m.RankingKeys).GroupBy(pair => pair.Key, StringComparer.Ordinal)
+                .ToDictionary(g => g.Key, g => (IReadOnlyList<UtilityFormat>)g.SelectMany(pair => pair.Value).Distinct().ToList(), StringComparer.Ordinal),
         };
     }
 
@@ -137,4 +158,15 @@ internal static class UtilityConversions
     /// <summary>全角の数字を半角にして数にする。</summary>
     internal static int Number(string digits) =>
         int.Parse(new string(digits.Select(c => c is >= '０' and <= '９' ? (char)(c - '０' + '0') : c).ToArray()), System.Globalization.CultureInfo.InvariantCulture);
+}
+
+/// <summary>異なる呼び方を通常の候補の後ろに足す。選び続けても、変換エンジンの最初の候補を残す。</summary>
+internal sealed class RelatedTermsConversion : IUtilityConversion
+{
+    public UtilityCandidates? Convert(UtilityInput input) => input.Reading switch
+    {
+        "じゃくしゃだんせい" => UtilityCandidates.Rankable("related-jakushadansei", [("funyaosu", "ふにゃオス")]),
+        "ふにゃおす" => UtilityCandidates.Rankable("related-funyaosu", [("jakushadansei", "弱者男性")]),
+        _ => null,
+    };
 }
