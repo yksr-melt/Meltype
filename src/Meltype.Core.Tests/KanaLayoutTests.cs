@@ -9,7 +9,7 @@ namespace Meltype.Tests;
 /// <summary>JIS かな以外のかな配列と SKY 配列 (issue #1415)。</summary>
 internal static class KanaLayoutTests
 {
-    private const int NonConvert = 0x1D, Convert = 0x1C;
+    private const int NonConvert = 0x1D, Convert = 0x1C, Semicolon = 0xBB;
 
     private static Keyboard Layout(KanaLayout layout) => new() { Kana = true, KanaLayout = layout };
 
@@ -47,6 +47,63 @@ internal static class KanaLayoutTests
         var k = Layout(KanaLayout.Tsuki);
         k.TypeKanaKeys("djj");
         Assert.Equal("おう", k.Showing);
+    }
+
+    [Test]
+    public static void KanaLayout_Tsuki2263_PrefixShift()
+    {
+        // 月配列 2-263: Q = そ、D の次の F = あ、K の次の F も あ (D・K は同じ面)、L = ゛ (か + ゛ = が)
+        var k = Layout(KanaLayout.Tsuki2263);
+        k.TypeKanaKeys("qdfkfsl");
+        Assert.Equal("そああが", k.Showing);
+        // D の次の D = ら、K の次の K = も
+        var j = Layout(KanaLayout.Tsuki2263);
+        j.TypeKanaKeys("ddkk");
+        Assert.Equal("らも", j.Showing);
+    }
+
+    [Test]
+    public static void KanaLayout_Shingetsu_Sequences()
+    {
+        // 新月配列: S = か、S L = が (後から ゛)、A L L = ぱ、K A = あ (☆ の面)、K L Q = ぴょ
+        var k = Layout(KanaLayout.Shingetsu);
+        k.TypeKanaKeys("sl");
+        Assert.Equal("が", k.Showing);
+        var p = Layout(KanaLayout.Shingetsu);
+        p.TypeKanaKeys("allkaklq");
+        Assert.Equal("ぱあぴょ", p.Showing);
+    }
+
+    [Test]
+    public static void KanaLayout_Shingetsu_ShowsKanaBeforeDakuten()
+    {
+        // ゛ を待っている間も、打ったかなを見せる (S = か)。続かないキーならそのかなで決める (S A = かは)
+        var k = Layout(KanaLayout.Shingetsu);
+        k.TypeKanaKeys("s");
+        Assert.Equal("か", k.Showing);
+        k.TypeKanaKeys("a");
+        Assert.Equal("かは", k.Showing);
+        // 仮に出したかなは BackSpace で消せる
+        var b = Layout(KanaLayout.Shingetsu);
+        b.TypeKanaKeys("as");
+        b.Press(VirtualKeys.Back);
+        Assert.Equal("は", b.Showing);
+    }
+
+    [Test]
+    public static void KanaLayout_Shingetsu_NextInput()
+    {
+        // ; K の後が続かなければ き で決め、K (☆) から読み直す (; K A = きあ)。; K B = きゃ
+        var k = new Keyboard(typedKeys: Meltype.Config.TypedKeysStyle.Keys) { Kana = true, KanaLayout = KanaLayout.Shingetsu };
+        k.Press(Semicolon);
+        k.TypeKanaKeys("ka");
+        Assert.Equal("きあ", k.Showing);
+        Assert.Equal(";ka", k.Host.View!.Typed);
+        var y = new Keyboard(typedKeys: Meltype.Config.TypedKeysStyle.Keys) { Kana = true, KanaLayout = KanaLayout.Shingetsu };
+        y.Press(Semicolon);
+        y.TypeKanaKeys("kb");
+        Assert.Equal("きゃ", y.Showing);
+        Assert.Equal(";kb", y.Host.View!.Typed);
     }
 
     [Test]

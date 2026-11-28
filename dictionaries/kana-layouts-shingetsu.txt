@@ -1,0 +1,147 @@
+# 新月配列の表。作成元: tools/make-shingetsu-layout.mjs (手で直さない)
+# 表は https://github.com/nagamine-git/shingetsu-layout (MIT License、Copyright (c) 2026 nagamine-git) の shingetsu-romantable.txt から取った
+# 形式は kana-layouts.txt と同じ: 配列<Tab>打つキー<Tab>かな[<Tab>次の入力]
+Shingetsu	,	、
+Shingetsu	-	ー
+Shingetsu	.	。
+Shingetsu	/	・
+Shingetsu	;	き
+Shingetsu	@	「
+Shingetsu	[	」
+Shingetsu	a	は
+Shingetsu	b	さ
+Shingetsu	c	に
+Shingetsu	e	し
+Shingetsu	f	と
+Shingetsu	g	た
+Shingetsu	h	く
+Shingetsu	i	い
+Shingetsu	j	う
+Shingetsu	l	゛
+Shingetsu	m	る
+Shingetsu	n	っ
+Shingetsu	o	の
+Shingetsu	p	り
+Shingetsu	q	そ
+Shingetsu	r	て
+Shingetsu	s	か
+Shingetsu	t	ょ
+Shingetsu	u	ん
+Shingetsu	v	な
+Shingetsu	w	こ
+Shingetsu	x	け
+Shingetsu	y	つ
+Shingetsu	z	す
+Shingetsu	; k	き	k
+Shingetsu	; l	ぎ
+Shingetsu	; t	きょ
+Shingetsu	a l	ば
+Shingetsu	b l	ざ
+Shingetsu	c k	に	k
+Shingetsu	c t	にょ
+Shingetsu	d ;	ち
+Shingetsu	d d	ら
+Shingetsu	d h	ま
+Shingetsu	d i	み
+Shingetsu	d j	お
+Shingetsu	d k	も
+Shingetsu	d l	わ
+Shingetsu	d m	ろ
+Shingetsu	d n	む
+Shingetsu	d o	や
+Shingetsu	d p	ー
+Shingetsu	d u	え
+Shingetsu	d y	ぬ
+Shingetsu	e k	し	k
+Shingetsu	e l	じ
+Shingetsu	e t	しょ
+Shingetsu	f l	ど
+Shingetsu	g l	だ
+Shingetsu	h l	ぐ
+Shingetsu	i l	ぃ
+Shingetsu	j l	ゔ
+Shingetsu	k a	あ
+Shingetsu	k b	ゃ
+Shingetsu	k c	せ
+Shingetsu	k d	ら
+Shingetsu	k e	ほ
+Shingetsu	k f	れ
+Shingetsu	k g	よ
+Shingetsu	k k	も
+Shingetsu	k q	ゆ
+Shingetsu	k r	ふ
+Shingetsu	k s	を
+Shingetsu	k t	め
+Shingetsu	k v	ゅ
+Shingetsu	k w	ひ
+Shingetsu	k x	へ
+Shingetsu	k z	ね
+Shingetsu	l l	゜
+Shingetsu	p k	り	k
+Shingetsu	p t	りょ
+Shingetsu	q l	ぞ
+Shingetsu	r l	で
+Shingetsu	s l	が
+Shingetsu	w l	ご
+Shingetsu	x l	げ
+Shingetsu	y l	づ
+Shingetsu	z l	ず
+Shingetsu	; k b	きゃ
+Shingetsu	; k v	きゅ
+Shingetsu	a l l	ぱ
+Shingetsu	c k b	にゃ
+Shingetsu	c k v	にゅ
+Shingetsu	d ; l	ぢ
+Shingetsu	d j l	ぉ
+Shingetsu	d l l	ゎ
+Shingetsu	d o l	ゃ
+Shingetsu	d u l	ぇ
+Shingetsu	e k b	しゃ
+Shingetsu	e k v	しゅ
+Shingetsu	j l l	ぅ
+Shingetsu	k a l	ぁ
+Shingetsu	k c l	ぜ
+Shingetsu	k e l	ぼ
+Shingetsu	k g l	ょ
+Shingetsu	k l ,	みゃ
+Shingetsu	k l /	ちゃ
+Shingetsu	k l ;	ちゅ
+Shingetsu	k l a	ぴゅ
+Shingetsu	k l c	じゃ
+Shingetsu	k l d	じゅ
+Shingetsu	k l e	じょ
+Shingetsu	k l f	ぎゅ
+Shingetsu	k l i	みょ
+Shingetsu	k l k	みゅ
+Shingetsu	k l p	ちょ
+Shingetsu	k l q	ぴょ
+Shingetsu	k l r	ぎょ
+Shingetsu	k l s	びゅ
+Shingetsu	k l v	ぎゃ
+Shingetsu	k l w	びょ
+Shingetsu	k l x	びゃ
+Shingetsu	k l z	ぴゃ
+Shingetsu	k q l	ゅ
+Shingetsu	k r l	ぶ
+Shingetsu	k w k	ひ	k
+Shingetsu	k w l	び
+Shingetsu	k w t	ひょ
+Shingetsu	k x l	べ
+Shingetsu	p k b	りゃ
+Shingetsu	p k v	りゅ
+Shingetsu	r l i	でい
+Shingetsu	r l k	で	k
+Shingetsu	r l t	でょ
+Shingetsu	d ; l k	ぢ	k
+Shingetsu	d ; l t	ぢょ
+Shingetsu	k e l l	ぽ
+Shingetsu	k r l l	ぷ
+Shingetsu	k w k b	ひゃ
+Shingetsu	k w k v	ひゅ
+Shingetsu	k w l l	ぴ
+Shingetsu	k x l l	ぺ
+Shingetsu	r l i l	でぃ
+Shingetsu	r l k b	でゃ
+Shingetsu	r l k v	でゅ
+Shingetsu	d ; l k b	ぢゃ
+Shingetsu	d ; l k v	ぢゅ

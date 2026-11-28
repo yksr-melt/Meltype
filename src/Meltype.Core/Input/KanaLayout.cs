@@ -11,7 +11,7 @@ public enum KanaLayout
     /// <summary>JIS かな配列 (キーボードの刻印どおり)。</summary>
     [System.ComponentModel.Description("JIS かな")] Jis,
     /// <summary>月配列 (U9。D・K の前置シフト)。</summary>
-    [System.ComponentModel.Description("月配列")] Tsuki,
+    [System.ComponentModel.Description("月配列 (U9)")] Tsuki,
     /// <summary>花配列 (D・K の前置シフト)。</summary>
     [System.ComponentModel.Description("花配列")] Hana,
     /// <summary>NICOLA (親指シフト。無変換・変換が左右の親指キー)。</summary>
@@ -20,6 +20,10 @@ public enum KanaLayout
     [System.ComponentModel.Description("中指NICOLA")] NakayubiNicola,
     /// <summary>TRON 配列 (親指シフト。無変換・変換が左右の親指キー)。</summary>
     [System.ComponentModel.Description("TRON 配列")] Tron,
+    /// <summary>月配列 2-263 式 (D・K の前置シフト)。</summary>
+    [System.ComponentModel.Description("月配列 (2-263)")] Tsuki2263,
+    /// <summary>新月配列 (月配列 2-263 式をもとにした、☆・★ の前置シフトと ゛ の後置の配列)。</summary>
+    [System.ComponentModel.Description("新月配列")] Shingetsu,
 }
 
 /// <summary>ローマ字入力のキーの配列 (issue #1415)。</summary>
@@ -67,7 +71,7 @@ internal readonly record struct KanaKeyUp(bool ThumbTap, KanaStroke Stroke);
 /// JIS かな以外のかな配列で、打鍵をかなにする (issue #1415)。表は dictionaries/kana-layouts.txt (配列ごとの「打つキー → かな」)。
 /// 打つキーの書き方で、読み方が 2 つある。
 /// <list type="bullet">
-/// <item>並び (d f): 前置シフト。打ったキーの並びが表の並びの途中なら、次のキーを待つ。</item>
+/// <item>並び (d f): 前置シフト。打ったキーの並びが表の並びの途中なら、次のキーを待つ。4 列目は、続かなかったときに読み直す次の入力。</item>
 /// <item>同時 (L+f): 押したままのキーと合わせて読む。押したままの親指キー (L・R) とはいつでも、
 /// ほかのキーとは、押してから <see cref="ChordWindowMs"/> 以内に次のキーを押したとき。押したときはシフトなしの文字にしておき、
 /// 組み合わせになったら打ち直す (文字キーの直後に押した親指キーも同時打鍵)。</item>
@@ -82,12 +86,13 @@ internal sealed class KanaLayoutEngine(KanaLayout layout)
 
     public const int LeftThumb = 0x1D, RightThumb = 0x1C;
 
-    private static readonly Lazy<Dictionary<KanaLayout, Table>> Tables = new(() => Table.Load(DictionarySource.ReadEmbedded("kana-layouts.txt")));
+    private static readonly Lazy<Dictionary<KanaLayout, Table>> Tables = new(() =>
+        Table.Load(DictionarySource.ReadEmbedded("kana-layouts.txt") + "\n" + DictionarySource.ReadEmbedded("kana-layouts-shingetsu.txt")));
 
     /// <summary>1 つの配列の表。並びは「仮想キーを , でつないだもの」、同時は「押したままのキー (小さい順に +) → 文字キー」。</summary>
     private sealed class Table
     {
-        public readonly Dictionary<string, string> Sequences = new(StringComparer.Ordinal);
+        public readonly Dictionary<string, (string Kana, string Next)> Sequences = new(StringComparer.Ordinal);
         public readonly HashSet<string> Prefixes = new(StringComparer.Ordinal);
         public readonly Dictionary<(string Shifts, int Key), string> Chords = [];
 
@@ -106,12 +111,14 @@ internal sealed class KanaLayoutEngine(KanaLayout layout)
                     table.Chords[(Id(keys[..^1]), keys[^1])] = cells[2];
                     continue;
                 }
-                var sequence = string.Join(',', cells[1].Split(' ').Select(KeyOf));
-                table.Sequences[sequence] = cells[2];
+                var sequence = Join(cells[1]);
+                table.Sequences[sequence] = (cells[2], cells.Length > 3 ? Join(cells[3]) : "");
                 for (var end = sequence.IndexOf(','); end > 0; end = sequence.IndexOf(',', end + 1)) table.Prefixes.Add(sequence[..end]);
             }
             return tables;
         }
+
+        private static string Join(string keys) => string.Join(',', keys.Split(' ').Select(KeyOf));
 
         private static int KeyOf(string name) => name switch
         {
@@ -143,16 +150,19 @@ internal sealed class KanaLayoutEngine(KanaLayout layout)
     private readonly List<Held> _held = [];
     // 中指の打ち直しで、シフトキー自身の文字も消せるのは、その文字が直前の出力のときだけ。
     private Held? _lastOutput;
-    // 前置シフトの並びの打ちかけ (仮想キーを , でつないだもの)
+    // 並びの打ちかけ (仮想キーを , でつないだもの)・その並びで仮に入れたかなの文字数・仮に入れた並びの次の入力
     private string _sequence = "";
+    private string _sequenceKeys = "";
+    private int _shown;
+    private string _next = "";
 
     public KanaLayout Layout => layout;
 
     /// <summary>親指キーを押したままか (離すまで、離したことを受け取る必要がある)。</summary>
     public bool ThumbHeld => _held.Any(key => IsThumb(key.Vk));
 
-    /// <summary>前置シフトのキーを押して、次のキーを待っているか。</summary>
-    public bool HasPrefix => _sequence.Length > 0;
+    /// <summary>前置シフトのキーを押して、何も入れずに次のキーを待っているか (かなを仮に入れているときは含めない。BackSpace でそのかなを消せるように)。</summary>
+    public bool HasPrefix => _sequence.Length > 0 && _shown == 0;
 
     private static bool IsThumb(int vk) => vk is LeftThumb or RightThumb;
 
@@ -167,6 +177,9 @@ internal sealed class KanaLayoutEngine(KanaLayout layout)
     public void Reset()
     {
         _sequence = "";
+        _sequenceKeys = "";
+        _shown = 0;
+        _next = "";
         _lastOutput = null;
         _held.RemoveAll(key => !IsThumb(key.Vk));
     }
@@ -182,7 +195,7 @@ internal sealed class KanaLayoutEngine(KanaLayout layout)
             if (IsThumb(vk) || repeated.Shifting || layout == KanaLayout.NakayubiNicola && vk is 0x44 or 0x4B) return KanaStroke.Consumed;
             foreach (var key in _held) key.OnRelease = null;
             var thumb = _held.FirstOrDefault(key => IsThumb(key.Vk));
-            var kana = thumb is not null ? _table.Chords.GetValueOrDefault(($"{thumb.Vk}", vk)) : _table.Sequences.GetValueOrDefault($"{vk}");
+            var kana = thumb is not null ? _table.Chords.GetValueOrDefault(($"{thumb.Vk}", vk)) : _table.Sequences.GetValueOrDefault($"{vk}").Kana;
             repeated.Time = time;
             repeated.Emitted = kana?.Length ?? 0;
             repeated.Target = thumb is not null;
@@ -192,19 +205,36 @@ internal sealed class KanaLayoutEngine(KanaLayout layout)
         return _table.Chords.Count > 0 ? Chord(vk, time) : Sequence(vk);
     }
 
+    /// <summary>
+    /// 並びの配列。打った並びが表の並びで、もっと長い並びの始まりでもあるとき (新月配列の か → が) は、そのかなを仮に入れておき、
+    /// 長い並びになったら打ち直す。続かないキーなら、仮に入れたかなで決め、表の「次の入力」から読み直す。
+    /// </summary>
     private KanaStroke Sequence(int vk)
     {
+        var table = _table!;
+        bool Known(string sequence) => table.Prefixes.Contains(sequence) || table.Sequences.ContainsKey(sequence);
+        var waiting = _sequence.Length > 0 && _shown == 0;
         var sequence = _sequence.Length == 0 ? $"{vk}" : $"{_sequence},{vk}";
-        _sequence = "";
-        if (_table!.Prefixes.Contains(sequence))
+        var key = KeyLabel(vk);
+        if (Known(sequence)) return Advance(sequence, _sequenceKeys + key, _shown);
+        var restart = _shown > 0 ? _next : "";
+        (_sequence, _sequenceKeys, _shown, _next) = ("", "", 0, "");
+        sequence = restart.Length == 0 ? $"{vk}" : $"{restart},{vk}";
+        if (Known(sequence)) return Advance(sequence, key, 0);
+        // 前置シフトの次の、表に無いキーは何も入れない。前置シフトでもないキーはふつうのキー
+        return waiting ? KanaStroke.Consumed : KanaStroke.NotHandled;
+    }
+
+    private KanaStroke Advance(string sequence, string keys, int remove)
+    {
+        if (!_table!.Sequences.TryGetValue(sequence, out var rule))
         {
-            _sequence = sequence;
+            (_sequence, _sequenceKeys) = (sequence, keys);
             return KanaStroke.Consumed;
         }
-        if (_table.Sequences.TryGetValue(sequence, out var kana))
-            return new KanaStroke(true, 0, kana, string.Concat(sequence.Split(',').Select(key => KeyLabel(int.Parse(key, System.Globalization.CultureInfo.InvariantCulture)))));
-        // 前置シフトの次の、表に無いキーは何も入れない。前置シフトでもないキーはふつうのキー
-        return sequence.Contains(',') ? KanaStroke.Consumed : KanaStroke.NotHandled;
+        if (_table.Prefixes.Contains(sequence)) (_sequence, _sequenceKeys, _shown, _next) = (sequence, keys, rule.Kana.Length, rule.Next);
+        else (_sequence, _sequenceKeys, _shown, _next) = (rule.Next, "", 0, "");
+        return new KanaStroke(true, remove, rule.Kana, keys);
     }
 
     private KanaStroke Chord(int vk, long time)
@@ -237,7 +267,7 @@ internal sealed class KanaLayoutEngine(KanaLayout layout)
             _held.Add(_lastOutput);
             return thumbKana is not null ? new KanaStroke(true, 0, thumbKana, KeyLabel(held.Vk) + KeyLabel(vk)) : KanaStroke.Consumed;
         }
-        var plain = table.Sequences.GetValueOrDefault($"{vk}");
+        var plain = table.Sequences.TryGetValue($"{vk}", out var single) ? single.Kana : null;
         // 中指NICOLA: D・K を押したままの文字キーは、ふつうの文字にしておき、先に離したら打ち直す
         if (layout == KanaLayout.NakayubiNicola)
         {

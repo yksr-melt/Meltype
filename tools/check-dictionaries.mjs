@@ -21,6 +21,19 @@ const mozcPos = new Set(['品詞なし', '名詞', '短縮よみ', 'サジェス
 // Core (WordList.ParseWords・ProperNouns.AddText) の語の区切り。全角空白は区切りでない (含むトークンは語にならず捨てられる)
 const coreTokens = line => line.split(/[ \t\r,]+/).filter(Boolean);
 
+// 配列<Tab>打つキー<Tab>かな[<Tab>次の入力] (かな配列の表)。打つキーは刻印の 1 文字・L・R を空白 (並び) か + (同時) でつなぐ
+const kanaKey = String.raw`[0-9\-^\\a-z@[;:\],./_LR]`;
+const kanaKeys = new RegExp(`^${kanaKey}(?:[ +]${kanaKey})*$`);
+const kanaLayouts = {
+  format: tabbed(3, 4, ([layout, keys, kana, next]) => [
+    /^[A-Z][A-Za-z0-9]+$/.test(layout) ? null : `配列「${layout}」が KanaLayout の名前でない`,
+    kanaKeys.test(keys) ? null : `打つキー「${keys}」の書き方が違う`,
+    kana.length > 0 ? null : 'かなが空',
+    next === undefined || kanaKeys.test(next) ? null : `次の入力「${next}」の書き方が違う`,
+  ]),
+  keysOf: line => { const [layout, keys] = line.split('\t'); return [[`${layout}\t${keys}`, line]]; },
+};
+
 /**
  * 辞書ごとの扱い。各辞書には既定 (checkDictionary) と違う項目だけを書く。
  *   format    … # 以降を除いた行を渡すと、エラーの並び (null は問題なし) を返す。必須
@@ -102,15 +115,8 @@ const dictionaries = {
       ];
     },
   },
-  // 配列<Tab>打つキー<Tab>かな (かな配列の表)。打つキーは刻印の 1 文字・L・R を空白 (並び) か + (同時) でつなぐ
-  'kana-layouts.txt': {
-    format: tabbed(3, 3, ([layout, keys, kana]) => [
-      /^[A-Z][A-Za-z]+$/.test(layout) ? null : `配列「${layout}」が KanaLayout の名前でない`,
-      /^([1-90\-^\\a-z@[;:\],./_LR])([ +][1-90\-^\\a-z@[;:\],./_LR])*$/.test(keys) ? null : `打つキー「${keys}」の書き方が違う`,
-      kana.length > 0 ? null : 'かなが空',
-    ]),
-    keysOf: line => { const [layout, keys] = line.split('\t'); return [[`${layout}\t${keys}`, line]]; },
-  },
+  'kana-layouts.txt': kanaLayouts,
+  'kana-layouts-shingetsu.txt': kanaLayouts,
   // 読み<Tab>語句[<Tab>品詞]。Mozc のヘルパーは知らない品詞名を名詞にするので、品詞名は Mozc の user_pos.def の名前に限る
   'phrases.txt': {
     format: tabbed(2, 3, ([reading, , pos]) => [
