@@ -21,7 +21,10 @@ internal sealed partial class ColorConversion : IFunctionConversion
     [GeneratedRegex(@"^(?<h>-?\d+(?:\.\d+)?)\s*(?:,\s*|\s+)(?<s>\d+(?:\.\d+)?)%\s*(?:,\s*|\s+)(?<l>\d+(?:\.\d+)?)%(?:\s*(?:,|/)\s*(?<a>\d+(?:\.\d+)?%?|\.\d+%?))?$")]
     private static partial Regex HslArgsPattern();
 
-    public IReadOnlyList<FunctionCandidate> Call(string name, string args, DateTime now)
+    public Func<DateTime, IReadOnlyList<FunctionCandidate>>? Parse(string name, string args) =>
+        Candidates(name, args) is { Count: > 0 } candidates ? _ => candidates : null;
+
+    private static List<FunctionCandidate> Candidates(string name, string args)
     {
         switch (name)
         {

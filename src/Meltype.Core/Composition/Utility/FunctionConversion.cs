@@ -10,8 +10,11 @@ namespace Meltype.Composition.Utility;
 /// </summary>
 internal interface IFunctionConversion
 {
-    /// <summary>name は小文字、args は前後の空白を除いたもの。この変換の名前でないか、引数を解釈できなければ空。</summary>
-    IReadOnlyList<FunctionCandidate> Call(string name, string args, DateTime now);
+    /// <summary>
+    /// name は小文字、args は前後の空白を除いたもの。この変換の名前で引数を解釈できれば、変換を始めた時刻から空でない候補を作る関数。そうでなければ null。
+    /// Space・Tab で変換を始めるかは解釈だけで決めるので、候補 (uuid() の UUID など) は返した関数の中で作る。
+    /// </summary>
+    Func<DateTime, IReadOnlyList<FunctionCandidate>>? Parse(string name, string args);
 }
 
 /// <summary>関数記法の変換の候補。Color は色見本 (#rrggbbaa)。</summary>
@@ -24,8 +27,8 @@ internal sealed class FunctionConversion : IUtilityConversion
     {
         if (input.Text.KanaInput || input.Text.Mode != DisplayMode.Auto) return null;
         var raw = CompositionText.Raw(input.Text);
-        var candidates = UtilityConversions.Call(raw, input.Context.Now).ToList();
-        if (candidates.Count == 0) return null;
+        if (UtilityConversions.Parse(raw) is not { } candidatesAt) return null;
+        var candidates = candidatesAt(input.Context.Now).ToList();
         if (!candidates.Any(c => c.Text == raw)) candidates.Add(new(raw));
         return new(candidates.Select(c => c.Text).ToList(), UtilityPlacement.Replace)
         {

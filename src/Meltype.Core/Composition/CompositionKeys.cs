@@ -567,7 +567,7 @@ internal static class CompositionKeys
     /// </summary>
     private static bool StartsConversionDespiteEnglish(CompositionTextState text, CompositionEnv env) =>
         CompositionConversion.HasRegisteredReading(text, env) ||
-        (!text.KanaInput && text.Mode == DisplayMode.Auto && Utility.UtilityConversions.Call(CompositionText.Raw(CompositionText.Read(text, env)), env.Services.Now()).Count > 0);
+        (!text.KanaInput && text.Mode == DisplayMode.Auto && Utility.UtilityConversions.Parse(CompositionText.Raw(CompositionText.Read(text, env))) is not null);
 
     /// <summary>Esc でひらがなに戻した読みを直している (← → でカーソルを動かせる)。</summary>
     private static bool EditsReading(CompositionScene.WithInput scene) =>

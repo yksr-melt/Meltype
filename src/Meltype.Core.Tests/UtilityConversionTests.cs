@@ -46,7 +46,7 @@ internal static class UtilityConversionTests
     }
 
     private static IEnumerable<string> FunctionCandidates(string raw) =>
-        UtilityConversions.Call(raw, Tuesday).Select(c => c.Text);
+        UtilityConversions.Parse(raw)?.Invoke(Tuesday).Select(c => c.Text) ?? [];
 
     [Test]
     public static void Today_IsOfferedOnlyForTheWholeInput()

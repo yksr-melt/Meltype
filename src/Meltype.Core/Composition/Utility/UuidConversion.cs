@@ -21,11 +21,11 @@ internal sealed class UuidConversion : IUtilityConversion, IFunctionConversion
         return null;
     }
 
-    public IReadOnlyList<FunctionCandidate> Call(string name, string args, DateTime now)
+    public Func<DateTime, IReadOnlyList<FunctionCandidate>>? Parse(string name, string args)
     {
-        if (name is not ("uuid" or "guid")) return [];
+        if (name is not ("uuid" or "guid")) return null;
         var mode = ToHalfWidthAscii(args).Trim().ToLowerInvariant();
-        return mode is "" or "v4" or "v7" or "n" ? GenerateAll(now, mode).Select(c => new FunctionCandidate(c)).ToList() : [];
+        return mode is "" or "v4" or "v7" or "n" ? now => GenerateAll(now, mode).Select(c => new FunctionCandidate(c)).ToList() : null;
     }
 
     private static List<string> GenerateAll(DateTime now, string mode)
