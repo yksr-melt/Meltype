@@ -130,6 +130,10 @@ public abstract record ImeEvent
     /// <summary>前の応答の一覧 (view.candidates) の Index 番目をクリックした。予測変換の候補なら確定する。</summary>
     public sealed record CandidateClicked(int Index) : ImeEvent
     {
+        /// <summary>候補を選び、その文節までを確定する操作か。省略時は変換の候補を選ぶだけ。</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public bool CommitThroughClause { get; init; }
+
         internal override T Match<T>(Cases<T> cases) => cases.CandidateClicked(this);
     }
 

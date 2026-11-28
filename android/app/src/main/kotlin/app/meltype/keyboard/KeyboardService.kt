@@ -322,8 +322,6 @@ class KeyboardService : InputMethodService(), KeyListener {
         createdAtNanos = System.nanoTime()
         active = WeakReference(this)
         Settings(this).registerChangeListener(settingsListener)
-        // 候補のタップでその文節までを確定する (Core が config.json を読み直すので、次に打つキーから効く)。
-        Settings(this).usePartialCommit()
         // 辞書を写すので時間がかかる。開き終わるまで、Core の変換は待つ。
         val mozc = mozc(this)
         worker.execute { mozc.value }
@@ -400,12 +398,7 @@ class KeyboardService : InputMethodService(), KeyListener {
         val bar = CandidateBarView(this).also { it.onPick = { index ->
             val instance = core
             val choice = coreInput.choices.getOrNull(index)
-            // The Core decides what the tap does (a prediction commits; a conversion candidate is chosen for its clause).
-            if (instance != null && choice != null && coreSend(instance, ImeJson.candidateClicked(choice.nativeIndex, fieldFacts()))) {
-                // 変換の候補なら、続けてその文節までを確定する (Shift + Enter。Core の PartialCommit)。残りの文節は未確定のまま。
-                // 最後の文節の候補なら、全部を確定する。予測候補のタップは Core が確定済みなので、変換中ではない。
-                if (coreInput.view?.converting == true) coreSend(instance, ImeJson.virtualKey(ImeJson.VK_RETURN, fieldFacts(), shift = true))
-            }
+            if (instance != null && choice != null) coreSend(instance, ImeJson.candidateClicked(choice.nativeIndex, fieldFacts()))
         } }
         val keys = KeyboardView(this).also { it.listener = this }
         // 絵文字の画面は、開いているあいだ、候補バーとキーの代わりに同じ場所に出る（高さは同じ）。

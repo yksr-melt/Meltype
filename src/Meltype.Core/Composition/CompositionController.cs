@@ -73,22 +73,19 @@ internal static class CompositionController
         return CompositionRefresh.Refresh(state, env) ? Result(state, env, consumed: true) : null;
     }
 
-    /// <summary>変換中の文節の候補を番号で選ぶ (Mac の候補ウィンドウをクリックしたときなど)。</summary>
-    public static SessionResult SelectCandidate(CompositionState state, CompositionEnv env, int index)
+    /// <summary>変換中の文節の候補を番号で選ぶ。確定の操作なら、選んだ文節までを同じ出来事で確定する。</summary>
+    public static SessionResult SelectCandidate(CompositionState state, CompositionEnv env, int index, bool commitThroughClause = false)
     {
         CompositionOutput.Begin(state.Out);
-        SelectCandidateAt(state, env, index);
+        if (state.Scene is CompositionScene.Converting converting &&
+            converting.Conversion.SelectedClause is var clause && index >= 0 && index < clause.Candidates.Count)
+        {
+            clause.Index = index;
+            clause.Changed = true;
+            if (commitThroughClause) CompositionCommit.ThroughSelectedClause(state, converting, env.WaitingForInput());
+            CompositionPresentation.UpdateView(state, env);
+        }
         return Result(state, env, consumed: true);
-    }
-
-    private static void SelectCandidateAt(CompositionState state, CompositionEnv env, int index)
-    {
-        if (state.Scene is not CompositionScene.Converting converting) return;
-        var clause = converting.Conversion.SelectedClause;
-        if (index < 0 || index >= clause.Candidates.Count) return;
-        clause.Index = index;
-        clause.Changed = true;
-        CompositionPresentation.UpdateView(state, env);
     }
 
     /// <summary>予測変換の候補を番号で選んで確定する (Meltype IME の候補の一覧をクリックしたとき)。</summary>

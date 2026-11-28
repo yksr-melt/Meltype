@@ -11,6 +11,38 @@ namespace Meltype.Composition;
 internal static class CompositionCommit
 {
 
+    /// <summary>
+    /// 選んでいる文節までを確定し、残りの文節は読み (英語の文節は打った英字) を
+    /// 未確定の入力として残す (残りは選び直した候補を忘れ、変換前に戻る)。issue #493
+    /// </summary>
+    internal static void ThroughSelectedClause(CompositionState state, CompositionScene.Converting scene, CompositionEnv env)
+    {
+        var conversion = scene.Conversion;
+        var all = conversion.Clauses;
+        if (conversion.Selected == all.Count - 1)
+        {
+            Commit(state, scene, env);
+            return;
+        }
+        var done = all.Take(conversion.Selected + 1).ToList();
+        var rest = all.Skip(conversion.Selected + 1).ToList();
+        conversion.Clauses = done;
+        LearnClauses(state, scene.Input, done, env);
+        CommitText(state, env, CompositionPresentation.Composed(done), done.All(c => c.IsEnglish), "", chosen: true);
+        var input = CompositionLifecycle.Begin(state, env, scene.Input.Private, scene.Input.Reconversion);
+        foreach (var clause in rest)
+        {
+            if (clause.IsEnglish)
+            {
+                input.Text = (clause.Raw ?? clause.Reading).Aggregate(input.Text, CompositionText.Append);
+            }
+            else
+            {
+                input.Text = CompositionText.AppendReading(input.Text, clause.Reading);
+            }
+        }
+    }
+
     internal static void CommitIfAny(CompositionState state, CompositionEnv env, bool preserveText = false)
     {
         if (state.Scene is CompositionScene.WithInput scene) Commit(state, scene, env, preserveText: preserveText);
@@ -161,7 +193,7 @@ internal static class CompositionCommit
     }
 
     /// <summary>確定した文節を学習する。設定「ユーザー学習を使う」が OFF なら覚えない (issue #277)</summary>
-    internal static void LearnClauses(CompositionState state, CompositionInput input, IReadOnlyList<Clause> clauses, CompositionEnv env)
+    private static void LearnClauses(CompositionState state, CompositionInput input, IReadOnlyList<Clause> clauses, CompositionEnv env)
     {
         if (CompositionLifecycle.Learning(state, input, env)) env.Learning.Learn(clauses, CompositionText.LearningContext(env));
     }
