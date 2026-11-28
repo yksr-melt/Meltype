@@ -164,6 +164,9 @@ internal static class ChemicalCompoundDictionaryTests
             Assert.True(chemicals.Lookup("あくりるさん", []).Contains("CH₂=CHCOOH (MW=72.063)"), "結合式を示性式のまま表示して質量を計算する");
             Assert.True(chemicals.Lookup("えんかあんもにうむ", []).Contains("NH₄Cl (FW=53.489)"), "アンモニウム塩を式量として計算する");
             Assert.True(chemicals.Lookup("りゅうさんどう2ごすいわぶつ", []).Contains("CuSO₄·5H₂O (FW=249.677)"), "一覧の水和数を正しい大きさで表示して式量を計算する");
+            Assert.True(chemicals.Lookup("さくさんめちる", []).Contains("CH₃COOCH₃ (MW=74.079)"), "辞書にない酢酸メチルをカルボン酸とアルキル基から作る");
+            Assert.True(chemicals.Lookup("ぎさんえちる", []).Contains("HCOOCH₂CH₃ (MW=74.079)"), "辞書にないギ酸エチルの結合順を示す");
+            Assert.True(chemicals.Lookup("さりちるさん2なとりうむ", []).Contains("C₆H₄(ONa)COONa (FW=182.086)"), "サリチル酸二ナトリウムを候補に出す");
 
             var polymer = chemicals.Lookup("きちん", []);
             Assert.True(polymer.Contains("(C₈H₁₃NO₅)n") && !polymer.Any(candidate => candidate.Contains("MW=", StringComparison.Ordinal) || candidate.Contains("FW=", StringComparison.Ordinal)), "重合度が未指定の式は質量を決めつけない");

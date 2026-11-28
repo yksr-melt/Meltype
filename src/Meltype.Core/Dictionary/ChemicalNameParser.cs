@@ -87,7 +87,7 @@ internal static class ChemicalNameParser
             hydrateCount = waters;
         }
 
-        var parsed = FindNamedFormula(name) ?? TryParseEther(name) ?? TryParseJapaneseStoichiometry(name) ?? TryParseEnglishStoichiometry(name) ?? TryParseIonic(name) ?? TryParseOrganic(name);
+        var parsed = FindNamedFormula(name) ?? TryParseEther(name) ?? TryParseJapaneseStoichiometry(name) ?? TryParseEnglishStoichiometry(name) ?? TryParseIonic(name) ?? TryParseEster(name) ?? TryParseOrganic(name);
         if (parsed is null) return [];
         if (hydrateCount == 0) return parsed;
 
@@ -313,6 +313,39 @@ internal static class ChemicalNameParser
             return [Compound(FormulaFromCounts(counts), molecular: true, PreferredOrganicFormula(name, parent, before, suffix))];
         }
         return null;
+    }
+
+    private static ChemicalCompound[]? TryParseEster(string name)
+    {
+        foreach (var alkyl in AlkylGroups.OrderByDescending(group => group.JapaneseAlias.Length))
+        {
+            if (!name.EndsWith(alkyl.JapaneseAlias, StringComparison.Ordinal)) continue;
+            var acidName = name[..^alkyl.JapaneseAlias.Length];
+            if (TryEster(acidName, alkyl) is { } ester) return [ester];
+        }
+        foreach (var alkyl in AlkylGroups.OrderByDescending(group => group.Alias.Length))
+        {
+            if (!name.EndsWith(alkyl.Alias, StringComparison.Ordinal)) continue;
+            var acidName = name[..^alkyl.Alias.Length];
+            if (TryEster(acidName, alkyl) is { } ester) return [ester];
+        }
+        return null;
+    }
+
+    private static ChemicalCompound? TryEster(string acidName, AlkylGroup alkyl)
+    {
+        var acid = FindNamedFormula(acidName)?.FirstOrDefault() ?? TryParseOrganic(acidName)?.FirstOrDefault();
+        if (acid is null || !ChemicalFormula.TryParse(acid.Formula, out var acidCounts) || acidCounts.GetValueOrDefault("O") != 2 ||
+            acidCounts.GetValueOrDefault("C") == 0 || acidCounts.GetValueOrDefault("H") == 0 || !ChemicalFormula.TryParse(alkyl.Formula, out var alkylCounts))
+            return null;
+
+        var counts = new Dictionary<string, int>(acidCounts, StringComparer.Ordinal);
+        counts["H"]--;
+        foreach (var (element, count) in alkylCounts) counts[element] = counts.GetValueOrDefault(element) + count;
+        var preferred = acid.PreferredFormula is { } acidFormula && acidFormula.EndsWith("OH", StringComparison.Ordinal)
+            ? acidFormula[..^2] + "O" + alkyl.Formula
+            : null;
+        return Compound(FormulaFromCounts(counts), molecular: true, preferred);
     }
 
     private static string? PreferredOrganicFormula(string name, ParentName parent, string before, OrganicSuffix suffix)
