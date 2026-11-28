@@ -397,11 +397,10 @@ internal static class CompositionTests
             _now += 30;
             // 打つ前に入力欄にフォーカスが入る
             if (_stale) Send(new ImeEvent.CaretMoved(new ImeCaret { Moved = true, PassedKey = 0, FocusEntered = true }));
-            if (vk is VirtualKeys.LControl or VirtualKeys.RControl) _ctrlHeld = !up;
-            if (vk is VirtualKeys.LShift or VirtualKeys.RShift) _shiftHeld = !up;
             var shift = _shiftHeld || Host.PhysicalShift;
             if (up)
             {
+                HoldModifier(vk, false);
                 _held.Remove(vk);
                 if (_releaseFollows.Remove(vk)) Send(new ImeEvent.KeyReleased(new ImeKeyRelease(vk)));
                 return false;
@@ -412,13 +411,26 @@ internal static class CompositionTests
                 Host.Apply(new SessionResult(false, [], null), vk, shift, _ctrlHeld, captured: false);
                 // アプリに通したキーはキャレットを動かすかもしれない
                 if (!VirtualKeys.IsModifier(vk)) Send(new ImeEvent.CaretMoved(new ImeCaret { Moved = true, PassedKey = vk, Ctrl = _ctrlHeld }));
+                HoldModifier(vk, true);
                 return false;
             }
             var releaseFollows = _state.Capture.KeyReleases && !VirtualKeys.IsModifier(vk);
             if (releaseFollows) _releaseFollows.Add(vk);
             var ch = !_ctrlHeld && Host.CharFromKey(vk, shift) is { } c && !char.IsControl(c) ? c : 0;
-            return Send(new ImeEvent.KeyPressed(new ImeKey { Vk = vk, Ch = ch, Shift = shift, Ctrl = _ctrlHeld, Repeat = repeat, ReleaseFollows = releaseFollows }),
+            var consumed = Send(new ImeEvent.KeyPressed(new ImeKey { Vk = vk, Ch = ch, Shift = shift, Ctrl = _ctrlHeld, Repeat = repeat, ReleaseFollows = releaseFollows }),
                 vk: vk, shift: shift).Consumed;
+            if (!consumed) HoldModifier(vk, true);
+            return consumed;
+        }
+
+        /// <summary>
+        /// 押している修飾キー。KeyboardFront は OS のキーの状態 (GetAsyncKeyState) で見るので、アプリに届いた押下だけが押していることになる。
+        /// フックが止めた (本体が使った) 押下は OS に届かず、続くキーには Shift・Ctrl が付かない。押下そのものは、まだ押していない状態で送る。
+        /// </summary>
+        private void HoldModifier(int vk, bool down)
+        {
+            if (vk is VirtualKeys.LControl or VirtualKeys.RControl) _ctrlHeld = down;
+            if (vk is VirtualKeys.LShift or VirtualKeys.RShift) _shiftHeld = down;
         }
 
         /// <summary>候補の一覧 (フロントに渡した一覧) の index 番目をクリックする。</summary>
@@ -1551,7 +1563,7 @@ internal static class CompositionTests
         CtrlPress(k, 'U');
         Assert.Equal("あいうえお", k.Showing);
         Assert.Equal(0, k.Host.Output.Count);
-        Assert.True(!k.Host.Events.Any(e => e == "down:A2"), "Ctrl はアプリに送らない");
+        Assert.Equal("down:A2|down:A2|down:A2|down:A2|down:A2", string.Join("|", k.Host.Events), "アプリには Ctrl だけを通す");
     }
 
     [Test]
@@ -1563,7 +1575,7 @@ internal static class CompositionTests
         CtrlPress(k, 'H');
         Assert.Equal("あいうえ", k.Showing);
         Assert.Equal(0, k.Host.Output.Count);
-        Assert.True(!k.Host.Events.Any(e => e.EndsWith(":A2", StringComparison.Ordinal)), "Ctrl を送らない: " + string.Join(" ", k.Host.Events));
+        Assert.True(!k.Host.Events.Contains("down:48"), "H を通さない: " + string.Join(" ", k.Host.Events));
 
         k.Press(VirtualKeys.Space);
         CtrlPress(k, 'H');
@@ -1580,7 +1592,7 @@ internal static class CompositionTests
     [Test]
     public static void CtrlHeld_RepeatsShortcutAndMatchesUps()
     {
-        // Ctrl を押したまま O を 2 回 (半角英数 → 大文字)。右 Ctrl でも同じ。Ctrl はアプリに送らず、上げ下げもそろったまま
+        // Ctrl を押したまま O を 2 回 (半角英数 → 大文字)。右 Ctrl でも同じ。O はアプリに通さない
         foreach (var control in new[] { VirtualKeys.LControl, VirtualKeys.RControl })
         {
             var k = new Keyboard();
@@ -1590,7 +1602,7 @@ internal static class CompositionTests
             k.Press('O');
             k.Key(control, up: true);
             Assert.Equal("AIUEO", k.Showing);
-            Assert.True(!k.Host.Events.Any(e => e.EndsWith($":{control:X2}", StringComparison.Ordinal)), "Ctrl を送らない: " + string.Join(" ", k.Host.Events));
+            Assert.True(!k.Host.Events.Contains("down:4F"), "O を通さない: " + string.Join(" ", k.Host.Events));
             k.Press(VirtualKeys.Return);
             Assert.Equal("AIUEO", k.Host.Document);
         }
@@ -1599,7 +1611,7 @@ internal static class CompositionTests
     [Test]
     public static void CtrlShiftShortcut_SendsModifiersInOrder()
     {
-        // Ctrl+Shift+Z: 確定してから Z をアプリに通す (Ctrl と Shift は Z と一緒に届いている)
+        // Ctrl+Shift+Z: 確定してから Z をアプリに通す (Ctrl と Shift は押したときにアプリに通し、Z と一緒にも届いている)
         var k = new Keyboard();
         k.Type("kana");
         k.Key(VirtualKeys.LControl);
@@ -1607,7 +1619,7 @@ internal static class CompositionTests
         k.Press('Z');
         k.Key(VirtualKeys.LShift, up: true);
         k.Key(VirtualKeys.LControl, up: true);
-        Assert.Equal("text:かな|down:5A", string.Join("|", k.Host.Events));
+        Assert.Equal("down:A2|down:A0|text:かな|down:5A", string.Join("|", k.Host.Events));
         Assert.True(!k.Captured, "ショートカットの後は受け取らない");
     }
 
@@ -1618,7 +1630,7 @@ internal static class CompositionTests
         k.Type("aiueo");
         CtrlPress(k, 'C');
         Assert.Equal("あいうえお", k.Host.Document);
-        Assert.Equal("text:あいうえお|down:43", string.Join("|", k.Host.Events), "確定してから Ctrl+C を通す");
+        Assert.Equal("down:A2|text:あいうえお|down:43", string.Join("|", k.Host.Events), "Ctrl を通し、確定してから Ctrl+C を通す");
     }
 
     [Test]
@@ -2984,6 +2996,51 @@ internal static class CompositionTests
         k.Key(VirtualKeys.LControl, up: true);
         var shrunk = string.Concat(k.Host.View!.Clauses!);
         Assert.True(k.Host.View!.Converting && shrunk != "単位を取る", "Ctrl+K で文節が縮む: " + shrunk);
+    }
+
+    [Test]
+    public static void Issue2012_ShiftArrowResizesTheClause()
+    {
+        // 変換中に押した Shift を本体が使うと、フックが OS に届けないので、続く ← に Shift が付かず文節の選択になっていた
+        var k = new Keyboard();
+        k.Type("m3e4wotukau ");
+        k.Press(VirtualKeys.Right);
+        k.Key(VirtualKeys.LShift);
+        k.Press(VirtualKeys.Left);
+        k.Key(VirtualKeys.LShift, up: true);
+        Assert.Equal("m|3え4をつか|う", string.Join("|", k.Host.View!.Clauses!), "後ろの文節が縮む");
+        Assert.Equal("", k.Host.Document, "確定しない");
+        k.Key(VirtualKeys.LShift);
+        k.Press(VirtualKeys.Right);
+        k.Key(VirtualKeys.LShift, up: true);
+        Assert.Equal("m|3え4をつかう", string.Join("|", k.Host.View!.Clauses!), "伸ばす");
+    }
+
+    [Test]
+    public static void Issue2012_CtrlAloneKeepsTheComposition()
+    {
+        // 変換中に Ctrl を押した瞬間に確定され、Ctrl+K / L で文節の長さを変えられなかった
+        foreach (var typed in new[] { "aiueo", "aiueo " })
+        {
+            var k = new Keyboard();
+            k.Type(typed);
+            var showing = k.Showing;
+            k.Key(VirtualKeys.LControl);
+            k.Key(VirtualKeys.LControl, up: true);
+            Assert.Equal(showing, k.Showing, typed);
+            Assert.Equal("", k.Host.Document, "確定しない: " + typed);
+        }
+    }
+
+    [Test]
+    public static void WindowsKey_CommitsBeforePassing()
+    {
+        // Windows キーは単独で離すとスタートメニューに移るので、押したときに確定する (Shift・Ctrl は確定しない)
+        var k = new Keyboard();
+        k.Type("kana");
+        k.Key(VirtualKeys.LWin);
+        Assert.Equal("かな", k.Host.Document);
+        Assert.True(!k.Captured, "確定した");
     }
 
     [Test]
@@ -6432,7 +6489,7 @@ internal static class CompositionTests
         k.Press('C');
         k.Key(VirtualKeys.LControl, up: true);
         // 入力中の Ctrl + キーは、Ctrl+U/I/O/P ならかな・英字の切り替え。ほかのキーなら確定してからそのキーを通す
-        Assert.Equal("text:かな|down:43", string.Join("|", k.Host.Events), "確定 → Ctrl+C を通す");
+        Assert.Equal("down:A2|text:かな|down:43", string.Join("|", k.Host.Events), "Ctrl → 確定 → Ctrl+C を通す");
         Assert.True(!k.Captured, "ショートカットの後は受け取らない");
     }
 
@@ -6456,7 +6513,7 @@ internal static class CompositionTests
         k.Key(VirtualKeys.LShift);
         k.Press(0x25); // ←
         k.Key(VirtualKeys.LShift, up: true);
-        Assert.Equal("text:hello|down:25", string.Join("|", k.Host.Events), "確定してから Shift+← (範囲選択) を通す");
+        Assert.Equal("down:A0|text:hello|down:25", string.Join("|", k.Host.Events), "Shift を通し、確定してから Shift+← (範囲選択) を通す");
     }
 
     [Test]

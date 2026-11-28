@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Yukishiro
 // Copyright (C) 2026 yksr-melt
 
+using Meltype.Input;
 using Meltype.Notation;
 
 namespace Meltype.Composition;
@@ -26,7 +27,7 @@ internal static class CompositionController
         var consumed = CompositionKeys.Handle(state, env, key);
         if (!releaseFollows) CompositionKeys.HandleRelease(state, env, key.Vk, key.Position);
         Settle(state, env);
-        return Result(state, env, consumed);
+        return CompositionOutput.Result(state.Out, env, consumed && !state.Out.PassedCurrent, env.Settings, typed: !VirtualKeys.IsModifier(key.Vk));
     }
 
     /// <summary>ワークアラウンド: releaseFollows を付けて押したキーを離した (親指シフトの親指キー・中指NICOLA のシフトのキー)。</summary>

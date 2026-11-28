@@ -42,11 +42,12 @@ internal static class CompositionOutput
         state.Hidden = false;
     }
 
-    public static SessionResult Result(CompositionOutputState state, CompositionEnv env, bool consumed, Config.Settings settings)
+    /// <param name="typed">アプリに渡したら文字が入るかもしれないキーか (修飾キーは文字を入れない)。</param>
+    public static SessionResult Result(CompositionOutputState state, CompositionEnv env, bool consumed, Config.Settings settings, bool typed = true)
     {
         if (state.PendingDelete > 0) CompositionOutput.Add(state, "");
         // アプリに渡したキーの文字は、確定した文字の続きとしては分からない
-        if (!consumed) state.Committed.Clear();
+        if (!consumed && typed) state.Committed.Clear();
         // 操作ガイドを出さない設定では、入力に応じた案内 (手動判定の提案・予測など) だけ。どのフロントもこの表示を受け取る
         var view = state.Hidden || state.View is not { } shown ? null : SessionResult.ForFront(shown, settings.ShowsGuide, settings.NumberKeysSelectCandidates);
         return new SessionResult(consumed, state.Commits.ToList(), view);

@@ -388,11 +388,43 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         return output;
     }
 
+    /// <summary>
+    /// 確定した文字を入れる。押している Ctrl・Shift は、入れる間だけ離す。変換中の修飾キーの押下はアプリに通すので、Ctrl+Enter・Ctrl+C・Shift+← の前の確定では押したままになり、
+    /// 確定し直しの BackSpace が Ctrl+BackSpace (語ごと消す) に、貼り付けが Ctrl+Shift+V に、キャレットを戻す ← が範囲選択になり、ブラウザーは Ctrl 付きの文字を入れない。
+    /// 確定はキーの処理の中で入れ、その間に離した物理キーはフックが並べて後から送るので、押し直したまま残らない。
+    /// </summary>
     private void Commit(TextEdit edit)
     {
-        _composition.Insert(edit.DeleteBefore, edit.Text, edit.Paste);
-        _composition.MoveCaretBackward(edit.CaretBack);
+        var held = LiftedModifiers.Where(key => (Native.GetAsyncKeyState(key.Vk) & 0x8000) != 0).ToList();
+        _injector.Inject(ModifierRelease(held));
+        try
+        {
+            _composition.Insert(edit.DeleteBefore, edit.Text, edit.Paste);
+            _composition.MoveCaretBackward(edit.CaretBack);
+        }
+        finally
+        {
+            _injector.Inject(held);
+        }
     }
+
+    // Ctrl 単独の解放として OS に見せると「Ctrl でポインター位置を表示」が働く。
+    // Alt の単独押しと同じく、未割り当てのキーを挟んでから修飾キーを離す。
+    internal static IReadOnlyList<KeyEvent> ModifierRelease(IReadOnlyList<KeyEvent> held) => held.Count == 0 ? [] :
+    [
+        new KeyEvent(0xE8, 0, false, false, false, 0),
+        new KeyEvent(0xE8, 0, false, true, false, 0),
+        .. held.Select(key => key with { IsUp = true }),
+    ];
+
+    /// <summary>確定した文字を入れる間だけ離す修飾キー (押下)。Alt・Windows キーは、離すとメニュー・スタートメニューに移るので離さない。</summary>
+    private static readonly KeyEvent[] LiftedModifiers =
+    [
+        new(VirtualKeys.LControl, 0, false, false, false, 0),
+        new(VirtualKeys.RControl, 0, true, false, false, 0),
+        new(VirtualKeys.LShift, 0, false, false, false, 0),
+        new(VirtualKeys.RShift, 0, false, false, false, 0),
+    ];
 
     /// <summary>
     /// 入力欄の事実。フォーカスを調べている最中なら、調べ終わるのを少し待つ。入力欄の文字は、UI Automation で読めたときだけ。

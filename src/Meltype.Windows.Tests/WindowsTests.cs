@@ -263,6 +263,23 @@ internal static class WindowsTests
     }
 
     [Test]
+    public static void Commit_ModifierReleaseMasksCtrlTapAndPreservesPhysicalKeys()
+    {
+        var held = new KeyEvent[]
+        {
+            new(0xA3, 0, true, false, false, 0),
+            new(0xA0, 0, false, false, false, 0),
+        };
+        var release = Keyboard.KeyboardFront.ModifierRelease(held);
+        Assert.Equal(4, release.Count);
+        Assert.Equal(0xE8, release[0].Vk);
+        Assert.True(release[0].IsDown && release[1].IsUp, "修飾キーの解放前にマスクキーを送る");
+        Assert.Equal(held[0] with { IsUp = true }, release[2]);
+        Assert.Equal(held[1] with { IsUp = true }, release[3]);
+        Assert.Equal(0, Keyboard.KeyboardFront.ModifierRelease([]).Count);
+    }
+
+    [Test]
     public static void FirstLetter_AfterClickAndAutofill()
     {
         // クリックの直後 (1 秒以内) の打ち始めだけ、フォーカスを調べ直す

@@ -440,8 +440,8 @@ internal static class ImeSession
         if (settings.InputStyle == InputStyle.Kana && settings.KanaLayout == KanaLayout.Jis &&
             position == VirtualKeys.OemMinus && key.Shift && key.Ch == '_') position = 0xDC;
         var result = ComposeKey(state, env, vk, position, key.Ch > 0 ? (char)key.Ch : null, key.Shift, key.Ctrl, key.Alt, key.Command, key.ReleaseFollows);
-        // アプリに通したキーはキャレットを動かすかもしれない (Core が通すと決めたので、フロントからは送られてこない)
-        if (!result.Consumed) CaretMoved(state, vk, key.Ctrl);
+        // 修飾キーの押下だけではキャレットは動かない。
+        if (!result.Consumed && !VirtualKeys.IsModifier(vk)) CaretMoved(state, vk, key.Ctrl);
         return result;
     }
 
