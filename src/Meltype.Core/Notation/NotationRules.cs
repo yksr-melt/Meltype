@@ -25,6 +25,9 @@ internal static class NotationRules
     public static ComposedText Commit(ComposedText text, string? before, string? after, Settings settings) =>
         EnglishSpacing.Apply(text, before, after, settings.SpaceAroundEnglish, settings.SpaceAroundNumbers);
 
+    /// <summary>text に、表記の規則が日本語とみなす文字 (英単語の前後の空白を入れる相手) があるか。</summary>
+    public static bool HasJapanese(string text) => text.Any(EnglishSpacing.IsJapanese);
+
     /// <summary>入力欄・変換ボックスに書く文字列。</summary>
     public static string Write(ComposedText text, PunctuationStyle punctuation) => Punctuation.Write(text, punctuation);
 

@@ -42,6 +42,9 @@ internal abstract class CompositionScene
     {
         public readonly StringBuilder Letters = new();
 
+        /// <summary>Letters の各文字を打ったキーの位置 (<see cref="KeyPress.Position"/>)。かな入力で日本語に戻すとき、かなを位置で決める。- は 0。</summary>
+        public readonly List<int> Positions = [];
+
         /// <summary>アプリに通した文字 (文字の無いキーは \0)。</summary>
         public readonly StringBuilder Sent = new();
 
@@ -91,7 +94,7 @@ internal abstract class CompositionScene
 /// <summary>変換ボックスの入力 1 つ分 (打ち始めてから、確定するか取り消すまで) の値。</summary>
 internal sealed class CompositionInput
 {
-    public required CompositionTextState Text { get; init; }
+    public required CompositionTextState Text { get; set; }
 
     /// <summary>入力が終わったら英数に戻る (英数で再変換した・入力中に OS が IME を閉じた・ゲームに移った)。</summary>
     public required bool Direct { get; set; }

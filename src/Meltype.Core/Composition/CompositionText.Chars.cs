@@ -11,15 +11,34 @@ namespace Meltype.Composition;
 /// <summary>記号・カタカナ・全角の文字の変換。</summary>
 internal static partial class CompositionText
 {
-    private static string PendingText(CompositionTextState state, TextEnv env, bool final)
+    private static string PendingText(TextReading state, TextEnv env, bool final)
     {
         var pending = CompositionText.Pending(state);
         if (pending.Length == 0) return "";
         return env.Detector.Romaji.ConvertLenient(pending.ToLowerInvariant(), final);
     }
 
+    /// <summary>
+    /// 打った英字の [start, end) に入っている、入力途中の子音の読み。
+    /// 区間分けは入力途中の子音の途中でも区切る (bug|w の g は英語の区間、w は日本語の区間) ので、区間には入力途中の子音の一部だけが入ることがある (#2417)。
+    /// </summary>
+    private static string PendingText(TextReading state, TextEnv env, int start, int end, bool final)
+    {
+        var pending = CompositionText.Pending(state);
+        var unitsEnd = CompositionText.Raw(state).Length - pending.Length;
+        var inRange = pending[Math.Clamp(start - unitsEnd, 0, pending.Length)..Math.Clamp(end - unitsEnd, 0, pending.Length)];
+        return inRange.Length == 0 ? "" : env.Detector.Romaji.ConvertLenient(inRange.ToLowerInvariant(), final);
+    }
+
+    /// <summary>最後の区間 last に入っている、入力途中の子音の読み。</summary>
+    private static string PendingText(TextReading state, TextEnv env, CompositionSegment last, bool final)
+    {
+        var length = CompositionText.Raw(state).Length;
+        return CompositionText.PendingText(state, env, length - last.Raw.Length, length, final);
+    }
+
     /// <summary>日本語の中で打った記号 (全角。テスターの報告で決めた)。英語の区間では打ったままの半角で出す。数字と括弧は半角のまま。</summary>
-    private static char Symbol(CompositionTextState state, char c) => c switch
+    private static char Symbol(TextReading state, char c) => c switch
     {
         '-' => 'ー',
         // 読みにするときに TypedMarks が決める。

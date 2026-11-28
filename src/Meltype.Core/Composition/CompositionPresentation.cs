@@ -80,12 +80,12 @@ internal static class CompositionPresentation
             CandidateMeaning(env, selected),
             Suggestion(CompositionSpelling.MisspellingSuggestion(input, env)),
             Typed: TypedKeys(input, conversion, env),
-            Committed: ComposedText.Concat(clauses), ContextHint: zenzai ? "Zenzai" : null);
+            Committed: ComposedText.Concat(clauses), ContextHint: zenzai ? "Zenzai" : null, Colors: selected.Colors);
     }
 
     private static ComposedView TypingView(CompositionInput input, CompositionEnv env)
     {
-        var suggestion = CompositionText.Suggestion(input.Text, env);
+        var suggestion = CompositionText.Suggestion(CompositionText.Read(input.Text, env), env);
         var misspelling = CompositionSpelling.MisspellingSuggestion(input, env);
         // 手動の英字提案・訂正提案がある間は予測を出さないため、contextHint の両方の案内は同時に出ない。
         UpdatePredictions(input, env, blocked: misspelling is not null || suggestion is not null);
@@ -93,7 +93,7 @@ internal static class CompositionPresentation
         var predictions = input.Predictions?.Items ?? [];
         var predictionIndex = input.Predictions?.Index ?? -1;
         var tabConverts = env.Settings.TabConversion && misspelling is null && suggestion is null && predictions.Count == 0;
-        var hint = CompositionText.IsAlphanumeric(input.Text, env) ? "Enter 確定　Space 確定+空白　Shift+Space 日本語で変換　半角/全角 日本語に" : (tabConverts ? "Space/Tab 変換" : "Space 変換") + "　←→ 文節　Enter 確定　F7 カタカナ　F10 英字";
+        var hint = CompositionText.IsAlphanumeric(CompositionText.Read(input.Text, env), env) ? "Enter 確定　Space 確定+空白　Shift+Space 日本語で変換　半角/全角 日本語に" : (tabConverts ? "Space/Tab 変換" : "Space 変換") + "　←→ 文節　Enter 確定　F7 カタカナ　F10 英字";
         var contextHint = suggestion is null ? null : $"Tab → {suggestion} (英字に)";
         if (contextHint is not null) hint = contextHint + "　" + hint;
         if (predictions.Count > 0)
@@ -106,13 +106,17 @@ internal static class CompositionPresentation
         return new ComposedView(display, [], -1, false, hint,
             Suggestion: Suggestion(misspelling),
             Predictions: predictions.Count > 0 ? predictions.Select(p => ComposedText.Of(SpanKind.Japanese, p.Text)).ToList() : null, SelectedPrediction: predictionIndex, Typed: TypedKeys(input, null, env),
-            Committed: selected ?? CurrentComposed(input, env, final: true), ContextHint: contextHint);
+            Committed: selected ?? CurrentComposed(input, env, final: true), ContextHint: contextHint,
+            CaretBack: selected is null ? CompositionText.TailText(input.Text).Length : 0,
+            Colors: predictions.Any(p => p.Color is not null) ? predictions.Select(p => p.Color).ToList() : null);
     }
 
     /// <summary>文節 clause の候補 candidate の文字。文全体の文節の案は、確定と同じく案の文節から作る (<see cref="CompositionConversion.SplitWholeSentence"/>)。</summary>
+    /// <remarks>英語の文節のかな・漢字の入った候補 (ハロー・midiか) は日本語の区間にする (英単語の前後の空白は、日本語の区間の中の英字の並びの前後に入る)。</remarks>
     internal static ComposedText Candidate(Clause clause, string candidate) =>
         clause.Alternatives?.TryGetValue(candidate, out var clauses) == true ? Composed(clauses)
-        : clause.IsEnglish ? ComposedText.English(candidate)
+        : clause.IsEnglish && !NotationRules.HasJapanese(candidate) ? ComposedText.English(candidate)
+        : clause.IsEnglish ? ComposedText.Of(SpanKind.Japanese, candidate)
         : ComposedText.Converted(clause.Reading, candidate);
 
     /// <summary>書き間違いの修正の案内 (もしかして)。</summary>
@@ -121,9 +125,10 @@ internal static class CompositionPresentation
     /// <summary>変換ボックスに出す、打ったもの (設定「打ったキーを表示」)。漢字変換前は、変換中なら文節の読み、変換していなければ確定される形 (<see cref="CurrentComposed"/>) を漢字にせずに出す。</summary>
     private static string? TypedKeys(CompositionInput input, Conversion? conversion, CompositionEnv env) => env.Settings.TypedKeys switch
     {
-        TypedKeysStyle.Keys => CompositionText.Raw(input.Text),
+        TypedKeysStyle.Keys when input.Text.KanaInput => input.Text.KanaKeyLabels,
+        TypedKeysStyle.Keys => CompositionText.Raw(CompositionText.Read(input.Text, env)),
         TypedKeysStyle.Kana when conversion is not null => string.Concat(conversion.Clauses.Select(CompositionConversion.Reading)),
-        TypedKeysStyle.Kana => CompositionText.AsCommitted(input.Text, env, text => CompositionText.Compose(text, env, final: true)).Text,
+        TypedKeysStyle.Kana => CompositionText.Compose(CompositionText.Read(input.Text, env), env, final: true).Text,
         TypedKeysStyle.Off => null,
         var style => throw new InvalidOperationException($"不明な TypedKeysStyle: {style}"),
     };
@@ -142,15 +147,18 @@ internal static class CompositionPresentation
 
     private static List<Prediction> BuildPredictions(CompositionInput input, CompositionEnv env)
     {
-        if (env.Services.Predictor is not { } predictor || !env.Settings.PredictiveCandidates || input.Text.Mode != DisplayMode.Auto) return [];
-        var raw = CompositionText.Raw(input.Text);
+        if (!env.Settings.PredictiveCandidates || input.Text.Mode != DisplayMode.Auto) return [];
+        var raw = CompositionText.Raw(CompositionText.Read(input.Text, env));
+        if (!input.Text.KanaInput && Utility.ColorConversion.CandidatesWithColors(raw) is { Count: > 0 } colorCandidates)
+            return colorCandidates.Select(c => new Prediction(c.Text, "", raw, c.Color)).ToList();
+        if (env.Services.Predictor is not { } predictor) return [];
         IEnumerable<string> PredictEnglish() => Predictor.PredictEnglish(raw).Select(w => NotationRules.Word(w, env.ProperNoun));
-        if (CompositionText.IsAlphanumeric(input.Text, env))
+        if (CompositionText.IsAlphanumeric(CompositionText.Read(input.Text, env), env))
         {
             // 英単語 1 語の打ちかけ (decis → decisions)
             return raw.All(char.IsAsciiLetter) ? PredictEnglish().Select(w => new Prediction(w, "", raw)).ToList() : [];
         }
-        var kana = CompositionText.AllKana(input.Text, env, final: false);
+        var kana = CompositionText.AllKana(CompositionText.Read(input.Text, env), env, final: false);
         var predictions = new List<Prediction>();
         void Add(IEnumerable<string> words, string before, string reading)
         {
@@ -198,7 +206,7 @@ internal static class CompositionPresentation
         return starts;
     }
 
-    private static string PredictionKey(CompositionInput input) => CompositionText.Raw(input.Text) + "\u0001" + input.Text.Mode;
+    private static string PredictionKey(CompositionInput input) => input.Text.TypedRaw + "\u0001" + input.Text.Mode;
 
     /// <summary>今の打ちかけの予測の候補 (キーをまとめて処理しているときにも、打った内容に合わせて作り直す)。</summary>
     internal static List<Prediction> CurrentPredictions(CompositionInput input, CompositionEnv env)
@@ -213,7 +221,19 @@ internal static class CompositionPresentation
 
     /// <summary>今の表示 (確定するときと同じく打ち間違いを直した形。ライブ変換が有効なら日本語区間は漢字に変換済み)。</summary>
     internal static ComposedText CurrentComposed(CompositionInput input, CompositionEnv env, bool final) =>
-        CompositionText.AsCommitted(input.Text, env, text => CompositionText.Compose(text, env, final, env.Settings.LiveConversion ? (kana, afterEnglish, shown) => CompositionConversion.LiveConvert(input, env, kana, afterEnglish, CompositionConversion.SegmentBefore(env, shown)) : null));
+        ComposedBeforeCaret(input, env, final) + ComposedText.Kana(CompositionText.TailText(input.Text));
+
+    // 読みの途中を直している間の、カーソルより前 (後ろはひらがなのまま足す)
+    private static ComposedText ComposedBeforeCaret(CompositionInput input, CompositionEnv env, bool final) =>
+        CompositionText.Compose(CompositionText.Read(input.Text, env), env, final, LiveAnswer(input, env, wait: false));
+
+    /// <summary>自動の表示の文節の並び (<see cref="CompositionText.Clauses"/>)。ライブ変換の答えは待たない。</summary>
+    internal static IReadOnlyList<TypingClause> AutoClauses(CompositionInput input, CompositionEnv env, bool final) =>
+        CompositionText.Clauses(CompositionText.Read(input.Text, env), env, final, LiveAnswer(input, env, wait: false));
+
+    private static Func<string, bool, string, IReadOnlyList<TypingClause.Japanese>>? LiveAnswer(CompositionInput input, CompositionEnv env, bool wait) => env.Settings.LiveConversion
+        ? (kana, afterEnglish, shown) => CompositionConversion.LiveAnswer(input, env, kana, afterEnglish, CompositionConversion.SegmentBefore(env, shown), wait)
+        : null;
 
     /// <summary><see cref="CurrentComposed"/> の文字。</summary>
     internal static string CurrentDisplay(CompositionInput input, CompositionEnv env, bool final) => CurrentComposed(input, env, final).Text;
@@ -222,11 +242,8 @@ internal static class CompositionPresentation
     /// 変換していないときに確定する文字。答えを後から受け取れるフロントでは、ライブ変換の答えが間に合っていなくても env.Deadline までは答えを待つ
     /// (受け取れないフロントは、表示のときから待っている)。
     /// </summary>
-    internal static ComposedText CommittedDisplay(CompositionInput input, CompositionEnv env) => env.LateResults
-        ? CompositionText.AsCommitted(input.Text, env, committed => CompositionText.Compose(committed, env, final: true, env.Settings.LiveConversion
-            ? (kana, afterEnglish, shown) => CompositionConversion.CountsAsLive(kana) ? Composed(CompositionConversion.ConvertJapaneseSegment(input, env, kana, afterEnglish, CompositionConversion.SegmentBefore(env, shown), zenzai: true)) : ComposedText.Kana(kana)
-            : null))
-        : CurrentComposed(input, env, final: true);
+    internal static ComposedText CommittedDisplay(CompositionInput input, CompositionEnv env) =>
+        CompositionText.Compose(CompositionText.Read(input.Text, env), env, final: true, LiveAnswer(input, env, wait: env.LateResults));
 
     /// <summary>文節の文字。</summary>
     internal static ComposedText Composed(IEnumerable<Clause> clauses) => ComposedText.Concat(clauses.Select(c => Candidate(c, c.Text)));

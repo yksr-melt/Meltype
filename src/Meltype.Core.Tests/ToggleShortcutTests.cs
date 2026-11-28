@@ -81,9 +81,9 @@ internal static class ToggleShortcutTests
     {
         var parsed = ControlKeyBindingParser.Parse(" t = f6; T=F7, y=left\nz=Tab; T=unknown; AA=F8; 1=F9; Q=unknown; broken");
         Assert.Equal(3, parsed.Count);
-        Assert.Equal(VirtualKeys.F7, parsed['T'], "最後の有効な割り当てを優先");
-        Assert.Equal(VirtualKeys.Left, parsed['Y']);
-        Assert.Equal(VirtualKeys.Tab, parsed['Z']);
+        Assert.Equal<ControlKeyTarget>(new ControlKeyTarget.Key(VirtualKeys.F7), parsed['T'], "最後の有効な割り当てを優先");
+        Assert.Equal<ControlKeyTarget>(new ControlKeyTarget.Key(VirtualKeys.Left), parsed['Y']);
+        Assert.Equal<ControlKeyTarget>(new ControlKeyTarget.Key(VirtualKeys.Tab), parsed['Z']);
         var settings = new Settings { ControlKeyBindings = "t=F7; Q=unknown" };
         foreach (var mods in new[] { ShortcutModifiers.Control, ShortcutModifiers.Control | ShortcutModifiers.Shift })
             Assert.Equal(ShortcutValidationError.ControlKeyBinding, ToggleShortcutValidator.Validate(new() { Key = 'T', Modifiers = mods }, settings, []));
@@ -443,8 +443,8 @@ internal static class ToggleShortcutTests
                 Assert.Equal(ShortcutValidationError.UnmodifiedKey, ToggleShortcutValidator.Validate(binding, new Settings(), []));
                 Assert.Equal(0, new Settings { ToggleShortcuts = [binding] }.Normalize().EffectiveToggleShortcuts.Count, "読み込み時も通常入力を奪わない");
             }
-        // 半角/全角・CapsLock・カタカナ/ひらがな (US キーボードで CapsLock を割り当て直したもの)・変換・無変換
-        foreach (var key in new[] { 0x19, 0xF3, 0xF4, 0x14, 0xF2, 0x1C, 0x1D })
+        // 半角/全角・CapsLock・英数・カタカナ/ひらがな (US キーボードで CapsLock を割り当て直したもの)・変換・無変換
+        foreach (var key in new[] { 0x19, 0xF3, 0xF4, 0x14, 0xF0, 0xF2, 0x1C, 0x1D })
             foreach (var mods in new[] { ShortcutModifiers.None, ShortcutModifiers.Shift })
                 Assert.Equal(ShortcutValidationError.None, ToggleShortcutValidator.Validate(new() { Key = key, Modifiers = mods }, new Settings(), []));
         Assert.Equal(ShortcutValidationError.None, ToggleShortcutValidator.Validate(

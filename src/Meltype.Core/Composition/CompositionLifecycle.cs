@@ -170,6 +170,8 @@ internal static class CompositionLifecycle
             Private = Private(state) || privateInput,
             Reconversion = reconversion,
         };
+        // ライブ変換の控えは 1 回の入力の間だけ使う (前の入力の後に登録した語・変わった設定・変換エンジンの失敗を持ち越さない)
+        state.LiveCache.Clear();
         state.Scene = new CompositionScene.Typing(input);
         return input;
     }
@@ -200,7 +202,7 @@ internal static class CompositionLifecycle
     /// <summary>打った文字がすべて消えたら、入力を終える。</summary>
     internal static void FinishIfEmpty(CompositionState state, CompositionInput input)
     {
-        if (CompositionText.IsEmpty(input.Text)) Finish(state);
+        if (input.Text.IsEmpty) Finish(state);
     }
 
     /// <summary>入力を終える (確定した・取り消した)。</summary>
@@ -211,7 +213,6 @@ internal static class CompositionLifecycle
     {
         Finish(state);
         ForgetLastCommit(state);
-        state.LiveCache.Clear();
         state.Pressed.Clear();
         state.KanaLayout.Reset();
         CompositionOutput.Begin(state.Out);
@@ -228,6 +229,10 @@ internal static class CompositionLifecycle
     /// <summary>今の未確定入力が、自動では変換してはいけない保護区間か (F9/F10 などの明示指定は除く)。</summary>
     internal static bool IsProtectedInput(CompositionScene.WithInput scene) =>
         scene is CompositionScene.Typing { Input.Text: { Mode: DisplayMode.Auto } text } && CompositionText.HasProtectedTail(text);
+
+    /// <summary>無変換でかなの種類を切り替えるか。保護区間はカタカナに変えない (#1966)。</summary>
+    internal static bool NonConvertCyclesKana(CompositionScene.WithInput scene, Config.Settings settings) =>
+        settings.NonConvertCyclesKana && !IsProtectedInput(scene);
 
     /// <summary>キャレットが動いたかもしれないとき (Meltype を通らなかったキー・クリック)。直前の語は確定し直さない。</summary>
     internal static void ForgetLastCommit(CompositionState state)

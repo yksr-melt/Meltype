@@ -149,7 +149,10 @@ internal static class TipEndToEnd
                 await Case("日本語に戻る", "kyouha\n", "きょうは");
                 var beforeControlEnter = controlEnters;
                 await Case("通常文の Ctrl+Enter", "kyouha\r", "きょうは");
-                results.Add(("通常文の Ctrl+Enter はアプリへ届く", "1", (controlEnters - beforeControlEnter).ToString(CultureInfo.InvariantCulture)));
+                results.Add(("変換中の Ctrl+Enter は確定だけ", "0", (controlEnters - beforeControlEnter).ToString(CultureInfo.InvariantCulture)));
+                TypeKeys("\r");
+                await Task.Delay(200);
+                results.Add(("確定後の Ctrl+Enter はアプリへ届く", "1", (controlEnters - beforeControlEnter).ToString(CultureInfo.InvariantCulture)));
                 // 確定したあと ← でキャレットを動かしてから英単語を打っても、前の文字を消して確定し直さない
                 await Case("動かしたあとは直さない", "i\n←want ", "want い");
 
@@ -171,7 +174,7 @@ internal static class TipEndToEnd
                         await Case("括弧候補 " + label, "[] \n", "「」", enabled ? 1 : 2);
                         beforeControlEnter = controlEnters;
                         await Case("括弧 Ctrl+Enter " + label, "[]\r", "「」");
-                        results.Add(("括弧 Ctrl+Enter はアプリへ届く " + label, "1", (controlEnters - beforeControlEnter).ToString(CultureInfo.InvariantCulture)));
+                        results.Add(("括弧 Ctrl+Enter は確定だけ " + label, "0", (controlEnters - beforeControlEnter).ToString(CultureInfo.InvariantCulture)));
                         await Case("括弧の次の入力 " + label, "[]\nka\n", enabled ? "「か」" : "「」か", enabled ? 2 : 3);
                         await Case("候補確定と次の入力 " + label, "[] k", continueInside ? "「k」" : "「」k", continueInside ? 2 : 3);
                         TypeKeys("\u001b"); // 打ちかけの k を取り消してから次のケースへ。

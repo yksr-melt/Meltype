@@ -17,11 +17,13 @@ namespace Meltype.SettingsApp;
 /// </summary>
 internal static class LearningPage
 {
+    public const string Title = "学習";
+
     private sealed record Conversion(string Reading, string Text, DateTime Used);
 
     private static string Date(DateTime used) => used.ToLocalTime().ToString("yyyy/MM/dd", CultureInfo.InvariantCulture);
 
-    public static Control Build(Window owner)
+    public static Control Build(Window owner, Control settings)
     {
         // ローマ字の表を読むので、ページを開くたびに 1 回だけ作る (一覧・消す操作の前に、ファイルを読み直す)
         var data = LearningData.OpenStandalone(AppPaths.DataDirectory);
@@ -103,7 +105,8 @@ internal static class LearningPage
         });
 
         Reload();
-        return Pages.Layout("学習データ", "",
+        return Pages.Layout(Title, "",
+            settings,
             Pages.Row(filter),
             message,
             Pages.Card(
