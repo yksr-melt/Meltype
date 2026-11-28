@@ -244,6 +244,77 @@ internal static class BackgroundConversionTests
         }
     }
 
+    /// <summary>変換エンジンの候補の一覧 (文節を選んだときに取る) を、答えを待たずにすぐ返す入力欄。</summary>
+    private static TestSession SessionWithEngineList(IKanjiConverter converter) =>
+        new(() => new Settings { LiveConversion = true }, converter, new CompositionServices { MoreCandidates = (_, _) => ["候補1", "候補2"] }, lateResults: true);
+
+    [Test]
+    public static void Refresh_KeepsACandidateChosenFromTheEngineList()
+    {
+        // 文節を選んだときに取った変換エンジンの一覧の候補を選んでから答えが届いても、選んだ候補のまま (新しい候補が上に入って位置は変わる)
+        var release = new ManualResetEventSlim();
+        using var converter = new BackgroundCallbackConverter(
+            (reading, _) =>
+            {
+                release.Wait(10000);
+                return [new ConversionClause(reading, reading == "にほんご" ? "日本語" : reading + "!")];
+            },
+            _ => []);
+        var session = SessionWithEngineList(converter);
+        SessionFacadeTests.Type(session, "nihongo ");
+        CompositionView? moved = null;
+        for (var i = 0; i < 8 && moved?.Text != "候補2"; i++) moved = session.HandleKey(VirtualKeys.Down, null, false, false, false, false).View;
+        Assert.Equal("候補2", moved?.Text, "変換エンジンの一覧の候補を選んだ: " + string.Join(",", moved?.Candidates ?? []));
+        release.Set();
+        var view = RefreshUntil(session, v => v.Candidates is ["日本語", ..]);
+        Assert.Equal("候補2", view?.Text, "選んでいる候補は変えない");
+        Assert.Equal(view!.Candidates.ToList().IndexOf("候補2"), view.SelectedIndex);
+    }
+
+    [Test]
+    public static void Refresh_KeepsTheChosenCandidateOfAFixedClause()
+    {
+        // 前の入力の答えが届くと、開いている変換を作り直す。固定の文節 (uuid() の Replace) で選んだ候補も、一覧に残って選んだままになる
+        var release = new ManualResetEventSlim();
+        using var converter = new BackgroundCallbackConverter(
+            (reading, _) =>
+            {
+                release.Wait(10000);
+                return [new ConversionClause(reading, reading == "にほんご" ? "日本語" : reading)];
+            },
+            _ => []);
+        var session = SessionWithEngineList(converter);
+        SessionFacadeTests.Type(session, "nihongo");
+        session.HandleKey(VirtualKeys.Escape, null, false, false, false, false);
+        session.HandleKey(VirtualKeys.Escape, null, false, false, false, false);
+        SessionFacadeTests.Type(session, "uuid() ");
+        var chosen = session.HandleKey(VirtualKeys.Down, null, false, false, false, false).View;
+        Assert.True(chosen is { Converting: true, SelectedIndex: > 0 }, $"uuid() の候補を選んだ: {chosen?.Text} {chosen?.SelectedIndex}");
+        release.Set();
+        var view = RefreshUntil(session, _ => true);
+        Assert.True(view is not null, "前の入力の答えで、開いている変換を作り直す");
+        Assert.Equal(chosen!.Text, view?.Text, "選んだ候補のまま");
+        Assert.Equal(view!.Candidates.ToList().IndexOf(chosen.Text), view.SelectedIndex, "選んだ候補が一覧にある");
+        Assert.True(view.SelectedIndex >= 0, "選んだ候補が一覧から消えない");
+    }
+
+    [Test]
+    public static void ChosenCandidate_IsKept_WhenTheListIsOpenedAndTheClauseIsLeft()
+    {
+        // 文節の一覧を開いて (変換エンジンの一覧が入り、候補の位置が変わる) 候補を選び、別の文節に移って戻っても、選んだ候補のまま
+        var converter = new ChangingAnswer { Clauses = [new("にほんごを", "日本語を"), new("かく", "書く")] };
+        var session = SessionWithEngineList(converter);
+        SessionFacadeTests.Type(session, "nihongowokaku ");
+        CompositionView? moved = null;
+        for (var i = 0; i < 8 && moved?.Clauses?[0] != "候補1"; i++) moved = session.HandleKey(VirtualKeys.Down, null, false, false, false, false).View;
+        Assert.Equal("候補1", moved?.Clauses?[0], "最初の文節で変換エンジンの一覧の候補を選んだ: " + string.Join(",", moved?.Candidates ?? []));
+        session.HandleKey(VirtualKeys.Right, null, false, false, false, false);
+        session.HandleKey(VirtualKeys.Down, null, false, false, false, false);
+        var back = session.HandleKey(VirtualKeys.Left, null, false, false, false, false).View;
+        Assert.Equal("候補1", back?.Clauses?[0], "戻った文節は選んだ候補のまま");
+        Assert.Equal(back!.Candidates.ToList().IndexOf("候補1"), back.SelectedIndex);
+    }
+
     [Test]
     public static void Refresh_DoesNotUndoAResizedClause()
     {

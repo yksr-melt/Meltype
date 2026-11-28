@@ -23,6 +23,25 @@ internal static class SlashDateTests
     }
 
     [Test]
+    public static void DateCandidates_AreDistinctAndDownAdvances()
+    {
+        // 10/20 は {m}/{d} と {m:D2}/{d:D2} が同じ文字になる。同じ文字の候補が 2 つあると、↓ で同じ文字に進んで見た目が変わらない
+        foreach (var typed in new[] { "10/20", "1/5" })
+        {
+            var k = new Keyboard(now: () => new DateTime(2026, 10, 1));
+            k.Type(typed);
+            k.Press(VirtualKeys.Convert);
+            var candidates = k.Host.View!.Candidates.ToList();
+            Assert.Equal(candidates.Count, candidates.Distinct().Count(), typed + ": " + string.Join(",", candidates));
+            for (var i = 1; i <= 4; i++)
+            {
+                k.Press(VirtualKeys.Down);
+                Assert.Equal(candidates[i], k.Host.View!.Candidates[k.Host.View.SelectedIndex], $"{typed}: ↓ {i} 回");
+            }
+        }
+    }
+
+    [Test]
     public static void Issue935_SpaceAndCalculatorUnchanged()
     {
         // Space は今までどおり確定して空白

@@ -64,7 +64,7 @@ internal static class CompositionPresentation
         var (input, conversion) = (scene.Input, scene.Conversion);
         var selected = conversion.SelectedClause;
         // 選んでいる文節は、最初から候補の一覧をすべて出す (Space を 1 回押しただけでは一部しか出ず、選び間違えやすかった)。
-        if (!selected.Expanded) CompositionConversion.Expand(env, selected);
+        if (selected.Expansion is null) CompositionConversion.Expand(env, selected);
         // 出している文節に Zenzai の答えがあれば、説明の頭に「Zenzai」と出す (学習・選び直しで変わった文節は数えない。issue #1152)
         var zenzai = conversion.Clauses.Any(c => c.ZenzaiText is { } z && c.Text == z);
         var clauses = conversion.Clauses.Select(c => Composed([c])).ToList();

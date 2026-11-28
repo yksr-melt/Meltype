@@ -110,15 +110,14 @@ internal static class CompositionConversion
             var fixedClause = new Clause(utility.Reading ?? CompositionText.Raw(CompositionText.Read(input.Text, env)), utility.Reading is null, [.. utility.Candidates])
             {
                 Raw = CompositionText.Raw(CompositionText.Read(input.Text, env)),
-                Expanded = true,
                 Fixed = true,
                 Notes = utility.Notes,
                 Colors = utility.Colors,
             };
             fixedClause.NotLearned.UnionWith(utility.NotLearned);
             // 続けて入力する前の選択だけを復元し、候補の順 (注記と同じ順) は変えない。
-            if (input.KeptChoices.TryGetValue(fixedClause.Reading, out var kept) && fixedClause.Candidates.IndexOf(kept) is >= 0 and var index)
-                fixedClause.Index = index;
+            if (input.KeptChoices.TryGetValue(fixedClause.Reading, out var kept) && fixedClause.Built.Contains(kept))
+                fixedClause.Choice = kept;
             return new Conversion([fixedClause], trigger, preferJapanese);
         }
         // 打った英字全体がユーザー辞書の読み (helloworld → 登録した語) か子音の略入力の読み (ast → 明日。issue #62) なら、
@@ -144,7 +143,7 @@ internal static class CompositionConversion
         if (utility is not null) clauses = [WithUtility(input, env, clauses, utility, segments[0].Kana)];
         // 変換したあとに続けて打っていたら、前に選んでいた候補を同じ読みの文節で使う
         foreach (var clause in clauses)
-            if (input.KeptChoices.TryGetValue(clause.Reading, out var kept) && clause.Candidates.Contains(kept)) Prefer(clause, kept);
+            if (input.KeptChoices.TryGetValue(clause.Reading, out var kept) && clause.Built.Contains(kept)) Prefer(clause, kept);
         // 打ち始めの ・ は、Space で / にする。
         if (CompositionText.IsSlashAtStart(CompositionText.Read(input.Text, env)) && clauses is [var slash]) Prefer(slash, "/");
         return new Conversion(clauses, trigger, preferJapanese) { Selected = InitialClause(env, clauses.Count) };
@@ -233,20 +232,13 @@ internal static class CompositionConversion
         foreach (var clauses in alternatives) texts.TryAdd(string.Concat(clauses.Select(c => c.Text)), clauses);
         if (texts.Count < 2) return null;
         var whole = new Clause(CompositionText.AllKana(CompositionText.Read(input.Text, env), env, final: true), false, [.. texts.Keys]) { Raw = CompositionText.Raw(CompositionText.Read(input.Text, env)), Alternatives = texts };
-        AddSingleClauseCandidates(whole);
+        whole.Built = WithSingleClauseCandidates(whole);
         return whole;
     }
 
-    /// <summary>文全体の文節の候補の後ろに、文節が 1 つの案のその文節の候補を足す。</summary>
-    private static void AddSingleClauseCandidates(Clause whole)
-    {
-        foreach (var clauses in whole.Alternatives!.Values)
-        {
-            if (clauses is not [var only]) continue;
-            foreach (var candidate in only.Candidates)
-                if (!whole.Candidates.Contains(candidate)) whole.Candidates.Add(candidate);
-        }
-    }
+    /// <summary>文全体の文節の候補の後ろに、文節が 1 つの案のその文節の候補を足した並び。</summary>
+    private static List<string> WithSingleClauseCandidates(Clause whole) =>
+        Distinct([.. whole.Candidates, .. whole.Alternatives!.Values.Where(c => c is [_]).SelectMany(c => c[0].Candidates)]);
 
     /// <summary>
     /// 文脈の手がかり (ContextRules) を探すキャレットの前: 近くの 20 文字だけ。手がかりは同じ話題の近くの語 (気温 → 暑い) で、
@@ -270,7 +262,7 @@ internal static class CompositionConversion
         }
         if (!alternatives.ContainsKey(whole.Text) && clauses is [var single])
         {
-            single.Index = single.Candidates.IndexOf(whole.Text);
+            single.Choice = whole.Text;
             single.Changed = whole.Changed;
         }
         conversion.Clauses = clauses;
@@ -307,13 +299,13 @@ internal static class CompositionConversion
         var clause = clauses is [var only] && only.Reading == reading ? only : WholeClause(input, env, clauses, reading);
         var katakana = CompositionText.ToKatakana(reading);
         var at = utility.Placement == UtilityPlacement.Prepend ? 0
-            : new[] { reading, katakana, CompositionText.ToHalfWidthKatakana(katakana) }.Max(clause.Candidates.IndexOf) + 1;
-        if (at == 0 && utility.Placement != UtilityPlacement.Prepend) at = clause.Candidates.Count;
+            : new[] { reading, katakana, CompositionText.ToHalfWidthKatakana(katakana) }.Max(clause.Built.IndexOf) + 1;
+        if (at == 0 && utility.Placement != UtilityPlacement.Prepend) at = clause.Built.Count;
         clause.NotLearned.UnionWith(utility.NotLearned);
         foreach (var text in utility.Candidates)
         {
-            if (clause.Candidates.Contains(text)) continue;
-            clause.Candidates.Insert(at++, text);
+            if (clause.Built.Contains(text)) continue;
+            clause.Built.Insert(at++, text);
             if (utility.RankingKeys.TryGetValue(text, out var key)) clause.UtilityRankingKeys.Add(text, key);
         }
         // 2 回以上選んだ書式のうち、いちばん多く選んだ書式の候補を 2 番目に上げる
@@ -321,13 +313,13 @@ internal static class CompositionConversion
                 .SelectMany(pair => pair.Value.Select(format => (Text: pair.Key, Count: formats.Get(format.Id).FirstOrDefault(c => c.Word == format.Format).Count)))
                 .DefaultIfEmpty().MaxBy(c => c.Count) is { Count: >= 2, Text: var ranked })
         {
-            clause.Candidates.Remove(ranked);
-            clause.Candidates.Insert(1, ranked);
+            clause.Built.Remove(ranked);
+            clause.Built.Insert(1, ranked);
             clause.Leading = 2;
         }
         if (utility.Placement == UtilityPlacement.Prepend)
         {
-            clause.Index = 0;
+            clause.Choice = null;
             clause.Leading = at;
         }
         return clause;
@@ -355,7 +347,7 @@ internal static class CompositionConversion
     private static void AddTranslations(CompositionEnv env, Clause clause)
     {
         if (clause.IsEnglish || env.Services.Translations is not { } dictionary) return;
-        var words = dictionary.Lookup(clause.Text, clause.Reading).Where(w => !clause.Candidates.Contains(w)).ToList();
+        var words = dictionary.Lookup(clause.Text, clause.Reading).Where(w => !clause.Built.Contains(w)).ToList();
         if (words.Count == 0) return;
         var learned = env.Services.TranslationHistory?.Get(clause.Reading) ?? [];
         // 選んだ回数の多い順に前へ
@@ -364,10 +356,10 @@ internal static class CompositionConversion
         var often = learned.FirstOrDefault(l => l.Count >= 2 && words.Contains(l.Word)).Word;
         if (often is not null)
         {
-            clause.Candidates.Insert(Math.Min(1, clause.Candidates.Count), often);
+            clause.Built.Insert(Math.Min(1, clause.Built.Count), often);
             words.Remove(often);
         }
-        clause.Candidates.AddRange(words);
+        clause.Built.AddRange(words);
     }
 
     /// <summary>打った英字を英語寄りに区切り直して、英語と日本語が混ざる形 (midiか) になれば返す。</summary>
@@ -388,28 +380,28 @@ internal static class CompositionConversion
         {
             foreach (var word in abbreviations.Lookup(abbreviation.ToLowerInvariant()))
             {
-                if (!clause.Candidates.Contains(word)) clause.Candidates.Add(word);
+                if (!clause.Built.Contains(word)) clause.Built.Add(word);
             }
         }
         // 入力中の表示が半角の記号 (* が 2 個以上・---) のときは、最初の候補も同じ半角にする。
-        if (input.Text.Mode == DisplayMode.Auto && clause.Candidates.Count > 0 &&
-            CompositionText.AsDisplayedHalfWidth(CompositionText.Read(input.Text, env), clause.Candidates[0], clause.Raw) is var shown && shown != clause.Candidates[0])
+        if (input.Text.Mode == DisplayMode.Auto && clause.Built.Count > 0 &&
+            CompositionText.AsDisplayedHalfWidth(CompositionText.Read(input.Text, env), clause.Built[0], clause.Raw) is var shown && shown != clause.Built[0])
         {
-            clause.Candidates.Remove(shown);
-            clause.Candidates.Insert(0, shown);
+            clause.Built.Remove(shown);
+            clause.Built.Insert(0, shown);
         }
         // 全角にした記号 (＃ （ ％) は、半角に戻した候補も出す (Space を続けて押すと半角の # ( %)。
-        if (clause.Candidates.Count > 0 && CompositionText.SymbolsToHalfWidth(clause.Candidates[0]) is var half && half != clause.Candidates[0] &&
-            !clause.Candidates.Contains(half))
+        if (clause.Built.Count > 0 && CompositionText.SymbolsToHalfWidth(clause.Built[0]) is var half && half != clause.Built[0] &&
+            !clause.Built.Contains(half))
         {
-            clause.Candidates.Add(half);
+            clause.Built.Add(half);
         }
         if (clause.Raw is not { } raw || !raw.Any(c => c is >= '!' and <= '~')) return;
         // 英語を含む区切り (midika → 身近 の候補に midiか)
-        if (raw.All(char.IsAsciiLetter) && EnglishSplit(env, raw) is { } split && !clause.Candidates.Contains(split)) clause.Candidates.Add(split);
+        if (raw.All(char.IsAsciiLetter) && EnglishSplit(env, raw) is { } split && !clause.Built.Contains(split)) clause.Built.Add(split);
         foreach (var candidate in new[] { raw, CompositionText.ToFullWidth(raw) })
         {
-            if (!clause.Candidates.Contains(candidate)) clause.Candidates.Add(candidate);
+            if (!clause.Built.Contains(candidate)) clause.Built.Add(candidate);
         }
     }
 
@@ -425,12 +417,12 @@ internal static class CompositionConversion
         if (!clause.Reading.Contains("うぃ") && !clause.Reading.Contains("うぇ")) return;
         static string Old(string text) => text.Replace("うぃ", "ゐ").Replace("うぇ", "ゑ").Replace("ウィ", "ヰ").Replace("ウェ", "ヱ");
         var added = new List<string>();
-        foreach (var candidate in clause.Candidates.Concat([clause.Reading, CompositionText.ToKatakana(clause.Reading)]))
+        foreach (var candidate in clause.Built.Concat([clause.Reading, CompositionText.ToKatakana(clause.Reading)]))
         {
             var old = Old(candidate);
-            if (old != candidate && !clause.Candidates.Contains(old) && !added.Contains(old)) added.Add(old);
+            if (old != candidate && !clause.Built.Contains(old) && !added.Contains(old)) added.Add(old);
         }
-        clause.Candidates.AddRange(added);
+        clause.Built.AddRange(added);
     }
 
     /// <summary>
@@ -492,8 +484,10 @@ internal static class CompositionConversion
     private static void KeepTypedSymbols(CompositionInput input, Clause clause, string reading)
     {
         if (!TypedLetterOrDigit(input)) return;
-        var kept = AnswerFixes.KeepTypedSymbols([new FixedAnswer(reading, clause.Engine ?? clause.Text, [.. clause.Candidates], clause.ZenzaiText)], reading)[0];
-        clause.Candidates = [.. kept.Candidates];
+        var answer = new FixedAnswer(reading, clause.Engine ?? clause.Text, clause.Built, clause.ZenzaiText);
+        if (AnswerFixes.KeepTypedSymbols([answer], reading) is not [var kept] || ReferenceEquals(kept, answer)) return;
+        clause.Built = [.. kept.Candidates];
+        clause.Choice = null;
         clause.ZenzaiText = kept.Zenzai;
     }
 
@@ -514,9 +508,9 @@ internal static class CompositionConversion
 
     private static void Prefer(Clause clause, string text)
     {
-        clause.Candidates.Remove(text);
-        clause.Candidates.Insert(0, text);
-        clause.Index = 0;
+        clause.Built.Remove(text);
+        clause.Built.Insert(0, text);
+        clause.Choice = null;
     }
 
     /// <summary>
@@ -525,11 +519,9 @@ internal static class CompositionConversion
     /// </summary>
     private static void AddCandidates(CompositionEnv env, Clause clause)
     {
-        if (clause.Engine is not { } engine || clause.EngineCandidatesAdded) return;
-        var (chosen, text) = (clause.Candidates, clause.Text);
-        clause.Candidates = [.. chosen, .. JapaneseCandidates(env, clause.Reading, engine, null, zenzai: false).Where(c => !chosen.Contains(c))];
-        clause.Index = clause.Candidates.IndexOf(text);
-        clause.EngineCandidatesAdded = true;
+        if (clause.Engine is not { } engine) return;
+        var chosen = clause.Built;
+        clause.Built = [.. chosen, .. JapaneseCandidates(env, clause.Reading, engine, null, zenzai: false).Where(c => !chosen.Contains(c))];
     }
 
     /// <summary>
@@ -570,12 +562,10 @@ internal static class CompositionConversion
     /// </summary>
     private static void MoveEmojiLast(CompositionEnv env, Clause clause)
     {
-        var block = EmojiBlock(env, clause.Reading).Where(e => clause.Candidates.IndexOf(e) > 0).ToList();
+        var block = EmojiBlock(env, clause.Reading).Where(e => clause.Built.IndexOf(e) > 0).ToList();
         if (block.Count == 0) return;
-        var current = clause.Text;
-        clause.Candidates.RemoveAll(block.Contains);
-        clause.Candidates.AddRange(block);
-        clause.Index = Math.Max(0, clause.Candidates.IndexOf(current));
+        clause.Built.RemoveAll(block.Contains);
+        clause.Built.AddRange(block);
     }
 
     /// <summary>英語の文節の候補: 見せている表記 (打ったまま、iPhone など自動で大文字小文字を直す固有名詞はその形) → 打ったまま → 固有名詞の正しい形 → 先頭だけ大文字 → すべて大文字 → 全角。</summary>
@@ -612,19 +602,21 @@ internal static class CompositionConversion
     internal static void NextCandidatePage(Conversion conversion, CompositionEnv env, int step)
     {
         var clause = conversion.SelectedClause;
-        if (!clause.IsEnglish && !clause.Expanded) Expand(env, clause);
-        var pages = (clause.Candidates.Count + CandidatePageSize - 1) / CandidatePageSize;
+        if (!clause.IsEnglish && clause.Expansion is null) Expand(env, clause);
+        var candidates = clause.Candidates;
+        var pages = (candidates.Count + CandidatePageSize - 1) / CandidatePageSize;
         if (pages <= 1) return;
         var page = (Math.Max(0, clause.Index) / CandidatePageSize + step + pages) % pages;
-        clause.Index = page * CandidatePageSize;
+        clause.Choice = candidates[page * CandidatePageSize];
         clause.Changed = true;
     }
 
     internal static void NextCandidate(Conversion conversion, CompositionEnv env, int step)
     {
         var clause = conversion.SelectedClause;
-        if (!clause.Expanded) Expand(env, clause);
-        clause.Index = (clause.Index + step + clause.Candidates.Count) % clause.Candidates.Count;
+        if (clause.Expansion is null) Expand(env, clause);
+        var candidates = clause.Candidates;
+        clause.Choice = candidates[(clause.Index + step + candidates.Count) % candidates.Count];
         clause.Changed = true;
     }
 
@@ -634,10 +626,11 @@ internal static class CompositionConversion
     /// </summary>
     private static int DictionaryWordsEnd(CompositionEnv env, Clause clause, string reading)
     {
-        var kana = clause.Candidates.IndexOf(reading);
-        var limit = kana < 0 ? clause.Candidates.Count : kana;
+        var candidates = clause.Candidates;
+        var kana = IndexOf(candidates, reading);
+        var limit = kana < 0 ? candidates.Count : kana;
         var words = (env.Services.UserDictionary?.Lookup(reading) ?? []).Concat(env.Services.Candidates?.LookupWords(reading) ?? []);
-        return Math.Max(0, words.Select(word => clause.Candidates.IndexOf(word)).Where(index => index < limit).DefaultIfEmpty(-1).Max());
+        return Math.Max(0, words.Select(word => IndexOf(candidates, word)).Where(index => index < limit).DefaultIfEmpty(-1).Max());
     }
 
     /// <summary>
@@ -648,25 +641,41 @@ internal static class CompositionConversion
     /// </summary>
     internal static void Expand(CompositionEnv env, Clause clause)
     {
-        clause.Expanded = true;
+        // 固定の文節 (ユーティリティ変換の Replace) は候補を足さないので、変換エンジンの一覧も頼まない。Expansion は null のまま (候補の一覧は Built)
+        if (clause.Fixed) return;
+        // 足す一覧が無いと Expanded は Built をそのまま返すので、写して持つ (同じリストを 2 つの名前で持つと、Built を差し替えたときに Expansion が古いリストを指す)
+        clause.Expansion = [.. Expanded(env, clause)];
+        // 選んでいた候補が並びから消えたら (入力欄に出る文字が同じ候補をまとめた: DistinctShown)、最初の候補を選ぶ
+        if (clause.Choice is { } choice && !clause.Candidates.Contains(choice)) clause.Choice = null;
+    }
+
+    /// <summary><see cref="Expand"/> の並び。足す一覧が無ければ今の並びのまま。</summary>
+    private static IReadOnlyList<string> Expanded(CompositionEnv env, Clause clause)
+    {
+        var candidates = clause.Candidates;
         // 文全体の文節は、文節が 1 つの案のその文節の一覧を足す
         if (clause.Alternatives is { } alternatives)
         {
-            foreach (var only in alternatives.Values.Where(c => c.Count == 1).Select(c => c[0]).Where(c => !c.Expanded)) Expand(env, only);
-            AddSingleClauseCandidates(clause);
-            return;
+            foreach (var only in alternatives.Values.Where(c => c.Count == 1).Select(c => c[0]).Where(c => c.Expansion is null)) Expand(env, only);
+            return WithSingleClauseCandidates(clause);
         }
-        if (env.Services.MoreCandidates is not { } more) return;
+        if (env.Services.MoreCandidates is not { } more) return candidates;
         var reading = clause.IsEnglish ? RomajiReading(env, clause.Reading) : clause.Reading;
-        if (reading is null) return;
+        if (reading is null) return candidates;
         // 変換エンジンの候補は、日本語の文節では、最初の候補とユーザー辞書・同梱の辞書の語の後ろに入れる。
         // 最初の候補のすぐ後ろに入れると、変換エンジンが知っている読みでは、辞書の語が候補の一覧の後ろに押しやられる (saiki → PSYQUI が 58 件中 51 番目: issue #1681)
-        var anchor = clause.IsEnglish ? clause.Candidates.IndexOf(reading) : Math.Max(DictionaryWordsEnd(env, clause, reading), clause.Leading - 1);
-        if (anchor < 0) return;
-        var current = clause.Text;
-        var merged = DistinctShown(env, clause.Reading, clause.IsEnglish, [.. clause.Candidates.Take(anchor + 1), .. more(reading, env.Deadline).Select(c => NormalizeHalfWidth(c, reading)), .. clause.Candidates.Skip(anchor + 1)]);
-        clause.Candidates = merged;
-        clause.Index = Math.Max(0, merged.IndexOf(current));
+        var anchor = clause.IsEnglish ? IndexOf(candidates, reading) : Math.Max(DictionaryWordsEnd(env, clause, reading), clause.Leading - 1);
+        if (anchor < 0) return candidates;
+        return DistinctShown(env, clause.Reading, clause.IsEnglish, [.. candidates.Take(anchor + 1), .. more(reading, env.Deadline).Select(c => NormalizeHalfWidth(c, reading)), .. candidates.Skip(anchor + 1)]);
+    }
+
+    private static int IndexOf(IReadOnlyList<string> candidates, string text)
+    {
+        for (var i = 0; i < candidates.Count; i++)
+        {
+            if (candidates[i] == text) return i;
+        }
+        return -1;
     }
 
     /// <summary>
@@ -764,11 +773,12 @@ internal static class CompositionConversion
     private static void Reconvert(CompositionInput input, List<Clause> clauses, CompositionEnv env, int index)
     {
         var clause = clauses[index];
-        clause.Candidates = JapaneseCandidates(env, clause.Reading, null, SegmentBefore(env, string.Concat(clauses.Take(index).Select(c => c.Text))), zenzai: true);
-        clause.Index = 0;
+        clause.Built = JapaneseCandidates(env, clause.Reading, null, SegmentBefore(env, string.Concat(clauses.Take(index).Select(c => c.Text))), zenzai: true);
+        clause.Choice = null;
         clause.Changed = false;
         // 前の読みのもの。候補の一覧は、文節を選んだときに新しい読みで取り直す
-        clause.Expanded = false;
+        clause.Expansion = null;
+        clause.Added.Clear();
         clause.Raw = null;
         clause.Translations.Clear();
         clause.UtilityRankingKeys.Clear();
