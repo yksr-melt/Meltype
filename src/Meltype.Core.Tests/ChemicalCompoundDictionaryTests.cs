@@ -166,6 +166,7 @@ internal static class ChemicalCompoundDictionaryTests
             Assert.True(chemicals.Lookup("りゅうさんどう2ごすいわぶつ", []).Contains("CuSO₄·5H₂O (FW=249.677)"), "一覧の水和数を正しい大きさで表示して式量を計算する");
             Assert.True(chemicals.Lookup("さくさんめちる", []).Contains("CH₃COOCH₃ (MW=74.079)"), "辞書にない酢酸メチルをカルボン酸とアルキル基から作る");
             Assert.True(chemicals.Lookup("ぎさんえちる", []).Contains("HCOOCH₂CH₃ (MW=74.079)"), "辞書にないギ酸エチルの結合順を示す");
+            Assert.True(chemicals.Lookup("さくさんぺんちる", []).Contains("CH₃COOCH₂CH₂CH₂CH₂CH₃ (MW=130.187)"), "長いアルキル基を持つエステルも組み立てる");
             Assert.True(chemicals.Lookup("さりちるさん2なとりうむ", []).Contains("C₆H₄(ONa)COONa (FW=182.086)"), "サリチル酸二ナトリウムを候補に出す");
 
             var polymer = chemicals.Lookup("きちん", []);

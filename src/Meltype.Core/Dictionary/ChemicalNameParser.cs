@@ -73,6 +73,12 @@ internal static class ChemicalNameParser
         new("propyl", "ぷろぴる", "CH2CH2CH3", "CH3CH2CH2"),
         new("isopropyl", "いそぷろぴる", "CH(CH3)2", "CH(CH3)2"),
         new("butyl", "ぶちる", "CH2CH2CH2CH3", "CH3CH2CH2CH2"),
+        new("pentyl", "ぺんちる", "CH2CH2CH2CH2CH3", "CH3CH2CH2CH2CH2"),
+        new("hexyl", "へきしる", "CH2CH2CH2CH2CH2CH3", "CH3CH2CH2CH2CH2CH2"),
+        new("heptyl", "へぷちる", "CH2CH2CH2CH2CH2CH2CH3", "CH3CH2CH2CH2CH2CH2CH2"),
+        new("octyl", "おくちる", "CH2CH2CH2CH2CH2CH2CH2CH3", "CH3CH2CH2CH2CH2CH2CH2CH2"),
+        new("nonyl", "のにる", "CH2CH2CH2CH2CH2CH2CH2CH2CH3", "CH3CH2CH2CH2CH2CH2CH2CH2CH2"),
+        new("decyl", "でしる", "CH2CH2CH2CH2CH2CH2CH2CH2CH2CH3", "CH3CH2CH2CH2CH2CH2CH2CH2CH2CH2"),
     ];
 
     public static IReadOnlyList<ChemicalCompound> Parse(string input)
