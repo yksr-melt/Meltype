@@ -1416,17 +1416,18 @@ internal static class CompositionTests
     }
 
     [Test]
-    public static void ParticleAfterAnExplicitlyAlphanumericPath()
+    public static void ParticleAfterACommittedPath()
     {
-        foreach (var path in new[] { "/usr/bin/php", @"c:\temp\php" })
+        const string path = "/usr/bin/php";
+        foreach (var forceAlphanumeric in new[] { false, true })
         {
             var keyboard = new Keyboard();
             keyboard.Type(path);
-            keyboard.Press(VirtualKeys.F10);
+            if (forceAlphanumeric) keyboard.Press(VirtualKeys.F10);
             keyboard.Type("\nwo");
             Assert.Equal("を", keyboard.Showing, path);
             keyboard.Type("\n");
-            Assert.Equal(path.ToUpperInvariant() + "を", keyboard.Host.Document, path);
+            Assert.Equal((forceAlphanumeric ? path.ToUpperInvariant() : path) + "を", keyboard.Host.Document, path);
         }
     }
 

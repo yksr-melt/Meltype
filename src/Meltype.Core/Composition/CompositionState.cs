@@ -135,7 +135,7 @@ internal sealed record CompositionEnv(CompositionDetector Detector, IKanjiConver
 internal enum ConversionTrigger { Other, Space, Tab }
 
 /// <summary>自分の確定の記録。Shown は確定したときにフロントが渡したキャレットの前の文字 (読めなければ null)、Text は確定した後のキャレットの前の文字 (末尾の 20 文字まで)。</summary>
-internal sealed record OwnCommit(string? Shown, string Text, bool ExplicitPath);
+internal sealed record OwnCommit(string? Shown, string Text);
 
 /// <summary>1 回の変換 (Space などで始めてから、確定するか取り消すまで) の状態。</summary>
 internal sealed class Conversion(List<Clause> clauses, ConversionTrigger startedBy, bool preferJapanese)

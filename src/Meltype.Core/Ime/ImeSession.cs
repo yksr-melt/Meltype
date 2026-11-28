@@ -770,9 +770,9 @@ internal static class ImeSession
         var passesSlash = !state.CodeJapanese && lineKind is LineKind.Code or LineKind.Prompt;
         var slashAtStart = !modifier && !CompositionController.IsComposing(state.Composition) && ch is '/' && !passesSlash && !SigilWord.InNameAfter(before, comment) && settings.SigilWordsDirect &&
             SigilWord.PassesAfter(before, '/', comment);
-        // F10 で明示的に確定したパスの後ろでは、パス記号に続く名前の入力は終わっている。
+        // 自分で確定したパスの後ろは、アプリへ直接入力中の補完名の続きではない。
         if (!slashAtStart && !modifier && !CompositionController.IsComposing(state.Composition) && ch is { } c && settings.SigilWordsDirect &&
-            CompositionContext.CurrentCommit(state.Composition, before)?.ExplicitPath != true && SigilWord.PassesAfter(before, c, comment))
+            before is not null && SigilWord.PassesAfter(before, c, comment) && !CompositionContext.AfterCommittedPath(state.Composition, before))
         {
             return CompositionController.Pass(state.Composition, Env(state, env), now);
         }

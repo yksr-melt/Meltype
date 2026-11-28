@@ -64,9 +64,7 @@ internal static class CompositionCommit
         else if (CompositionLifecycle.Learning(state, input, env) && !input.EscReverted) env.Learning.LearnLanguage(CompositionText.Read(input.Text, env), CompositionText.Segments(CompositionText.Read(CompositionText.Automatic(input.Text), env), env), CompositionText.LearningContext(env));
         if (clauses is null || clauses.All(CompositionLearning.Learnable))
             RememberPhrase(state, input, env, clauses is not null ? string.Concat(clauses.Select(c => c.IsEnglish ? "" : c.Reading)) : CompositionText.AllKana(CompositionText.Read(input.Text, env), env, final: true), NotationRules.Write(text, env.Settings.Punctuation), english);
-        var explicitPath = suffix.Length == 0 && input.Text.Mode == DisplayMode.HalfWidthAlphanumeric &&
-            ProtectedSpanScanner.Scan(text.Text) is [{ Start: 0, End: var pathEnd, Kind: ProtectedKind.PosixPath or ProtectedKind.WindowsPath }] && pathEnd == text.Length;
-        CommitText(state, env, text + ComposedText.English(suffix), english, CompositionText.Raw(CompositionText.Read(input.Text, env)), chosen, preserveText, string.Join("、", rules), explicitPath);
+        CommitText(state, env, text + ComposedText.English(suffix), english, CompositionText.Raw(CompositionText.Read(input.Text, env)), chosen, preserveText, string.Join("、", rules));
     }
 
     /// <summary>
@@ -255,7 +253,7 @@ internal static class CompositionCommit
     private static readonly HashSet<string> BracketPairs = ["「」", "『』", "（）", "()", "［］", "[]", "｛｝", "{}", "【】", "〈〉", "《》", "〔〕", "\"\"", "“”"];
 
     /// <summary>確定して入力する。確定した文字列を、次の入力の文脈として覚えておく。</summary>
-    internal static void CommitText(CompositionState state, CompositionEnv env, ComposedText text, bool english, string raw = "", bool chosen = false, bool preserveText = false, string rule = "", bool explicitPath = false)
+    internal static void CommitText(CompositionState state, CompositionEnv env, ComposedText text, bool english, string raw = "", bool chosen = false, bool preserveText = false, string rule = "")
     {
         if (state.Scene is CompositionScene.WithInput scene) LogCommit(scene, env, text.Text, rule);
         var spaceIntended = state.Scene is CompositionScene.Converting { Conversion.StartedBy: ConversionTrigger.Space };
@@ -276,12 +274,12 @@ internal static class CompositionCommit
         else state.Correctable.Clear();
         if (corrected is var (count, replacement))
         {
-            CompositionContext.NoteCommit(state, env, count, replacement + text, explicitPath);
+            CompositionContext.NoteCommit(state, env, count, replacement + text);
             CompositionOutput.ReplaceBackward(state.Out, env, count, replacement, text);
         }
         else
         {
-            CompositionContext.NoteCommit(state, env, 0, text, explicitPath);
+            CompositionContext.NoteCommit(state, env, 0, text);
             CompositionOutput.Commit(state.Out, env, text);
         }
         // 設定「カッコを打ったら中にカーソルを移動」: カッコの組だけを確定したら、中に入る (issue #72)。
