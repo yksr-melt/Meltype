@@ -122,18 +122,37 @@ internal static class UtilityConversions
     {
         var matches = All.Select(c => c.Convert(input)).OfType<UtilityCandidates>().Where(m => m.Candidates.Count > 0).ToList();
         if (matches.Count == 0) return null;
-        if (matches is [var only]) return only;
+        if (matches is [var only]) return WithoutDuplicates(only);
         var replace = matches.FirstOrDefault(m => m.Placement == UtilityPlacement.Replace);
         // Replace が無ければ、1 つでも Prepend なら前に足す (その読みをほぼ確実に指す変換があるので)
         var placement = replace?.Placement ?? (matches.Any(m => m.Placement == UtilityPlacement.Prepend) ? UtilityPlacement.Prepend : UtilityPlacement.Append);
-        return new UtilityCandidates(matches.SelectMany(m => m.Candidates).Distinct(StringComparer.Ordinal).ToList(), placement)
+        return WithoutDuplicates(new UtilityCandidates(matches.SelectMany(m => m.Candidates).ToList(), placement)
         {
             Reading = replace?.Reading,
             NotLearned = matches.SelectMany(m => m.NotLearned).ToList(),
             RankingKeys = matches.SelectMany(m => m.RankingKeys).GroupBy(pair => pair.Key, StringComparer.Ordinal)
                 .ToDictionary(g => g.Key, g => (IReadOnlyList<UtilityFormat>)g.SelectMany(pair => pair.Value).Distinct().ToList(), StringComparer.Ordinal),
+        });
+    }
+
+    /// <summary>
+    /// 同じ文字の候補を最初の 1 つにまとめる (注記・色見本は候補と同じ位置のものを残す)。変換は形の違う書き方を並べるので、
+    /// 数字の桁によって同じ文字になることがある (10/20 の {m}/{d} と {m:D2}/{d:D2})。同じ文字が並んでも見分けられないので、1 つにする。
+    /// </summary>
+    private static UtilityCandidates WithoutDuplicates(UtilityCandidates candidates)
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var keep = candidates.Candidates.Select(seen.Add).ToList();
+        if (!keep.Contains(false)) return candidates;
+        return candidates with
+        {
+            Candidates = Kept(candidates.Candidates, keep),
+            Notes = candidates.Notes is { } notes ? Kept(notes, keep) : null,
+            Colors = candidates.Colors is { } colors ? Kept(colors, keep) : null,
         };
     }
+
+    private static List<T> Kept<T>(IReadOnlyList<T> items, List<bool> keep) => [.. items.Where((_, i) => keep[i])];
 
     internal static readonly string[] WeekDays = ["日", "月", "火", "水", "木", "金", "土"];
 
