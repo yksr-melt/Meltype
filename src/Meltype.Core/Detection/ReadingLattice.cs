@@ -266,6 +266,10 @@ internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
             // 付属語の軽い重み (0.8) のままだと、ローマ字の途中で英単語を切り出した残り (get|う・hit|う・れ|pro) が、語にならないかな 2 音 (げ|つ) より軽くなる。
             // 付属語だけを打った入力 (re) は、前に確定した語の続きなので付属語のまま
             if (!edge.English && !edge.Neutral && (state.IsEnglish || state.Side == Side.None && edge.End < length) && VerbAuxiliaries.Contains(edge.Kana)) cost = UnknownKanaCost;
+            // 英単語と活用しない語の後ろの ん・てる (まい|ん|たべた・まい|のち|てる) は、語にならないかなとして読む。付属語の重みのままだと、
+            // 打った英単語 (main) をかなに割った道が、英単語 + 切り替えより軽くなる
+            if (!edge.English && !edge.Neutral && from.Previous is not null && !from.Edge.Neutral && JapaneseLexicon.CannotFollow(from.Edge.English ? null : from.Edge.Kana, edge.Kana))
+                cost = UnknownKana(edge.Kana);
             if (edge.English) cost += EnglishTieBreak + englishBias;
             Span<int> counts = stackalloc int[LinkWeights.Count];
             CountLinks(from, state, edge, counts);

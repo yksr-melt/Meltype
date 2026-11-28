@@ -59,6 +59,52 @@ internal sealed class JapaneseLexicon
         // 短い読みを足しても、そこから 2 文字以下の活用形 (くべる → くべ = cube) は作らない。
         PackedWordSet.FromWords(Conjugations(CommonReadings.RareText()).Where(form => form.Length >= 3 && !CommonReadings.Rare.Contains(form))));
 
+    // 同梱の読み (readings-rare.txt も含む) のうち活用する語の、終止形・連体形 (たべる・はやい)・活用した形 (たべ・かい・まい)・未然形 (たべ・かか・こ・さ)。
+    // 活用した形は、よく使う語の読みと同じ綴り (まい = 舞う の連用形・枚) も含む
+    private static readonly Lazy<(PackedWordSet Inflecting, PackedWordSet Inflected, PackedWordSet Irrealis)> Inflections = new(() =>
+    {
+        List<string> inflecting = [], inflected = [], irrealis = [];
+        foreach (var line in Libraries.Lexicon.DictionarySource.DataLines(CommonReadings.ReadText() + "\n" + CommonReadings.RareText()))
+        {
+            var parts = line.Split('\t');
+            if (parts.Length < 2) continue;
+            inflecting.Add(parts[0]);
+            foreach (var kind in parts[1].Split(','))
+            {
+                AddConjugations(parts[0], kind, inflected);
+                irrealis.AddRange(Irrealis(parts[0], kind));
+            }
+        }
+        return (PackedWordSet.FromWords(inflecting), PackedWordSet.FromWords(inflected), PackedWordSet.FromWords(irrealis));
+    });
+
+    // 未然形 (ない・ん が続く形)
+    private static string[] Irrealis(string word, string kind) => word.Length < 2 ? [] : kind switch
+    {
+        "v1" when word[^1] == 'る' => [word[..^1]],
+        "vk" when word.EndsWith("くる", StringComparison.Ordinal) => [word[..^2] + "こ"],
+        "vs" when word.EndsWith("する", StringComparison.Ordinal) => [word[..^2] + "さ", word[..^2] + "せ"],
+        _ when kind.StartsWith("v5", StringComparison.Ordinal) && Rows.TryGetValue(word[^1], out var row) => [word[..^1] + row[0]],
+        _ => [],
+    };
+
+    // 動詞の て形の後ろにしか付かない付属語
+    private static readonly HashSet<string> TeFormAuxiliaries = ["てる", "てた", "ている", "てい", "ていた", "ちゃう", "ちゃった"];
+
+    /// <summary>
+    /// 付属語 kana を、直前の語 previous (英単語なら null) に付けられないか。ん は未然形・連体形の後ろ (いかん・いくん)、
+    /// てる・ちゃう は活用した形の後ろにしか付かないので、英単語と活用しない語の後ろ (main|ん・まい|ん・のち|てる) では付属語として読まない。
+    /// 直前が付属語 (ない|ん・じゃ|ん) か、ー で終わる感動詞 (あー|ん) なら付けられる。
+    /// </summary>
+    internal static bool CannotFollow(string? previous, string kana)
+    {
+        if (kana != "ん" && !TeFormAuxiliaries.Contains(kana)) return false;
+        if (previous is null) return true;
+        if (IsFunctionWord(previous) || previous.EndsWith('ー')) return false;
+        var (inflecting, inflected, irrealis) = Inflections.Value;
+        return kana == "ん" ? !inflecting.Contains(previous) && !irrealis.Contains(previous) : !inflected.Contains(previous);
+    }
+
     public static JapaneseLexicon Load(RomajiDetector romaji) => new(romaji, CommonReadings.Words, CommonForms.Value);
 
     public int Count { get; }
@@ -123,7 +169,8 @@ internal sealed class JapaneseLexicon
                 // て・た 形 (と て の縮まった ちゃ・ちゃった の ちゃっ) も 1 語にする: 語幹が 1 文字 (み・き) だと 1 文字の語の重みになり、
                 // み|て が英単語 mite に、き|ちゃ が kit + や に負ける
                 // 命令形 (みろ・たべろ) も、ろ が 1 文字の語にならないよう 1 語にする (みろ が英単語 miro に負ける)
-                foreach (var ending in (string[])["", "て", "た", "ちゃ", "ちゃっ", "ろ"]) forms.Add(stem + ending);
+                // て形 + る (おちてる) も 1 語にする: おち|てる の 2 語だと、英単語の後ろ (main|おちてる) で まい|の… に負ける
+                foreach (var ending in (string[])["", "て", "た", "てる", "ちゃ", "ちゃっ", "ろ"]) forms.Add(stem + ending);
                 break;
             case "i":
                 if (word[^1] != 'い') break;
@@ -151,10 +198,11 @@ internal sealed class JapaneseLexicon
                 if (onbin is not null)
                 {
                     forms.Add(stem + onbin);
-                    // 音便の て・た 形 (まって・よんで) も 1 語にする: まっ|て に分けると、英単語 (matte) 1 語と同じ重みにしかならない
+                    // 音便の て・た 形と て形 + る (まって・よんで・まってる) も 1 語にする: まっ|て に分けると、英単語 (matte) 1 語と同じ重みにしかならない
                     var voiced = kind is "v5g" or "v5b" or "v5m" or "v5n";
                     forms.Add(stem + onbin + (voiced ? "で" : "て"));
                     forms.Add(stem + onbin + (voiced ? "だ" : "た"));
+                    forms.Add(stem + onbin + (voiced ? "でる" : "てる"));
                 }
                 // ござる・いらっしゃる・なさる は ます の前が い (ございます)
                 if (kind == "v5aru") forms.Add(stem + "い");

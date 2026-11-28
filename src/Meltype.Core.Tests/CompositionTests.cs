@@ -667,15 +667,17 @@ internal static class CompositionTests
         Assert.Equal("身近", k.Host.View!.Candidates[0], string.Join(" ", k.Host.View!.Candidates));
         Assert.True(k.Host.View!.Candidates.Contains("midiか"), string.Join(" ", k.Host.View!.Candidates));
 
-        // みぢか に続く形 (midi|かくにん・midi|かも) も、かなで見えたまま Space で英単語で区切った形を選べる
-        foreach (var (typed, kana, split) in new[] { ("midikakuninn", "みぢかくにん", "midiかくにん"), ("midikamo", "みぢかも", "midiかも") })
-        {
-            var j = new Keyboard();
-            j.Type(typed);
-            Assert.Equal(kana, j.Showing);
-            j.Press(VirtualKeys.Space);
-            Assert.True(j.Host.View!.Candidates.Contains(split), $"「{typed}」: " + string.Join(" ", j.Host.View!.Candidates));
-        }
+        // みぢか に続く形 (midi|かも) も、かなで見えたまま Space で英単語で区切った形を選べる
+        var j = new Keyboard();
+        j.Type("midikamo");
+        Assert.Equal("みぢかも", j.Showing);
+        j.Press(VirtualKeys.Space);
+        Assert.True(j.Host.View!.Candidates.Contains("midiかも"), string.Join(" ", j.Host.View!.Candidates));
+
+        // みぢか|くに|ん は日本語として読めない (ん は名詞の後ろに付かない) ので、midi|かくにん で見える
+        var m = new Keyboard();
+        m.Type("midikakuninn");
+        Assert.Equal("midiかくにん", m.Showing);
     }
 
     [Test]
@@ -2475,6 +2477,17 @@ internal static class CompositionTests
         Assert.Equal("procrasticle", k.Showing);
         k.Type("\n");
         Assert.Equal("procrasticle", k.Host.Document);
+    }
+
+    [Test]
+    public static void Issue2208_Issue1483_NasalAndTeruAfterNounDoNotSplitEnglish()
+    {
+        // ん・てる は活用しない語の後ろに付かないので、ローマ字として読める英単語 (main) を まい|ん・まい|のち|てる に割らない
+        AssertCommitted(("mainkannsuu", "mainかんすう"), ("mainochiteru", "mainおちてる"), ("masterochita", "masterおちた"),
+            ("maintabeta", "mainたべた"), ("renderkannsuu", "renderかんすう"));
+        // 逆向き: 活用した形の後ろの ん・てる と、英単語にならない日本語はそのまま
+        AssertCommitted(("mainichi", "まいにち"), ("maikin", "まいきん"), ("tabeteru", "たべてる"), ("yatteru", "やってる"),
+            ("tabechau", "たべちゃう"), ("ikan", "いかん"), ("wakaran", "わからん"), ("ikunda", "いくんだ"), ("jan", "じゃん"), ("adon", "あどん"));
     }
 
     [Test]
