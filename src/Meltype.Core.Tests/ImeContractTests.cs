@@ -1372,6 +1372,47 @@ internal static class ImeContractTests
     }
 
     [Test]
+    public static void KanaInput_UsesTheUSPositionsForJisKana()
+    {
+        foreach (var (os, t, left, f, right, grave, backslash, apostrophe, semicolon, equals, minus) in new[]
+        {
+            ("Evdev", 20, 26, 33, 27, 41, 43, 40, 39, 13, 12),
+            ("Mac", 0x11, 0x21, 0x03, 0x1E, 0x32, 0x2A, 0x27, 0x29, 0x18, 0x1B),
+            ("Windows", 0x14, 0x1A, 0x21, 0x1B, 0x29, 0x2B, 0x28, 0x27, 0x0D, 0x0C),
+        })
+        {
+            var front = new Front();
+            front.Settings.InputStyle = InputStyle.Kana;
+            void Press(int code, char ch, bool shift = false) => PhysicalKey(front, Physical(os, code), ch, shift);
+            Press(t, 't');
+            Press(left, '[');
+            Press(f, 'f');
+            Press(right, ']');
+            Press(grave, '`');
+            Press(backslash, '\\');
+            Press(apostrophe, '\'');
+            Press(semicolon, ';');
+            Press(equals, '=');
+            Press(minus, '-');
+            Press(minus, '_', shift: true);
+            Press(minus, '=', shift: true);
+            Assert.Equal("がぱろむけれへほーほ", front.Composition["t1"], $"{os}\n{front.Trace}");
+        }
+    }
+
+    [Test]
+    public static void KanaInput_GravePositionDoesNotChangeShortcuts()
+    {
+        var front = new Front();
+        front.Settings.InputStyle = InputStyle.Kana;
+        front.Event("KeyPressed", extra: ",\"key\":{\"vk\":0,\"ch\":116}");
+        front.Event("KeyPressed", extra: ",\"key\":{\"vk\":0,\"ch\":96}");
+        Assert.Equal("かろ", front.Composition["t1"], front.Trace);
+        var shortcut = front.Event("KeyPressed", extra: ",\"key\":{\"vk\":0,\"ch\":96,\"alt\":true,\"physical\":{\"type\":\"Evdev\",\"code\":41}}");
+        Assert.True(!Consumed(shortcut) && front.Open, front.Trace);
+    }
+
+    [Test]
     public static void PhysicalKey_KanaFollowsThePositionAndRomajiFollowsTheCharacter()
     {
         // Dvorak の配列: S の位置のキーで o が入る

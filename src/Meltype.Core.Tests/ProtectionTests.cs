@@ -116,7 +116,7 @@ internal static class ProtectionTests
             ContextRules = ContextRules.Load(null),
             History = new ConversionHistory(null),
             Misspellings = MisspellingDictionary.Load(null),
-            RomajiTypos = RomajiTypoCorrector.Load(CompositionTests.Detector.Romaji),
+            Lexicon = JapaneseLexicon.Load(CompositionTests.Detector.Romaji),
             Languages = languages,
         };
         // 行頭の @・/ (#193 の「そのままアプリへ渡す」) を切り、変換ボックスの中の保護区間の扱いを確かめる。
@@ -305,7 +305,7 @@ internal static class ProtectionTests
     }
 
     [Test]
-    public static void MixedProtectedSpans_DoNotAutocorrectRomajiTypos()
+    public static void MixedProtectedSpans_StayAsTyped()
     {
         foreach (var token in new[] { "@onegaishimsu", "https://example.com/onegaishimsu", "./onegaishimsu" })
             foreach (var action in new[] { VirtualKeys.Return, VirtualKeys.Space })
