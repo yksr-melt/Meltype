@@ -26,7 +26,8 @@ public static class Imm32ImeController
 
         if (!TrySend(imeWindow, IMC_GETOPENSTATUS, IntPtr.Zero, QueryTimeoutMs, out var open))
             return new ImeState(language, ImeMode.Unknown, 0, hkl);
-        TrySend(imeWindow, IMC_GETCONVERSIONMODE, IntPtr.Zero, QueryTimeoutMs, out var conversion);
+        if (!TrySend(imeWindow, IMC_GETCONVERSIONMODE, IntPtr.Zero, QueryTimeoutMs, out var conversion))
+            return new ImeState(language, ImeMode.Unknown, 0, hkl);
         return new ImeState(language, open != IntPtr.Zero ? ImeMode.Open : ImeMode.Closed, unchecked((int)conversion.ToInt64()), hkl);
     }
 

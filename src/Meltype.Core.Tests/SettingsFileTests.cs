@@ -8,6 +8,26 @@ namespace Meltype.Tests;
 internal static class SettingsFileTests
 {
     [Test]
+    public static void Settings_OldNullAppRulesPreserveUserSettings()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "meltype-settings-null-rules-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var path = Path.Combine(directory, "config.json");
+            foreach (var rules in new[] { "null", "[null]" })
+            {
+                File.WriteAllText(path, $$"""{"SettingsVersion": 11, "AppRules": {{rules}}, "Enabled": false}""");
+                var settings = Settings.Load(path);
+                Assert.True(!settings.Enabled, "保存されていた一時停止を維持する");
+                Assert.True(settings.AppRules.Any(r => r.Process == "JumpClient.exe" && !r.Enabled), "旧版からの移行を実行する");
+                Assert.True(!File.Exists(path + ".broken"), "読み込める設定として扱う");
+            }
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
+
+    [Test]
     public static void Settings_WithAValueOfTheWrongType_LoadsDefaults()
     {
         // 手で書いた値の型が違う (Process が数) と、古い版の設定の読み替えが InvalidOperationException を投げる。起動できなくせず、既定値で動く

@@ -923,15 +923,17 @@ internal static class CompositionConversion
         string.Concat(CompositionText.ConversionSegments(CompositionText.Read(input.Text, env), env).Select(s => s.IsEnglish ? s.Raw : " "));
 
     /// <summary>
-    /// ライブ変換: Space を押したときと同じく、文脈・手がかり辞書・学習を使って文節ごとに変換した結果を見せる。
-    /// 打つたびに呼ばれるので、1 回の入力の間だけ控えを使う。
+    /// ライブ変換: Space を押したときと同じく、文脈・手がかり辞書・学習を使って、変換していない入力の日本語の区間を文節ごとに変換する。
+    /// wait なら変換エンジンの答えを env.Deadline まで待つ (答えを後から受け取れるフロントの確定)。待たないときは、打つたびに呼ばれるので、1 回の入力の間だけ控えを使う。
     /// </summary>
-    internal static ComposedText LiveConvert(CompositionInput input, CompositionEnv env, string kana, bool afterEnglish, string before)
+    internal static IReadOnlyList<TypingClause.Japanese> LiveAnswer(CompositionInput input, CompositionEnv env, string kana, bool afterEnglish, string before, bool wait)
     {
         // 記号 (～ ! ? …) は数えない。かなが短いうちに記号を足しただけで、的外れな漢字にしない (な～～～ が 名～～～ になっていた: issue #505)
-        if (!CountsAsLive(kana)) return ComposedText.Kana(kana);
-        return ComposedText.Concat(LiveClauses(input, env, kana, afterEnglish, before).Select(c => ComposedText.Converted(c.Reading, c.Text)));
+        if (!CountsAsLive(kana)) return [new TypingClause.Kana(kana)];
+        return wait ? Converted(ConvertJapaneseSegment(input, env, kana, afterEnglish, before, zenzai: true)) : LiveClauses(input, env, kana, afterEnglish, before);
     }
+
+    private static List<TypingClause.Converted> Converted(IEnumerable<Clause> clauses) => [.. clauses.Select(c => new TypingClause.Converted(c.Reading, c.Engine, c.Text))];
 
     /// <summary>
     /// ライブ変換するだけの拍があるか。小書きの母音・拗音は直前のかなと合わせて 1 拍 (きょ・ふゅ・しぃ は 1 拍)、っ・ん・ー は 1 拍と数える。
@@ -940,13 +942,17 @@ internal static class CompositionConversion
     internal static bool CountsAsLive(string kana) =>
         kana.Where((c, i) => IsKana(c) && !(i > 0 && KanaChars.IsSmallKana(c) && IsKana(kana[i - 1]))).Count() >= LiveConversionMinLength;
 
-    /// <summary>ライブ変換の文節 (読み・変換エンジンの答え・学習などで選び直した後の文字)。予測変換で最後の文節を探すときも、同じ打鍵で変換した結果を使う。</summary>
-    internal static List<(string Reading, string? Engine, string Text)> LiveClauses(CompositionInput input, CompositionEnv env, string kana, bool afterEnglish, string before)
+    /// <summary>
+    /// ライブ変換の文節 (読み・変換エンジンの答え・学習などで選び直した後の文字)。予測変換で最後の文節を探すときも、同じ打鍵で変換した結果を使う。
+    /// 1 キーの表示・確定の文字・予測が同じ読みを何度も頼むので控える。Mozc・Zenzai は最後に頼まれた 1 件だけを処理する (LatestRequestWorker) ので、
+    /// 控えずに頼み直すと、変換エンジンへの要求が増えて答えの届く順が変わる。
+    /// </summary>
+    internal static List<TypingClause.Converted> LiveClauses(CompositionInput input, CompositionEnv env, string kana, bool afterEnglish, string before)
     {
         // 辞書・学習・変換エンジンは入力の間は変わらない (控えは入力を始めるときに空にする)。打ったものに英数字があるか (KeepTypedSymbols) は入力の途中で変わる
         var key = string.Join("\u0001", kana, afterEnglish, before, EnglishInComposition(input, env), env.Context().FollowingText, TypedLetterOrDigit(input));
         if (env.LiveCache.TryGetValue(key, out var cached)) return cached;
-        var clauses = ConvertJapaneseSegment(input, env.WithoutWaiting(), kana, afterEnglish, before, zenzai: true).Select(c => (c.Reading, c.Engine, c.Text)).ToList();
+        var clauses = Converted(ConvertJapaneseSegment(input, env.WithoutWaiting(), kana, afterEnglish, before, zenzai: true));
         if (env.LiveCache.Count > 256) env.LiveCache.Clear();
         env.LiveCache[key] = clauses;
         return clauses;
