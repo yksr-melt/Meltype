@@ -133,6 +133,8 @@ internal static class ImeContractTests
             '/' => Key(0xBF, key, instance: instance, moved: moved),
             '"' => Key(0xDE, key, shift: true, instance: instance, moved: moved),
             ']' => Key(0xDD, key, instance: instance, moved: moved),
+            ';' => Key(0xBB, key, instance: instance, moved: moved),
+            ',' => Key(0xBC, key, instance: instance, moved: moved),
             >= 'a' and <= 'z' => Key(key - 'a' + 'A', key, instance: instance, moved: moved),
             _ => throw new ArgumentException($"送れないキー: {key}"),
         };
@@ -223,6 +225,43 @@ internal static class ImeContractTests
         front.Key('\n');
         Assert.Equal("今日はあいうえお", front.Document, front.Trace);
         Assert.True(!Consumed(front.Key('\n')), "打っていないときの Enter はアプリに通す\n" + front.Trace);
+    }
+
+    [Test]
+    public static void LetterLayout_TypesRomajiByPosition()
+    {
+        // ローマ字の配列が Dvorak: QWERTY の位置で打った j f = h u = ふ、v a g = k a i = かい
+        var front = new Front();
+        front.Settings.RomajiLayout = RomajiLayout.Dvorak;
+        front.Event("StateRequested");
+        front.Type("jfvag");
+        Assert.Equal("ふかい", front.Composition["t1"], front.Trace);
+        // Colemak で google と打つキー (QWERTY の t;;tuk) は英語の google
+        front = new Front();
+        front.Settings.RomajiLayout = RomajiLayout.Colemak;
+        front.Event("StateRequested");
+        front.Type("t;;tuk");
+        Assert.Equal("google", front.Composition["t1"], front.Trace);
+        // 大西配列: QWERTY の l ; d = s h a、r = , (、)
+        front = new Front();
+        front.Settings.RomajiLayout = RomajiLayout.Ohnishi;
+        front.Event("StateRequested");
+        front.Type("l;dr");
+        Assert.Equal("しゃ、", front.Composition["t1"], front.Trace);
+    }
+
+    [Test]
+    public static void LetterLayout_ShortcutsAndDirectModeKeepQwerty()
+    {
+        // Ctrl と一緒のキーと英数状態のキーは入れ替えない
+        var settings = new Settings { RomajiLayout = RomajiLayout.Dvorak };
+        Assert.Equal('c', (char)LetterLayout.Apply(new ImeKey { Ch = 'c', Ctrl = true }, settings, direct: false).Ch);
+        Assert.Equal('j', (char)LetterLayout.Apply(new ImeKey { Ch = 'j' }, settings, direct: true).Ch);
+        Assert.Equal('H', (char)LetterLayout.Apply(new ImeKey { Ch = 'J', Shift = true }, settings, direct: false).Ch);
+        // 記号の位置の Shift (:) と QWERTY・SKY 配列は入れ替えない
+        Assert.Equal(null, LetterLayout.Map(RomajiLayout.Dvorak, ':'));
+        Assert.Equal(null, LetterLayout.Map(RomajiLayout.Qwerty, 'a'));
+        Assert.Equal(null, LetterLayout.Map(RomajiLayout.Sky, 'a'));
     }
 
     [Test]

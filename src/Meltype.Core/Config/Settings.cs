@@ -268,7 +268,7 @@ public sealed class Settings
     public InputStyle InputStyle { get; set; } = InputStyle.Romaji;
 
     [Category("入力方式"), DisplayName("ローマ字の配列"), Platforms(Platform.Windows),
-     Description("入力方式が「ローマ字入力」のときのキーの配列。QWERTY (ふつう) か SKY 配列 (左手が子音 , W R M H / N T S K Y / P D Z G B、右手が母音 UU AI OU 。 EI / U A O I E / UN AN ON IN EN)。SKY 配列では、英字のキーを SKY 配列のローマ字にしてから読みます (拗音は子音 + Y + 母音、促音は子音を 2 回)。英語の自動判定は使わず、日本語として読みます。Meltype キーボードで使えます。")]
+     Description("入力方式が「ローマ字入力」のときのキーの配列。QWERTY (ふつう)・SKY 配列・Dvorak・Colemak・Workman・大西配列・Eucalyn 配列。SKY 配列 (左手が子音 , W R M H / N T S K Y / P D Z G B、右手が母音 UU AI OU 。 EI / U A O I E / UN AN ON IN EN)。SKY 配列では、英字のキーを SKY 配列のローマ字にしてから読みます (拗音は子音 + Y + 母音、促音は子音を 2 回)。英語の自動判定は使わず、日本語として読みます。Dvorak・Colemak・Workman・大西配列・Eucalyn 配列では、日本語入力中の英字の 3 段をその配列の文字にしてから、ふつうのローマ字入力と同じに読みます (英語の判定も使います)。英数状態とショートカット (Ctrl・Alt) のキーは入れ替えません。Meltype キーボードで使えます。")]
     public RomajiLayout RomajiLayout { get; set; } = RomajiLayout.Qwerty;
 
     [Category("入力方式"), DisplayName("かな配列"), Platforms(Platform.Windows),

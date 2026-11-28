@@ -28,6 +28,11 @@ public enum RomajiLayout
     [System.ComponentModel.Description("QWERTY")] Qwerty,
     /// <summary>SKY 配列 (白鳥・小橋 1987 の基本配列。左手が子音、右手が母音・二重母音・撥音)。</summary>
     [System.ComponentModel.Description("SKY 配列")] Sky,
+    [System.ComponentModel.Description("Dvorak")] Dvorak,
+    [System.ComponentModel.Description("Colemak")] Colemak,
+    [System.ComponentModel.Description("Workman")] Workman,
+    [System.ComponentModel.Description("大西配列")] Ohnishi,
+    [System.ComponentModel.Description("Eucalyn 配列")] Eucalyn,
 }
 
 /// <summary>SKY 配列: QWERTY の位置のキーを、ローマ字の綴りにする (issue #1415)。</summary>

@@ -379,6 +379,7 @@ internal static class ImeSession
     private static Handled HandleKey(ImeSessionState state, ImeEnv env, ImeKey key, ImeField? field, string? before, Settings settings, (string Text, string Typed)? lastSnippet)
     {
         key = CapsLockApplied(key, settings);
+        key = LetterLayout.Apply(key, settings, Direct(state));
         var composing = IsComposing(state);
         var modifiers = Modifiers(key);
         var plain = modifiers == ShortcutModifiers.None;
