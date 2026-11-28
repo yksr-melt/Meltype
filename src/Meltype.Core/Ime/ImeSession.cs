@@ -827,8 +827,8 @@ internal static class ImeSession
         if (vk is not (VirtualKeys.Convert or VirtualKeys.NonConvert or VirtualKeys.Kana)) return null;
         // 無変換でのカタカナ切り替えは、役割を分ける設定が OFF でも働く (CompositionController 側で NonConvertCyclesKana を見る)
         var settings = env.App;
-        if (!(settings.SeparateKeyRoles || vk == VirtualKeys.NonConvert && settings.NonConvertCyclesKana)) return null;
-        if (!CompositionController.IsComposing(state.Composition) || Direct(state)) return null;
+        if (state.Composition.Scene is not CompositionScene.WithInput input || Direct(state)) return null;
+        if (!(settings.SeparateKeyRoles || vk == VirtualKeys.NonConvert && CompositionLifecycle.NonConvertCyclesKana(input, settings))) return null;
         return ComposeKey(state, env, vk, vk, null, false, false, false, false);
     }
 

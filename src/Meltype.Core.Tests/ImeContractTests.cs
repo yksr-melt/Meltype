@@ -544,6 +544,26 @@ internal static class ImeContractTests
     }
 
     [Test]
+    public static void NonConvertAfterProtectedInput_SwitchesToAlphanumeric()
+    {
+        foreach (var cycle in new[] { false, true })
+        {
+            var front = new Front();
+            front.Settings.SeparateKeyRoles = false;
+            front.Settings.NonConvertCyclesKana = cycle;
+            const string url = "https://example.com/abc";
+            front.Type("https");
+            front.Key(0xBA, ':');
+            front.Type("//example");
+            front.Key(VirtualKeys.OemPeriod, '.');
+            front.Type("com/abc");
+            front.Key(VirtualKeys.NonConvert);
+            Assert.Equal(url, front.Document, front.Trace);
+            Assert.True(!front.Open, front.Trace);
+        }
+    }
+
+    [Test]
     public static void ConvertKey_ReconvertsTheSelection()
     {
         var front = new Front { Document = "a ", Selection = "kyouha" };

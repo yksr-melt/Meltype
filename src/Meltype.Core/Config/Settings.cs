@@ -479,7 +479,7 @@ public sealed class Settings
     public ControlKeyLayout ControlKeys { get; set; } = ControlKeyLayout.Standard;
 
     [Category("キー操作"), DisplayName("Control キーの個別の割り当て"),
-     Description("入力中の Control + 英字に、別のキーの働きを割り当てます。「T=F6;Y=F7;U=F8;I=F9;O=F10」のように、英字=キー名を ; で区切って書きます (F キーが無い HHKB やノートパソコン向け)。キー名: F6〜F10・Left・Right・Up・Down・Home・End・Delete・Back・Enter・Esc・Tab。ここに書いた英字は、「Control キーの割り当て」より優先します。")]
+     Description("入力中の Control + 英字に、別のキーの働きを割り当てます。「T=F6;Y=F7;U=F8;I=F9;O=F10」のように、英字=キー名を ; で区切って書きます (F キーが無い HHKB やノートパソコン向け)。キー名: F6〜F10・HalfWidth (かなは半角カタカナ、それ以外は半角英数)・Left・Right・Up・Down・Home・End・Delete・Back・Enter・Esc・Tab。ここに書いた英字は、「Control キーの割り当て」より優先します。")]
     public string ControlKeyBindings { get; set; } = "";
 
     [Category("表示"), DisplayName("入力モードをカーソルの近くに表示"),

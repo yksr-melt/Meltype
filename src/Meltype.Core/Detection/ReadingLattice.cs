@@ -135,6 +135,7 @@ internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
         bool manual, bool englishSentence, bool kanaInput, bool punctuateAfterEnglish, double englishBias, int count, List<Func<string>>? reasons = null)
     {
         var text = prepared.Raw + pending;
+        var lowerText = text.ToLowerInvariant();
         var length = text.Length;
         if (length == 0) return [[new CompositionSegment(false, "", "")]];
         var keep = count > 1 ? PathsPerState : 1;
@@ -289,7 +290,7 @@ internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
             if (EscapeEnd(learning, text, p) is >= 0 and var escape) return new(LexemeRule.Escape, escape, domain, technical);
             if (HyphenatedWordEnd(prepared, learning, units, unit, pending) is >= 0 and var hyphenated) return new(LexemeRule.HyphenatedWord, RawEnd(hyphenated), domain, technical);
             if (NumeronymEnd(prepared, units, unit, pending) is >= 0 and var numeronym) return new(LexemeRule.Numeronym, RawEnd(numeronym), domain, technical);
-            if (ProperNounWithDigitsEnd(prepared, units, unit, pending) is >= 0 and var proper) return new(LexemeRule.ProperNounWithDigits, RawEnd(proper), domain, technical);
+            if (ProperNounWithDigitsEnd(lowerText, p) is >= 0 and var proper) return new(LexemeRule.ProperNounWithDigits, proper, domain, technical);
             if (VersionSuffixEnd(units, unit, pending) is >= 0 and var version) return new(LexemeRule.VersionSuffix, RawEnd(version), domain, technical);
             return new(LexemeRule.None, -1, domain, technical);
         }
@@ -442,7 +443,7 @@ internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
     /// <summary>和語で っ の後ろに来ない音 (濁音・な行・あ行など)。</summary>
     private const string NoSokuonBefore = "あいうえおがぎぐげござじずぜぞだぢづでどなにぬねのばびぶべぼまみむめもやゆよらりるれろわをん";
 
-    private static readonly HashSet<string> NounParticles = ["が", "を", "に", "で", "と", "の", "は", "も", "へ", "や", "から", "まで", "より", "って", "だ", "です"];
+    private static readonly HashSet<string> NounParticles = ["が", "を", "に", "で", "と", "の", "は", "も", "へ", "や", "から", "まで", "より", "って", "だ", "です", "では"];
 
     /// <summary>
     /// 動詞・形容詞の活用形の後ろにしか付かない、1 文字の付属語 (名詞や英単語の後ろには付かない)。
@@ -877,17 +878,20 @@ internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
     /// 数字を含む固有名詞 (propernouns.txt の yachi8000) の終わり。start からの英字・数字が一覧にあるとき (前後に日本語が続いてもよい)。
     /// 英字の部分がローマ字として読めても、数字の前で区切ってかなにしない (やち8000 にしない: issue #1013)。
     /// </summary>
-    private int ProperNounWithDigitsEnd(Prepared prepared, IReadOnlyList<CompositionUnit> units, int start, string pending)
+    private int ProperNounWithDigitsEnd(string text, int start)
     {
-        static bool IsPart(CompositionUnit unit) => unit.Raw.Length > 0 && unit.Raw.All(char.IsAsciiLetterOrDigit);
-        if (start >= units.Count || !IsPart(units[start])) return -1;
-        // 数字の無い固有名詞 (korehaneovidedesu の neovide) と同じく、文の途中 (koreha|yachi8000|desu) からも引く。
-        // 一覧にある一番長い頭 (yachi8000|desu の yachi8000)
+        // 固有名詞の末尾はローマ字の単位の途中に来ることがある (n8n|ni の nn)。
+        // 生の文字で一覧を引いて、見つかった一番長い固有名詞の直後で区切る。
         var end = -1;
-        for (var i = start + 1; i <= units.Count && IsPart(units[i - 1]); i++)
+        var digit = false;
+        var letter = false;
+        for (var i = start; i < text.Length && char.IsAsciiLetterOrDigit(text[i]); i++)
         {
-            var word = prepared.RawRange(start, i) + (i == units.Count && pending.All(char.IsAsciiLetterOrDigit) ? pending : "");
-            if (word.Any(char.IsAsciiDigit) && word.Any(char.IsAsciiLetter) && words.ProperNouns.Contains(word.ToLowerInvariant())) end = i;
+            var prefix = text.AsSpan(start, i - start + 1);
+            if (!words.ProperNouns.HasPrefix(prefix)) break;
+            digit |= char.IsAsciiDigit(text[i]);
+            letter |= char.IsAsciiLetter(text[i]);
+            if (digit && letter && words.ProperNouns.Contains(prefix)) end = i + 1;
         }
         return end;
     }

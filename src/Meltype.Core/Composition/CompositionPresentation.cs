@@ -125,6 +125,7 @@ internal static class CompositionPresentation
     /// <summary>変換ボックスに出す、打ったもの (設定「打ったキーを表示」)。漢字変換前は、変換中なら文節の読み、変換していなければ確定される形 (<see cref="CurrentComposed"/>) を漢字にせずに出す。</summary>
     private static string? TypedKeys(CompositionInput input, Conversion? conversion, CompositionEnv env) => env.Settings.TypedKeys switch
     {
+        TypedKeysStyle.Keys when input.Text.KanaInput => input.Text.KanaKeyLabels,
         TypedKeysStyle.Keys => CompositionText.Raw(CompositionText.Read(input.Text, env)),
         TypedKeysStyle.Kana when conversion is not null => string.Concat(conversion.Clauses.Select(CompositionConversion.Reading)),
         TypedKeysStyle.Kana => CompositionText.Compose(CompositionText.Read(input.Text, env), env, final: true).Text,
