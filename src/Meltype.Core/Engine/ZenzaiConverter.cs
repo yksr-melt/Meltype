@@ -10,7 +10,6 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Meltype.Libraries.Chars;
 
 namespace Meltype.Engine;
 
@@ -48,7 +47,7 @@ internal sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     private readonly int _timeoutMs;
     private readonly Uri? _fixedEndpoint;
     private readonly object _gate = new();
-    private readonly Dictionary<string, string?> _cache = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _cache = new(StringComparer.Ordinal);
     private readonly HttpClient _http = new() { Timeout = Timeout.InfiniteTimeSpan };
     private Process? _process;
     private Uri? _endpoint;
@@ -149,14 +148,14 @@ internal sealed class ZenzaiConverter : IKanjiConverter, IDisposable
         var key = context + "\u0000" + hiragana;
         lock (_gate)
         {
-            if (_cache.TryGetValue(key, out var cached)) return cached is null ? null : [new ConversionClause(hiragana, cached)];
+            if (_cache.TryGetValue(key, out var cached)) return [new ConversionClause(hiragana, cached)];
             EnsureStarting();
             if (!_ready || _endpoint is null) return null;
         }
         var live = new LiveRequest(hiragana, context, key);
         _worker.Submit(live);
         if (!_worker.Wait(live, ConversionRequest.RemainingMs(request.Deadline))) return null;
-        lock (_gate) return _cache.TryGetValue(key, out var answered) && answered is not null ? [new ConversionClause(hiragana, answered)] : null;
+        lock (_gate) return _cache.TryGetValue(key, out var answered) ? [new ConversionClause(hiragana, answered)] : null;
     }
 
     private readonly record struct LiveRequest(string Hiragana, string Context, string Key);
@@ -165,7 +164,7 @@ internal sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     {
         try
         {
-            // 変換しなかった・失敗した答えは知らせない (表示が変わらない。失敗では再描画がまた同じ要求を出す)。
+            // 失敗した答えは知らせない (表示が変わらない。再描画がまた同じ要求を出す)。
             // 壊れた答えは知らせる (使うかは HybridConverter が Mozc の候補と比べて決めるので、ここでは分からない。使わなければ表示は変わらない)
             if (ConvertNow(request.Hiragana, request.Context, request.Key) is not null) ResultReady?.Invoke();
         }
@@ -181,12 +180,9 @@ internal sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     private IReadOnlyList<ConversionClause>? ConvertNow(string hiragana, string context, string key)
     {
         using var timeout = new CancellationTokenSource(_timeoutMs);
-        var answer = Complete(Prompt(hiragana, context), timeout.Token);
-        // 読みのまま (変換していない: かんたん → かんたん) の答えは使わない。Mozc に任せる。記号の幅は、zenz に半角で渡すので見ない (ほんとう？ → ほんとう?)。
+        // 読みのままの答え (python + なら、になってしまう、先生に質問を + した) も使う (#1975)。
         // 壊れた答え (はーどうぇ → ハードウェアウェア…) かは、Mozc の候補と比べられる HybridConverter が決める
-        // 英単語に続く付属語 (python なら) では、かなのままの答えも変換結果として使う。
-        var keepsAttachedWord = TextChars.LanguageOf(context) == true && JapaneseParticles.IsAttachedWord(hiragana);
-        var text = answer is null || !keepsAttachedWord && ToHalfWidth(answer) == ToHalfWidth(hiragana) ? null : answer;
+        var answer = Complete(Prompt(hiragana, context), timeout.Token);
         // 経過時間を測って比べない。Windows の Environment.TickCount64 は約 16 ms 刻みなので、時間切れでも _timeoutMs より短く測れて、失敗に数えてしまう
         var slow = timeout.IsCancellationRequested;
         lock (_gate)
@@ -200,10 +196,10 @@ internal sealed class ZenzaiConverter : IKanjiConverter, IDisposable
             else if (answer is null) _failures++;
             else { _failures = 0; _timingOutSince = 0; _hasAnswered = true; }
             if (_cache.Count >= MaxCache) _cache.Clear();
-            // 使わないと決めた答えも覚える (打鍵のたびに聞き直さない)。失敗・遅いときは覚えない
-            if (answer is not null && !slow) _cache[key] = text;
+            // 失敗・遅いときは覚えない
+            if (answer is not null && !slow) _cache[key] = answer;
         }
-        return text is null ? null : [new ConversionClause(hiragana, text)];
+        return answer is null ? null : [new ConversionClause(hiragana, answer)];
     }
 
     /// <summary>zenz v3 系に渡す文は、文脈を先に置く。v2 の順序では前の文章が変換結果に混ざることがある。</summary>
