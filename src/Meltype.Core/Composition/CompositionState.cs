@@ -89,6 +89,9 @@ internal sealed record CompositionEnv(CompositionDetector Detector, IKanjiConver
     /// <summary>フロントが送ってきた、キャレットの前の確定済みの文字 (この出来事の前のもの。読めなければ null)。</summary>
     public string? Before { get; init; }
 
+    /// <summary>今回の打鍵で実際に読めた前文。前の文字を安全に置き換えられる場合に限る。</summary>
+    public string? EditableBefore { get; init; }
+
     /// <summary>フロントが送ってきた、キャレットの後ろの確定済みの文字 (読めなければ null)。</summary>
     public string? After { get; init; }
 

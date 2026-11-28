@@ -378,8 +378,8 @@ internal static class ImeSession
 
     private static Handled HandleKey(ImeSessionState state, ImeEnv env, ImeKey key, ImeField? field, string? before, Settings settings, (string Text, string Typed)? lastSnippet)
     {
+        var originalCh = key.Ch;
         key = CapsLockApplied(key, settings);
-        var composing = IsComposing(state);
         var modifiers = Modifiers(key);
         var plain = modifiers == ShortcutModifiers.None;
         var vk = key.Vk != 0 ? ToggleShortcut.NormalizeKey(key.Vk) : VirtualKeyOf(key.Ch);
@@ -397,6 +397,9 @@ internal static class ImeSession
         var toggle = settings.EffectiveToggleShortcuts.Any(shortcut => shortcut.Matches(vk, modifiers));
         // 押しっぱなしで、入力モードを何度も切り替えない
         if (key.Repeat && (toggle || plain && vk is ToggleShortcut.Hankaku or VirtualKeys.OemAttn or VirtualKeys.Kana)) return Consumed;
+        // 明示的なモード切り替えでは、英数開始の読みを延長するためだけに残した打鍵を未確定扱いしない。
+        if (toggle || plain && ModeKeys.Contains(vk)) CompositionDirectInput.ResumeNormalHold(state.Composition);
+        var composing = IsComposing(state);
         if (toggle && !composing) return Switch(state, env, !ShowsJapanese(state, before, settings), before, toggle: true);
         // 入力中は変換ボックスの英字表示の切り替え。変換中は変換ボックスのキーとして使う (Shift+Space は「前の候補へ」)
         if (toggle && !IsConverting(state)) return ComposeKey(state, env, VirtualKeys.Kanji, VirtualKeys.Kanji, null, false, false, false, false);
@@ -439,7 +442,8 @@ internal static class ImeSession
         // US 配列の Shift+- は _。JIS かなでは、US 配列にない ¥ キーの長音をこの位置で打てるようにする。
         if (settings.InputStyle == InputStyle.Kana && settings.KanaLayout == KanaLayout.Jis &&
             position == VirtualKeys.OemMinus && key.Shift && key.Ch == '_') position = 0xDC;
-        var result = ComposeKey(state, env, vk, position, key.Ch > 0 ? (char)key.Ch : null, key.Shift, key.Ctrl, key.Alt, key.Command, key.ReleaseFollows);
+        var result = ComposeKey(state, env, vk, position, key.Ch > 0 ? (char)key.Ch : null, key.Shift, key.Ctrl, key.Alt, key.Command, key.ReleaseFollows, keyField: field,
+            passedChar: originalCh > 0 ? (char)originalCh : null);
         // アプリに通したキーはキャレットを動かすかもしれない (Core が通すと決めたので、フロントからは送られてこない)
         if (!result.Consumed) CaretMoved(state, vk, key.Ctrl);
         return result;
@@ -626,11 +630,10 @@ internal static class ImeSession
     /// <summary>入力欄 (state.Field) のアプリの設定を入れた env。</summary>
     private static ImeEnv ForField(ImeSessionState state, ImeEnv env) => env with { App = env.Settings.ForApp(state.Field?.App) };
 
-    /// <summary>変換ボックスの処理に渡す、入力欄の状態でないもの (今の設定で作る)。</summary>
-    private static CompositionEnv Env(ImeSessionState state, ImeEnv env) => Env(state, env, env.App);
-
-    private static CompositionEnv Env(ImeSessionState state, ImeEnv env, Settings settings)
+    /// <summary>変換ボックスの処理に渡す、今の設定と入力欄の状態。</summary>
+    private static CompositionEnv Env(ImeSessionState state, ImeEnv env, ImeField? keyField = null)
     {
+        var settings = env.App;
         var lateResults = env.Parts.LateResults();
         var before = LineBefore(state, state.Field);
         CompositionEnv composition = null!;
@@ -646,6 +649,7 @@ internal static class ImeSession
             NowPlaying = env.Parts.NowPlaying,
             Corrected = env.Parts.Corrected,
             Before = before,
+            EditableBefore = keyField is { CanRemove: true, Composing: false, Selection: null or "" } field ? field.Before : null,
             After = state.Field?.After,
             CodeString = CodeInput(state) && CodeLineKind(state, before, settings) == LineKind.String,
             LateResults = lateResults,
@@ -753,7 +757,8 @@ internal static class ImeSession
     /// </summary>
     /// <param name="position">押したキーの位置 (<see cref="KeyPress.Position"/>)。</param>
     /// <param name="releaseFollows">ワークアラウンド (ImeEvent.KeyReleased): 離したことは <see cref="HandleKeyUp"/> で届く。false なら押した直後に離したとみなす。</param>
-    public static SessionResult ComposeKey(ImeSessionState state, ImeEnv env, int vk, int position, char? ch, bool shift, bool control, bool alt, bool command, bool releaseFollows = false)
+    public static SessionResult ComposeKey(ImeSessionState state, ImeEnv env, int vk, int position, char? ch, bool shift, bool control, bool alt, bool command,
+        bool releaseFollows = false, ImeField? keyField = null, char? passedChar = null)
     {
         var settings = env.App;
         var before = LineBefore(state, state.Field);
@@ -812,7 +817,7 @@ internal static class ImeSession
             state.UserDictionaryCheckedMs = now;
             env.UserDictionary?.Refresh();
         }
-        var result = CompositionController.Press(state.Composition, Env(state, env) with { SlashAtStart = slashAtStart }, new KeyPress(vk, position, ch, shift, control, alt, command, now), releaseFollows);
+        var result = CompositionController.Press(state.Composition, Env(state, env, keyField) with { SlashAtStart = slashAtStart }, new KeyPress(vk, position, ch, shift, control, alt, command, now) { PassedChar = passedChar }, releaseFollows);
         // アプリに渡したキー (変換していないときの BackSpace・矢印・Enter など) はキャレットを動かすかもしれない。
         // 前に確定した語を確定し直さない (消す位置がずれて関係ない文字を消さないように)
         if (!result.Consumed && !CompositionController.IsComposing(state.Composition)) ForgetLastCommit(state);

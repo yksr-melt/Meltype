@@ -21,7 +21,7 @@ internal static class CompositionKeys
         (state.Shift, state.Control, state.Modifier) = (key.Shift, key.Control, key.Modifier);
         if (!CompositionLifecycle.IsComposing(state) && !state.KanaLayout.ThumbHeld && (key.Modifier || !StartsComposition(state, env, key))) return false;
         state.Pressed.Add(key.Vk);
-        HandleKey(state, env, new KeyEvent(key.Vk, key.Ch ?? 0, false, false, false, key.TimeMs), key.Position);
+        HandleKey(state, env, new KeyEvent(key.Vk, key.Ch ?? 0, false, false, false, key.TimeMs), key.Position, key.PassedChar ?? key.Ch);
         return true;
     }
 
@@ -52,19 +52,20 @@ internal static class CompositionKeys
         // 親指シフト: 文字に使わずに離した親指キーは、もとの働き (変換・無変換) をする
         if (kanaUp.ThumbTap && pressed)
         {
-            HandleKey(state, env with { BypassKanaLayout = true }, new KeyEvent(vk, 0, false, false, false, 0), position);
+            HandleKey(state, env with { BypassKanaLayout = true }, new KeyEvent(vk, 0, false, false, false, 0), position, null);
         }
     }
 
     /// <param name="position">押したキーの位置 (<see cref="KeyPress.Position"/>)。かな配列・SKY 配列だけが使う。</param>
-    private static void HandleKey(CompositionState state, CompositionEnv env, KeyEvent e, int position)
+    private static void HandleKey(CompositionState state, CompositionEnv env, KeyEvent e, int position, char? passedChar)
     {
         var vk = e.Vk;
+        if (!VirtualKeys.IsLetter(vk) || state.Shift || state.Modifier) CompositionDirectInput.ResumeNormalHold(state);
         if (state.Scene is CompositionScene.Judging judging)
         {
             if (VirtualKeys.IsLetter(vk) && !state.Shift && !state.Modifier)
             {
-                CompositionDirectInput.Hold(state, judging, env, e, position);
+                CompositionDirectInput.Hold(state, judging, env, e, position, passedChar);
                 return;
             }
             // 母音の後の - は長音 (ro-maji → ろーまじ、de-ta → でーた)。英単語の途中にはまず出てこないので、ローマ字として
@@ -80,7 +81,7 @@ internal static class CompositionKeys
                 judging.LastKeyTime = e.TimeMs;
                 if (prefix)
                 {
-                    CompositionDirectInput.Send(state, judging, e);
+                    CompositionDirectInput.Send(state, judging, passedChar);
                     return;
                 }
                 Diagnostics.Log.Decision($"英数状態でローマ字を検知: {Diagnostics.Log.Text(judging.Letters.ToString())} (母音の後の長音)");
@@ -165,7 +166,7 @@ internal static class CompositionKeys
         if (!env.BypassKanaLayout && HandleKanaLayout(state, env, e, position)) return;
 
         if (state.Scene is CompositionScene.WithInput scene) HandleInputKey(state, scene, env, e, vk, position);
-        else StartWith(state, env, e, position);
+        else StartWith(state, env, e, position, passedChar);
     }
 
     /// <summary>変換ボックスに入力があるときのキー。vk は、Ctrl のショートカットを読み替えたキー。</summary>
@@ -368,7 +369,7 @@ internal static class CompositionKeys
     internal static bool StartsWithSymbol(char c) => c is >= '!' and <= '~' && !char.IsAsciiLetter(c);
 
     /// <summary>変換ボックスが空のときの最初の打鍵。英字・句読点なら入力を始め、それ以外はそのまま通す。</summary>
-    private static void StartWith(CompositionState state, CompositionEnv env, KeyEvent e, int position)
+    private static void StartWith(CompositionState state, CompositionEnv env, KeyEvent e, int position, char? passedChar)
     {
         var direct = CompositionLifecycle.IsDirect(state);
         if (e.Vk == VirtualKeys.Convert)
@@ -421,7 +422,7 @@ internal static class CompositionKeys
                 PassKey(state);
                 CompositionLifecycle.StartEnglishWord(state);
             }
-            else CompositionDirectInput.Hold(state, CompositionLifecycle.StartJudging(state), env, e, position);
+            else CompositionDirectInput.Hold(state, CompositionLifecycle.StartJudging(state), env, e, position, passedChar);
             return;
         }
         // 句読点・かぎかっこ・長音・中黒・数字でも入力を始める (、。「」ー・)。英数状態ではそのまま通す。

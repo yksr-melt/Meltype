@@ -51,6 +51,8 @@ public sealed record CompositionView(
 /// </summary>
 internal readonly record struct KeyPress(int Vk, int Position, char? Ch, bool Shift, bool Control, bool Alt, bool Command, long TimeMs)
 {
+    /// <summary>キーを通すとアプリに入る文字。Ch は CapsLock の設定で変わるので、前文との照合には通した文字を使う。</summary>
+    public char? PassedChar { get; init; }
     public bool Modifier => Control || Alt || Command;
 }
 

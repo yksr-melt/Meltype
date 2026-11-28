@@ -2064,6 +2064,134 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void Issue2219_DirectModeConvertsFromTheFirstKey()
+    {
+        foreach (var (keys, expected) in new[]
+        {
+            ("temotonopurojekuto", "てもとのぷろじぇくと"),
+            ("makuro-rinn", "まくろーりん"),
+            ("memorigatarinai", "めもりがたりない"),
+        })
+        {
+            var k = new Keyboard(direct: true, directAutoDetect: true);
+            k.Type(keys);
+            Assert.True(!k.Direct, $"{keys}: 日本語に切り替わる");
+            Assert.Equal("", k.Host.Document, $"{keys}: 先に送った英字が入力欄に残らない");
+            k.Type(" \n");
+            Assert.Equal(expected, k.Host.Document, keys);
+        }
+
+        // 最初に報告された綴りでも、末尾とは独立に「てもと」まで変換欄に入る。
+        var reported = new Keyboard(direct: true, directAutoDetect: true);
+        reported.Type("temotonopuroject");
+        Assert.Equal("", reported.Host.Document);
+        Assert.True(reported.Showing?.StartsWith("てもと", StringComparison.Ordinal) == true, reported.Showing ?? "");
+    }
+
+    [Test]
+    public static void Issue2219_DirectModeKeepsEnglishWordsWhileTyping()
+    {
+        foreach (var word in new[]
+        {
+            "template", "memorial", "memories", "matches", "baggage", "bachelor", "authority", "bedding", "biggest", "bending",
+            "home-made", "data-driven", "use-case", "meta-analysis", "name-based", "time-zone",
+            "bare-bones", "bare-bone", "bare-metal", "bare-minimum", "meme-based", "meme-themed",
+            "bare-bones?", "bare-bones!", "pure-data", "pure-demo@example.com", "bare-no@example.com", "pure-demo_config",
+            "domesticates", "forbearance", "prohibitions",
+        })
+        {
+            var k = new Keyboard(direct: true, directAutoDetect: true);
+            for (var i = 0; i < word.Length; i++)
+            {
+                k.Type(word[i].ToString());
+                Assert.True(k.Direct, $"{word[..(i + 1)]}: 英数のまま");
+                Assert.Equal(word[..(i + 1)], k.Host.Document, "打った文字はすぐ入力欄に届く");
+            }
+
+            k.Type("\n");
+            Assert.Equal($"{word}\n", k.Host.Document, "英単語の後の Enter は改行する");
+            k.Type("konnnichiha\n");
+            Assert.Equal($"{word}\nこんにちは", k.Host.Document);
+        }
+    }
+
+    [Test]
+    public static void Issue2219_DirectModeKeepsEnglishAfterAPause()
+    {
+        foreach (var (prefix, suffix) in new[] { ("acc", "ommodate"), ("mem", "orandum") })
+        {
+            var k = new Keyboard(direct: true, directAutoDetect: true);
+            k.Type(prefix);
+            k.Wait(950);
+            k.Type(suffix + "\n");
+            Assert.True(k.Direct, prefix + suffix);
+            Assert.Equal(prefix + suffix + "\n", k.Host.Document);
+        }
+    }
+
+    [Test]
+    public static void Issue2219_DirectModeAllowsExplicitSwitchAfterEnglishVerdict()
+    {
+        var k = new Keyboard(direct: true, directAutoDetect: true);
+        k.Type("temo");
+        k.Press(ToggleShortcut.Hankaku);
+        Assert.True(!k.Direct, "半角/全角 で日本語になる");
+        Assert.Equal("temo", k.Host.Document, "すでに入力した英字はそのまま");
+    }
+
+    [Test]
+    public static void Issue2219_DirectModeDetectsJapaneseAfterPunctuation()
+    {
+        foreach (var prefix in new[] { "home-", "data,", "home.", "off-" })
+        {
+            var k = new Keyboard(direct: true, directAutoDetect: true);
+            k.Type(prefix);
+            Assert.Equal(prefix, k.Host.Document);
+            Assert.True(k.Direct, prefix);
+            k.Type("konnnichiha\n");
+            Assert.Equal(prefix + "こんにちは", k.Host.Document);
+        }
+    }
+
+    [Test]
+    public static void Issue2219_DirectModeKeepsJapaneseDictionaryMatches()
+    {
+        foreach (var (keys, expected) in new[]
+        {
+            ("inu", "いぬ"),
+            ("inuga", "いぬが"),
+            ("inuwo", "いぬを"),
+            ("inuwokau", "いぬをかう"),
+        })
+        {
+            var k = new Keyboard(direct: true, directAutoDetect: true);
+            k.Type(keys + "\n");
+            Assert.Equal(expected, k.Host.Document, keys);
+        }
+    }
+
+    [Test]
+    public static void DirectMode_LongVowelAfterAnEnglishWordCanStillBeJapanese()
+    {
+        foreach (var (keys, expected) in new[]
+        {
+            ("tore-", "とれー"),
+            ("tore-ninngu", "とれーにんぐ"),
+            ("tore-na-", "とれーなー"),
+            ("tore-do", "とれーど"),
+            ("tore-sa-", "とれーさー"),
+            ("tore-ra-", "とれーらー"),
+            // ぐらにゅらー と読めるが、今まで変換に入っていた にゅ まで英字に残さない。
+            ("guranyura-", "guraにゅらー"),
+        })
+        {
+            var k = new Keyboard(direct: true, directAutoDetect: true);
+            k.Type(keys + "\n");
+            Assert.Equal(expected, k.Host.Document, keys);
+        }
+    }
+
+    [Test]
     public static void DirectMode_LongVowelDashSwitchesToJapanese()
     {
         // 英数状態で ro-maji と打つと、- の時点で英語として出してしまっていた (ローマ字 が打てない)。

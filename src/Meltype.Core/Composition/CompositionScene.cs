@@ -50,6 +50,9 @@ internal abstract class CompositionScene
 
         public long LastKeyTime;
 
+        // 英語と早く判定した場合に、通常の判定を再開する位置。0 は保留の延長なし。
+        public int ResumeAt;
+
         /// <summary>学習しない入力 (<see cref="CompositionInput.Private"/>)。</summary>
         public bool Private;
 

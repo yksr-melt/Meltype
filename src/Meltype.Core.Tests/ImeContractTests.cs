@@ -1286,6 +1286,32 @@ internal static class ImeContractTests
     }
 
     [Test]
+    public static void DirectModeCapsLock_ReclaimsRomajiAndPreservesEnglish()
+    {
+        var engine = TestSupport.CreateEngine();
+        foreach (var method in new[] { InputMode.Tsf, InputMode.Keyboard })
+        {
+            var japanese = new Front { InputMethod = method, SendsImeOpen = method == InputMode.Tsf, ClassifyDirect = (letters, final, settings) => MeltypeRuntime.ClassifyDirect(engine, letters, final, settings) };
+            japanese.Settings.Mode = method;
+            japanese.Settings.DirectModeAutoDetect = true;
+            japanese.Settings.CapsLockTypesCapitals = false;
+            japanese.Event("AlphanumericModeSelected");
+            foreach (var c in "TEMOTONOPUROJEKUTO") japanese.Key(c, c, capsLock: true);
+            Assert.Equal("", japanese.Document, japanese.Trace);
+            Assert.Equal("てもとのぷろじぇくと", japanese.Composition["t1"], japanese.Trace);
+
+            var english = new Front { InputMethod = method, SendsImeOpen = method == InputMode.Tsf, ClassifyDirect = (letters, final, settings) => MeltypeRuntime.ClassifyDirect(engine, letters, final, settings) };
+            english.Settings.Mode = method;
+            english.Settings.DirectModeAutoDetect = true;
+            english.Settings.CapsLockTypesCapitals = false;
+            english.Event("AlphanumericModeSelected");
+            foreach (var c in "TEMPLATE") english.Key(c, c, capsLock: true);
+            Assert.Equal("TEMPLATE", english.Document, english.Trace);
+            Assert.True(!english.Open, english.Trace);
+        }
+    }
+
+    [Test]
     public static void ThumbShift_HoldsTheThumbKeyUntilItIsReleased()
     {
         // ワークアラウンド (KeyReleased): 親指シフトの配列のときだけ、離したことも受け取る

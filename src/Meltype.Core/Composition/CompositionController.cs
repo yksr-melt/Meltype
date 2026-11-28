@@ -21,9 +21,11 @@ internal static class CompositionController
     public static SessionResult Press(CompositionState state, CompositionEnv env, KeyPress key, bool releaseFollows = false)
     {
         CompositionOutput.Begin(state.Out);
-        CompositionDirectInput.Tick(state, env, key.TimeMs);
+        var passNext = CompositionDirectInput.Tick(state, env, key.TimeMs);
         env = env.WaitingForInput();
-        var consumed = CompositionKeys.Handle(state, env, key);
+        // フロントは保留中なのでキーを送ったが、通常の英数判定ではこの続きのキーはアプリに通っていた。
+        var englishContinuation = key.Ch is { } ch && (char.IsAsciiLetterOrDigit(ch) || ch is '@' or '_');
+        var consumed = !(passNext && englishContinuation) && CompositionKeys.Handle(state, env, key);
         if (!releaseFollows) CompositionKeys.HandleRelease(state, env, key.Vk, key.Position);
         Settle(state, env);
         return Result(state, env, consumed);
