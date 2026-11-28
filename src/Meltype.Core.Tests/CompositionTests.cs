@@ -303,7 +303,7 @@ internal static class CompositionTests
             Func<string, IReadOnlyList<string>>? moreCandidates = null, UserDictionary? userDictionary = null, LanguageMemory? languages = null,
             TranslationDictionary? translations = null, TranslationHistory? translationHistory = null, Predictor? predictor = null,
             Func<DateTime>? now = null, Meltype.Config.TypedKeysStyle typedKeys = Meltype.Config.TypedKeysStyle.Off, bool tabConversion = false, bool englishNamePredictions = false,
-            CompositionDetector? detector = null, bool directAutoDetect = false)
+            CompositionDetector? detector = null, bool directAutoDetect = false, ChemicalCompoundDictionary? chemicalCompounds = null)
         {
             detector ??= Detector;
             Settings = new Meltype.Config.Settings
@@ -320,6 +320,7 @@ internal static class CompositionTests
             var services = new CompositionServices
             {
                 Candidates = Candidates,
+                ChemicalCompounds = chemicalCompounds,
                 ContextRules = Rules,
                 History = history ?? new ConversionHistory(null),
                 MoreCandidates = moreCandidates is null ? null : (reading, _) => moreCandidates(reading),
