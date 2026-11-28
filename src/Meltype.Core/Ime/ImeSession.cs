@@ -59,6 +59,11 @@ internal static class ImeSession
     private static bool IsTerminal(ImeField field) =>
         field.Traits.Contains(ImeTrait.Terminal) || field.App is { } app && LineContext.ClassifyFocus(app, field.Element) == CodeFocus.Terminal;
 
+    // ファイル名を指定して実行は、パスを打った後の Enter をそのままシェルへ渡す (#2264)。
+    private static bool IsShellRunDialog(ImeField? field) =>
+        field is { WindowClass: "#32770", Title: "Run" or "ファイル名を指定して実行" } &&
+        string.Equals(field.App, "explorer.exe", StringComparison.OrdinalIgnoreCase);
+
     private static bool ForbidsLearning(ImeField? field) => IsPassword(field) || field?.Traits.Contains(ImeTrait.Private) == true;
 
     /// <summary>
@@ -70,7 +75,7 @@ internal static class ImeSession
         var traits = field?.Traits ?? [];
         var app = field?.App;
         return (environment.InputMethod is not { } method || settings.Mode == method) && settings.Enabled &&
-            !IsPassword(field) && !traits.Contains(ImeTrait.Email) && !traits.Contains(ImeTrait.Numeric) && !traits.Contains(ImeTrait.Unreachable) &&
+            !IsPassword(field) && !IsShellRunDialog(field) && !traits.Contains(ImeTrait.Email) && !traits.Contains(ImeTrait.Numeric) && !traits.Contains(ImeTrait.Unreachable) &&
             !(settings.ExcludeFullscreen && traits.Contains(ImeTrait.Fullscreen)) &&
             !(settings.JapaneseKeyboardOnly && traits.Contains(ImeTrait.OtherLanguage)) &&
             !(traits.Contains(ImeTrait.NonText) && !IsGameChat(settings, field) && !settings.TreatsAsTextInput(app) && !(app is not null && LineContext.TerminalProcesses.Contains(app))) &&

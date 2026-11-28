@@ -539,7 +539,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
     /// <summary>入力先のスレッドで選んでいる入力言語が日本語か (物理配列ではない。HKL の下位ワードが言語 ID で、上位ワード (配列・IME の識別子) と開閉状態には依存しない)。</summary>
     internal static bool IsJapaneseLayout(IntPtr layout) => (layout.ToInt64() & 0xFFFF) == 0x0411;
 
-    private static string? WindowClass(IntPtr window)
+    internal static string? WindowClass(IntPtr window)
     {
         if (window == IntPtr.Zero) return null;
         var className = new char[256];
