@@ -98,3 +98,5 @@ Mergify Antigravity Obsidian KonomiTV
 
 # 辞書追加リクエストのメモ (Linux・開発ツール)
 IBus Xwayland Codex
+# 英字・数字・英字の略語
+i18n l10n g11n a11y o11y k8s e2e o2o p2p b2b b2c c2c m2m w3c h2o

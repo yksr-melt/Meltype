@@ -15,7 +15,7 @@ namespace Meltype.Detection;
 /// - 知っている英単語は、英単語の書き方の大文字・小文字 (its・Its・ITS・GitHub) のときだけノードにする (iTs は its にしない)。
 /// - 1 文字の英単語 (a・i・u・r) は、前後を英字以外で区切ったときだけノードにする。
 /// - 自動判定を使わないなら、Shift を押して打った大文字で始まる語だけを英語のノードにする。
-/// - 記号・数字の決まり (ドメイン・拡張子・ユーザー名・\ + 英字・- の入った語・数字を挟んだ略語・英文の中の記号) は、コストで比べずにその区間を英語にする。
+/// - 記号・数字の決まり (ドメイン・拡張子・ユーザー名・\ + 英字・- の入った語・数字を含む固有名詞・英文の中の記号) は、コストで比べずにその区間を英語にする。
 /// - 技術用語の綴りのすぐ後ろが する の活用 (share|して・make|します) なら、その綴りを日本語の語 (しゃれ・まけ) として読まない (しゃれする・まけします は日本語でない)。ただし一段動詞の使役形 (make|させた) は日本語のまま。
 /// - ローマ字入力では 1 文字ずつを区切りの位置にする (単位の途中で区切れる: get|Element、medal|s|ha)。かな入力では打った単位の境目だけ。
 /// </summary>
@@ -102,7 +102,7 @@ internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
     }
 
     /// <summary>コストで比べずに、その区間を英語にする記号・数字の決まり (このクラスの説明の「コストで比べない決まり」)。</summary>
-    private enum LexemeRule { None, Dotfile, UserName, Escape, HyphenatedWord, Numeronym, ProperNounWithDigits, VersionSuffix }
+    private enum LexemeRule { None, Dotfile, UserName, Escape, HyphenatedWord, ProperNounWithDigits, VersionSuffix }
 
     /// <summary>
     /// 1 つの位置から始まる字句。Rule が None でなければ、End (打った文字の位置) までを英語にする。
@@ -289,7 +289,6 @@ internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
             if (!englishLevel) return new(LexemeRule.None, -1, domain, technical);
             if (EscapeEnd(learning, text, p) is >= 0 and var escape) return new(LexemeRule.Escape, escape, domain, technical);
             if (HyphenatedWordEnd(prepared, learning, units, unit, pending) is >= 0 and var hyphenated) return new(LexemeRule.HyphenatedWord, RawEnd(hyphenated), domain, technical);
-            if (NumeronymEnd(prepared, units, unit, pending) is >= 0 and var numeronym) return new(LexemeRule.Numeronym, RawEnd(numeronym), domain, technical);
             if (ProperNounWithDigitsEnd(lowerText, p) is >= 0 and var proper) return new(LexemeRule.ProperNounWithDigits, proper, domain, technical);
             if (VersionSuffixEnd(units, unit, pending) is >= 0 and var version) return new(LexemeRule.VersionSuffix, RawEnd(version), domain, technical);
             return new(LexemeRule.None, -1, domain, technical);
@@ -897,54 +896,6 @@ internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
             if (digit && letter && words.ProperNouns.Contains(prefix)) end = i + 1;
         }
         return end;
-    }
-
-    /// <summary>
-    /// 数字を英字が挟む短い略語 (i18n、l10n、h2o、a11y、k8s) の終わり。無ければ -1。
-    /// 末尾が数字だけの語 (win11、ps5) は区切りの重みに任せる。
-    /// 日本語の途中の数字 (かいぎは3じ) を略語にしないよう、前後の英字は短く、全体も短いときだけ。
-    /// 末尾の子音が打ちかけ (pending の n: i18|n) のときも、数字の後ろの英字として数える。
-    /// </summary>
-    private int NumeronymEnd(Prepared prepared, IReadOnlyList<CompositionUnit> units, int start, string pending)
-    {
-        static bool IsLetter(CompositionUnit unit) => unit.Raw.Length > 0 && unit.Raw.All(char.IsAsciiLetter);
-        static bool IsDigit(CompositionUnit unit) => unit.Raw is [var d] && char.IsAsciiDigit(d);
-        if (start >= units.Count || !IsLetter(units[start])) return -1;
-        var i = start;
-        while (i < units.Count && IsLetter(units[i])) i++;
-        var headLen = prepared.RawRange(start, i).Length;
-        if (headLen is < 1 or > 2 || i >= units.Count || !IsDigit(units[i])) return -1;
-        var digitStart = i;
-        while (i < units.Count && IsDigit(units[i])) i++;
-        var digitLen = prepared.RawRange(digitStart, i).Length;
-        if (digitLen is < 1 or > 2) return -1;
-        var digitEnd = i;
-        var pendingLetters = i == units.Count && pending.Length > 0 && pending.All(char.IsAsciiLetter) ? pending : "";
-        if (i < units.Count && IsLetter(units[i]))
-        {
-            var tailStart = i;
-            while (i < units.Count && IsLetter(units[i])) i++;
-            // 数字の後ろにまた数字が続く形 (a1b2) は対象外
-            if (i < units.Count && IsDigit(units[i])) return -1;
-            var tailLen = prepared.RawRange(tailStart, i).Length;
-            pendingLetters = i == units.Count && pending.Length > 0 && pending.All(char.IsAsciiLetter) ? pending : "";
-            if (tailLen + pendingLetters.Length is < 1 or > 3) return -1;
-        }
-        else if (pendingLetters.Length is < 1 or > 3) return -1;
-        var word = prepared.RawRange(start, i) + pendingLetters;
-        if (word.Length is < 3 or > 6) return -1;
-        // 数字の前と後ろが、どちらもかなとして最後まで読める (huuso|ku|6|me|-toru の ku と me) なら、
-        // 略語 (i18n の n、k8s の s、h2o の h) ではなく、数字を挟んだ日本語 (風速6メートル: issue #1017)。
-        // 母音 1 文字 (e2e・o2o の e・o) は、かなとして読めても略語のことが多いので、子音から始まる 2 文字以上のときだけ。
-        var head = prepared.RawRange(start, digitStart).ToLowerInvariant();
-        var tail = (prepared.RawRange(digitEnd, i) + pendingLetters).ToLowerInvariant();
-        // 母音 1 文字でも、すぐ前に英字が続いていれば、前の語の続き (mou|1|tu の u、dai|1|dan の i) で、数字を挟んだ日本語 (もう1つ・第1弾)。
-        var headContinuesWord = head.Length == 1 && start > 0 && prepared.RawRange(start - 1, start) is [.., var before] && char.IsAsciiLetter(before);
-        if (head.Length >= 2 && tail.Length >= 2 && words.Romaji.AnalyzeFragment(head) is { IsValid: true, Partial: "" } &&
-            words.Romaji.AnalyzeFragment(tail) is { IsValid: true, Partial: "" }) return -1;
-        // 前の語の続きの母音なら、後ろが ん で終わる読み (dai|1|dan) も日本語
-        if (headContinuesWord && tail.Length >= 2 && words.Romaji.AnalyzeFragment(tail) is { IsValid: true, Partial: "" or "n" }) return -1;
-        return i;
     }
 
     /// <summary>
