@@ -6011,11 +6011,12 @@ internal static class CompositionTests
     [Test]
     public static void TypedNn_IsNotSplitBetweenJapaneseWords()
     {
-        // 打った nn は ん。日本語の語のあいだで ん|な と読み直さない (issue #2526)。nnn は ん + n、英語の後ろの単位は読み直す
+        // 打った nn は ん。日本語の語のあいだで ん|な と読み直さない (issue #2526)。nnn は ん + n、英語の後ろの単位は読み直す。
+        // 逆向き: n を 1 つだけ打った na は な (kaizenan = かいぜなん、kousinan = こうしなん)
         var expected = new Dictionary<string, string>
         {
             ["kaizennann"] = "かいぜんあん", ["kaizennannda"] = "かいぜんあんだ", ["sinnann"] = "しんあん",
-            ["kaizennnann"] = "かいぜんなん", ["baconni"] = "baconに",
+            ["kaizennnann"] = "かいぜんなん", ["baconni"] = "baconに", ["kaizenan"] = "かいぜなん", ["kousinan"] = "こうしなん",
         };
         foreach (var (typed, kana) in expected)
         {
