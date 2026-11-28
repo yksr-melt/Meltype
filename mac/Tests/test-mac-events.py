@@ -50,6 +50,7 @@ def main():
         (data / 'config.json').write_text(json.dumps({
             'SpaceAroundEnglish': True, 'LiveConversion': False, 'SigilWordsDirect': False,
             'TypedKeys': 'Keys', 'PredictiveCandidates': True,
+            'CursorIntoBrackets': True,
         }))
         (data / 'snippets.json').write_text(json.dumps({'tes': 'テスト'}))
         # 「こう」で予測候補が開き、「こうほ」まで打つと閉じるようにする。

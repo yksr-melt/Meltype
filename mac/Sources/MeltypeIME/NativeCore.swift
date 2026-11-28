@@ -51,6 +51,7 @@ struct SessionResult: Decodable {
 struct TextEdit: Decodable {
     let text: String
     let removeBefore: String?
+    let moveCaretBack: Int?
 }
 
 struct CompositionView: Decodable {

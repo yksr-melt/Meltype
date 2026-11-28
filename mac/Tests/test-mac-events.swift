@@ -77,6 +77,25 @@ struct EventTests {
   func equal(_ actual:String,_ expected:String) {
    precondition(Array(actual.unicodeScalars)==Array(expected.unicodeScalars),"expected \(expected.debugDescription), got \(actual.debugDescription)")
   }
+  check("secure event input and focused field hints") { _,_ in
+   let safari = "com.apple.Safari"
+   let appKit = "local.meltype.event-client"
+   let protects = MeltypeInputController.protectsInput
+   precondition(protects(safari, nil, true, false), "Safari's secure input works without AX")
+   precondition(!protects(safari, false, true, false), "AX regular field overrides the fallback")
+   precondition(!protects(safari, nil, false, false), "another process's secure input does not bypass Safari")
+   precondition(!protects(appKit, nil, true, false), "secure input alone does not identify an AppKit field")
+   precondition(protects(appKit, true, false, false), "AX identifies a secure AppKit field")
+   precondition(protects(appKit, nil, false, true), "ABC secure input bypasses a stale controller")
+   precondition(!protects(appKit, false, false, false), "regular input resumes after focus changes")
+  }
+  check("bracket commit consumes Return with caret movement enabled") { controller,client in
+   precondition(key(controller,client,"[",code:UInt16(kVK_ANSI_LeftBracket)))
+   precondition(key(controller,client,"]",code:UInt16(kVK_ANSI_RightBracket)))
+   precondition(key(controller,client,"\r",code:UInt16(kVK_Return)))
+   equal(client.document,"「」")
+   equal(client.marked,"")
+  }
   for prefix in ["", "前の行\n"] {
    check("snippet after \(prefix.debugDescription)") { controller,client in
     client.document = prefix

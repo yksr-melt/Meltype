@@ -57,9 +57,8 @@ internal static class FrontProtocolTests
             Others: []),
         new("macOS", "mac/Sources/MeltypeIME/NativeCore.swift", source => source[source.IndexOf("struct ImeOutput", StringComparison.Ordinal)..source.IndexOf("/// libMeltypeNative", StringComparison.Ordinal)],
             new([], Fields: true),
-            // Input Method Kit では IME からアプリのキャレットを動かせない。
             Unused: ["version", "handlesInput", "imeOpen", "capture", "printableAscii", "printableAsciiExcept", "shortcuts", "vk", "modifiers",
-                "ctrlKeysWhileComposing", "revision", "currentWord", "moveCaretBack", "insertByPaste", "keyReleases", "altKeys"],
+                "ctrlKeysWhileComposing", "revision", "currentWord", "insertByPaste", "keyReleases", "altKeys"],
             Others: []),
     ];
 

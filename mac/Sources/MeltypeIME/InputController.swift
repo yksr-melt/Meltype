@@ -3,7 +3,8 @@
 // Copyright (C) 2026 aster-void
 // Copyright (C) 2026 HarukiKubota
 
-import Carbon.HIToolbox
+import ApplicationServices
+import Carbon
 import Cocoa
 import InputMethodKit
 import UniformTypeIdentifiers
@@ -26,6 +27,8 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
 
     /// ロック画面と OS の認証ダイアログを Password として送り、Core でアプリ別設定より優先する (#1752)。
     private static let authenticationApps: Set<String> = ["com.apple.loginwindow", "com.apple.SecurityAgent"]
+    private static let safariApps: Set<String> = ["com.apple.Safari", "com.apple.SafariTechnologyPreview"]
+    nonisolated(unsafe) private static var explainedCaretPermission = false
 
     /// 判定の文脈とコードの行の判定に使う、キャレットの前の文字数
     private static let beforeLength = 4000
@@ -60,8 +63,7 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
     private func send(_ type: String, client: IMKTextInput?, _ fields: [String: Any] = [:], keyEvent: NSEvent? = nil) -> ImeOutput? {
         var event: [String: Any] = ["version": 1, "type": type, "instance": "mac"]
         let app = client?.bundleIdentifier()
-        if let app, Self.authenticationApps.contains(app) {
-            // ユーザー名は通常自動で入るため、SecurityAgent ではユーザー名欄も含めて打鍵を通す。
+        if let app, Self.isPasswordInput(app: app) {
             // 未確定入力の取消に必要な属性だけを送り、打鍵の内容や周辺文字列は Core に渡さない。
             // 打鍵は、今の状態だけを受け取る出来事 (StateRequested) にする。
             event["field"] = ["traits": ["Password"]]
@@ -80,6 +82,53 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
             modeIndicator.show(japanese ? .japanese : .direct, caret: client.flatMap { modeIndicatorCaret($0) }, milliseconds: output.state.modeIndicatorMs)
         }
         return output
+    }
+
+    private static func isPasswordInput(app: String) -> Bool {
+        // SecurityAgent では通常自動で入るユーザー名も含めて通す。
+        if authenticationApps.contains(app) { return true }
+        guard let front = NSWorkspace.shared.frontmostApplication, front.bundleIdentifier == app else { return false }
+        let secureEventInput = IsSecureEventInputEnabled()
+        let usingABC = secureEventInput && ModeServices.currentInputSourceID() == "com.apple.keylayout.ABC"
+        // 同じ入力欄でも password と通常テキストを切り替えられるため、打鍵ごとに読み直す。
+        let secureField = AXIsProcessTrusted() ? focusedFieldIsSecure(front.processIdentifier) : nil
+        let secureInputOwnedByApp = secureField == nil && secureEventInput && safariApps.contains(app) &&
+            secureInputOwner() == front.processIdentifier
+        return protectsInput(app: app, secureField: secureField, secureInputOwnedByApp: secureInputOwnedByApp, usingABC: usingABC)
+    }
+
+    private static func secureInputOwner() -> pid_t? {
+        // Secure Event Input はシステム全体の状態。所有元が分かる場合だけ、Safari の現在の欄の手がかりにする。
+        let session = CGSessionCopyCurrentDictionary() as? [String: Any]
+        return (session?["kCGSSessionSecureInputPID"] as? NSNumber)?.int32Value
+    }
+
+    static func protectsInput(app: String, secureField: Bool?, secureInputOwnedByApp: Bool, usingABC: Bool) -> Bool {
+        // ABC への切り替え後にも IMK がこのコントローラーに打鍵を届ける場合がある (#1932)。
+        if usingABC { return true }
+        if let secureField { return secureField }
+        return secureInputOwnedByApp && safariApps.contains(app)
+    }
+
+    private static func focusedFieldIsSecure(_ pid: pid_t) -> Bool? {
+        let application = AXUIElementCreateApplication(pid)
+        // 応答しないアプリからの取得で打鍵を長く止めない。
+        AXUIElementSetMessagingTimeout(application, 0.02)
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(application, kAXFocusedUIElementAttribute as CFString, &value) == .success,
+              let value, CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
+        let field = value as! AXUIElement
+        AXUIElementSetMessagingTimeout(field, 0.02)
+        var subrole: CFTypeRef?
+        let result = AXUIElementCopyAttributeValue(field, kAXSubroleAttribute as CFString, &subrole)
+        if result == .success, let name = subrole as? String {
+            return name == kAXSecureTextFieldSubrole
+        }
+        guard result == .noValue || result == .attributeUnsupported else { return nil }
+        var role: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(field, kAXRoleAttribute as CFString, &role) == .success,
+              let role = role as? String else { return nil }
+        return [kAXTextFieldRole, kAXTextAreaRole, kAXComboBoxRole].contains(role) ? false : nil
     }
 
     /// 入力欄の事実 (ImeField)。キャレットの前後は、変換中なら変換中の文字の前後
@@ -284,7 +333,7 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
     // ---- 指示を入力欄に反映する ----
 
     private func apply(_ result: SessionResult, to client: IMKTextInput) {
-        for edit in result.commits {
+        for (index, edit) in result.commits.enumerated() {
             // 確定し直し: キャレット (変換中の文字があればその先頭) の前の remove を置き換える (本体が照合済み)
             var range = NSRange(location: NSNotFound, length: 0)
             if let remove = edit.removeBefore {
@@ -293,13 +342,47 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
                 let caret = marked.location != NSNotFound && marked.length > 0 ? marked.location : client.selectedRange().location
                 if caret != NSNotFound && caret >= length { range = NSRange(location: caret - length, length: length) }
             }
+            let caretBack = edit.moveCaretBack ?? 0
+            let movesCaret = caretBack > 0 && result.view == nil && index == result.commits.count - 1
+            var insertion = range
+            if movesCaret && insertion.location == NSNotFound {
+                insertion = client.markedRange()
+                if insertion.location == NSNotFound || insertion.length == 0 { insertion = client.selectedRange() }
+            }
             client.insertText(NSAttributedString(string: edit.text), replacementRange: range)
             hasMarkedText = false
+            if movesCaret && insertion.location != NSNotFound {
+                moveCaretBack(caretBack, after: insertion.location + (edit.text as NSString).length, in: client)
+            }
         }
         if let view = result.view {
             showComposition(view, client: client)
         } else {
             hideComposition(client: client)
+        }
+    }
+
+    private func moveCaretBack(_ count: Int, after expected: Int, in client: IMKTextInput) {
+        guard Self.active === self,
+              let front = NSWorkspace.shared.frontmostApplication,
+              front.bundleIdentifier == client.bundleIdentifier(),
+              client.selectedRange() == NSRange(location: expected, length: 0) else { return }
+        guard AXIsProcessTrusted() else {
+            if !Self.explainedCaretPermission {
+                Self.explainedCaretPermission = true
+                NSLog("Meltype: 括弧内へキャレットを移動するには、システム設定のアクセシビリティで Meltype を許可してください")
+            }
+            return
+        }
+        // 私有のキー状態で送り、確定時に押したままの Shift などを引き継がない。
+        guard let source = CGEventSource(stateID: .privateState) else { return }
+        for _ in 0..<count {
+            guard let down = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_LeftArrow), keyDown: true),
+                  let up = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_LeftArrow), keyDown: false) else { return }
+            down.flags = []
+            up.flags = []
+            down.postToPid(front.processIdentifier)
+            up.postToPid(front.processIdentifier)
         }
     }
 
