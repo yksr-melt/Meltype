@@ -116,7 +116,7 @@ internal static class ProtectionTests
             ContextRules = ContextRules.Load(null),
             History = new ConversionHistory(null),
             Misspellings = MisspellingDictionary.Load(null),
-            RomajiTypos = RomajiTypoCorrector.Load(CompositionTests.Detector.Romaji),
+            Lexicon = JapaneseLexicon.Load(CompositionTests.Detector.Romaji),
             Languages = languages,
         };
         // 行頭の @・/ (#193 の「そのままアプリへ渡す」) を切り、変換ボックスの中の保護区間の扱いを確かめる。
@@ -272,11 +272,11 @@ internal static class ProtectionTests
             var env = TestSupport.Env(CompositionTests.Detector);
             foreach (var c in "kyouha「" + token + "」ashita") text = CompositionText.Append(text, c);
             var calls = new List<string>();
-            var shown = CompositionText.Display(CompositionText.Read(text, env), env, final: true, convert: (kana, _, _) =>
+            var shown = CompositionText.Compose(CompositionText.Read(text, env), env, final: true, answer: (kana, _, _) =>
             {
                 calls.Add(kana);
-                return kana.Replace("きょうは", "今日は").Replace("あした", "明日");
-            });
+                return [new TypingClause.Converted(kana, null, kana.Replace("きょうは", "今日は").Replace("あした", "明日"))];
+            }).Text;
             Assert.Equal("今日は「" + token + "」明日", shown, token);
             Assert.True(calls.All(kana => !kana.Contains(token)), "保護原文を漢字変換へ渡さない");
             Assert.Equal(token, CompositionText.ConversionSegments(CompositionText.Read(text, env), env).Single(s => s.IsProtected).Raw);
@@ -305,7 +305,7 @@ internal static class ProtectionTests
     }
 
     [Test]
-    public static void MixedProtectedSpans_DoNotAutocorrectRomajiTypos()
+    public static void MixedProtectedSpans_StayAsTyped()
     {
         foreach (var token in new[] { "@onegaishimsu", "https://example.com/onegaishimsu", "./onegaishimsu" })
             foreach (var action in new[] { VirtualKeys.Return, VirtualKeys.Space })

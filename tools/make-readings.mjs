@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Yukishiro
 //
 // JMdict (EDRDG、CC BY-SA 4.0) から、よく使う語の読みの一覧 dictionaries/readings.txt を作る。
-// ローマ字の打ち間違い (shimsu → shimasu) を直すとき、直した読みが日本語らしいかを調べるのに使う。
+// 英語と日本語の区切りで、ローマ字の読みが日本語らしいかを調べるのに使う。
 //   node tools/make-readings.mjs JMdict_e.xml > dictionaries/readings.txt
 //   node tools/make-readings.mjs JMdict_e.xml rare > dictionaries/readings-rare.txt
 // rare では、よく使う語の印が無い語のうち、ひらがなで 3 文字以上の読み (ろんぱ・うちどめ・かんれんづける) を出す (よく使う語と同じ読みは除く)。
@@ -64,7 +64,7 @@ const out = [
     '# JMdict (Electronic Dictionary Research and Development Group) のよく使う語の印が無い語の、ひらがなで 3 文字以上の読みから tools/make-readings.mjs で作成 (3〜4 文字は古語・廃語などを除く)。',
   ] : [
     '# Meltype 読みの一覧 (よく使う語の読み [TAB] 活用の種類)',
-    '# ローマ字の打ち間違いを直すとき、直した読みが日本語らしいかを調べるのに使う。',
+    '# 英語と日本語の区切りで、ローマ字の読みが日本語らしいかを調べるのに使う。',
     '# JMdict (Electronic Dictionary Research and Development Group) のよく使う語から tools/make-readings.mjs で作成。',
   ]),
   '# JMdict は Creative Commons Attribution-ShareAlike 4.0 (CC BY-SA 4.0) で公開されている: https://www.edrdg.org/edrdg/licence.html',

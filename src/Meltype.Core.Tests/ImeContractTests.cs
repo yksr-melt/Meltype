@@ -484,6 +484,18 @@ internal static class ImeContractTests
     }
 
     [Test]
+    public static void LangKeys_SelectJapaneseOrAlphanumeric()
+    {
+        var front = new Front();
+        front.Type("ka");
+        Assert.True(Consumed(front.Key(VirtualKeys.ImeOn)) && front.Open && front.Document == "", front.Trace);
+        front.Key(VirtualKeys.ImeOff);
+        Assert.True(!front.Open && front.Document == "か", front.Trace);
+        Assert.True(Consumed(front.Key(VirtualKeys.ImeOff)) && !front.Open, front.Trace);
+        Assert.True(Consumed(front.Key(VirtualKeys.ImeOn)) && front.Open, front.Trace);
+    }
+
+    [Test]
     public static void ConvertKeys_SetTheMode()
     {
         var front = new Front();
@@ -529,6 +541,26 @@ internal static class ImeContractTests
         Assert.True(!toggle.Open, "切り替えキーの変換で英数\n" + toggle.Trace);
         toggle.Key(VirtualKeys.Convert);
         Assert.True(toggle.Open, "もう一度押して日本語\n" + toggle.Trace);
+    }
+
+    [Test]
+    public static void NonConvertAfterProtectedInput_SwitchesToAlphanumeric()
+    {
+        foreach (var cycle in new[] { false, true })
+        {
+            var front = new Front();
+            front.Settings.SeparateKeyRoles = false;
+            front.Settings.NonConvertCyclesKana = cycle;
+            const string url = "https://example.com/abc";
+            front.Type("https");
+            front.Key(0xBA, ':');
+            front.Type("//example");
+            front.Key(VirtualKeys.OemPeriod, '.');
+            front.Type("com/abc");
+            front.Key(VirtualKeys.NonConvert);
+            Assert.Equal(url, front.Document, front.Trace);
+            Assert.True(!front.Open, front.Trace);
+        }
     }
 
     [Test]
@@ -597,6 +629,22 @@ internal static class ImeContractTests
         front = new Front { InputMethod = InputMode.Keyboard };
         front.Traits.Add("Game");
         Assert.True(!Active(front.Key('a')), "Meltype キーボードはゲームでは受け持たない (チャットは Windows の IME で打つ)\n" + front.Trace);
+    }
+
+    [Test]
+    public static void KeyboardGame_IsHandledOnlyWhileTheChatIsOpen()
+    {
+        // Meltype キーボードはゲームでは止め、IME の入力コンテキストが結び付いている間 (チャット欄が開いている間) だけ、日本語で受け持つ
+        var front = new Front { InputMethod = InputMode.Keyboard, SendsImeOpen = false };
+        front.Settings.Mode = InputMode.Keyboard;
+        front.Traits.AddRange(["Game", "NonText"]);
+        Assert.True(!Active(front.Event("StateRequested")), "チャット欄が閉じている間は止める\n" + front.Trace);
+        front.Traits.Add("ImeContext");
+        var opened = front.Event("StateRequested");
+        Assert.True(Active(opened) && Japanese(opened), "チャット欄が開いたら日本語で受け持つ\n" + front.Trace);
+        front.Traits.Remove("ImeContext");
+        var closed = front.Event("StateRequested");
+        Assert.True(!Active(closed) && !Japanese(closed), "チャット欄が閉じたら止めて英数に戻す\n" + front.Trace);
     }
 
     [Test]
@@ -887,7 +935,7 @@ internal static class ImeContractTests
         phrases.Remember("にほんごでにゅうりょく", "日本語で入力");
         LearningSaves.FlushAll();
         var originalPhrases = File.ReadAllText(phrasePath);
-        var translationHistory = new TranslationHistory(translationPath);
+        var translationHistory = new ChoiceCounts(translationPath, "英訳の学習データ");
         var converter = new LearningConverter();
         var front = new Front
         {
@@ -954,7 +1002,7 @@ internal static class ImeContractTests
         Assert.Equal(languages.Get("tao"), new LanguageMemory(languagePath).Get("tao"), mode);
         Assert.Equal(history.Get("にほんご"), new ConversionHistory(historyPath).Get("にほんご"), mode);
         Assert.Equal(phrases.Count, new PhraseHistory(phrasePath).Count, mode);
-        Assert.Equal(translationHistory.Get("かわ").Count, new TranslationHistory(translationPath).Get("かわ").Count, mode);
+        Assert.Equal(translationHistory.Get("かわ").Count, new ChoiceCounts(translationPath, "英訳の学習データ").Get("かわ").Count, mode);
         if (mode == "Privateから通常欄へ移動")
         {
             // Private で始めた入力が終わったあと、同じ instance で始め直した通常入力は学習する。
@@ -1295,6 +1343,47 @@ internal static class ImeContractTests
             PhysicalKey(front, Physical(os, three), '#', shift: true);
             Assert.Equal("がれーろぁ", front.Composition["t1"], $"{os}\n{front.Trace}");
         }
+    }
+
+    [Test]
+    public static void KanaInput_UsesTheUSPositionsForJisKana()
+    {
+        foreach (var (os, t, left, f, right, grave, backslash, apostrophe, semicolon, equals, minus) in new[]
+        {
+            ("Evdev", 20, 26, 33, 27, 41, 43, 40, 39, 13, 12),
+            ("Mac", 0x11, 0x21, 0x03, 0x1E, 0x32, 0x2A, 0x27, 0x29, 0x18, 0x1B),
+            ("Windows", 0x14, 0x1A, 0x21, 0x1B, 0x29, 0x2B, 0x28, 0x27, 0x0D, 0x0C),
+        })
+        {
+            var front = new Front();
+            front.Settings.InputStyle = InputStyle.Kana;
+            void Press(int code, char ch, bool shift = false) => PhysicalKey(front, Physical(os, code), ch, shift);
+            Press(t, 't');
+            Press(left, '[');
+            Press(f, 'f');
+            Press(right, ']');
+            Press(grave, '`');
+            Press(backslash, '\\');
+            Press(apostrophe, '\'');
+            Press(semicolon, ';');
+            Press(equals, '=');
+            Press(minus, '-');
+            Press(minus, '_', shift: true);
+            Press(minus, '=', shift: true);
+            Assert.Equal("がぱろむけれへほーほ", front.Composition["t1"], $"{os}\n{front.Trace}");
+        }
+    }
+
+    [Test]
+    public static void KanaInput_GravePositionDoesNotChangeShortcuts()
+    {
+        var front = new Front();
+        front.Settings.InputStyle = InputStyle.Kana;
+        front.Event("KeyPressed", extra: ",\"key\":{\"vk\":0,\"ch\":116}");
+        front.Event("KeyPressed", extra: ",\"key\":{\"vk\":0,\"ch\":96}");
+        Assert.Equal("かろ", front.Composition["t1"], front.Trace);
+        var shortcut = front.Event("KeyPressed", extra: ",\"key\":{\"vk\":0,\"ch\":96,\"alt\":true,\"physical\":{\"type\":\"Evdev\",\"code\":41}}");
+        Assert.True(!Consumed(shortcut) && front.Open, front.Trace);
     }
 
     [Test]

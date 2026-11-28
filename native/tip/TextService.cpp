@@ -536,6 +536,7 @@ STDMETHODIMP TextService::OnSetFocus(BOOL foreground) {
     // キーを受け取らなくなった (スレッドが前面でなくなった・ほかの IME に移った): 受け取ったキーを離したことは届かないかもしれないので忘れる
     // (このスレッドで次に押したキーの、離したことまで受け取らないように)
     if (!foreground) {
+        caretPipe_.Close();
         for (bool& eaten : eatenDown_) eaten = false;
     }
     return S_OK;
@@ -690,15 +691,21 @@ void TextService::SendCaret(TfEditCookie ec, ITfContext* context, bool selection
     // ただし、マウスのボタンを押しているあいだに選択が変わったら、キーの直後でもクリックとして伝える
     const bool clicked = selectionChanged && ((GetAsyncKeyState(VK_LBUTTON) | GetAsyncKeyState(VK_RBUTTON)) & 0x8000) != 0;
     const bool recent = !clicked && passedTime_ != 0 && GetTickCount64() - passedTime_ < 500;
-    std::string caret = std::string(",\"caret\":{\"moved\":") + (selectionChanged || recent ? "true" : "false");
+    const bool moved = selectionChanged || recent;
+    const RECT anchor = (smoothCaret_ && moved) ? CaretRect(ec, context) : RECT{};
+    std::string caret = std::string(",\"caret\":{\"moved\":") + (moved ? "true" : "false");
     if (recent) caret += ",\"passedKey\":" + std::to_string(passedVk_) + (passedControl_ ? ",\"ctrl\":true" : "");
     else if (selectionChanged) caret += ",\"passedKey\":0";
     caret += "}";
     JsonValue reply;
     // キャレットを動かすたびに送るので、応答が遅ければ待たない (表示が次の出来事まで古いだけ)
-    if (Send("CaretMoved", field, caret, reply, 100, true)) {
+    if (Send("CaretMoved", field, caret, reply, 100, true, (smoothCaret_ && moved) ? &anchor : nullptr)) {
         ApplyState(reply[L"state"], field);
         UpdateLangBar();
+    }
+    if (smoothCaret_ && moved && window_ != nullptr) {
+        // OnEndEdit 時点ではアプリの再レイアウト前の古い座標・空矩形になることがあるため、1 回だけ遅延取得する
+        SetTimer(window_, kDeferredCaretTimer, 16, nullptr);
     }
 }
 
@@ -908,8 +915,11 @@ bool TextService::Send(const char* type, const std::string& field, const std::st
         if (composition_ != nullptr) EndCompositionAsync();
     }
     std::string request = "{\"impl\":" + ImplId() + ",\"thread\":" + std::to_string(GetCurrentThreadId());
-    if (anchor != nullptr && anchor->bottom > anchor->top && anchor->bottom - anchor->top < 200)
-        request += ",\"x\":" + std::to_string(anchor->left) + ",\"y\":" + std::to_string(anchor->bottom + 4);
+    if (anchor != nullptr && anchor->bottom > anchor->top && anchor->bottom - anchor->top < 200) {
+        request += ",\"x\":" + std::to_string(anchor->left) + ",\"y\":" + std::to_string(anchor->bottom + 4) +
+                   ",\"caret\":[" + std::to_string(anchor->left) + "," + std::to_string(anchor->top) + "," +
+                   std::to_string(anchor->right) + "," + std::to_string(anchor->bottom) + "]";
+    }
     request += std::string(",\"event\":{\"version\":") + std::to_string(kImeVersion) + ",\"type\":\"" + type + "\",\"instance\":\"" + instance_ +
                "\",\"imeOpen\":" + (open_ ? "true" : "false") + (field.empty() ? "" : ",\"field\":" + field) + fields + "}}";
     std::string response;
@@ -925,7 +935,39 @@ bool TextService::Send(const char* type, const std::string& field, const std::st
         TipLog(L"応答を読めません");
         return false;
     }
+    smoothCaret_ = reply[L"smoothCaret"].Bool();
     return true;
+}
+
+void TextService::SendCaretPosition(const RECT& caret) {
+    if (deactivated_ || !smoothCaret_ || !state_.Active()) return;
+    if (caret.bottom <= caret.top || caret.bottom - caret.top >= 200 || (caret.left == 0 && caret.top == 0)) return;
+    const std::string request = "{\"impl\":" + ImplId() + ",\"thread\":" + std::to_string(GetCurrentThreadId()) +
+                                ",\"caret\":[" + std::to_string(caret.left) + "," + std::to_string(caret.top) + "," +
+                                std::to_string(caret.right) + "," + std::to_string(caret.bottom) + "]}";
+    std::string response;
+    caretPipe_.Transact(request, response, 50, true);
+}
+
+void TextService::PostCaretPosition(const RECT& caret) {
+    if (deactivated_ || !smoothCaret_ || !state_.Active() || window_ == nullptr) return;
+    if (caret.bottom <= caret.top || caret.bottom - caret.top >= 200 || (caret.left == 0 && caret.top == 0)) return;
+    const bool alreadyPending = pendingCaret_.has_value();
+    pendingCaret_ = caret;
+    if (!alreadyPending) PostMessageW(window_, kSendCaret, 0, 0);
+}
+
+void TextService::QueryAndSendCaretAsync() {
+    if (deactivated_ || disabled_ || !smoothCaret_ || !state_.Active() || threadMgr_ == nullptr) return;
+    Microsoft::WRL::ComPtr<ITfDocumentMgr> documentMgr;
+    Microsoft::WRL::ComPtr<ITfContext> context;
+    if (FAILED(threadMgr_->GetFocus(&documentMgr)) || !documentMgr || FAILED(documentMgr->GetTop(&context)) || !context) return;
+    Microsoft::WRL::ComPtr<TextService> self = this;
+    RunEditSession(context.Get(), clientId_, TF_ES_ASYNCDONTCARE | TF_ES_READ, [self, context](TfEditCookie ec) {
+        if (self->deactivated_ || !self->smoothCaret_ || !self->state_.Active() || self->ContextDisabled(context.Get())) return S_OK;
+        self->PostCaretPosition(self->CaretRect(ec, context.Get()));
+        return S_OK;
+    });
 }
 
 bool TextService::ReadField(TfEditCookie ec, ITfContext* context, std::string& field) {
@@ -1019,6 +1061,17 @@ LRESULT CALLBACK TextService::MessageWindowProc(HWND window, UINT message, WPARA
         self->HandleAltKey(static_cast<UINT>(wParam), static_cast<UINT>(lParam));
         return 0;
     }
+    if (message == kSendCaret && self) {
+        const auto caret = self->pendingCaret_;
+        self->pendingCaret_.reset();
+        if (caret) self->SendCaretPosition(*caret);
+        return 0;
+    }
+    if (message == WM_TIMER && wParam == kDeferredCaretTimer && self) {
+        KillTimer(window, kDeferredCaretTimer);
+        self->QueryAndSendCaretAsync();
+        return 0;
+    }
     return DefWindowProcW(window, message, wParam, lParam);
 }
 
@@ -1032,6 +1085,7 @@ void TextService::CreateMessageWindow() {
 }
 
 void TextService::DestroyMessageWindow() {
+    pendingCaret_.reset();
     if (window_) {
         DestroyWindow(window_);
         window_ = nullptr;
@@ -1042,6 +1096,7 @@ void TextService::DestroyMessageWindow() {
         conversionWait_.get();
     }
     conversionPipe_.reset();
+    caretPipe_.Close();
     // クラスはプロセス内で共有する。他スレッドのウィンドウが残る間の解除失敗は許容し、最後のインスタンスがウィンドウを破棄したときに解除する
     UnregisterClassW(L"Meltype.Tip.Messages", g_module);
 }
@@ -1103,6 +1158,7 @@ void TextService::FinishConversionWait() {
                 if (reply[L"result"][L"consumed"].Bool()) {
                     self->ownEdit_ = true;
                     self->ApplyOutput(ec, context.Get(), reply);
+                    if (self->smoothCaret_ && self->state_.Active()) self->PostCaretPosition(self->CaretRect(ec, context.Get()));
                 } else if (!reply[L"result"][L"view"].IsNull()) {
                     // 候補選択中は背景変換を使わず、現在の表示を返す。同じ欄への復帰で隠した候補だけを戻す。
                     self->ApplyState(reply[L"state"]);
@@ -1390,6 +1446,9 @@ void TextService::HandleKey(ITfContext* context, UINT vk, LPARAM lParam, wchar_t
     bool failed = false;
     bool consumed = true;
     bool inserted = false;
+    RECT beforeCaret = {};
+    RECT afterCaret = {};
+    bool sendAfterCaret = false;
     HRESULT hr = RunEditSession(context, clientId_, TF_ES_SYNC | TF_ES_READWRITE, [&](TfEditCookie ec) {
         // 復帰通知中に読めなかった場合も、Core に次のキーを送る前に未確定範囲からの離脱を確かめる。
         PrepareComposition(ec, context);
@@ -1406,8 +1465,9 @@ void TextService::HandleKey(ITfContext* context, UINT vk, LPARAM lParam, wchar_t
             consumed = false;
             return S_OK;
         }
-        // 受け取るように言われたキーは、入力モードを表示する位置も送る (切り替えたかは Meltype.exe が決める)
-        const RECT anchor = listed ? CaretRect(ec, context) : RECT{};
+        // 受け取るように言われたキーは、入力モードを表示する位置も送る。スムーズカーソル有効時は編集前後の比較に使う
+        const RECT anchor = (listed || smoothCaret_) ? CaretRect(ec, context) : RECT{};
+        beforeCaret = anchor;
         ownEdit_ = true;
         // lParam の 16〜23 ビットはスキャンコード、24 ビットは拡張キー
         const UINT scan = (static_cast<UINT>(lParam) >> 16) & 0xFF;
@@ -1450,10 +1510,22 @@ void TextService::HandleKey(ITfContext* context, UINT vk, LPARAM lParam, wchar_t
             }
             if (!inserted) TipLog(L"英数文字を直接入力できませんでした。キーをアプリへ送り直します");
         }
+        if (smoothCaret_ && state_.Active() && (consumed || inserted)) {
+            afterCaret = CaretRect(ec, context);
+            sendAfterCaret = true;
+        }
         return S_OK;
     });
     // 同期の編集セッションの終わりの通知 (OnEndEdit) はもう来ている。何も変えなかったときに印が残らないように戻す
     ownEdit_ = false;
+    if (sendAfterCaret) {
+        if (afterCaret.bottom > afterCaret.top && !EqualRect(&afterCaret, &beforeCaret)) {
+            SendCaretPosition(afterCaret);
+        } else if (window_) {
+            // 編集セッション終了後に描画位置を更新するアプリ向けに 1 回だけ遅延取得する
+            SetTimer(window_, kDeferredCaretTimer, 16, nullptr);
+        }
+    }
     if (FAILED(hr)) {
         TipLog(L"編集セッションを始められません: 0x%08X", hr);
         failed = true;
@@ -1533,6 +1605,24 @@ void TextService::RememberPassed(ITfContext* context, UINT vk) {
     passedVk_ = vk;
     passedControl_ = KeyDown(VK_CONTROL);
     passedTime_ = GetTickCount64();
+    if (smoothCaret_ && window_ != nullptr) {
+        switch (vk) {
+            case VK_BACK:
+            case VK_DELETE:
+            case VK_LEFT:
+            case VK_RIGHT:
+            case VK_UP:
+            case VK_DOWN:
+            case VK_HOME:
+            case VK_END:
+            case VK_RETURN:
+                // 確定後の BackSpace・矢印等で OnEndEdit を送らない／遅延レイアウトするアプリ向けに 1 回だけ取得する
+                SetTimer(window_, kDeferredCaretTimer, 16, nullptr);
+                break;
+            default:
+                break;
+        }
+    }
 }
 
 bool TextService::Reinject(UINT vk) {
@@ -1652,6 +1742,16 @@ RECT TextService::CaretRect(TfEditCookie ec, ITfContext* context) {
     BOOL clipped = FALSE;
     // Terminal の UI Automation の選択範囲は実際のカーソル位置とは限らないので、TSF の入力コンテキストから取る
     if (SUCCEEDED(context->GetActiveView(&view)) && (FAILED(view->GetTextExt(ec, range.Get(), &rect, &clipped)) || clipped)) rect = {};
+    if (rect.left == 0 && rect.top == 0 && rect.right == 0 && rect.bottom == 0) {
+        GUITHREADINFO info = {sizeof(info)};
+        if (GetGUIThreadInfo(GetCurrentThreadId(), &info) && info.hwndCaret != nullptr && info.rcCaret.bottom > info.rcCaret.top) {
+            POINT point = {info.rcCaret.left, info.rcCaret.top};
+            if (ClientToScreen(info.hwndCaret, &point) && (point.x != 0 || point.y != 0)) {
+                const LONG width = info.rcCaret.right > info.rcCaret.left ? info.rcCaret.right - info.rcCaret.left : 1;
+                rect = {point.x, point.y, point.x + width, point.y + (info.rcCaret.bottom - info.rcCaret.top)};
+            }
+        }
+    }
     return rect;
 }
 
@@ -2275,6 +2375,11 @@ void TextService::CommitInSession(TfEditCookie ec, ITfContext* context, bool kee
         if (Send("CommitRequested", field, keepAppCaret ? CaretMoved(left) : "", reply)) ApplyOutput(ec, context, reply, field);
         keepAppCaret_ = false;
         EndComposition(ec);
+        if (smoothCaret_ && state_.Active() && !left) {
+            const RECT caret = CaretRect(ec, context);
+            if (caret.bottom > caret.top) PostCaretPosition(caret);
+            else if (window_ != nullptr) SetTimer(window_, kDeferredCaretTimer, 16, nullptr);
+        }
     }
     if (candidates_) candidates_->Hide();
 }
@@ -2310,6 +2415,7 @@ void TextService::SelectCandidate(int index) {
         JsonValue reply;
         if (self->Send("CandidateClicked", field, ",\"index\":" + std::to_string(index), reply)) {
             self->ApplyOutput(ec, context.Get(), reply, field);
+            if (self->smoothCaret_ && self->state_.Active()) self->PostCaretPosition(self->CaretRect(ec, context.Get()));
         }
         return S_OK;
     });

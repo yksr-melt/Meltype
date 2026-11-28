@@ -11,12 +11,17 @@ indexiana	インディアナ
 nagasimasupa-rando	ナガシマスパーランド
 Androidha	Androidは
 ryokai	りょかい
+funabori	船堀
 todorisuto	todoリスト
 sitanode	したので
 meta	meta
 claudecode	claudecode
 kwo	くぉ
 funyaosu	ふにゃオス
+すきじご	隙自語
+すきじがたり	隙自語
+すきじかたり	隙自語
+すきじがた	隙自語
 karenda-	カレンダー
 pure	pure
 ninatta	になった
@@ -154,7 +159,6 @@ kennpa	検波
 syi	しぃ
 phsikennsi	pH試験紙
 metyakutyagokaiunndeta	めちゃくちゃ誤解生んでた
-sumimasne	すみません
 omosiroine!nihongo?	面白いね！日本語？
 reibunn?	例文？
 [kyouha	「今日は
@@ -168,8 +172,7 @@ Congo - Kinshasa	Congo - Kinshasa
 omanjuutabeta	おまんじゅう食べた
 omanjuuwotabeta	おまんじゅうを食べた
 botto	botと
-じゃくしゃだんせい	ふにゃオス
-ふにゃおす	弱者男性
+jakushadansei	弱者男性
 deploys	deploys
 pythonnara	pythonなら
 pythonsika	pythonしか
@@ -219,12 +222,14 @@ osgawade	os側で
 sonnnawakeneledaro	そんなわけねぇだろ
 nitasune	に足すね
 sitaiwane	したいわね
+dokkanoverdeha	どっかのverでは
 sitatokini	した時に
 kuttonnnenn	食っとんねん
 --expect	--expect
 \n	\n
 sin60	sin60
 mainochiteru	main落ちてる
+n8nwotukau	n8nを使う
 sannzennenn	三千円
 atu	圧
 atsu	圧
@@ -245,8 +250,6 @@ hogezlfuga	ほげ→ふが
 kitya	きちゃ
 kityatta	来ちゃった
 Yukishiro	Yukishiro
-onegaishimsu	お願いします
-ikimahsou	行きましょう
 kusawww	草www
 deha,korehadoudesyou?	では、これはどうでしょう？
 *nihongo*	*日本語*
@@ -291,6 +294,7 @@ bukkakeru	ぶっかける
 buttobasu	ぶっ飛ばす
 pushsaseta	pushさせた
 githubdeha	GitHubでは
+youtu.be	youtu.be
 100,	100、
 1,000,	1,000、
 10,000	10,000
@@ -306,3 +310,6 @@ bugw	bugw
 --expect	--expect
 /repro	/repro
 kaigyouha\ndesu	開業は\nです
+kaizennann	改善案
+appswo	appsを
+anb	あんb

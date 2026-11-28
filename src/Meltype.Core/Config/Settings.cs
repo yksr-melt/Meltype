@@ -324,10 +324,6 @@ public sealed class Settings
      Description("Keyboard モードで、Space を押さなくても打ったそばから漢字に変換して表示します。")]
     public bool LiveConversion { get; set; } = true;
 
-    [Category("変換"), DisplayName("打ち間違いを直す"),
-     Description("Space・Enter で変換・確定するときに、ローマ字の打ち間違いを直します。読めない子音が残ったとき、隣のキーの押し間違い・入れ替わり・抜けを 1 文字だけ直します (onegaishimsu → お願いします、sumimasne → すみません。よく使う語の読みになるときだけ)。")]
-    public bool CorrectTypos { get; set; } = true;
-
     [Category("変換"), DisplayName("予測変換の候補"),
      Description("打っている途中に、続きの候補を変換ボックスの下に出します (前に確定した語句・ユーザー辞書・選び直した変換の学習・よく使うあいさつ・英単語の続き)。Tab / Shift+Tab で選んで Enter で確定します。確定した語句は %LOCALAPPDATA%\\Meltype\\phrases.txt に暗号化せずに覚え (この PC の外には送りません)、「学習データをリセット」で消えます。")]
     public bool PredictiveCandidates { get; set; } = true;
@@ -348,7 +344,7 @@ public sealed class Settings
      Description("zenz のモデルファイル (例: zenz-v3.2-small の ggml-model-Q5_K_M.gguf) の場所。空なら同梱の zenz-v3.2-small を使います (既定)。「Zenzai を使う」が ON のときに使います。")]
     public string ZenzaiModelPath { get; set; } = "";
 
-    [Category("変換"), DisplayName("Zenzai: 使う GPU"), Platforms(Platform.Windows),
+    [Category("変換"), DisplayName("Zenzai: 使う GPU"), Platforms(Platform.Windows | Platform.Linux),
      Description("GPU 版 (Vulkan・CUDA) の llama-server で、計算に使う GPU の名前 (例: Vulkan0)。llama-server の --device に渡し、GPU に載せる量は llama-server が空いているメモリに合わせて決めます。空なら CPU だけで計算します (既定)。名前は llama-server --list-devices で確かめられます。変えると llama-server を起動し直します。")]
     public string ZenzaiDevice { get; set; } = "";
 
@@ -479,7 +475,7 @@ public sealed class Settings
     public ControlKeyLayout ControlKeys { get; set; } = ControlKeyLayout.Standard;
 
     [Category("キー操作"), DisplayName("Control キーの個別の割り当て"),
-     Description("入力中の Control + 英字に、別のキーの働きを割り当てます。「T=F6;Y=F7;U=F8;I=F9;O=F10」のように、英字=キー名を ; で区切って書きます (F キーが無い HHKB やノートパソコン向け)。キー名: F6〜F10・Left・Right・Up・Down・Home・End・Delete・Back・Enter・Esc・Tab。ここに書いた英字は、「Control キーの割り当て」より優先します。")]
+     Description("入力中の Control + 英字に、別のキーの働きを割り当てます。「T=F6;Y=F7;U=F8;I=F9;O=F10」のように、英字=キー名を ; で区切って書きます (F キーが無い HHKB やノートパソコン向け)。キー名: F6〜F10・HalfWidth (かなは半角カタカナ、それ以外は半角英数)・Left・Right・Up・Down・Home・End・Delete・Back・Enter・Esc・Tab。ここに書いた英字は、「Control キーの割り当て」より優先します。")]
     public string ControlKeyBindings { get; set; } = "";
 
     [Category("表示"), DisplayName("入力モードをカーソルの近くに表示"),
@@ -530,6 +526,14 @@ public sealed class Settings
      Description("打ったキーを小さく出します。Meltype キーボードでは変換ボックスの文字の下に、Meltype IME では候補の一覧の上に出します。「打ったキー」はローマ字のまま (kyouhagoogle) で、打ち間違いに気づきやすくなります。「漢字変換前」は英語と日本語に分けたあと・漢字にする前の形 (きょうはgoogle) で、ライブ変換の前に何と読んだかを確かめられます。")]
     public TypedKeysStyle TypedKeys { get; set; } = TypedKeysStyle.Keys;
 
+    [Category("表示"), DisplayName("カーソルを滑らかに動かす (スムーズカーソル)"), Platforms(Platform.Windows),
+     Description("Meltype IME で入力や矢印移動をするとき、テキストカーソルが滑らかに追従するアニメーションを表示します。")]
+    public bool SmoothCaret { get; set; }
+
+    /// <summary>スムーズカーソルを有効にするか (Meltype が有効で、Meltype IME を使っているときだけ)。</summary>
+    [JsonIgnore, Browsable(false)]
+    public bool UsesSmoothCaret => Enabled && Mode == InputMode.Tsf && SmoothCaret;
+
     [Category("動作する場面"), DisplayName("日本語キーボードのときだけ動作"), Platforms(Platform.Windows),
      Description("Windows の入力言語が日本語のときだけ動作します。韓国語・英語などでは入力処理と IME の自動制御を停止し、日本語に戻すと再開します。物理キーボードの JIS / US 配列や IME の「あ」「A」の状態は問いません。全プロファイル共通です。")]
     public bool JapaneseKeyboardOnly { get; set; }
@@ -542,7 +546,7 @@ public sealed class Settings
     public bool ExcludeFullscreen { get; set; } = true;
 
     [Category("動作する場面"), DisplayName("ゲームでは止める"), Platforms(Platform.Windows),
-     Description("Steam・Epic Games・Riot Games・EA・Ubisoft・Battle.net・Xbox のゲームのフォルダーにあるアプリ (ウィンドウ表示のゲームも) では、Meltype キーボードは何もしません (キーを横取りせず、Windows の IME にも触らないので、ゲームのチャットは Windows の IME で打てます)。Meltype IME は英数で始め、英数ではキーを横取りしません (チャットでは 半角/全角 で日本語にできます)。ほかのゲームは、アプリ別設定で種類を「ゲーム」にしてください。")]
+     Description("Steam・Epic Games・Riot Games・EA・Ubisoft・Battle.net・Xbox のゲームのフォルダーにあるアプリ (ウィンドウ表示のゲームも) では、Meltype キーボードは、チャット欄が開くまで何もしません (キーを横取りせず、Windows の IME にも触らないので、移動などの操作はそのままゲームに届きます)。チャット欄を開いたときだけ IME を使うゲーム (Unity など) では、チャット欄が開くと日本語入力になり、閉じると英数に戻ります。Meltype IME は英数で始め、英数ではキーを横取りしません (チャットでは 半角/全角 で日本語にできます)。ほかのゲームは、アプリ別設定で種類を「ゲーム」にしてください。")]
     public bool StopInGames { get; set; } = true;
 
     [Category("動作する場面"), DisplayName("アプリ別設定"), Description("アプリ (Windows はプロセス名、macOS は bundle ID、Linux はプログラム名) ごとに、ON/OFF・種類・確定した文字の入れ方・入力欄とみなすかを指定します。種類「コード」(コードエディター・ターミナル) では基本は英数のままで、コメント (// # -- など) と文字列 (\"…\" など) の中だけ日本語を判定します。コードの行で 半角/全角 を押すと、その行だけ日本語で入力できます。README.md などの文章ファイルを開いているときは一般として扱います。")]
@@ -1029,6 +1033,9 @@ public sealed class Settings
     internal bool Migrate()
     {
         if (SettingsVersion >= CurrentVersion) return false;
+        // 旧版からの移行でアプリ別設定を参照する。Normalize は移行後なので、明示的な null はここで空にする。
+        AppRules ??= [];
+        AppRules.RemoveAll(rule => rule is null);
         // v2: IME 自動切替の保留の時間を延ばした (IME 自動切替は消した)。
         // v3: Meltype キーボード (変換ボックス) を追加。v2 以前の config.json には Mode が無いので、
         // 読み込み時に初期値になる。

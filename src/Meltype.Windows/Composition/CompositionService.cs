@@ -19,6 +19,7 @@ internal sealed class CompositionService : IDisposable
     private readonly Control _invoker;
     private readonly CompositionWindow _window = new();
     private readonly ModeIndicatorWindow _indicator = new();
+    private readonly SmoothCaretWindow _smoothCaret;
     private readonly Func<Config.Settings> _settings;
     private readonly KeyInjector _injector = new();
 
@@ -29,6 +30,13 @@ internal sealed class CompositionService : IDisposable
         _invoker = invoker;
         Runtime = runtime;
         _settings = settings;
+        _smoothCaret = new SmoothCaretWindow(invoker);
+        _smoothCaret.SetEnabled(settings().UsesSmoothCaret);
+        runtime.SettingsChanged += _ =>
+        {
+            if (!_invoker.IsDisposed && _invoker.IsHandleCreated)
+                _invoker.BeginInvoke(() => _smoothCaret.SetEnabled(_settings().UsesSmoothCaret));
+        };
         // Mozc (同梱の mozc\meltype_mozc_helper.exe) と Zenzai (zenzai\)
         runtime.StartConverter(AppContext.BaseDirectory);
         runtime.ConversionReady += () => ConversionReady?.Invoke();
@@ -57,6 +65,29 @@ internal sealed class CompositionService : IDisposable
 
 
     public FocusInspector Focus { get; } = new();
+
+    public bool UsesSmoothCaret => _settings().UsesSmoothCaret;
+
+    /// <summary>Meltype IME (TSF) の出来事に付随するキャレット情報をスムーズカーソルへ反映する。</summary>
+    public void NotifyImeCaret(uint thread, Rectangle? caret, bool isInput, bool focusEntered)
+    {
+        if (!UsesSmoothCaret || _invoker.IsDisposed || !_invoker.IsHandleCreated) return;
+        _invoker.BeginInvoke(() => _smoothCaret.OnImeCaret(thread, caret, isInput, focusEntered));
+    }
+
+    /// <summary>Meltype IME (TSF) の編集反映後に届いたキャレット矩形をスムーズカーソルへ反映する。</summary>
+    public void NotifyCaretRect(uint thread, Rectangle caret)
+    {
+        if (!UsesSmoothCaret || _invoker.IsDisposed || !_invoker.IsHandleCreated) return;
+        _invoker.BeginInvoke(() => _smoothCaret.OnCaretRect(thread, caret));
+    }
+
+    /// <summary>対象スレッドで Meltype IME が受け持たなくなった・フォーカスが外れたときにスムーズカーソルを消す。</summary>
+    public void ClearCaretThread(uint thread)
+    {
+        if (_invoker.IsDisposed || !_invoker.IsHandleCreated) return;
+        _invoker.BeginInvoke(() => _smoothCaret.ClearThread(thread));
+    }
 
     /// <summary>
     /// 確定した文字を入れる: 前の count 文字を消してから text を入れる。paste なら貼り付けで入れる (貼り付けられなければキーで送る。改行は Shift+Enter)。
@@ -596,6 +627,7 @@ internal sealed class CompositionService : IDisposable
     {
         // 変換エンジン (Mozc・Zenzai) は作った MeltypeRuntime が止める
         Focus.Dispose();
+        _smoothCaret.Dispose();
         _window.Dispose();
         _indicator.Dispose();
     }
