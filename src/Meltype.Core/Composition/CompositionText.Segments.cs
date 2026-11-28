@@ -196,6 +196,7 @@ internal static partial class CompositionText
     /// <summary>
     /// 開きの記号 (「(」「"」) は打った時点ではまだ後ろが分からないので全角になる。後ろが分かったら、
     /// すぐ後ろが英語 ((Ooh) か、対になる閉じの記号が半角 ("…Go Through!") なら、開きの記号も半角にする。半角にする単位の番号を返す。
+    /// 開きクォートが半角なら、途中に日本語があっても対になる閉じクォートを半角にする。
     /// ("打ち上げ話はGo Through!" の最初の " だけ全角 ” になっていた、(Ooh … wow…) の ( だけ全角 （ になっていた)
     /// 語の頭に付ける記号 (- /) も、続けて打った同じ記号ごと、すぐ後ろが英語なら半角にする (ーーexpect: issue #1544、・repro: issue #1736)。
     /// </summary>
@@ -213,7 +214,15 @@ internal static partial class CompositionText
         bool StartsEnglish(int i) => i < state.Units.Count ? offsets[i] < english.Count && english[offsets[i]] && char.IsAsciiLetter(state.Units[i].Raw[0])
             : CompositionText.Pending(state).Length > 0 && segments.Count > 0 && segments[^1].IsEnglish;
 
+        bool Escaped(int i)
+        {
+            var start = i;
+            while (start > 0 && state.Units[start - 1].Raw == "\\") start--;
+            return (i - start) % 2 != 0;
+        }
+
         var halfWidth = new HashSet<int>();
+        var closingQuotes = new HashSet<int>();
         for (var i = 0; i < state.Units.Count; i++)
         {
             if (IsWordPrefix(i))
@@ -224,10 +233,23 @@ internal static partial class CompositionText
                 i = next - 1;
                 continue;
             }
-            if (!Openers.TryGetValue(state.Units[i].Raw, out var closer) || state.Units[i].Kana == state.Units[i].Raw) continue;
-            if (state.FullWidthParentheses && state.Units[i].Raw == "(") continue; // 設定「カッコを全角で入力」: 英語のそばでも全角のまま
+            var unit = state.Units[i];
+            if (!Openers.TryGetValue(unit.Raw, out var closer)) continue;
+            if (state.FullWidthParentheses && unit.Raw == "(") continue; // 設定「カッコを全角で入力」: 英語のそばでも全角のまま
+            var quote = unit.Raw is "\"" or "'";
+            if (quote && (closingQuotes.Contains(i) || Escaped(i))) continue;
+            var closing = Enumerable.Range(i + 1, state.Units.Count - i - 1)
+                .FirstOrDefault(k => state.Units[k].Raw == closer && (!quote || !Escaped(k)), -1);
+            // 単語の途中のアポストロフィ (don't) を開きクォートとして扱わない。
+            if (quote && closing >= 0 && IsHalf(i) &&
+                (i == 0 || unit.Raw == "\"" || !char.IsAsciiLetterOrDigit(state.Units[i - 1].Raw[^1])))
+            {
+                halfWidth.Add(i);
+                halfWidth.Add(closing);
+                closingQuotes.Add(closing);
+            }
+            if (unit.Kana == unit.Raw) continue;
             var nextIsEnglish = StartsEnglish(i + 1);
-            var closing = Enumerable.Range(i + 1, state.Units.Count - i - 1).FirstOrDefault(k => state.Units[k].Raw == closer, -1);
             // 閉じの記号が英語の語のすぐ後ろ (間の記号 ! . は飛ばす: …Through!") なら、閉じも、間の記号も半角にする
             var afterEnglish = -1;
             if (closing > i)

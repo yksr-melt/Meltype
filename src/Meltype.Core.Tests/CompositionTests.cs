@@ -2663,6 +2663,15 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void AsciiQuotesStayPairedAroundJapanese()
+    {
+        AssertCommitted(("printf(\"nihongo\")", "printf(\"にほんご\")"),
+            ("printf('nihongo')", "printf('にほんご')"),
+            ("printf(\"hello\")", "printf(\"hello\")"),
+            ("don't", "don't"));
+    }
+
+    [Test]
     public static void SymbolConversionOffersEllipsisWithoutChangingLiteralPunctuation()
     {
         var k = new Keyboard();
