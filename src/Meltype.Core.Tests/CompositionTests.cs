@@ -1858,7 +1858,7 @@ internal static class CompositionTests
     {
         foreach (var (typed, symbol, weight) in new[]
         {
-            ("suiso", "H", "H (AW=1.0)"), ("enso", "Cl", "Cl (AW=35.5)"), ("oganeson", "Og", null),
+            ("suiso", "H", "H (AW=1.0080)"), ("enso", "Cl", "Cl (AW=35.45)"), ("oganeson", "Og", null),
         })
         {
             var keyboard = new Keyboard();

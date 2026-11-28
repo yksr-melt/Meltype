@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Meltype Contributors
 
-using System.Globalization;
 using Meltype.Libraries.Lexicon;
 
 namespace Meltype.Composition.Utility;
@@ -18,10 +17,6 @@ internal sealed class ElementConversion : IUtilityConversion
         input.Reading is { } reading && Elements.Value.TryGetValue(reading, out var candidates)
             ? new(candidates, UtilityPlacement.Append) { Learnable = true } : null;
 
-    private static string[] Candidates(string symbol, string weight)
-    {
-        if (weight == "-") return [symbol];
-        var rounded = Math.Round(decimal.Parse(weight, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture), 1, MidpointRounding.AwayFromZero);
-        return [symbol, symbol + " (AW=" + rounded.ToString("F1", CultureInfo.InvariantCulture) + ")"];
-    }
+    private static string[] Candidates(string symbol, string weight) =>
+        weight == "-" ? [symbol] : [symbol, symbol + " (AW=" + weight + ")"];
 }
