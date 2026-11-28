@@ -18,7 +18,8 @@ internal sealed class TodayConversion : IUtilityConversion
         var date = $"{now.Year}年{now.Month}月{now.Day}日";
         var monthDay = $"{now.Month}月{now.Day}日";
         var slashDate = $"{now.Year:D4}/{now.Month:D2}/{now.Day:D2}";
-        return new([date, $"{date}({day})", monthDay, $"{monthDay}({day})", slashDate, $"{slashDate}({day})", $"{now.Month}/{now.Day}({day})",
-            $"{now.Year:D4}-{now.Month:D2}-{now.Day:D2}", $"{day}曜日", $"{now.Year:D4}{now.Month:D2}{now.Day:D2}"], UtilityPlacement.Append);
+        return UtilityCandidates.Rankable("today", [("yyyy年M月d日", date), ("yyyy年M月d日(ddd)", $"{date}({day})"), ("M月d日", monthDay), ("M月d日(ddd)", $"{monthDay}({day})"),
+            ("yyyy/MM/dd", slashDate), ("yyyy/MM/dd(ddd)", $"{slashDate}({day})"), ("M/d(ddd)", $"{now.Month}/{now.Day}({day})"),
+            ("yyyy-MM-dd", $"{now.Year:D4}-{now.Month:D2}-{now.Day:D2}"), ("dddd", $"{day}曜日"), ("yyyyMMdd", $"{now.Year:D4}{now.Month:D2}{now.Day:D2}")]);
     }
 }

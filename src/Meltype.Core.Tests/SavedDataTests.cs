@@ -38,7 +38,7 @@ internal static class SavedDataTests
     {
         WithFile("{\"すし\":null,\"りんご\":{\"apple\":2}}", path =>
         {
-            var history = new TranslationHistory(path);
+            var history = new ChoiceCounts(path, "英訳の学習データ");
             Assert.Equal(0, history.Get("すし").Count);
             Assert.Equal("apple", history.Get("りんご")[0].Word);
         });

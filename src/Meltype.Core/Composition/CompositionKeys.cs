@@ -559,15 +559,13 @@ internal static class CompositionKeys
 
     /// <summary>
     /// Space の分岐で変換を始める (StartConversion に行く) 場面か。Tab で始めるときも同じ場面に限る (issue #219)。
-    /// Space と同じ順で判定するため、英語かを見る前に打ち間違いを直す (Enter で確定するときと同じ直し)。
     /// </summary>
     private static bool TabStartsConversion(CompositionTextState text, CompositionEnv env)
     {
         // 保護区間が語の途中にあり、その後にかなが続く入力も Tab 変換しない。
         // IsProtectedInput は末尾が保護区間かだけを見るため、ここでは全区間を調べる。
         if (text.Mode == DisplayMode.Auto && CompositionText.ProtectedSpans(CompositionText.Read(text, env)).Count > 0) return false;
-        var settled = CompositionText.Settle(text);
-        return CompositionConversion.HasRegisteredReading(settled, env) || !SpaceCommitsAsEnglish(settled, env);
+        return CompositionConversion.HasRegisteredReading(text, env) || !SpaceCommitsAsEnglish(text, env);
     }
 
     /// <summary>Esc でひらがなに戻した読みを直している (← → でカーソルを動かせる)。</summary>

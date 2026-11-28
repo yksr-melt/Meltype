@@ -18,3 +18,5 @@ indent_size = 4
 end_of_line = lf
 # 対応表 (キーの表など) は 1 行に複数の項目を並べる
 csharp_new_line_before_members_in_object_initializers = false
+# TODO: CA1502 (循環的複雑度) を warning にする。Meltype.Core に既存の違反が 27 件 (FindSpanAlternatives の 176 など) あり、先にリファクタが要る
+# dotnet_diagnostic.CA1502.severity = warning

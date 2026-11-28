@@ -431,7 +431,15 @@ internal static class ImeSession
             return CommitCombiningForPassThrough(state, env, preserveLatinRaw: key.Ch is >= 0x0300 and <= 0x036F);
         // 補助面の文字 (絵文字など) は char に入らないので、未確定の内容を確定してからアプリに通す
         if (key.Ch >= 0x10000) return CommitForPassThrough(state, env);
-        var result = ComposeKey(state, env, vk, Position(vk, key.Physical), key.Ch > 0 ? (char)key.Ch : null, key.Shift, key.Ctrl, key.Alt, key.Command, key.ReleaseFollows);
+        var position = Position(vk, key.Physical);
+        // US 配列のバッククォートはかな配列の位置にだけ対応づける。ショートカット用の仮想キーは変えない。
+        if (settings.InputStyle == InputStyle.Kana && settings.KanaLayout == KanaLayout.Jis &&
+            key.Ch is '`' or '~' && (key.Physical?.IsGravePosition == true || key.Physical is null && key.Vk == 0))
+            position = 0xE2;
+        // US 配列の Shift+- は _。JIS かなでは、US 配列にない ¥ キーの長音をこの位置で打てるようにする。
+        if (settings.InputStyle == InputStyle.Kana && settings.KanaLayout == KanaLayout.Jis &&
+            position == VirtualKeys.OemMinus && key.Shift && key.Ch == '_') position = 0xDC;
+        var result = ComposeKey(state, env, vk, position, key.Ch > 0 ? (char)key.Ch : null, key.Shift, key.Ctrl, key.Alt, key.Command, key.ReleaseFollows);
         // アプリに通したキーはキャレットを動かすかもしれない (Core が通すと決めたので、フロントからは送られてこない)
         if (!result.Consumed) CaretMoved(state, vk, key.Ctrl);
         return result;
@@ -785,11 +793,18 @@ internal static class ImeSession
         var passesSlash = !state.CodeJapanese && lineKind is LineKind.Code or LineKind.Prompt;
         var slashAtStart = !modifier && !CompositionController.IsComposing(state.Composition) && ch is '/' && !passesSlash && !SigilWord.InNameAfter(before, comment) && settings.SigilWordsDirect &&
             SigilWord.PassesAfter(before, '/', comment);
-        if (!slashAtStart && !modifier && !CompositionController.IsComposing(state.Composition) && ch is { } c && settings.SigilWordsDirect && SigilWord.PassesAfter(before, c, comment))
+        // 自分で確定したパスの後ろは、アプリへ直接入力中の補完名の続きではない。
+        if (!slashAtStart && !modifier && !CompositionController.IsComposing(state.Composition) && ch is { } c && settings.SigilWordsDirect &&
+            before is not null && SigilWord.PassesAfter(before, c, comment) && !CompositionContext.AfterCommittedPath(state.Composition, before))
         {
             return CompositionController.Pass(state.Composition, Env(state, env), now);
         }
-        if (!state.CodeJapanese && lineKind == LineKind.Code)
+        // 行頭の # の次の !・[ はシバン・属性の記号なので、元のキーをアプリへ渡す (括弧補完もアプリが行う)。
+        // かな入力では記号キーも本文のかなに使う。既存のコメント・文字列の中では指令にしない。
+        // ターミナルの裸の # は既にコードなので例外は不要。コメント本文の # に同じ例外を使うと、本文の記号まで通してしまう。
+        if (!state.CodeJapanese && (lineKind == LineKind.Code ||
+            lineKind == LineKind.Comment && !CodeTerminal(state) && !modifier && settings.InputStyle == InputStyle.Romaji && ch is { } hashMark &&
+            before is { } hashLine && LineContext.ContinuesHashDirectiveMarker(hashLine, hashMark, settings)))
         {
             return CompositionController.Pass(state.Composition, Env(state, env), now);
         }
