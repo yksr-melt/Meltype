@@ -44,8 +44,8 @@ internal sealed record CompositionServices
     /// <summary>よくある書き間違い (ブレスレッド → ブレスレット) の辞書。「もしかして」に使う。null なら出さない。</summary>
     public MisspellingDictionary? Misspellings { get; init; }
 
-    /// <summary>ローマ字の打ち間違いを直すもの (onegaishimsu → お願いします)。null なら直さない。</summary>
-    public RomajiTypoCorrector? RomajiTypos { get; init; }
+    /// <summary>よく使う語の読み・付属語・活用した形 (英語で確定した語を後ろの日本語に合わせてかなに直すときの、読みが語かの判定と、学習のよく使う日本語の判定)。null なら使わない。</summary>
+    public JapaneseLexicon? Lexicon { get; init; }
 
     internal Func<GitHubIssueTitles?> GitHubTitles { get; init; } = () => null;
 
