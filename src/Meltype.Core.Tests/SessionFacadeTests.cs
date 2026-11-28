@@ -1048,9 +1048,181 @@ internal static class SessionFacadeTests
     }
 
     [Test]
+    public static void CodeInput_HashPrefixSymbolsReachTheEditor()
+    {
+        foreach (var terminal in new[] { false, true })
+            foreach (var prefix in new[] { "", "  ", "\t", "/* 説明 */ ", " /* a */ /* b */ ", "int x;\n  " })
+                foreach (var code in new[] { "#!/usr/bin/env bash", "#[derive(Clone)]", "#![allow(unused)]" })
+                {
+                    var session = Create();
+                    session.CodeInput = true;
+                    session.CodeTerminal = terminal;
+                    var field = new Field(prefix);
+                    var results = Type(session, code, field);
+                    Assert.True(results.All(r => !r.Consumed && r.View is null && r.Commits.Count == 0), prefix + code);
+                    Assert.Equal(prefix + code, field.Text);
+                }
+    }
+
+    [Test]
+    public static void CodeInput_HashSymbolsInsideTextComposeNormally()
+    {
+        foreach (var before in new[] { "x #", "# ", "#コメント #", "str = \"word: #", "/* 説明 #", "/* 前の行\n #", "/* 前の行\n */ #", "/* outer\n/* text */ #", "<!-- 説明 --> #" })
+            foreach (var key in new[] { "!", "[" })
+            {
+                var session = Create();
+                session.CodeInput = true;
+                var result = Type(session, key, new Field(before)).Single();
+                Assert.True(result.Consumed && result.View is not null, "本文の記号は未確定入力に入れる: " + before + key);
+                if (key == "[") Assert.Equal("「", result.View?.Text, before + key);
+            }
+        // 未確定の本文を書いているときは、確定済みテキストの末尾が # でも属性の記号にしない。
+        var composing = Create();
+        composing.CodeInput = true;
+        var field = new Field("#");
+        Type(composing, "ima", field);
+        Assert.True(Type(composing, "[", field).Single().Consumed, "本文の途中の括弧は変換ボックスに入れる");
+
+        // かな配列では [ のキーも本文のかな (JIS の濁点) に使う。
+        var kana = new TestSession(() => new Settings { LiveConversion = false, InputStyle = InputStyle.Kana }) { CodeInput = true };
+        Assert.True(kana.HandleKey(0xDB, '[', false, false, false, false, "#").Consumed, "かな入力の記号キーは本文に使う");
+    }
+
+    [Test]
+    public static void CodeInput_HashRulesRespectCommentSettings()
+    {
+        // 指令の見出し・診断文は両方で日本語。それ以外の # は上流のコメントの規則を使う。
+        (string Before, bool EditorJapanese, bool TerminalJapanese)[] cases =
+        [
+            ("#", true, false), ("#foo", false, false), ("#region ", true, true),
+            ("#error ", true, true), ("#warning ", true, true),
+            ("kome #TODO ", false, false), ("kome#コメント", true, false), ("#コメント", true, true), ("# ", true, true),
+            ("r#type", false, false), ("#![", false, false), ("#include ", false, false),
+        ];
+        foreach (var terminal in new[] { false, true })
+            foreach (var enabled in new[] { false, true })
+                foreach (var (before, editorJapanese, terminalJapanese) in cases)
+                {
+                    var session = new TestSession(() => new Settings { LiveConversion = false, CodeCommentHash = enabled }) { CodeInput = true, CodeTerminal = terminal };
+                    session.HandleKey(VirtualKeys.Shift, null, true, false, false, false, before);
+                    var japanese = enabled && (terminal ? terminalJapanese : editorJapanese);
+                    Assert.Equal(!japanese, session.CodeEnglishAt(before), $"{before}, hash: {enabled}, terminal: {terminal}");
+                    var results = Type(session, "ima", new Field(before));
+                    if (japanese) Assert.Equal("いま", results[^1].View?.Text, before);
+                    else Assert.True(results.All(r => !r.Consumed && r.View is null), before);
+                }
+        foreach (var enabled in new[] { false, true })
+            foreach (var previous in new[] { "", "int x;\n" })
+            {
+                // /* … */ が OFF なら、その文字列もコードなので、後ろの # は行頭ではない。
+                var session = new TestSession(() => new Settings { LiveConversion = false, CodeCommentBlock = enabled }) { CodeInput = true };
+                var message = previous + "/* 説明 */ #region ";
+                session.HandleKey(VirtualKeys.Shift, null, true, false, false, false, message);
+                Assert.Equal(!enabled, session.CodeEnglishAt(message), message);
+                var before = previous + "/* 説明 */ #";
+                var result = Type(session, "[", new Field(before)).Single();
+                Assert.Equal(!enabled, result.Consumed, before);
+            }
+    }
+
+    [Test]
+    public static void CodeInput_DirectiveMessagesStartAfterCommittedSpace()
+    {
+        foreach (var terminal in new[] { false, true })
+            foreach (var word in new[] { "include", "define", "TODO", "pragma once", "region", "endregion", "error", "warning", "pragma region", "pragma endregion" })
+            {
+                var session = Create();
+                session.CodeInput = true;
+                session.CodeTerminal = terminal;
+                // 指令名は確定済みの文字列として渡し、辞書による語の判定とは分ける。
+                var field = new Field("#" + word);
+                session.HandleKey(VirtualKeys.Shift, null, true, false, false, false, field.Text);
+                Assert.True(session.CodeEnglishAt(field.Text), word);
+                Assert.True(!Type(session, " ", field).Single().Consumed, "半角空白はアプリへ渡す: " + word);
+                var next = Type(session, "ima", field);
+                if (word is "region" or "endregion" or "error" or "warning" or "pragma region" or "pragma endregion")
+                    Assert.Equal("いま", next[^1].View?.Text, word);
+                else
+                {
+                    Assert.True(next.All(r => !r.Consumed && r.View is null), word);
+                    Assert.Equal("#" + word + " ima", field.Text);
+                }
+            }
+    }
+
+    [Test]
+    public static void CodeInput_HashCommentsContinueAfterCommit()
+    {
+        foreach (var terminal in new[] { false, true })
+            foreach (var before in new[] { "#region ", "#error ", "#warning ", "#コメント", "# ", "/* 説明 */ #region " })
+            {
+                var session = Create();
+                session.CodeInput = true;
+                session.CodeTerminal = terminal;
+                var field = new Field(before);
+                Assert.Equal("いま", Type(session, "ima", field)[^1].View?.Text, before);
+                Assert.True(Type(session, "\n", field).Single().Consumed, before);
+                Assert.Equal(before + "いま", field.Text);
+                Assert.Equal("あ", Type(session, "a", field).Single().View?.Text, before);
+            }
+    }
+
+    [Test]
+    public static void CodeInput_DirectivesFollowExistingCommentBoundaries()
+    {
+        (string Before, bool EditorJapanese, bool TerminalJapanese)[] cases =
+        [
+            ("  #region ", true, true), ("/* 説明 */#region ", true, false),
+            (" /* a */ /* b */ #region ", true, true),
+            ("/*/ abc */ #region ", true, true), ("/*x*/ #region ", true, true),
+            ("/* a *//* b */ #region ", true, true),
+            ("x #region ", false, true), ("<!-- 説明 --> #region ", false, true),
+            ("user@host:~$ #region ", false, true), ("$ #error ", false, true),
+            ("user@host:~$ kome #warning ", false, true), ("kome#region ", false, false),
+            ("/* 前の行\n */ #region ", false, false),
+            ("/* outer\n/* text */ #region ", false, false),
+            ("#region_extra ", false, false), ("#warning2 ", false, false), ("#Region ", false, false),
+            ("#region\t", false, false), ("#region\u00a0", false, false),
+            ("# コメント #region ", true, true), ("str = \"#region ", true, true),
+        ];
+        foreach (var terminal in new[] { false, true })
+            foreach (var (before, editorJapanese, terminalJapanese) in cases)
+            {
+                var session = Create();
+                session.CodeInput = true;
+                session.CodeTerminal = terminal;
+                session.HandleKey(VirtualKeys.Shift, null, true, false, false, false, before);
+                var japanese = terminal ? terminalJapanese : editorJapanese;
+                Assert.Equal(!japanese, session.CodeEnglishAt(before), $"{before}, terminal: {terminal}");
+                var results = Type(session, "ima", new Field(before));
+                if (japanese) Assert.Equal("いま", results[^1].View?.Text, before);
+                else Assert.True(results.All(r => !r.Consumed && r.View is null), before);
+            }
+    }
+
+    [Test]
+    public static void CodeInput_HashRulesAllowManualModeChanges()
+    {
+        var session = new TestSession(() => new Settings { LiveConversion = false, DirectModeAutoDetect = false }) { CodeInput = true };
+        var field = new Field("#TODO ");
+        Type(session, "a", field);
+        session.Toggle(field.Text);
+        Assert.Equal("いま", Type(session, "ima", field)[^1].View?.Text);
+        Type(session, "\n", field);
+        session.Toggle(field.Text);
+        Assert.True(Type(session, "abc", field).All(r => !r.Consumed), "手動でコードの英数入力へ戻す");
+
+        field = new Field("str = \"word: ");
+        session.Direct = true;
+        Assert.True(Type(session, "#{word}", field).All(r => !r.Consumed), "文字列の中でも手動で直接入力できる");
+        session.Direct = false;
+        Assert.Equal("いま", Type(session, "ima", field)[^1].View?.Text);
+    }
+
+    [Test]
     public static void CodeInput_ExistingHashCommentsSurviveCaretAndFocusChanges()
     {
-        foreach (var comment in new[] { "#こめんと", "#コメント", "#説明", "#ｺﾒﾝﾄ", "#「説明」", "#※注意", "#１つめ", "kome#コメント" })
+        foreach (var comment in new[] { "#こめんと", "#コメント", "#説明", "#ｺﾒﾝﾄ", "#「説明」", "#※注意", "#１つめ", "kome#コメント", "#region Foo", "#error 設定", "#warning 旧形式" })
         {
             var session = Create();
             session.CodeInput = true;
@@ -1082,7 +1254,7 @@ internal static class SessionFacadeTests
     [Test]
     public static void CodeInput_ExistingDirectivesRemainCode()
     {
-        foreach (var before in new[] { "#include <stdio.h>", "#region Foo", "r#type", "#include日本語" })
+        foreach (var before in new[] { "#include <stdio.h>", "#include<stdio.h>", "#if(FOO)", "#define NAME", "#TODO ", "#foo", "r#type", "#include日本語", "kome #TODO " })
         {
             var session = Create();
             session.CodeInput = true;
@@ -1327,6 +1499,53 @@ internal static class SessionFacadeTests
             field.Text += c;
         }
         Assert.Equal("///", field.Text);
+    }
+
+    [Test]
+    public static void CodeInput_TerminalDirectiveMessagesAfterShellPrompt()
+    {
+        foreach (var prefix in new[] { "user@host:~$ ", "Last login: Mon Jan  1 00:00:00\nuser@host:~$ " })
+            foreach (var word in new[] { "region", "error", "warning" })
+            {
+                var session = Create();
+                session.CodeInput = true;
+                session.CodeTerminal = true;
+                var field = new Field(prefix);
+                Assert.True(Type(session, "#" + word + " ", field).All(r => !r.Consumed), word);
+                Assert.Equal("いま", Type(session, "ima", field)[^1].View?.Text, word);
+                Type(session, "\n", field);
+                Assert.Equal(prefix + "#" + word + " いま", field.Text, word);
+                Assert.Equal("あ", Type(session, "a", field).Single().View?.Text, word);
+            }
+    }
+
+    [Test]
+    public static void CodeInput_TerminalHashSymbolsInsideCommentsComposeNormally()
+    {
+        foreach (var before in new[] { "user@host:~$ # コメント #", "user@host:~$ #region 見出し #", "// コメント #", "str = \"#" })
+            foreach (var symbol in new[] { "!", "[" })
+            {
+                var session = Create();
+                session.CodeInput = true;
+                session.CodeTerminal = true;
+                var result = Type(session, symbol, new Field(before)).Single();
+                Assert.True(result.Consumed && result.View is not null, before + symbol);
+            }
+    }
+
+    [Test]
+    public static void CodeInput_TerminalWithoutSurroundingTextRecognizesDirectiveMessages()
+    {
+        foreach (var before in new string?[] { null, "" })
+            foreach (var word in new[] { "region", "error", "warning" })
+            {
+                var session = Create();
+                session.CodeInput = true;
+                session.CodeTerminal = true;
+                Assert.True(Type(session, "#" + word, before).All(r => !r.Consumed), word);
+                Assert.True(!session.HandleKey(VirtualKeys.Space, ' ', false, false, false, false, before).Consumed, word);
+                Assert.Equal("いま", Type(session, "ima", before)[^1].View?.Text, word);
+            }
     }
 
     [Test]

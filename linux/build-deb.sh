@@ -86,6 +86,8 @@ find "$root" -type d -exec chmod 755 {} +
 
 # 依存: 本体 (NativeAOT)・Mozc の変換ヘルパー・Zenzai の llama-server が使う C / C++ のライブラリと zlib、IBus のエンジン (Python)、
 # 設定アプリ (Avalonia) が使う fontconfig (日本語のフォントを fc-match で探す) と、dlopen で読む X11 のライブラリ。
+# ICU は .NET が実行時に dlopen する (InvariantGlobalization=false)。無いと設定アプリは起動直後に abort する (#2415 の調査で確認)。
+# ICU のパッケージ名は版を含み、どの版でも満たす仮想パッケージが無いので、対応する Debian 12 (72)・Ubuntu 24.04 (74) 以降の版を並べる
 # IBus は fcitx5 だけで使う人もいるので Recommends にする
 installed_size="$(du -sk --exclude=DEBIAN "$root" | cut -f1)"
 {
@@ -94,7 +96,7 @@ installed_size="$(du -sk --exclude=DEBIAN "$root" | cut -f1)"
     echo "Architecture: $arch"
     echo "Maintainer: Yukishiro <https://github.com/yksr-melt/Meltype>"
     echo "Installed-Size: $installed_size"
-    echo "Depends: libc6, libstdc++6, libgcc-s1, zlib1g, python3 (>= 3.9), python3-gi, libfontconfig1, fontconfig, libx11-6, libice6, libsm6, libxcursor1, libxext6, libxfixes3, libxi6, libxrandr2"
+    echo "Depends: libc6, libstdc++6, libgcc-s1, zlib1g, libicu78 | libicu77 | libicu76 | libicu75 | libicu74 | libicu72, python3 (>= 3.9), python3-gi, libfontconfig1, fontconfig, libx11-6, libice6, libsm6, libxcursor1, libxext6, libxfixes3, libxi6, libxrandr2"
     echo "Recommends: ibus, gir1.2-ibus-1.0"
     if $with_fcitx5; then echo "Suggests: fcitx5"; fi
     echo "Section: utils"

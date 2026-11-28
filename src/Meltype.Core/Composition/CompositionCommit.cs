@@ -98,11 +98,11 @@ internal static class CompositionCommit
         var input = scene.Input;
         var mode = input.Text.Mode;
         var left = input.LeftConversion is { } kept && kept.Raw == input.Text.TypedRaw
-            ? kept.Conversion.Clauses.Select(c => (c.Reading, c.Engine, c.Text)).ToList()
+            ? [.. kept.Conversion.Clauses.Select(c => new CommittedClause(c.Reading, c.Engine, c.Text))]
             : AutoClauses(input, env);
-        if (!IsKanaMode(mode)) return [.. left.Select(c => new CommittedClause(c.Reading, c.Engine, mode == DisplayMode.Auto ? c.Text : null))];
+        if (!IsKanaMode(mode)) return [.. left.Select(c => c with { Text = mode == DisplayMode.Auto ? c.Text : null })];
         var matches = string.Concat(left.Select(c => c.Reading)) == CompositionText.AllKana(CompositionText.Read(input.Text, env), env, final: true);
-        return [.. left.Select(c => new CommittedClause(c.Reading, c.Engine, matches ? KanaForm(mode, c.Reading) : null))];
+        return [.. left.Select(c => c with { Text = matches ? KanaForm(mode, c.Reading) : null })];
     }
 
     private static bool IsKanaMode(DisplayMode mode) => mode is DisplayMode.Hiragana or DisplayMode.Katakana or DisplayMode.HalfWidthKatakana;
@@ -114,26 +114,16 @@ internal static class CompositionCommit
         _ => hiragana,
     };
 
-    // 自動の表示の文節: 英語の区間は 1 つの文節 (変換エンジンの答えは無し)、日本語の区間はライブ変換の文節 (ライブ変換を使わなければかなのまま)
-    private static List<(string Reading, string? Engine, string Text)> AutoClauses(CompositionInput input, CompositionEnv env)
+    // 自動の表示の文節: 確定するときと同じ並び (自動の表示で確定したときの文字。F6〜F8 なら当てる前の形)
+    private static List<CommittedClause> AutoClauses(CompositionInput input, CompositionEnv env)
     {
         var original = input.Text;
         input.Text = CompositionText.Automatic(input.Text);
         try
         {
-            var clauses = new List<(string Reading, string? Engine, string Text)>();
-            var segments = CompositionText.Segments(CompositionText.Read(input.Text, env), env);
-            var typed = CompositionText.TypedSpans(segments, env);
-            for (var i = 0; i < segments.Count; i++)
-            {
-                var segment = segments[i];
-                if (segment.IsEnglish) clauses.Add((segment.Kana, null, typed[i].Text));
-                else if (env.Settings.LiveConversion && CompositionConversion.CountsAsLive(segment.Kana))
-                    clauses.AddRange(CompositionConversion.LiveClauses(input, env, segment.Kana, i > 0 && segments[i - 1].IsEnglish, CompositionConversion.SegmentBefore(env, string.Concat(clauses.Select(c => c.Text))))
-                        .Select(c => (c.Reading, c.Engine, c.Text)));
-                else clauses.Add((segment.Kana, null, segment.Kana));
-            }
-            return clauses;
+            // F6〜F8 の確定は自動の表示の答えを待たずに確定するので、見えていた答え
+            var clauses = CompositionPresentation.AutoClauses(input, env, final: true);
+            return [.. clauses.Select(c => c.Committed)];
         }
         finally
         {
@@ -226,7 +216,7 @@ internal static class CompositionCommit
             replacement = ComposedText.Kana(env.Detector.Romaji.ConvertLenient(previous.Raw.ToLowerInvariant(), final: true));
             // ローマ字として読んでもよく使う語の読みにならない語 (issue → いっすえ、api → あぴ) は英語のまま (issue #121, #124)。
             // sushi → すし のように、日本語の語として読めるときだけ直す。
-            if (env.Services.RomajiTypos is { } lexicon && !lexicon.IsWord(replacement.Text)) return null;
+            if (env.Services.Lexicon is { } lexicon && !lexicon.IsWord(replacement.Text)) return null;
         }
         // ユーザーが英字 / かなに直して覚えた語 (F10 で英字にした api) は、覚えたとおりなら書き換えない (issue #124)。
         if (targets.Any(t => CompositionText.LearnedLanguages(env).Get(t.Raw.ToLowerInvariant()) == t.English)) return null;
