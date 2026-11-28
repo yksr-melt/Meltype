@@ -1409,6 +1409,9 @@ internal static class RomajiTypoTests
         // ローマ字の打ち間違いは直さない (#2527)。見えている子音のまま確定する (anb は あんb: issue #2461)
         CompositionTests.AssertCommitted(
             ("anb", "あんb"), ("kanb", "かんb"), ("anm", "あんm"), ("anh", "あんh"),
+            ("a-nb", "あーんb"),
+            // かなの後ろの 1 つの w は笑いとして残す (余計な 1 文字として消して くさ になっていた)
+            ("kusaw", "くさw"),
             ("onegaishimsu", "おねがいしmす"),
             ("sumimasne", "すみmasね"),
             ("tabde", "tabで"));
