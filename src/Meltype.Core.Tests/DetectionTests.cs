@@ -382,4 +382,32 @@ internal static class DetectionTests
         }
         finally { Directory.Delete(dir, recursive: true); }
     }
+
+    [Test]
+    public static void PresetRomajiTable_Azik()
+    {
+        // 設定「ローマ字の表」が AZIK: kz = かん、q = ん、kt = こと。標準の綴り (katta) も今までどおり
+        var azik = RomajiDetector.CreateDefault(null, Config.RomajiTable.Azik);
+        Assert.Equal("かんじ", azik.AnalyzeFragment("kzji").Kana);
+        Assert.Equal("ことば", azik.AnalyzeFragment("ktba").Kana);
+        Assert.Equal("かった", azik.AnalyzeFragment("katta").Kana);
+        // 標準では kz は読めない
+        Assert.True(!RomajiDetector.CreateDefault(null).AnalyzeFragment("kzji").IsValid, "標準では kz を読まない");
+    }
+
+    [Test]
+    public static void PresetRomajiTable_UserTableWins()
+    {
+        // romaji.txt の綴りは組み込みの表より優先する (AZIK の kz = かん を くず にする)
+        var dir = Path.Combine(Path.GetTempPath(), $"meltype-romaji-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        try
+        {
+            File.WriteAllText(Path.Combine(dir, "romaji.txt"), "kz\tくず\n");
+            var romaji = RomajiDetector.CreateDefault(dir, Config.RomajiTable.Azik);
+            Assert.Equal("くず", romaji.AnalyzeFragment("kz").Kana);
+            Assert.Equal("こと", romaji.AnalyzeFragment("kt").Kana);
+        }
+        finally { Directory.Delete(dir, recursive: true); }
+    }
 }

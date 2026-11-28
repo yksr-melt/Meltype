@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Yukishiro
 
 using System.Text;
+using Meltype.Libraries.Lexicon;
 
 namespace Meltype.Detection;
 
@@ -129,8 +130,23 @@ internal sealed class RomajiDetector
         if (custom is { Count: > 0 }) _custom = new SpellingTrie(custom);
     }
 
-    /// <summary>ユーザー辞書のフォルダーの romaji.txt を読んで作る (無ければ組み込みの表だけ)。</summary>
-    public static RomajiDetector CreateDefault(string? userDictionaryDirectory) => new(LoadCustomTable(userDictionaryDirectory));
+    /// <summary>
+    /// 設定「ローマ字の表」の組み込みの表 (AZIK など) に、ユーザー辞書のフォルダーの romaji.txt を重ねて作る。
+    /// romaji.txt の綴りが組み込みの表より優先する。
+    /// </summary>
+    public static RomajiDetector CreateDefault(string? userDictionaryDirectory, Config.RomajiTable table = Config.RomajiTable.Standard)
+    {
+        var merged = PresetTable(table);
+        foreach (var (spelling, kana) in LoadCustomTable(userDictionaryDirectory) ?? []) merged[spelling] = kana;
+        return new(merged);
+    }
+
+    /// <summary>組み込みのローマ字の表 (標準なら空)。</summary>
+    public static Dictionary<string, string> PresetTable(Config.RomajiTable table) => table switch
+    {
+        Config.RomajiTable.Azik => ParseCustomTable(DictionarySource.ReadEmbedded("romaji-azik.txt")),
+        _ => new Dictionary<string, string>(StringComparer.Ordinal),
+    };
 
     /// <summary>
     /// ユーザーのローマ字の表 (romaji.txt)。1 行に「綴り<Tab>かな」(空白区切りも可)、行頭の # はコメント。

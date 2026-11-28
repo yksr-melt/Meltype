@@ -26,12 +26,13 @@ internal sealed class CompositionDetector
     /// <summary>日英の区切りのラティス。</summary>
     internal ReadingLattice Lattice { get; }
 
-    public static CompositionDetector CreateDefault(string? userDictionaryDirectory = null) => CreateDefault(userDictionaryDirectory, LinkWeights.Default);
+    public static CompositionDetector CreateDefault(string? userDictionaryDirectory = null, Config.RomajiTable romajiTable = Config.RomajiTable.Standard) =>
+        CreateDefault(userDictionaryDirectory, LinkWeights.Default, romajiTable);
 
     /// <summary>辺をつなぐ重みを変えて作る (重みを探す道具 --tune-weights が使う)。</summary>
-    internal static CompositionDetector CreateDefault(string? userDictionaryDirectory, LinkWeights weights)
+    internal static CompositionDetector CreateDefault(string? userDictionaryDirectory, LinkWeights weights, Config.RomajiTable romajiTable = Config.RomajiTable.Standard)
     {
-        var romaji = RomajiDetector.CreateDefault(userDictionaryDirectory);
+        var romaji = RomajiDetector.CreateDefault(userDictionaryDirectory, romajiTable);
         var japaneseWords = DictionarySource.Load("japanese.txt", userDictionaryDirectory).ToList();
         var proper = ProperNouns.Load(userDictionaryDirectory);
         var english = new EnglishDetector(DictionarySource.Load("english.txt", userDictionaryDirectory).Concat(proper.LowercaseWords));

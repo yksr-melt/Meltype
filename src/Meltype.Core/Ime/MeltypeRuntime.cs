@@ -47,7 +47,7 @@ public sealed class MeltypeRuntime : IDisposable
         });
         // ログの設定を、入力の前に入れる
         _ = Settings.Current;
-        Detector = CompositionDetector.CreateDefault(_userDirectory);
+        Detector = CompositionDetector.CreateDefault(_userDirectory, Settings.Current.RomajiTable);
         Learning = new LearningData(dataDirectory);
         _shared = new CompositionServices
         {

@@ -102,6 +102,14 @@ const dictionaries = {
       ];
     },
   },
+  // 綴り<Tab>かな (組み込みのローマ字の表)。綴りは英小文字だけ (RomajiDetector.ParseCustomTable と同じ決まり)
+  'romaji-azik.txt': {
+    format: tabbed(2, 2, ([spelling, kana]) => [
+      /^[a-z]+$/.test(spelling) ? null : `綴り「${spelling}」が英小文字だけでない`,
+      hiragana.test(kana) ? null : `かな「${kana}」がひらがなでない`,
+    ]),
+    keysOf: line => [[line.split('\t')[0], line]],
+  },
   // 配列<Tab>打つキー<Tab>かな (かな配列の表)。打つキーは刻印の 1 文字・L・R を空白 (並び) か + (同時) でつなぐ
   'kana-layouts.txt': {
     format: tabbed(3, 3, ([layout, keys, kana]) => [

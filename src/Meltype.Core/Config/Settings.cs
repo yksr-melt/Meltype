@@ -28,6 +28,13 @@ internal sealed class PlatformsAttribute(Platform platforms) : Attribute
     public Platform Platforms { get; } = platforms;
 }
 
+/// <summary>組み込みのローマ字の表。</summary>
+public enum RomajiTable
+{
+    [Description("標準")] Standard,
+    [Description("AZIK")] Azik,
+}
+
 public enum InputStyle
 {
     /// <summary>ローマ字入力。</summary>
@@ -270,6 +277,10 @@ public sealed class Settings
     [Category("入力方式"), DisplayName("ローマ字の配列"), Platforms(Platform.Windows),
      Description("入力方式が「ローマ字入力」のときのキーの配列。QWERTY (ふつう) か SKY 配列 (左手が子音 , W R M H / N T S K Y / P D Z G B、右手が母音 UU AI OU 。 EI / U A O I E / UN AN ON IN EN)。SKY 配列では、英字のキーを SKY 配列のローマ字にしてから読みます (拗音は子音 + Y + 母音、促音は子音を 2 回)。英語の自動判定は使わず、日本語として読みます。Meltype キーボードで使えます。")]
     public RomajiLayout RomajiLayout { get; set; } = RomajiLayout.Qwerty;
+
+    [Category("入力方式"), DisplayName("ローマ字の表"),
+     Description("ローマ字の綴りの表。標準 (Microsoft IME と同じ綴り) か AZIK (拡張ローマ字: kz = かん、q = ん、kt = こと など)。どちらでも、ユーザー辞書のフォルダーの romaji.txt に書いた綴りが優先します。変えたら Meltype を起動し直すと効きます。")]
+    public RomajiTable RomajiTable { get; set; } = RomajiTable.Standard;
 
     [Category("入力方式"), DisplayName("かな配列"), Platforms(Platform.Windows),
      Description("入力方式が「かな入力」のときの配列。JIS かな (刻印どおり)・月配列 (U9。D・K を押してから次のキーで 2 段目・3 段目)・花配列 (D・K を押してから次のキーで 2 段目)・NICOLA (親指シフト。無変換が左、変換が右の親指キー)・中指NICOLA (NICOLA に加え、K を押したまま左手のキーを押して先に離すと左シフト、D を押したまま右手のキーを押して先に離すと右シフト)・TRON 配列 (親指シフト)。親指シフトは、親指キーを押したまま文字キーを押すか、文字キーの直後 (0.1 秒以内) に親指キーを押します。親指キーだけを押して離すと、ふつうの変換・無変換です。Shift を押したキーはふつうの英字・記号です。JIS かな以外では、打ったキーの英字を英単語として見せません。Meltype キーボードで使えます。")]
@@ -1007,6 +1018,7 @@ public sealed class Settings
         if (!Enum.IsDefined(InputStyle)) InputStyle = InputStyle.Romaji;
         if (!Enum.IsDefined(KanaLayout)) KanaLayout = KanaLayout.Jis;
         if (!Enum.IsDefined(RomajiLayout)) RomajiLayout = RomajiLayout.Qwerty;
+        if (!Enum.IsDefined(RomajiTable)) RomajiTable = RomajiTable.Standard;
         if (!Enum.IsDefined(KeyCount)) KeyCount = KeyCountMode.Off;
         AppRules ??= [];
         AppKinds ??= [];

@@ -44,7 +44,7 @@ internal sealed class ScoreEngine
     /// <summary>組み込み辞書 (+ ユーザー辞書) から一式を組み立てる。</summary>
     public static ScoreEngine CreateDefault(Func<Settings> settings, string? userDictionaryDirectory = null)
     {
-        var romaji = RomajiDetector.CreateDefault(userDictionaryDirectory);
+        var romaji = RomajiDetector.CreateDefault(userDictionaryDirectory, settings().RomajiTable);
         var japaneseWords = DictionarySource.Load("japanese.txt", userDictionaryDirectory).ToList();
         var dictionary = new DictionaryDetector(japaneseWords, romaji);
         var english = new EnglishDetector(DictionarySource.Load("english.txt", userDictionaryDirectory).Concat(ProperNouns.Load(userDictionaryDirectory).LowercaseWords));
