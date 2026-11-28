@@ -202,14 +202,18 @@ internal static class LineContext
     private static bool IsBlockComment(string text, int index, bool terminal) =>
         StartsWith(text, index, "/*") && (!terminal || IsTerminalComment(text, index, 2));
 
+    // 本文に見出し・診断文を書く指令。#pragma region・#pragma endregion は MSVC の C/C++。
+    private static readonly string[] HashDirectiveMessages = ["region ", "endregion ", "error ", "warning ", "pragma region ", "pragma endregion "];
+
     // 指令の見出し・診断文は日本語でも書く。今の行と複数行の走査で同じ判定を使い、本文の記号を次の行へ持ち越さない。
     private static bool IsHashDirectiveMessage(string text, int index, Settings settings, bool terminal, bool continuedBlock)
     {
         if (text[index] != '#' || continuedBlock) return false;
         var body = text.AsSpan(index + 1);
         // #region_extra・#Region など別の名前を除くため、直後の半角空白まで、大文字小文字を区別して照合する。
-        return (body.StartsWith("region ", StringComparison.Ordinal) || body.StartsWith("error ", StringComparison.Ordinal) || body.StartsWith("warning ", StringComparison.Ordinal)) &&
-            IsHashDirectiveStart(text, index, settings, terminal);
+        foreach (var name in HashDirectiveMessages)
+            if (body.StartsWith(name, StringComparison.Ordinal)) return IsHashDirectiveStart(text, index, settings, terminal);
+        return false;
     }
 
     // #1623: # の直後に日本語を確定してもコメントのままにする。## (区切り) もコメント。

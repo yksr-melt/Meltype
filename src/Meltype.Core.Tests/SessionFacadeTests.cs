@@ -1129,7 +1129,7 @@ internal static class SessionFacadeTests
     public static void CodeInput_DirectiveMessagesStartAfterCommittedSpace()
     {
         foreach (var terminal in new[] { false, true })
-            foreach (var word in new[] { "include", "define", "TODO", "region", "error", "warning" })
+            foreach (var word in new[] { "include", "define", "TODO", "pragma once", "region", "endregion", "error", "warning", "pragma region", "pragma endregion" })
             {
                 var session = Create();
                 session.CodeInput = true;
@@ -1140,7 +1140,7 @@ internal static class SessionFacadeTests
                 Assert.True(session.CodeEnglishAt(field.Text), word);
                 Assert.True(!Type(session, " ", field).Single().Consumed, "半角空白はアプリへ渡す: " + word);
                 var next = Type(session, "ima", field);
-                if (word is "region" or "error" or "warning")
+                if (word is "region" or "endregion" or "error" or "warning" or "pragma region" or "pragma endregion")
                     Assert.Equal("いま", next[^1].View?.Text, word);
                 else
                 {
