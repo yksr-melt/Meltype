@@ -264,4 +264,40 @@ internal static partial class CompositionText
         }
         return null;
     }
+
+    /// <summary>
+    /// 打ったものを読んだ単位 (<see cref="Typed"/>) の [start, end) を打った要素を、正しい読み (カタカナ) に置き換える。end が単位の数を超えるときは入力途中の子音も含む。
+    /// かなの読みにする (英字の Raw を持たないので、英語と判定されることはない)。
+    /// 単位は、確定・変換に進んだ範囲を決めずに読んだもの (<see cref="Unsettled"/>: 単位の位置が打った要素と揃う)。置き換えたら範囲も決め直す。
+    /// </summary>
+    public static CompositionTextState ReplaceReading(CompositionTextState state, TextEnv env, int start, int end, string rightKatakana)
+    {
+        state = CompositionText.Unsettled(state);
+        var typed = CompositionText.Typed(state, env);
+        var from = typed.Units.Take(start).Sum(u => u.Raw.Length);
+        var to = end > typed.Units.Count ? state.Keys.Count : typed.Units.Take(end).Sum(u => u.Raw.Length);
+        var reading = KanaChars.ToHiragana(rightKatakana).Select(c => (TypedKey)new TypedKey.Reading(c));
+        return state with { Keys = state.Keys.RemoveRange(from, to - from).InsertRange(from, reading) };
+    }
+
+    /// <summary>確定・変換に進んだ範囲を決めていない値。</summary>
+    public static CompositionTextState Unsettled(CompositionTextState state) => state.Settled is null ? state : state with { Settled = null };
+
+    /// <summary>単位ごとに、英語として見せている区間に入っているか。</summary>
+    private static bool[] UnitIsEnglish(TextReading state, TextEnv env)
+    {
+        var result = new bool[state.Units.Count];
+        var unit = 0;
+        foreach (var segment in CompositionText.Segments(state, env))
+        {
+            var remaining = segment.Raw.Length;
+            while (unit < state.Units.Count && remaining > 0)
+            {
+                result[unit] = segment.IsEnglish;
+                remaining -= state.Units[unit].Raw.Length;
+                unit++;
+            }
+        }
+        return result;
+    }
 }

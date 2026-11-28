@@ -219,7 +219,7 @@ internal static class CompositionPresentation
     internal static Prediction? SelectedPrediction(CompositionInput input) =>
         input.Predictions is { Index: >= 0 } p && p.Index < p.Items.Count && p.Key == PredictionKey(input) ? p.Items[p.Index] : null;
 
-    /// <summary>今の表示 (確定するときと同じく打ち間違いを直した形。ライブ変換が有効なら日本語区間は漢字に変換済み)。</summary>
+    /// <summary>今の表示 (確定するときと同じ読み。ライブ変換が有効なら日本語区間は漢字に変換済み)。</summary>
     internal static ComposedText CurrentComposed(CompositionInput input, CompositionEnv env, bool final) =>
         ComposedBeforeCaret(input, env, final) + ComposedText.Kana(CompositionText.TailText(input.Text));
 

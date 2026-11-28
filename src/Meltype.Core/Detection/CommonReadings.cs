@@ -9,7 +9,7 @@ namespace Meltype.Detection;
 
 /// <summary>
 /// よく使う語の読み (dictionaries/readings.txt と readings-extra.txt の「読み [TAB] 活用の種類」の読み)。
-/// 読みの集合を一度だけ構築し、かな入力の判定とローマ字の打ち間違い直しで共有する。
+/// 読みの集合を一度だけ構築し、かな入力の判定と日英の区切り・よく使う語の一覧 (JapaneseLexicon) で共有する。
 /// </summary>
 internal static class CommonReadings
 {
@@ -71,7 +71,7 @@ internal static class CommonReadings
 
     private static readonly Lazy<PackedWordSet> SharedRare = new(() => PackedWordSet.FromLines(RareText(), firstField: true));
 
-    /// <summary>よく使う語でない語の 3 文字以上の読み (dictionaries/readings-rare.txt の ろんぱ・かんれんづける)。日英の区切りだけで使い、打ち間違い直しには使わない。</summary>
+    /// <summary>よく使う語でない語の 3 文字以上の読み (dictionaries/readings-rare.txt の ろんぱ・かんれんづける)。日英の区切りだけで使う。</summary>
     public static PackedWordSet Rare => SharedRare.Value;
 
     /// <summary>readings-rare.txt の本文を読み直す (活用形の生成に使う)。</summary>
