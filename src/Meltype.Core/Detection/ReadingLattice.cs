@@ -343,7 +343,10 @@ internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
                     continue;
                 }
                 if (neutral is { } symbol) OfferEdge(node, state, symbol, 0);
-                foreach (var (edge, cost) in japanese) OfferEdge(node, state, edge, cost);
+                // 単位の途中から始まる日本語 (bacon|n + i の ni) は、英語の後ろにだけ続ける。日本語の後ろで単位を分けると、
+                // 打った nn (ん) を ん|な と読み直した道が、表示どおりの道と同じ重みになる (kaizen|nann = かいぜんなん: issue #2526)
+                if (!(p < unitsEnd && unitAt[p] < 0 && !node.Edge.English))
+                    foreach (var (edge, cost) in japanese) OfferEdge(node, state, edge, cost);
                 foreach (var (edge, cost) in english) OfferEdge(node, state, edge, cost);
             }
         }

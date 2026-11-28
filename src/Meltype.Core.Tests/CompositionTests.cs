@@ -6009,6 +6009,23 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void TypedNn_IsNotSplitBetweenJapaneseWords()
+    {
+        // 打った nn は ん。日本語の語のあいだで ん|な と読み直さない (issue #2526)。nnn は ん + n、英語の後ろの単位は読み直す
+        var expected = new Dictionary<string, string>
+        {
+            ["kaizennann"] = "かいぜんあん", ["kaizennannda"] = "かいぜんあんだ", ["sinnann"] = "しんあん",
+            ["kaizennnann"] = "かいぜんなん", ["baconni"] = "baconに",
+        };
+        foreach (var (typed, kana) in expected)
+        {
+            var k = new Keyboard();
+            k.Type(typed);
+            Assert.Equal(kana, k.Showing, $"「{typed}」");
+        }
+    }
+
+    [Test]
     public static void Capitalized_IsEnglish()
     {
         var k = new Keyboard();
