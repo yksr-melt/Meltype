@@ -9,14 +9,35 @@ namespace Meltype.Dictionary;
 internal sealed class ChemicalCompoundDictionary
 {
     private readonly AtomicWeights _atomicWeights;
+    private readonly ChemicalNameCatalog _catalog;
 
-    public ChemicalCompoundDictionary(string dataDirectory) => _atomicWeights = new AtomicWeights(dataDirectory);
+    public ChemicalCompoundDictionary(string dataDirectory)
+    {
+        _atomicWeights = new AtomicWeights(dataDirectory);
+        _catalog = new ChemicalNameCatalog();
+    }
 
     public IReadOnlyList<string> Lookup(string reading, IEnumerable<string> names)
     {
         var compounds = new Dictionary<string, ChemicalCompound>(StringComparer.Ordinal);
-        foreach (var term in new[] { reading }.Concat(names).Distinct(StringComparer.Ordinal))
-            foreach (var compound in ChemicalNameParser.Parse(term)) compounds.TryAdd(compound.Identity, compound);
+        var terms = ChemicalNameParser.HasOxidationQualifier(reading)
+            ? [reading]
+            : new[] { reading }.Concat(names).Distinct(StringComparer.Ordinal).ToArray();
+        foreach (var term in terms)
+        {
+            if (!_catalog.TryLookup(term, out var listedCompounds, out var mergeRuleCandidates))
+            {
+                foreach (var compound in ChemicalNameParser.Parse(term)) compounds.TryAdd(compound.Identity, compound);
+                continue;
+            }
+
+            foreach (var compound in listedCompounds) compounds.TryAdd(compound.Identity, compound);
+            if (!mergeRuleCandidates) continue;
+
+            var listedFormulas = listedCompounds.Select(compound => compound.Formula).ToHashSet(StringComparer.Ordinal);
+            foreach (var compound in ChemicalNameParser.Parse(term))
+                if (!listedFormulas.Contains(compound.Formula)) compounds.TryAdd(compound.Identity, compound);
+        }
 
         var candidates = new List<string>();
         foreach (var compound in compounds.Values)

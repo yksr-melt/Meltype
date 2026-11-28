@@ -20,5 +20,6 @@
     <InternalsVisibleTo Include="Meltype.Core.Tests" />
     <InternalsVisibleTo Include="Benchmark" />
     <EmbeddedResource Include="..\..\dictionaries\*.txt" LogicalName="Meltype.dictionaries.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Dictionary\chemical-compounds.tsv" LogicalName="Meltype.Dictionary.chemical-compounds.tsv" />
   </ItemGroup>
 </Project>

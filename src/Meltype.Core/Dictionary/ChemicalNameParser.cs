@@ -504,7 +504,7 @@ internal static class ChemicalNameParser
         return first;
     }
 
-    private static string FormulaFromCounts(Dictionary<string, int> counts)
+    internal static string FormulaFromCounts(Dictionary<string, int> counts)
     {
         var symbols = counts.Keys.OrderBy(symbol => symbol == "C" ? 0 : symbol == "H" ? 1 : 2).ThenBy(symbol => symbol, StringComparer.Ordinal);
         return string.Concat(symbols.Where(symbol => counts[symbol] > 0)
@@ -532,7 +532,9 @@ internal static class ChemicalNameParser
         return true;
     }
 
-    private static string Normalize(string input)
+    internal static bool HasOxidationQualifier(string input) => TryRemoveOxidation(Normalize(input), out _, out _);
+
+    internal static string Normalize(string input)
     {
         var normalized = input.Normalize(NormalizationForm.FormKC).Trim().ToLowerInvariant();
         var result = new StringBuilder(normalized.Length);

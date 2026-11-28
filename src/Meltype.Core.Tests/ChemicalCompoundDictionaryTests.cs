@@ -138,6 +138,38 @@ internal static class ChemicalCompoundDictionaryTests
     }
 
     [Test]
+    public static void SuppliedNames_AreLocalAndExpandUnqualifiedValences()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "meltype-chemical-catalog-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var chemicals = new ChemicalCompoundDictionary(directory);
+            var copperOxide = chemicals.Lookup("酸化銅", []);
+            Assert.True(copperOxide.Contains("CuO") && copperOxide.Contains("Cu₂O"), "漢字の酸化銅から価数違いをすべて出す");
+            Assert.True(chemicals.Lookup("さんかどう", []).Contains("CuO") && chemicals.Lookup("さんかどう", []).Contains("Cu₂O"), "読みだけの酸化銅からも両方を出す");
+
+            var specifiedCopperOxide = chemicals.Lookup("さんかどう2", ["酸化銅"]);
+            Assert.True(specifiedCopperOxide.Contains("CuO") && !specifiedCopperOxide.Contains("Cu₂O"), "価数を指定した入力は指定候補に保つ");
+
+            var mercuryChloride = chemicals.Lookup("えんかすいぎん", []);
+            Assert.True(mercuryChloride.Contains("Hg₂Cl₂") && mercuryChloride.Contains("HgCl₂"), "塩化水銀から水銀(I)と水銀(II)を出す");
+            Assert.True(!mercuryChloride.Contains("HgCl"), "塩化水銀(I)を誤った一対一式にしない");
+            var mercuryIiChloride = chemicals.Lookup("えんかすいぎん1", ["塩化水銀"]);
+            Assert.True(mercuryIiChloride.Contains("Hg₂Cl₂") && !mercuryIiChloride.Contains("HgCl₂"), "塩化水銀(I)の指定を保つ");
+
+            Assert.True(chemicals.Lookup("あえんか", []).Contains("ZnO (FW=81.379)"), "一覧の別名と式量を出す");
+            Assert.True(chemicals.Lookup("あくりるさん", []).Contains("CH₂=CHCOOH (MW=72.063)"), "結合式を示性式のまま表示して質量を計算する");
+            Assert.True(chemicals.Lookup("えんかあんもにうむ", []).Contains("NH₄Cl (FW=53.489)"), "アンモニウム塩を式量として計算する");
+            Assert.True(chemicals.Lookup("りゅうさんどう2ごすいわぶつ", []).Contains("CuSO₄·₅H₂O (FW=249.677)"), "一覧の水和数を保持して式量を計算する");
+
+            var polymer = chemicals.Lookup("きちん", []);
+            Assert.True(polymer.Contains("(C₈H₁₃NO₅)n") && !polymer.Any(candidate => candidate.Contains("MW=", StringComparison.Ordinal) || candidate.Contains("FW=", StringComparison.Ordinal)), "重合度が未指定の式は質量を決めつけない");
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
+
+    [Test]
     public static void ChemicalFormulaCandidates_AppearInTheConversionList()
     {
         var directory = Path.Combine(Path.GetTempPath(), "meltype-chemical-input-" + Guid.NewGuid().ToString("N"));
