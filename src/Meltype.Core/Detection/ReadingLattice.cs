@@ -7,7 +7,7 @@ namespace Meltype.Detection;
 
 /// <summary>
 /// 日英の区切り。日本語の語・英単語・未知語をノードにしたラティスを作り、Viterbi で最小コスト経路を選ぶ。
-/// 日本語の語の生起コストは RomajiTypoCorrector.WordCost と共有する。
+/// 日本語の語の生起コストは JapaneseLexicon.WordCost と共有する。
 ///
 /// コストで比べない決まり:
 /// - 大文字を含む区間は日本語のノードにしない。
@@ -22,7 +22,7 @@ namespace Meltype.Detection;
 internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
 {
     // ---- 日本語のノードの生起コスト ----
-    // 1 文字の語 1.5・付属語 0.8 は RomajiTypoCorrector.WordCost
+    // 1 文字の語 1.5・付属語 0.8 は JapaneseLexicon.WordCost
     // 日本語の語 (readings.txt・readings-extra.txt と活用した形)・同梱の語句の読み (phrases.txt の どしたの)・
     // ユーザーがかなに直して覚えた語・english.txt の日本語由来の語 (sushi) をローマ字で読んだかな
     private const double JapaneseWordCost = 1;
@@ -343,7 +343,10 @@ internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
                     continue;
                 }
                 if (neutral is { } symbol) OfferEdge(node, state, symbol, 0);
-                foreach (var (edge, cost) in japanese) OfferEdge(node, state, edge, cost);
+                // 単位の途中から始まる日本語 (bacon|n + i の ni) は、英語の後ろにだけ続ける。日本語の後ろで単位を分けると、
+                // 打った nn (ん) を ん|な と読み直した道が表示どおりの道と同じ重みになり、先に入った ん|な の道が残る (kaizen|nann = かいぜんなん: issue #2526)
+                if (!(p < unitsEnd && unitAt[p] < 0 && !node.Edge.English))
+                    foreach (var (edge, cost) in japanese) OfferEdge(node, state, edge, cost);
                 foreach (var (edge, cost) in english) OfferEdge(node, state, edge, cost);
             }
         }
@@ -468,7 +471,7 @@ internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
             if (!word.All(char.IsAsciiLetterLower) || !WordJudge.IsTechnicalEnglishWord(word) || WordJudge.IsJapaneseOriginWord(word)) continue;
             // 日本語の読みがある語だけ (github のように読めない語は、日本語の道がもともと重い)
             if (words.Romaji.ConvertLenient(word, final: true) is not { Length: > 0 } reading || !reading.All(KanaChars.IsHiraganaOrLongMark) ||
-                RomajiTypoCorrector.IsFunctionWord(reading)) continue;
+                JapaneseLexicon.IsFunctionWord(reading)) continue;
             // すぐ後ろが する の活用か (して・します・した …)。し だけは日本語の語の終わり (恩師・分子・如し) と紛れるので除く
             if (words.Romaji.ConvertLenient(text[end..runEnd].ToLowerInvariant(), final: true) is var next && next.All(KanaChars.IsHiraganaOrLongMark) &&
                 WordJudge.IsSuruForm(next))
@@ -503,18 +506,18 @@ internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
     private (LatticeEdge Edge, double Cost) JapaneseEdge(int start, int end, string kana)
     {
         var particle = IsNounParticle(kana);
-        if (RomajiTypoCorrector.CommonWordCost(kana) is { } cost) return (new LatticeEdge(start, end, false, kana, true, particle), cost);
+        if (JapaneseLexicon.CommonWordCost(kana) is { } cost) return (new LatticeEdge(start, end, false, kana, true, particle), cost);
         if (CommonReadings.Phrases.Contains(kana) || words.UserJapanese.Contains(kana)) return (new LatticeEdge(start, end, false, kana, true, false), JapaneseWordCost);
         if (CommonReadings.Katakana.Contains(kana) || CommonReadings.Brands.Contains(kana)) return (new LatticeEdge(start, end, false, kana, true, false), KatakanaWordCost);
         // readings-rare.txt の読みは katakana.txt とも重なる (おねしゃす) ので、ほかの一覧の軽い重みを先に使う
-        if (RomajiTypoCorrector.IsRareWord(kana)) return (new LatticeEdge(start, end, false, kana, true, false), kana.Length < 5 ? ShortRareWordCost : RareWordCost);
+        if (JapaneseLexicon.IsRareWord(kana)) return (new LatticeEdge(start, end, false, kana, true, false), kana.Length < 5 ? ShortRareWordCost : RareWordCost);
         return (new LatticeEdge(start, end, false, kana, true, false), double.NaN);
     }
 
     /// <summary>
     /// start から始まる日本語の候補 (語・語にならないかな 1 音・読めない英字 1 文字)。読みは単位の読み (変換ボックスの表示と同じ) を使う。
     /// ローマ字入力では、英語の候補が単位の途中で終わった所 (medal|s|ha の ha) は、単位の残りをローマ字として読み直す。
-    /// 日本語の語は単位の途中で終わってもよい (単位の頭をローマ字として読み直す)。大文字を含む単位は日本語にしない (かな入力を除く)。
+    /// 日本語の語は、後ろに英語が続くときは単位の途中で終わってもよい (単位の頭をローマ字として読み直す)。大文字を含む単位は日本語にしない (かな入力を除く)。
     /// </summary>
     private List<(LatticeEdge, double)> JapaneseEdges(Prepared prepared, IReadOnlyList<CompositionUnit> units, string text, int start, int[] unitOf, int unitsEnd, string pending,
         bool kanaInput)
@@ -601,7 +604,7 @@ internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
         for (var k = u; k < units.Count; k++)
         {
             // 語の頭でなくなったら、それより長い語は無い (1 音目は語にならなくても読む)
-            if (!first && !RomajiTypoCorrector.CommonHasPrefix(kana) && !RomajiTypoCorrector.RareHasPrefix(kana) && !CommonReadings.Katakana.HasPrefix(kana) && !CommonReadings.Brands.HasPrefix(kana) &&
+            if (!first && !JapaneseLexicon.CommonHasPrefix(kana) && !JapaneseLexicon.RareHasPrefix(kana) && !CommonReadings.Katakana.HasPrefix(kana) && !CommonReadings.Brands.HasPrefix(kana) &&
                 !CommonReadings.Phrases.HasPrefix(kana) && !words.UserJapanesePrefixes.Contains(kana)) break;
             var unit = units[k];
             if (!IsKanaUnit(unit) || !kanaInput && unit.Raw.Any(char.IsAsciiLetterUpper)) break;
@@ -840,7 +843,7 @@ internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
         var lastLabel = lower[(lower.LastIndexOfAny(['.', '/']) + 1)..];
         if (Known(lower) || Known(lastLabel)) return end;
         if (lower.Any(c => char.IsAsciiDigit(c) || c is '.' or '/' or '_' or '+')) return end;
-        // 打っている途中も、最後の子音までかなになるときだけ読めるとみなす (Meltype.bas を ばs と表示すると、確定で打ち間違いとして ば に直される)
+        // 打っている途中も、最後の子音までかなになるときだけ読めるとみなす (Meltype.bas を ばs と表示しない)
         bool Readable(string text) => words.Romaji.Analyze(text) is { IsValid: true, Partial: "" or "n" };
         var readable = Readable(lower);
         // 短い語 (拡張子の長さ) の後ろが助詞で始まる日本語なら、そこまで。
@@ -868,7 +871,7 @@ internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
             var particle = TrailingParticles.FirstOrDefault(p => rest.StartsWith(p, StringComparison.Ordinal)) ?? "";
             var kana = words.Romaji.ConvertLenient(rest[particle.Length..], final: true);
             for (var length = 3; length <= kana.Length; length++)
-                if (RomajiTypoCorrector.CommonWordCost(kana.AsSpan(0, length)) is not null || CommonReadings.Katakana.Contains(kana.AsSpan(0, length))) return k;
+                if (JapaneseLexicon.CommonWordCost(kana.AsSpan(0, length)) is not null || CommonReadings.Katakana.Contains(kana.AsSpan(0, length))) return k;
         }
         // 最後までローマ字として読める語 (Meltype.desu) は、ふつうに判定する
         return readable ? -1 : end;

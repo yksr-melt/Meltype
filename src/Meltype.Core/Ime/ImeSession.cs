@@ -783,11 +783,18 @@ internal static class ImeSession
         var passesSlash = !state.CodeJapanese && lineKind is LineKind.Code or LineKind.Prompt;
         var slashAtStart = !modifier && !CompositionController.IsComposing(state.Composition) && ch is '/' && !passesSlash && !SigilWord.InNameAfter(before, comment) && settings.SigilWordsDirect &&
             SigilWord.PassesAfter(before, '/', comment);
-        if (!slashAtStart && !modifier && !CompositionController.IsComposing(state.Composition) && ch is { } c && settings.SigilWordsDirect && SigilWord.PassesAfter(before, c, comment))
+        // 自分で確定したパスの後ろは、アプリへ直接入力中の補完名の続きではない。
+        if (!slashAtStart && !modifier && !CompositionController.IsComposing(state.Composition) && ch is { } c && settings.SigilWordsDirect &&
+            before is not null && SigilWord.PassesAfter(before, c, comment) && !CompositionContext.AfterCommittedPath(state.Composition, before))
         {
             return CompositionController.Pass(state.Composition, Env(state, env), now);
         }
-        if (!state.CodeJapanese && lineKind == LineKind.Code)
+        // 行頭の # の次の !・[ はシバン・属性の記号なので、元のキーをアプリへ渡す (括弧補完もアプリが行う)。
+        // かな入力では記号キーも本文のかなに使う。既存のコメント・文字列の中では指令にしない。
+        // ターミナルの裸の # は既にコードなので例外は不要。コメント本文の # に同じ例外を使うと、本文の記号まで通してしまう。
+        if (!state.CodeJapanese && (lineKind == LineKind.Code ||
+            lineKind == LineKind.Comment && !CodeTerminal(state) && !modifier && settings.InputStyle == InputStyle.Romaji && ch is { } hashMark &&
+            before is { } hashLine && LineContext.ContinuesHashDirectiveMarker(hashLine, hashMark, settings)))
         {
             return CompositionController.Pass(state.Composition, Env(state, env), now);
         }

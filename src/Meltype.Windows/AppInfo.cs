@@ -43,7 +43,7 @@ internal static class AppInfo
 
         同梱の .NET ランタイムは MIT ライセンスです (app\dotnet\LICENSE.txt)。
         変換エンジン Mozc は BSD-3-Clause ライセンスです (app\mozc\MOZC-LICENSE.txt、辞書は app\mozc\MOZC-CREDITS.html)。
-        英訳の候補・英字で書く語の候補・打ち間違いを直すための読みの一覧は JMdict (Electronic Dictionary Research and Development Group) を元にしています (CC BY-SA 4.0)。
+        英訳の候補・英字で書く語の候補・よく使う語の読みの一覧は JMdict (Electronic Dictionary Research and Development Group) を元にしています (CC BY-SA 4.0)。
         候補の意味はウィクショナリー日本語版 (Wiktionary の執筆者) を元にしています (CC BY-SA 4.0)。
         よく使う英単語の一覧は SCOWL (Copyright 2000-2018 by Kevin Atkinson) を元にしています。
         絵文字の読みは Unicode CLDR を元にしています (Unicode License v3)。

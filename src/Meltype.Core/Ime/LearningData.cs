@@ -33,7 +33,7 @@ public sealed class LearningData(string dataDirectory)
     {
         var data = new LearningData(dataDirectory);
         var romaji = RomajiDetector.CreateDefault(Path.Combine(dataDirectory, "dictionaries"));
-        data.LanguageMemory.IsCommonJapanese = RomajiTypoCorrector.Load(romaji).IsCommonJapanese;
+        data.LanguageMemory.IsCommonJapanese = JapaneseLexicon.Load(romaji).IsCommonJapanese;
         data.LanguageMemory.IsReadableRomaji = LanguageMemory.ReadableBy(romaji);
         return data;
     }
