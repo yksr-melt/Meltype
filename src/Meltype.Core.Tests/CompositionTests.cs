@@ -2378,6 +2378,13 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void TrigFunctionsAndJapaneseRemainDistinct()
+    {
+        AssertCommitted(("cos", "cos"), ("sin", "sin"), ("tan", "tan"), ("sin(30)", "sin(30)"),
+            ("sinn", "しん"), ("tann", "たん"), ("tanoshii", "たのしい"));
+    }
+
+    [Test]
     public static void DictionaryAdditions_CandidatesAndBrandNames()
     {
         // #1445・#1651・#1924: 変換の候補に出す語
