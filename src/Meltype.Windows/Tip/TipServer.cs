@@ -564,7 +564,9 @@ internal sealed class TipServer : IDisposable
             var focusEntered = e is ImeEvent.WithCaret { Caret.FocusEntered: true };
             var isInput = e is ImeEvent.KeyPressed or ImeEvent.CommitRequested or ImeEvent.CandidateClicked
                 or ImeEvent.ConversionFinished or ImeEvent.WithCaret { Caret.Moved: true, Caret.FocusEntered: false };
-            _composition.NotifyImeCaret(request.Thread, request.Caret, isInput, focusEntered);
+            // KeyPressed に付く caret は編集前の位置なので、編集後の位置通知と競合して逆戻りしないよう使わない
+            var caret = e is ImeEvent.KeyPressed ? null : request.Caret;
+            _composition.NotifyImeCaret(request.Thread, caret, isInput, focusEntered);
         }
         var json = output.ToJson();
         if (output.State.HandlesInput && _composition.UsesSmoothCaret)

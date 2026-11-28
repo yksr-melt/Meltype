@@ -198,7 +198,7 @@ internal sealed class SmoothCaretWindow : PopupForm
         var caretWidth = ResolveWidth(rect.Width);
         var useMask = _hasUniformBackground && foreground == _sampledForeground;
         var wasActive = _motion.IsActive;
-        if (_motion.SetTarget(rect.Left, rect.Top, rect.Height, caretWidth, nativeCaretMasked: useMask))
+        if (_motion.SetTarget(rect.Left, rect.Top, rect.Height, caretWidth, nativeCaretMasked: useMask, timestampMs: Environment.TickCount64))
         {
             EnsureWindowReady();
             if (!wasActive)
@@ -208,6 +208,10 @@ internal sealed class SmoothCaretWindow : PopupForm
                 _lastFrameTicks = Stopwatch.GetTimestamp();
                 RenderLayeredAtomic(nativeCaretMasked: useMask);
                 _animTimer.Start();
+            }
+            else
+            {
+                RenderLayeredAtomic(nativeCaretMasked: useMask);
             }
         }
         else if (wasActive)

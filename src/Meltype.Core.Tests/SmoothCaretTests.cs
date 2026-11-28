@@ -80,26 +80,57 @@ internal static class SmoothCaretTests
         var motion = new SmoothCaretMotion();
         motion.Snap(100, 200, 20);
 
-        // 1 回の入力 (NotifyInput) の後にアプリのキャレットが小刻みに 3 回以上補間移動したとき (Word・Excel 等) は自動抑止する
+        // 1 回の入力 (NotifyInput) の後にアプリのキャレットが短時間に小刻みに 4 回以上補間移動したとき (Word・Excel 等) は自動抑止する
         motion.NotifyInput();
-        Assert.True(motion.SetTarget(104, 200, 20), "1 ステップ目は通常の移動として開始");
-        Assert.True(motion.SetTarget(108, 200, 20), "2 ステップ目");
-        Assert.True(!motion.SetTarget(112, 200, 20), "3 ステップ目でアプリ自前のスムーズカーソルと判定して抑止する");
+        Assert.True(motion.SetTarget(104, 200, 20, timestampMs: 100), "1 ステップ目は通常の移動として開始");
+        Assert.True(motion.SetTarget(108, 200, 20, timestampMs: 116), "2 ステップ目");
+        Assert.True(motion.SetTarget(112, 200, 20, timestampMs: 132), "3 ステップ目");
+        Assert.True(!motion.SetTarget(116, 200, 20, timestampMs: 148), "4 ステップ目でアプリ自前のスムーズカーソルと判定して抑止する");
         Assert.True(motion.NativeAnimationDetected, "自前補間の検知フラグが立つ");
         Assert.True(!motion.IsActive, "二重表示を防ぐためオーバーレイを即座に止める");
 
         // 抑止中は次の入力でも飛ばさない
         motion.NotifyInput();
-        Assert.True(!motion.SetTarget(124, 200, 20), "抑止中は離散移動 1 回目ではまだ再開しない");
+        Assert.True(!motion.SetTarget(128, 200, 20, timestampMs: 250), "抑止中は離散移動 1 回目ではまだ再開しない");
 
         // 1 入力 1 ステップの離散移動が続いたとき (VS Code 既定 OFF 等) は自動復帰する
         motion.NotifyInput();
-        motion.SetTarget(136, 200, 20);
+        motion.SetTarget(140, 200, 20, timestampMs: 350);
         motion.NotifyInput();
-        motion.SetTarget(148, 200, 20);
+        motion.SetTarget(152, 200, 20, timestampMs: 450);
         motion.NotifyInput();
         Assert.True(!motion.NativeAnimationDetected, "離散ジャンプが 3 回続いたら抑止を解除する");
-        Assert.True(motion.SetTarget(160, 200, 20), "解除後は再びスムーズカーソルが動く");
+        Assert.True(motion.SetTarget(164, 200, 20, timestampMs: 550), "解除後は再びスムーズカーソルが動く");
+    }
+
+    [Test]
+    public static void SmoothCaretMotion_DoesNotSuppressBackspaceRepeatOrImmediateBackspaceAfterType()
+    {
+        var motion = new SmoothCaretMotion();
+        motion.Snap(200, 200, 20);
+
+        // 確定後の文字を BackSpace 連打で削除 (全角 14px ずつ、NotifyInput が遅れても誤抑止しない)
+        Assert.True(motion.SetTarget(186, 200, 20, timestampMs: 100), "BackSpace 1 文字目でアニメーションする");
+        Assert.True(motion.SetTarget(172, 200, 20, timestampMs: 116), "BackSpace 2 文字目");
+        Assert.True(motion.SetTarget(158, 200, 20, timestampMs: 132), "BackSpace 3 文字目");
+        Assert.True(motion.SetTarget(144, 200, 20, timestampMs: 148), "BackSpace 4 文字目でも誤抑止しない");
+        Assert.True(!motion.NativeAnimationDetected, "文字幅の連続削除はアプリ自前補間と誤認しない");
+
+        // 半角幅 (7px) のキーリピート (33ms 間隔) でも誤抑止しない
+        Assert.True(motion.SetTarget(137, 200, 20, timestampMs: 200), "半角 BackSpace 1");
+        Assert.True(motion.SetTarget(130, 200, 20, timestampMs: 233), "半角 BackSpace 2");
+        Assert.True(motion.SetTarget(123, 200, 20, timestampMs: 266), "半角 BackSpace 3");
+        Assert.True(motion.SetTarget(116, 200, 20, timestampMs: 299), "半角 BackSpace 4");
+        Assert.True(!motion.NativeAnimationDetected, "キーリピート間隔の削除は誤抑止しない");
+
+        // 入力直後 (40ms 以内) に BackSpace で元の位置へ戻る場合は逆戻りスパイクとして無視しない
+        motion.Snap(100, 200, 20);
+        motion.NotifyInput();
+        Assert.True(motion.SetTarget(116, 200, 20, timestampMs: 500), "1 文字入力");
+        motion.Step(20f);
+        motion.NotifyInput();
+        Assert.True(motion.SetTarget(100, 200, 20, timestampMs: 520), "直後の BackSpace は元の位置へ滑らかに戻る");
+        Assert.Equal(100f, motion.TargetX);
     }
 
     [Test]

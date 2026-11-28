@@ -703,6 +703,10 @@ void TextService::SendCaret(TfEditCookie ec, ITfContext* context, bool selection
         ApplyState(reply[L"state"], field);
         UpdateLangBar();
     }
+    if (smoothCaret_ && moved && window_ != nullptr) {
+        // OnEndEdit 時点ではアプリの再レイアウト前の古い座標・空矩形になることがあるため、1 回だけ遅延取得する
+        SetTimer(window_, kDeferredCaretTimer, 16, nullptr);
+    }
 }
 
 TextService::FieldScope TextService::ReadFieldScope(TfEditCookie ec, ITfContext* context) {
@@ -1446,9 +1450,8 @@ void TextService::HandleKey(ITfContext* context, UINT vk, LPARAM lParam, wchar_t
             consumed = false;
             return S_OK;
         }
-        // 受け取るように言われたキー、またはスムーズカーソル有効時は現在のキャレット位置も送る
-        const bool sendAnchor = listed || smoothCaret_;
-        const RECT anchor = sendAnchor ? CaretRect(ec, context) : RECT{};
+        // 受け取るように言われたキーは、入力モードを表示する位置も送る。スムーズカーソル有効時は編集前後の比較に使う
+        const RECT anchor = (listed || smoothCaret_) ? CaretRect(ec, context) : RECT{};
         beforeCaret = anchor;
         ownEdit_ = true;
         // lParam の 16〜23 ビットはスキャンコード、24 ビットは拡張キー
@@ -1462,7 +1465,7 @@ void TextService::HandleKey(ITfContext* context, UINT vk, LPARAM lParam, wchar_t
                                 ((GetKeyState(VK_CAPITAL) & 1) ? ",\"capsLock\":true" : "") +
                                 (repeat ? ",\"repeat\":true" : "") + "}";
         JsonValue reply;
-        if (!Send("KeyPressed", field, key, reply, 800, false, sendAnchor ? &anchor : nullptr)) {
+        if (!Send("KeyPressed", field, key, reply, 800, false, listed ? &anchor : nullptr)) {
             // Meltype.exe が応答しない: 変換中の文字はそのまま確定する。打った文字はここで入れる
             // (送り直すと、その間に打った次のキーより後に届いて順番が入れ替わる)
             failed = true;
@@ -1587,6 +1590,24 @@ void TextService::RememberPassed(ITfContext* context, UINT vk) {
     passedVk_ = vk;
     passedControl_ = KeyDown(VK_CONTROL);
     passedTime_ = GetTickCount64();
+    if (smoothCaret_ && window_ != nullptr) {
+        switch (vk) {
+            case VK_BACK:
+            case VK_DELETE:
+            case VK_LEFT:
+            case VK_RIGHT:
+            case VK_UP:
+            case VK_DOWN:
+            case VK_HOME:
+            case VK_END:
+            case VK_RETURN:
+                // 確定後の BackSpace・矢印等で OnEndEdit を送らない／遅延レイアウトするアプリ向けに 1 回だけ取得する
+                SetTimer(window_, kDeferredCaretTimer, 16, nullptr);
+                break;
+            default:
+                break;
+        }
+    }
 }
 
 bool TextService::Reinject(UINT vk) {
@@ -2339,6 +2360,11 @@ void TextService::CommitInSession(TfEditCookie ec, ITfContext* context, bool kee
         if (Send("CommitRequested", field, keepAppCaret ? CaretMoved(left) : "", reply)) ApplyOutput(ec, context, reply, field);
         keepAppCaret_ = false;
         EndComposition(ec);
+        if (smoothCaret_ && state_.Active() && !left) {
+            const RECT caret = CaretRect(ec, context);
+            if (caret.bottom > caret.top) SendCaretPosition(caret);
+            else if (window_ != nullptr) SetTimer(window_, kDeferredCaretTimer, 16, nullptr);
+        }
     }
     if (candidates_) candidates_->Hide();
 }

@@ -21,8 +21,9 @@ public sealed class SmoothCaretMotion
     private const float ActiveOpacity = 0.92f;
     private const float SpikeRevertWindowMs = 40f;
     private const float SpikeRevertTolerancePx = 1.5f;
-    private const float MaxNativeSubStepPx = 28f;
-    private const int NativeSubStepsToSuppress = 3;
+    private const float MaxNativeSubStepPx = 8f;
+    private const float MaxNativeSubStepIntervalMs = 30f;
+    private const int NativeSubStepsToSuppress = 4;
     private const int DiscreteInputsToRecover = 3;
 
     private bool _initialized;
@@ -34,6 +35,7 @@ public sealed class SmoothCaretMotion
 
     private float _lastRawX;
     private float _lastRawY;
+    private long _lastRawTimestampMs = -1;
     private int _stepsInCurrentInput;
     private int _sameDirStepsInInput;
     private float _lastStepDirX;
@@ -80,6 +82,7 @@ public sealed class SmoothCaretMotion
         _initialized = true;
         _lastRawX = x;
         _lastRawY = y;
+        _lastRawTimestampMs = -1;
         _stepsInCurrentInput = 0;
         _sameDirStepsInInput = 0;
         _lastStepDirX = 0f;
@@ -87,7 +90,7 @@ public sealed class SmoothCaretMotion
     }
 
     /// <summary>新しいターゲット矩形を設定する。アニメーションが必要なら true を返す。</summary>
-    public bool SetTarget(float x, float y, float height, float width = 2f, bool nativeCaretMasked = false)
+    public bool SetTarget(float x, float y, float height, float width = 2f, bool nativeCaretMasked = false, long timestampMs = -1)
     {
         height = Math.Clamp(height, 10f, 64f);
         width = Math.Clamp(width, 1f, 3f);
@@ -96,8 +99,18 @@ public sealed class SmoothCaretMotion
             _initialized = true;
             _lastRawX = x;
             _lastRawY = y;
+            _lastRawTimestampMs = timestampMs;
             SnapTo(x, y, height, width);
             return false;
+        }
+
+        // 同一入力内のキャッシュ遅延などで 40ms 以内に直前の元の座標へ一瞬だけ逆戻りするスパイク座標を無視する
+        // (新しい入力 NotifyInput の直後の BackSpace 等による意図的な戻りは無視しない)
+        if (IsActive && _hasPreviousTarget && _stepsInCurrentInput >= 1 && _sinceTargetChangeMs <= SpikeRevertWindowMs &&
+            MathF.Abs(x - _previousTargetX) <= SpikeRevertTolerancePx &&
+            MathF.Abs(y - _previousTargetY) <= SpikeRevertTolerancePx)
+        {
+            return IsActive;
         }
 
         var rawDx = x - _lastRawX;
@@ -105,11 +118,13 @@ public sealed class SmoothCaretMotion
         if (MathF.Abs(rawDx) < 0.5f && MathF.Abs(rawDy) < 0.5f && MathF.Abs(height - TargetHeight) < 0.5f)
             return IsActive;
 
+        var withinNativeInterval = timestampMs < 0 || _lastRawTimestampMs < 0 || (timestampMs - _lastRawTimestampMs) <= MaxNativeSubStepIntervalMs;
         _lastRawX = x;
         _lastRawY = y;
+        _lastRawTimestampMs = timestampMs;
         _stepsInCurrentInput++;
 
-        if (MathF.Abs(rawDy) <= SameLineTolerancePx && MathF.Abs(rawDx) is >= 0.5f and <= MaxNativeSubStepPx)
+        if (withinNativeInterval && MathF.Abs(rawDy) <= SameLineTolerancePx && MathF.Abs(rawDx) is >= 1.0f and <= MaxNativeSubStepPx)
         {
             var dir = MathF.Sign(rawDx);
             _sameDirStepsInInput = (_lastStepDirX == 0f || dir == _lastStepDirX) ? _sameDirStepsInInput + 1 : 1;
@@ -121,19 +136,16 @@ public sealed class SmoothCaretMotion
                 _discreteInputStreak = 0;
             }
         }
+        else
+        {
+            _sameDirStepsInInput = 0;
+            _lastStepDirX = 0f;
+        }
 
         if (NativeAnimationDetected)
         {
             SnapTo(x, y, height, width);
             return false;
-        }
-
-        // キャッシュ遅延などで 40ms 以内に直前の元の座標へ一瞬だけ逆戻りするスパイク座標を無視する
-        if (IsActive && _hasPreviousTarget && _sinceTargetChangeMs <= SpikeRevertWindowMs &&
-            MathF.Abs(x - _previousTargetX) <= SpikeRevertTolerancePx &&
-            MathF.Abs(y - _previousTargetY) <= SpikeRevertTolerancePx)
-        {
-            return IsActive;
         }
 
         var dx = x - CurrentX;
@@ -206,6 +218,7 @@ public sealed class SmoothCaretMotion
         _hasPreviousTarget = false;
         _elapsedMs = 0f;
         _sinceTargetChangeMs = 1000f;
+        _lastRawTimestampMs = -1;
         _stepsInCurrentInput = 0;
         _sameDirStepsInInput = 0;
         _lastStepDirX = 0f;
