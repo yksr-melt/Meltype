@@ -82,7 +82,7 @@ internal sealed record CompositionTextState
 
     /// <summary>
     /// 確定・変換に進んだ (Space・Enter など) ときに打ってあった範囲。その範囲は、表示の形 (F6〜F10) を変えても続けて打っても、進んだときの読み
-    /// (打ち間違いの直し・笑いの w・入力途中の子音を確定した形) を使う。範囲の後ろに打った英字は、範囲の境で切って読む。
+    /// (笑いの w・数字の後ろの単位・入力途中の子音を確定した形) を使う。範囲の後ろに打った英字は、範囲の境で切って読む。
     /// </summary>
     public Settlement? Settled { get; init; }
 
@@ -117,7 +117,7 @@ internal sealed record CompositionTextState
 internal sealed record Settlement(int Count, DisplayMode Mode, Settlement? Previous);
 
 /// <summary>読んだ結果を決める env の値。どれかが変わったら読み直す。</summary>
-internal readonly record struct ReadingKey(CompositionDetector Detector, Config.Settings Settings, RomajiTypoCorrector? RomajiTypos, FragmentOrigin? Fragment, TextContext Context, LanguageMemory? Memory, int MemoryVersion);
+internal readonly record struct ReadingKey(CompositionDetector Detector, Config.Settings Settings, FragmentOrigin? Fragment, TextContext Context, LanguageMemory? Memory, int MemoryVersion);
 
 /// <summary>
 /// 打ったもの (<see cref="State"/>) を読んだもの: かな 1 音ずつの単位と、まだ音にならない子音 (k, ky, n …)。
@@ -131,7 +131,7 @@ internal sealed class TextReading(CompositionTextState state)
 
     public readonly StringBuilder Pending = new();
 
-    /// <summary>確定・変換に進んだ範囲 (<see cref="CompositionTextState.Settled"/>) を読んだ単位の数。この単位は、後ろのキーを読むときも打ち間違いを直すときも変えない。</summary>
+    /// <summary>確定・変換に進んだ範囲 (<see cref="CompositionTextState.Settled"/>) を読んだ単位の数。この単位は、後ろのキーを読むときも仕上げるときも変えない。</summary>
     public int SettledUnits { get; set; }
 
     /// <summary>残した音 (<see cref="TypedKey.Kept"/>) までの単位の数。この単位は、後ろに打った英字と合わせて読み直さない。</summary>
