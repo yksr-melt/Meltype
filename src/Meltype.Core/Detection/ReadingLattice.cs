@@ -263,8 +263,8 @@ internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
         void OfferEdge(LatticeNode from, LatticeState state, LatticeEdge edge, double cost)
         {
             // 活用した形の後ろにしか付かない付属語 (う・た・ん・てる) は、英単語と活用しない語の後ろ (main|ん・まい|ん・のち|てる) と、入力の頭で後ろに続きがあるときは、
-            // 語にならないかなとして読む。付属語の軽い重み (0.8) のままだと、ローマ字の途中で英単語を切り出した残り (get|う・hit|う・れ|pro) が語にならないかな 2 音 (げ|つ) より、
-            // 打った英単語をかなに割った道 (まい|ん|たべた) が英単語 + 切り替え (main|たべた) より軽くなる。
+            // 語にならないかなとして読む。付属語の軽い重み (0.8) のままだと、ローマ字の途中で英単語を切り出した残り (get|う・hit|う・れ|pro) が語にならないかな 2 音 (げ|つ) より軽くなり、
+            // 打った英単語をかなに割った道 (まい|ん|たべた) も英単語 + 切り替え (main|たべた) より軽くなる。
             // 付属語だけを打った入力 (re) は、前に確定した語の続きなので付属語のまま
             if (!edge.English && !edge.Neutral && JapaneseLexicon.IsInflectionAuxiliary(edge.Kana) &&
                 (state.IsEnglish || state.Side == Side.None && edge.End < length ||
