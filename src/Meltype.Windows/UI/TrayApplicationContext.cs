@@ -123,6 +123,11 @@ internal sealed class TrayApplicationContext : ApplicationContext
         updates.DropDownItems.Add("リリースノート...", null, (_, _) => ReleaseNotesDialog.ShowFor(AppInfo.Version, updated: false, _engine));
         _updateItem = new ToolStripMenuItem("", null, (_, _) => ApplyUpdate()) { Visible = false };
         updates.DropDownItems.Add(_updateItem);
+        if (Updater.FailedVersion is { } failedVersion)
+        {
+            updates.DropDownItems.Add($"Meltype {failedVersion} への更新失敗...", null, (_, _) =>
+                MessageBox.Show(UpdateFailedMessage(failedVersion, _engine.Settings.AutoUpdate), "Meltype - 更新失敗", MessageBoxButtons.OK, MessageBoxIcon.Warning));
+        }
         updates.DropDownOpening += (_, _) =>
         {
             _autoUpdateItem.Checked = _engine.Settings.AutoUpdate;
@@ -147,7 +152,16 @@ internal sealed class TrayApplicationContext : ApplicationContext
         UpdateStatus();
         // 前回の更新に失敗していたら知らせる (設定「通知を表示」にかかわらず。入力を止めないように、ダイアログではなく通知にする)
         if (Updater.FailedVersion is { } failed)
-            _invoker.BeginInvoke(() => _tray.ShowBalloonTip(10000, "Meltype - 更新失敗", UpdateFailedMessage(failed, _engine.Settings.AutoUpdate), ToolTipIcon.Warning));
+        {
+            // 起動直後のメッセージを処理してから、一度だけ通知を出す。
+            void NotifyFailure(object? sender, EventArgs args)
+            {
+                Application.Idle -= NotifyFailure;
+                _tray.ShowBalloonTip(10000, "Meltype - 更新失敗", UpdateFailedMessage(failed, _engine.Settings.AutoUpdate), ToolTipIcon.Warning);
+            }
+
+            Application.Idle += NotifyFailure;
+        }
         // 初めて起動したら使い方を見せる (見せたことは state.json に残す)
         var firstRun = !_state.WelcomeShown;
         if (firstRun)

@@ -60,8 +60,14 @@ internal static class Program
             try { settings.Save(AppPaths.ConfigFile); } catch { }
         }
 
+        // 更新の結果もファイルに残せるよう、更新の確認前にログを有効にする。
+        if (settings.FileLog) Log.SetFileOutput(Path.Combine(AppPaths.DataDirectory, "meltype.log"));
         // ダウンロード済みの新しい版があれば、起動せずに更新する (インストーラーが新しい版を起動する)。
-        if (!AppPaths.IsPortable && Updater.ApplyStagedAtStartup(() => settings.AutoUpdate, settings.UpdatePrerelease)) return 0;
+        if (!AppPaths.IsPortable && Updater.ApplyStagedAtStartup(() => settings.AutoUpdate, settings.UpdatePrerelease))
+        {
+            Log.FlushFile();
+            return 0;
+        }
 
         // 学習データは確定のたびに書かず、少し後にまとめて書く。終了・ログオフのときに残りを書く
         // (更新の確認は学習データを別に読み込んで書くので、それより後で切り替える)
