@@ -262,10 +262,14 @@ internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
 
         void OfferEdge(LatticeNode from, LatticeState state, LatticeEdge edge, double cost)
         {
-            // 活用する語の後ろにしか付かない 1 文字の付属語 (う・れ) は、英単語の後ろと、入力の頭で後ろに続きがあるときは、語にならないかなとして読む。
-            // 付属語の軽い重み (0.8) のままだと、ローマ字の途中で英単語を切り出した残り (get|う・hit|う・れ|pro) が、語にならないかな 2 音 (げ|つ) より軽くなる。
+            // 活用した形の後ろにしか付かない付属語 (う・た・ん・てる) は、英単語と活用しない語の後ろ (main|ん・まい|ん・のち|てる) と、入力の頭で後ろに続きがあるときは、
+            // 語にならないかなとして読む。付属語の軽い重み (0.8) のままだと、ローマ字の途中で英単語を切り出した残り (get|う・hit|う・れ|pro) が語にならないかな 2 音 (げ|つ) より軽くなり、
+            // 打った英単語をかなに割った道 (まい|ん|たべた) も英単語 + 切り替え (main|たべた) より軽くなる。
             // 付属語だけを打った入力 (re) は、前に確定した語の続きなので付属語のまま
-            if (!edge.English && !edge.Neutral && (state.IsEnglish || state.Side == Side.None && edge.End < length) && VerbAuxiliaries.Contains(edge.Kana)) cost = UnknownKanaCost;
+            if (!edge.English && !edge.Neutral && JapaneseLexicon.IsInflectionAuxiliary(edge.Kana) &&
+                (state.IsEnglish || state.Side == Side.None && edge.End < length ||
+                 from.Previous is not null && from.Edge is { English: false, Neutral: false } && !JapaneseLexicon.CanFollow(from.Edge.Kana, edge.Kana)))
+                cost = UnknownKana(edge.Kana);
             if (edge.English) cost += EnglishTieBreak + englishBias;
             Span<int> counts = stackalloc int[LinkWeights.Count];
             CountLinks(from, state, edge, counts);
@@ -447,12 +451,6 @@ internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
     private const string NoSokuonBefore = "あいうえおがぎぐげござじずぜぞだぢづでどなにぬねのばびぶべぼまみむめもやゆよらりるれろわをん";
 
     private static readonly HashSet<string> NounParticles = ["が", "を", "に", "で", "と", "の", "は", "も", "へ", "や", "から", "まで", "より", "って", "だ", "です", "では"];
-
-    /// <summary>
-    /// 動詞・形容詞の活用形の後ろにしか付かない、1 文字の付属語 (名詞や英単語の後ろには付かない)。
-    /// 2 文字以上の付属語 (ます・ません) は、英単語を切り出した残りにはまずならず、なっても日本語の根拠として十分なので入れない。
-    /// </summary>
-    private static readonly HashSet<string> VerbAuxiliaries = ["う", "た", "て", "ば", "れ"];
 
     /// <summary>
     /// start から始まる技術用語の綴り (share・make) のすぐ後ろが する の活用 (して・します) か。
