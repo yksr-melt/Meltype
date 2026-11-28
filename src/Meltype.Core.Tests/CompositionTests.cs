@@ -1166,6 +1166,24 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void UtilityRanking_KeepsTheFormatWhenTwoFormatsGiveTheSameText()
+    {
+        // 10 時台は H:mm と HH:mm がどちらも 10:30 になる。HH:mm で打ち続けた人には、9 時台も 09:30 を上げる
+        var history = new TranslationHistory(null);
+        foreach (var (typed, chosen) in new[] { ("10ji30funn", "10:30"), ("10ji30funn", "10:30"), ("10ji30funn", "10:30"), ("9ji30funn", "09:30"), ("9ji30funn", "09:30") })
+        {
+            var k = new Keyboard(translationHistory: history);
+            k.Type(typed + " ");
+            for (var n = 0; n < 30 && k.Showing != chosen; n++) k.Press(VirtualKeys.Space);
+            Assert.Equal(chosen, k.Showing);
+            k.Type("\n");
+        }
+        var next = new Keyboard(translationHistory: history);
+        next.Type("9ji30funn ");
+        Assert.Equal("09:30", next.Host.View!.Candidates[1]);
+    }
+
+    [Test]
     public static void UtilityRanking_RelatedTermsAreNeverFirst()
     {
         foreach (var (typed, preferred, related) in new[]

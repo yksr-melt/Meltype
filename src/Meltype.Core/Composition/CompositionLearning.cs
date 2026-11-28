@@ -67,7 +67,9 @@ internal sealed partial class CompositionLearning(CompositionServices services, 
         }
         foreach (var clause in clauses)
         {
-            if (clause.UtilityRankingKeys.TryGetValue(clause.Text, out var key)) services.TranslationHistory?.RememberUtility(key);
+            // 1 つの文字を複数の書式が出すときは、どの書式を選んだか区別できないので、すべての書式を覚える
+            if (!clause.UtilityRankingKeys.TryGetValue(clause.Text, out var keys)) continue;
+            foreach (var key in keys) services.TranslationHistory?.RememberUtility(key);
         }
         if (services.History is not { } history) return;
         foreach (var clause in clauses.Where(c => !c.IsEnglish && c.Changed && ConversionHistory.IsLearnableReading(c.Reading)))

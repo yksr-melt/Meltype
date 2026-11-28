@@ -321,7 +321,7 @@ internal static class CompositionConversion
             foreach (var (key, count) in history.UtilityChoices())
             {
                 if (count < 2) break;
-                var ranked = clause.UtilityRankingKeys.FirstOrDefault(pair => pair.Value == key).Key;
+                var ranked = clause.UtilityRankingKeys.FirstOrDefault(pair => pair.Value.Contains(key)).Key;
                 if (ranked is null) continue;
                 clause.Candidates.Remove(ranked);
                 clause.Candidates.Insert(1, ranked);

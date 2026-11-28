@@ -65,17 +65,19 @@ internal sealed record UtilityCandidates(IReadOnlyList<string> Candidates, Utili
     /// <summary>選んだら学習してよいか。時刻・設定・外の値で変わらない候補 (漢数字) だけ true にする。</summary>
     public bool Learnable { get; init; }
 
-    /// <summary>候補の文字と、選び方だけを覚えるための固定 ID。時刻や版番号などの候補の文字は保存しない。</summary>
-    public IReadOnlyDictionary<string, string> RankingKeys { get; init; } = new Dictionary<string, string>();
+    /// <summary>
+    /// 候補の文字と、その文字を出す書式の固定 ID。時刻や版番号などの候補の文字は保存せず、選んだ書式の ID だけを覚える。
+    /// 1 つの文字を複数の書式が出すことがある (10 時台の H:mm と HH:mm はどちらも 10:30)。
+    /// </summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> RankingKeys { get; init; } = new Dictionary<string, IReadOnlyList<string>>();
 
-    /// <summary>通常の候補の後ろに足す、書式が一定のユーティリティ変換。書式の番号は学習データに残るので、並びを維持する。</summary>
-    public static UtilityCandidates Rankable(string id, IReadOnlyList<string> candidates)
-    {
-        var keys = new Dictionary<string, string>(StringComparer.Ordinal);
-        for (var i = 0; i < candidates.Count; i++)
-            keys.TryAdd(candidates[i], id + ":" + i.ToString(System.Globalization.CultureInfo.InvariantCulture));
-        return new(candidates, UtilityPlacement.Append) { RankingKeys = keys };
-    }
+    /// <summary>通常の候補の後ろに足す、書式が一定のユーティリティ変換。id と書式の名前は学習データに残るので変えない。</summary>
+    public static UtilityCandidates Rankable(string id, IReadOnlyList<(string Format, string Text)> candidates) =>
+        new(candidates.Select(c => c.Text).Distinct(StringComparer.Ordinal).ToList(), UtilityPlacement.Append)
+        {
+            RankingKeys = candidates.GroupBy(c => c.Text, StringComparer.Ordinal)
+                .ToDictionary(g => g.Key, g => (IReadOnlyList<string>)g.Select(c => id + ":" + c.Format).ToList(), StringComparer.Ordinal),
+        };
 
     /// <summary>選んでも学習しない候補。</summary>
     public IReadOnlyList<string> NotLearned
@@ -122,7 +124,8 @@ internal static class UtilityConversions
         {
             Reading = replace?.Reading,
             NotLearned = matches.SelectMany(m => m.NotLearned).ToList(),
-            RankingKeys = matches.SelectMany(m => m.RankingKeys).DistinctBy(pair => pair.Key).ToDictionary(),
+            RankingKeys = matches.SelectMany(m => m.RankingKeys).GroupBy(pair => pair.Key, StringComparer.Ordinal)
+                .ToDictionary(g => g.Key, g => (IReadOnlyList<string>)g.SelectMany(pair => pair.Value).Distinct(StringComparer.Ordinal).ToList(), StringComparer.Ordinal),
         };
     }
 
@@ -138,8 +141,8 @@ internal sealed class RelatedTermsConversion : IUtilityConversion
 {
     public UtilityCandidates? Convert(UtilityInput input) => input.Reading switch
     {
-        "じゃくしゃだんせい" => UtilityCandidates.Rankable("related-jakushadansei", ["ふにゃオス"]),
-        "ふにゃおす" => UtilityCandidates.Rankable("related-funyaosu", ["弱者男性"]),
+        "じゃくしゃだんせい" => UtilityCandidates.Rankable("related-jakushadansei", [("funyaosu", "ふにゃオス")]),
+        "ふにゃおす" => UtilityCandidates.Rankable("related-funyaosu", [("jakushadansei", "弱者男性")]),
         _ => null,
     };
 }

@@ -27,7 +27,7 @@ internal sealed class SeasonalGreetingConversion : IUtilityConversion
     ];
 
     public UtilityCandidates? Convert(UtilityInput input) =>
-        input.Reading is "じこう" or "じこうのあいさつ" ? UtilityCandidates.Rankable("seasonal-greeting", [.. Greetings(input.Context.Now.Month)]) : null;
+        input.Reading is "じこう" or "じこうのあいさつ" ? UtilityCandidates.Rankable("seasonal-greeting", [.. Greetings(input.Context.Now.Month).Select(g => (g, g))]) : null;
 
     internal static IEnumerable<string> Greetings(int month)
     {

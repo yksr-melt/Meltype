@@ -18,7 +18,7 @@ internal sealed class NowConversion : IUtilityConversion
         return times;
     }
 
-    private static string[] Times(DateTime now)
+    private static (string Format, string Text)[] Times(DateTime now)
     {
         var day = UtilityConversions.WeekDays[(int)now.DayOfWeek];
         var date = $"{now.Year}年{now.Month}月{now.Day}日";
@@ -26,8 +26,9 @@ internal sealed class NowConversion : IUtilityConversion
         var slashDate = $"{now.Year:D4}/{now.Month:D2}/{now.Day:D2}";
         var clock = $"{now.Hour:D2}:{now.Minute:D2}";
         var time = $"{now.Hour}時{now.Minute}分";
-        return [clock, time, $"{(now.Hour < 12 ? "午前" : "午後")}{now.Hour % 12}時{now.Minute}分",
-            $"{date}({day}) {time}", $"{monthDay}({day}) {time}", $"{date}({day}) {clock}", $"{slashDate} {clock}"];
+        return [("HH:mm", clock), ("H時m分", time), ("午前h時m分", $"{(now.Hour < 12 ? "午前" : "午後")}{now.Hour % 12}時{now.Minute}分"),
+            ("yyyy年M月d日(ddd) H時m分", $"{date}({day}) {time}"), ("M月d日(ddd) H時m分", $"{monthDay}({day}) {time}"),
+            ("yyyy年M月d日(ddd) HH:mm", $"{date}({day}) {clock}"), ("yyyy/MM/dd HH:mm", $"{slashDate} {clock}")];
     }
 
     /// <summary>今再生している曲の候補 (曲名 / アーティスト、曲名)。読めなければ空。</summary>

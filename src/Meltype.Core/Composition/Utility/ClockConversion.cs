@@ -10,6 +10,7 @@ internal sealed class ClockConversion : IUtilityConversion
     {
         if (input.Reading is not ("とけい" or "じこく")) return null;
         var now = input.Context.Now;
-        return UtilityCandidates.Rankable("clock", [$"{now.Hour:D2}:{now.Minute:D2}", $"{now.Hour}時{now.Minute}分", $"{(now.Hour < 12 ? "午前" : "午後")}{now.Hour % 12}時{now.Minute}分"]);
+        return UtilityCandidates.Rankable("clock", [("HH:mm", $"{now.Hour:D2}:{now.Minute:D2}"), ("H時m分", $"{now.Hour}時{now.Minute}分"),
+            ("午前h時m分", $"{(now.Hour < 12 ? "午前" : "午後")}{now.Hour % 12}時{now.Minute}分")]);
     }
 }

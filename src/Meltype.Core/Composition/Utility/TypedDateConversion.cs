@@ -26,7 +26,7 @@ internal sealed partial class TypedDateConversion : IUtilityConversion
         if (ClockReading().Match(reading) is not { Success: true } clock) return null;
         var (hour, minute) = (UtilityConversions.Number(clock.Groups["h"].Value), UtilityConversions.Number(clock.Groups["m"].Value));
         if (hour > 23 || minute > 59) return null;
-        return UtilityCandidates.Rankable("typed-time", [$"{hour}:{minute:D2}", $"{hour:D2}:{minute:D2}"]);
+        return UtilityCandidates.Rankable("typed-time", [("H:mm", $"{hour}:{minute:D2}"), ("HH:mm", $"{hour:D2}:{minute:D2}")]);
     }
 
     /// <summary>
@@ -35,7 +35,7 @@ internal sealed partial class TypedDateConversion : IUtilityConversion
     /// 年は先の日付を優先する (予定を打つことが多いので)。今年のその日が今日以降なら今年、過ぎていれば来年。
     /// ただし過ぎてから 30 日以内ならその日 (少し前のことを書くとき。6 月 15 日に打つ 6/1 は今年、1/5 は来年、1 月 5 日に打つ 12/28 は去年)。
     /// </summary>
-    internal static string[]? Dates(int month, int day, DateTime now)
+    internal static (string Format, string Text)[]? Dates(int month, int day, DateTime now)
     {
         if (month is < 1 or > 12 || day is < 1 or > 31) return null;
         var today = now.Date;
@@ -49,7 +49,8 @@ internal sealed partial class TypedDateConversion : IUtilityConversion
         if (best is not { } chosen) return null;
         var week = UtilityConversions.WeekDays[(int)chosen.DayOfWeek];
         var y = chosen.Year;
-        return [$"{month}/{day}", $"{month:D2}/{day:D2}", $"{month}月{day}日", $"{month}/{day}({week})", $"{month}月{day}日({week})",
-            $"{y:D4}/{month:D2}/{day:D2}", $"{y:D4}/{month:D2}/{day:D2}({week})", $"{y}年{month}月{day}日"];
+        return [("M/d", $"{month}/{day}"), ("MM/dd", $"{month:D2}/{day:D2}"), ("M月d日", $"{month}月{day}日"), ("M/d(ddd)", $"{month}/{day}({week})"),
+            ("M月d日(ddd)", $"{month}月{day}日({week})"), ("yyyy/MM/dd", $"{y:D4}/{month:D2}/{day:D2}"), ("yyyy/MM/dd(ddd)", $"{y:D4}/{month:D2}/{day:D2}({week})"),
+            ("yyyy年M月d日", $"{y}年{month}月{day}日")];
     }
 }
