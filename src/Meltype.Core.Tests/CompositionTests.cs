@@ -1141,6 +1141,24 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void RelativeDateAndEraConversions_OfferCalendarValues()
+    {
+        var now = new DateTime(2026, 11, 10, 23, 45, 0);
+        foreach (var (raw, expected) in new[] {
+            ("3nitigo", "2026年11月13日(金)"), ("raishuunokinnyoubi", "2026年11月20日(金)"),
+            ("kongetumatu", "2026年11月30日(月)"), ("30pungo", "2026-11-11 00:15"),
+            ("2019nenn", "平成31年"), ("2019nenn", "令和元年"),
+            ("reiwagannnenn", "2019年"), ("heisei7nenn", "1995年"), ("1995nenn", "今年31歳（30〜31歳）"),
+        })
+        {
+            var k = new Keyboard(now: () => now);
+            k.Type(raw + " ");
+            var candidates = k.Host.View?.Candidates ?? [];
+            Assert.True(candidates.Contains(expected), raw + ": " + string.Join(" / ", candidates));
+        }
+    }
+
+    [Test]
     public static void UtilityRanking_RemembersTheTimeFormatAndDoesNotReplaceTheFirstCandidate()
     {
         var formats = new ChoiceCounts(null, "ユーティリティ変換の書式の学習データ");

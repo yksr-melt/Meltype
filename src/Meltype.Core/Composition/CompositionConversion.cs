@@ -304,6 +304,7 @@ internal static class CompositionConversion
     /// </summary>
     private static Clause WithUtility(CompositionInput input, CompositionEnv env, List<Clause> clauses, UtilityCandidates utility, string reading)
     {
+        reading = utility.Reading ?? reading;
         var clause = clauses is [var only] && only.Reading == reading ? only : WholeClause(input, env, clauses, reading);
         var katakana = CompositionText.ToKatakana(reading);
         var at = utility.Placement == UtilityPlacement.Prepend ? 0
