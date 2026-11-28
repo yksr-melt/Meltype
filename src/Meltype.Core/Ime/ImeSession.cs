@@ -62,23 +62,25 @@ internal static class ImeSession
     private static bool ForbidsLearning(ImeField? field) => IsPassword(field) || field?.Traits.Contains(ImeTrait.Private) == true;
 
     /// <summary>
-    /// この入力欄で入力を受け持つか。設定「動作モード」がこのフロントの入力方式で、一時停止中・アプリ別設定で OFF・ゲーム (Meltype キーボード)・パスワード欄・全画面 (設定)・
+    /// この入力欄で入力を受け持つか。設定「動作モード」がこのフロントの入力方式で、一時停止中・アプリ別設定で OFF・入力欄とみなしていないゲーム (Meltype キーボード)・パスワード欄・全画面 (設定)・
     /// 日本語以外の入力言語 (設定)・メールアドレスと数字の入力欄・フロントが文字を送れない所・入力欄でない所 (アプリ別設定で「入力欄とみなす」アプリとターミナルを除く) でない。
     /// </summary>
     public static bool IsActive(IImeEnvironment environment, Settings settings, ImeField? field)
     {
         var traits = field?.Traits ?? [];
         var app = field?.App;
+        var treatsAsText = settings.TreatsAsTextInput(app);
         return (environment.InputMethod is not { } method || settings.Mode == method) && settings.Enabled &&
             !IsPassword(field) && !traits.Contains(ImeTrait.Email) && !traits.Contains(ImeTrait.Numeric) && !traits.Contains(ImeTrait.Unreachable) &&
             !(settings.ExcludeFullscreen && traits.Contains(ImeTrait.Fullscreen)) &&
             !(settings.JapaneseKeyboardOnly && traits.Contains(ImeTrait.OtherLanguage)) &&
-            !(traits.Contains(ImeTrait.NonText) && !IsGameChat(settings, field) && !settings.TreatsAsTextInput(app) && !(app is not null && LineContext.TerminalProcesses.Contains(app))) &&
-            settings.IsAppEnabled(app) && !(environment.InputMethod == InputMode.Keyboard && IsGame(settings, field));
+            !(traits.Contains(ImeTrait.NonText) && !IsGameChat(settings, field) && !treatsAsText && !(app is not null && LineContext.TerminalProcesses.Contains(app))) &&
+            settings.IsAppEnabled(app) && !(environment.InputMethod == InputMode.Keyboard && !treatsAsText && IsGame(settings, field));
     }
 
     /// <summary>
-    /// ゲームで、チャット欄が開いていないか。Meltype キーボードはゲームでは止める (チャット欄が開いている間 (IsGameChat) だけ受け持つ)。
+    /// 入力コンテキストからチャット欄が開いていると確認できないゲームか。
+    /// Meltype キーボードは、こうしたゲームでは「入力欄とみなす」を選んだときだけ受け持つ。
     /// Meltype IME・macOS・Linux のフロントは OS の IME そのものなので、止めるとチャットで日本語を打てなくなる (#1805)。
     /// 受け持ったまま英数で始め、英数ではキーを横取りしない (自動判定もしない) ので、操作のキーはそのままゲームに届く。
     /// </summary>
@@ -93,6 +95,10 @@ internal static class ImeSession
 
     public static ImeOutput Handle(ImeSessionState state, ImeEnv env, ImeEvent e, long rev)
     {
+        var holdRevision = state.GameKeyHoldRevision;
+        // 背景の変換で表示を更新しても、打ったキーは同じ。ほかの出来事で元の打鍵を取り消せなくする。
+        if (e is not ImeEvent.ConversionFinished) state.GameKeyHoldRevision = 0;
+        var previousApp = state.Field?.App;
         var field = e.Field ?? state.Field;
         CompositionController.SetPrivate(state.Composition, ForbidsLearning(field));
         if (IsPassword(field))
@@ -123,8 +129,7 @@ internal static class ImeSession
         ApplyFacts(state, e, settings);
         // ゲームに入ったら英数にする (IsGame)
         var game = IsGame(all, state.Field);
-        // チャット欄を開いたら日本語、閉じたら (上の行で) 英数にする
-        if (game && !state.Game) CompositionController.SetDirect(state.Composition, true);
+        if (game && (!state.Game || !string.Equals(previousApp, field?.App, StringComparison.OrdinalIgnoreCase))) CompositionController.SetDirect(state.Composition, true);
         else if (state.Game && IsGameChat(all, state.Field)) CompositionController.SetDirect(state.Composition, false);
         state.Game = game;
         var before = LineBefore(state, e.Field);
@@ -138,6 +143,9 @@ internal static class ImeSession
         }
         var wasJapanese = ShowsJapanese(state, before, settings);
         var composing = IsComposing(state);
+        var gameKeyboard = active && game && env.Environment.InputMethod == InputMode.Keyboard;
+        var returnToGame = gameKeyboard && wasJapanese && composing && holdRevision != 0 &&
+            e is ImeEvent.KeyHeld held && held.PressRevision == holdRevision && string.Equals(previousApp, field?.App, StringComparison.OrdinalIgnoreCase);
         // view が null だと、フロントは変換中の表示を消す。表示を変えない出来事は今の表示を返す
         var handled = e.Match(new ImeEvent.Cases<Handled>
         {
@@ -145,6 +153,7 @@ internal static class ImeSession
             KeyReleased = released => !active ? Unchanged(state, env)
                 : released.Key.Vk is VirtualKeys.LMenu or VirtualKeys.RMenu ? AltReleased(state, env, released.Key, before, settings)
                 : HandleKeyUp(state, env, ToggleShortcut.NormalizeKey(released.Key.Vk), released.Key.Physical),
+            KeyHeld = _ => returnToGame ? ReturnToGame(state, env, before) : Unchanged(state, env),
             ModeToggleRequested = _ => active ? Switch(state, env, !wasJapanese, before, toggle: true) : Unchanged(state, env),
             JapaneseModeSelected = _ => active ? Switch(state, env, true, before, toggle: false) : Unchanged(state, env),
             AlphanumericModeSelected = _ => active ? Switch(state, env, false, before, toggle: false) : Unchanged(state, env),
@@ -159,11 +168,20 @@ internal static class ImeSession
             InstanceDestroyed = _ => Unchanged(state, env),
         });
         var result = WithPaste(state, Verify(state, handled.Result, e.Field), settings);
-        // ゲームでは、Enter で確定・Esc で取り消したら英数に戻す。ゲーム (Minecraft 26.2 までの GLFW など) はチャットを閉じたことを知らせてこないので、
-        // 日本語のままだと閉じたあとの移動のキー (WASD) が変換中の文字になる。チャットを送る・閉じる前の Enter・Esc を区切りにする
-        if (game && composing && !IsComposing(state) && e is ImeEvent.KeyPressed { Key.Vk: VirtualKeys.Return or VirtualKeys.Escape }) CompositionController.SetDirect(state.Composition, true);
+        if (game && !IsComposing(state))
+        {
+            // VRChat は Enter で送信してもチャット欄が開いたままなので、Meltype キーボードでは打ちかけが空の Esc がゲームに渡ったときに英数へ戻す (#2245)。
+            // OS の IME はチャット欄が閉じたことを知らせないゲームがあるため、確定・取り消しを区切りにする (Minecraft 26.2 までの GLFW など)。
+            var closesChat = env.Environment.InputMethod == InputMode.Keyboard
+                ? active && !composing && !result.Consumed && e is (ImeEvent.KeyPressed { Key.Vk: VirtualKeys.Escape } or ImeEvent.CaretMoved { Caret.PassedKey: VirtualKeys.Escape })
+                : composing && e is ImeEvent.KeyPressed { Key.Vk: VirtualKeys.Return or VirtualKeys.Escape };
+            if (closesChat) CompositionController.SetDirect(state.Composition, true);
+        }
         TrackLine(state, e, result);
         RememberFieldMode(state, e, result, handled.ExplicitChange, wasJapanese, ShowsJapanese(state, before, settings), fieldModes, fieldKey);
+        var watchHold = gameKeyboard && wasJapanese && !composing && result.Consumed && result.View is not null && result.Commits.Count == 0 &&
+            e is ImeEvent.KeyPressed { Key: { Ch: > ' ' and <= '~', Shift: false, Ctrl: false, Alt: false, Command: false, Repeat: false, ReleaseFollows: false } };
+        if (watchHold) state.GameKeyHoldRevision = rev;
         var snippetKeys = SnippetKeys(state, env, e, result, settings);
         // キーでアプリの文字が変わったあとの位置は、フロントが次の出来事 (caret) で知らせる
         var japanese = ShowsJapanese(state, before, settings);
@@ -178,7 +196,19 @@ internal static class ImeSession
             ModeIndicatorMs = active && indicate && result.View is null ? ModeIndicatorMs : 0,
             Capture = Capture(active, Direct(state), japanese, DirectEnglishWord(state), settings, game, ComposingControlKeys(state, env), snippetKeys),
             Revision = rev,
-        }, result);
+        }, result)
+        {
+            GameKeyHoldMs = watchHold ? GameKeyHoldMs : 0,
+        };
+    }
+
+    // 最初の 1 打鍵だけを対象にし、通常の文字入力で押している時間と移動の反応時間を両立する初期値。
+    private const int GameKeyHoldMs = 250;
+
+    private static Handled ReturnToGame(ImeSessionState state, ImeEnv env, string? before)
+    {
+        CompositionController.CancelPending(state.Composition);
+        return Switch(state, env, false, before, toggle: false);
     }
 
     /// <param name="ExplicitChange">入力モードを明示的に切り替えた。</param>
@@ -766,7 +796,8 @@ internal static class ImeSession
             (ch is { } directChar && !char.IsAsciiLetterOrDigit(directChar) && directChar is not ('@' or '_') ||
              before is { Length: > 0 } && !char.IsAsciiLetterOrDigit(before[^1]) && before[^1] is not ('@' or '_')))
             CompositionController.LeaveEnglishWord(state.Composition);
-        if ((Direct(state) && (!settings.DirectModeAutoDetect || DirectEnglishWord(state))) || !settings.Enabled)
+        // フロントで保留されたキーが本体に届いても、ゲームの英数では自動判定しない。
+        if ((Direct(state) && (state.Game || !settings.DirectModeAutoDetect || DirectEnglishWord(state))) || !settings.Enabled)
         {
             return CompositionController.Pass(state.Composition, Env(state, env), now);
         }

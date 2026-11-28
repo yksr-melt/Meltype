@@ -63,6 +63,8 @@ internal static class ImeContractTests
 
         public void CloseAll() => Host.CloseAll();
 
+        public ImeOutput Send(ImeEvent e) => Host.Handle(e);
+
         public string Document { get; set; } = "";
 
         /// <summary>OS の IME の開閉 (TSF の OPENCLOSE)。</summary>
@@ -627,6 +629,7 @@ internal static class ImeContractTests
         front.Traits.Add("Password");
         Assert.True(!Active(front.Key('a')) && front.Document == "a", "パスワード欄では受け持たない\n" + front.Trace);
         front = new Front { InputMethod = InputMode.Keyboard };
+        front.Settings.Mode = InputMode.Keyboard;
         front.Traits.Add("Game");
         Assert.True(!Active(front.Key('a')), "Meltype キーボードはゲームでは受け持たない (チャットは Windows の IME で打つ)\n" + front.Trace);
     }
@@ -676,6 +679,114 @@ internal static class ImeContractTests
         // ゲームでない入力欄は、OS の開閉のまま
         var general = new Front { InputMethod = InputMode.Tsf };
         Assert.True(general.Event("CaretMoved", extra: Entered).GetProperty("state").GetProperty("imeOpen").GetBoolean(), general.Trace);
+    }
+
+    [Test]
+    public static void Keyboard_GameChatCanBeEnabledWithoutCapturingMovementInAlphanumericMode()
+    {
+        const string app = "VRChat.exe";
+        var front = new Front { App = app, InputMethod = InputMode.Keyboard, SendsImeOpen = false, Sends = null };
+        front.Settings.Mode = InputMode.Keyboard;
+        front.Traits.AddRange(["Game", "NonText"]);
+        var rule = new AppRule { Process = app, Profile = AppProfile.Game };
+        front.Settings.AppRules.Add(rule);
+        Assert.True(!Active(front.Event("StateRequested")), "ゲームでは既定どおり Windows の IME に任せる\n" + front.Trace);
+
+        rule.TextInput = true;
+        front.Settings.DirectModeAutoDetect = true;
+        var entered = front.Event("StateRequested");
+        Assert.True(Active(entered) && !front.Open, "明示的に入力欄とみなしたゲームでは英数で使い始める\n" + front.Trace);
+        Assert.True(!Capture(entered).GetProperty("printableAscii").GetBoolean(), "英数では移動キーをそのまま通す\n" + front.Trace);
+        Assert.True(front.Type("wasd").All(key => !Consumed(key)), front.Trace);
+
+        Assert.True(Consumed(front.Key(ToggleShortcut.Hankaku)) && front.Open, front.Trace);
+        front.Type("ka");
+        Assert.True(Consumed(front.Key('\n')) && front.Open, "変換の確定後も続けて打てる\n" + front.Trace);
+        Assert.True(!Consumed(front.Key('\n')) && front.Open, "送信の Enter はゲームに通し、日本語のままにする\n" + front.Trace);
+        front.Type("ki");
+        Assert.True(Consumed(front.Key('\u001b')) && front.Open, "打ちかけを取り消す Esc はチャットを閉じない\n" + front.Trace);
+        var closed = front.Event("CaretMoved", extra: $",\"caret\":{{\"moved\":true,\"passedKey\":{VirtualKeys.Escape}}}");
+        Assert.True(!front.Open && !Capture(closed).GetProperty("printableAscii").GetBoolean(), "ゲームに通した Esc で英数に戻す\n" + front.Trace);
+        Assert.True(!Consumed(front.Key('w')), front.Trace);
+        front.Key(ToggleShortcut.Hankaku);
+        Assert.True(!Consumed(front.Key('\u001b')) && !front.Open, "前のキーが処理中で Esc が本体に届いたときも、ゲームに通して英数に戻す\n" + front.Trace);
+        Assert.Equal("wasdか\nw", front.Document, front.Trace);
+
+        rule.Enabled = false;
+        Assert.True(!Active(front.Event("StateRequested")), "アプリ別設定の無効が優先される\n" + front.Trace);
+
+        rule.Enabled = true;
+        front.Key(ToggleShortcut.Hankaku);
+        front.Settings.AppRules.Add(new AppRule { Process = "other-game.exe", Profile = AppProfile.Game, TextInput = true });
+        front.App = "other-game.exe";
+        Assert.True(Active(front.Event("StateRequested")) && !front.Open, "別のゲームでは英数で始める\n" + front.Trace);
+    }
+
+    [Test]
+    public static void Keyboard_GameDoesNotAutoDetectBufferedMovementKeys()
+    {
+        var front = new Front
+        {
+            App = "game.exe",
+            InputMethod = InputMode.Keyboard,
+            SendsImeOpen = false,
+            ClassifyDirect = (letters, _, _) => letters == "ka" ? Verdict.Japanese : Verdict.Undecided,
+        };
+        front.Settings.Mode = InputMode.Keyboard;
+        front.Settings.AppRules.Add(new AppRule { Process = "game.exe", Profile = AppProfile.Game, TextInput = true });
+        front.Settings.DirectModeAutoDetect = true;
+        Assert.True(front.Type("ka").All(key => Active(key) && !Consumed(key) && !Japanese(key)), "英数のキーが本体に届いても日本語を判定しない\n" + front.Trace);
+        Assert.Equal("ka", front.Document, front.Trace);
+    }
+
+    [Test]
+    public static void Keyboard_GameHoldCancelsOnlyTheFirstCharacterAndReturnsToAlphanumeric()
+    {
+        var front = new Front { InputMethod = InputMode.Keyboard };
+        front.Settings.Mode = InputMode.Keyboard;
+        front.Settings.AppRules.Add(new AppRule { Process = "VRChat.exe", Profile = AppProfile.Game, TextInput = true });
+        var field = new ImeField { App = "VRChat.exe", Traits = [ImeTrait.NonText] };
+        ImeOutput Send(ImeEvent e) => front.Send(e with { Field = field });
+
+        Send(new ImeEvent.JapaneseModeSelected());
+        // 操作キーの割り当てはゲームごとに違うので、WASD 以外の文字キーも受け取る。
+        var press = Send(new ImeEvent.KeyPressed(new ImeKey { Vk = 'I', Ch = 'i' }));
+        Assert.True(press.Result.Consumed && press.Result.View is not null, "短く押したときと同じように入力を始める");
+        Assert.Equal(250, press.GameKeyHoldMs, "最初のキーは長押しを待つ");
+        Send(new ImeEvent.ConversionFinished());
+        var held = Send(new ImeEvent.KeyHeld(press.State.Revision));
+        Assert.True(held.State.LanguageMode == ImeLanguageMode.Alphanumeric, "英数に戻す");
+        Assert.True(held.Result.View is null && held.Result.Commits.Count == 0, "打ちかけはゲームに確定しない");
+        Assert.True(!held.State.Capture.PrintableAscii, "次の移動キーは横取りしない");
+        var nextPress = Send(new ImeEvent.KeyPressed(new ImeKey { Vk = 'I', Ch = 'i' }));
+        Assert.True(!nextPress.Result.Consumed && nextPress.State.LanguageMode == ImeLanguageMode.Alphanumeric, "押し直したキーをゲームに通す");
+    }
+
+    [Test]
+    public static void Keyboard_GameHoldKeepsChatInputAfterAnotherKeyOrFocusChange()
+    {
+        var front = new Front { InputMethod = InputMode.Keyboard };
+        front.Settings.Mode = InputMode.Keyboard;
+        front.Settings.AppRules.Add(new AppRule { Process = "VRChat.exe", Profile = AppProfile.Game, TextInput = true });
+        var field = new ImeField { App = "VRChat.exe", Traits = [ImeTrait.NonText] };
+        ImeOutput Send(ImeEvent e) => front.Send(e with { Field = field });
+
+        Send(new ImeEvent.JapaneseModeSelected());
+        var press = Send(new ImeEvent.KeyPressed(new ImeKey { Vk = 'K', Ch = 'k' }));
+        var next = Send(new ImeEvent.KeyPressed(new ImeKey { Vk = 'A', Ch = 'a' }));
+        Assert.Equal(0, next.GameKeyHoldMs, "打ちかけがあるときは待たない");
+        var held = Send(new ImeEvent.KeyHeld(press.State.Revision));
+        Assert.True(held.State.LanguageMode == ImeLanguageMode.Japanese, "次のキーを打った後は英数に戻さない");
+        var commit = Send(new ImeEvent.KeyPressed(new ImeKey { Vk = VirtualKeys.Return }));
+        Assert.Equal("か", commit.Result.Commits.Single().Text, "続けて打った文字は通常どおり確定する");
+
+        press = Send(new ImeEvent.KeyPressed(new ImeKey { Vk = 'A', Ch = 'a' }));
+        Send(new ImeEvent.CaretMoved(new ImeCaret { FocusLeft = true }));
+        Assert.True(Send(new ImeEvent.KeyHeld(press.State.Revision)).State.LanguageMode == ImeLanguageMode.Japanese, "フォーカスが移った後は英数に戻さない");
+        Send(new ImeEvent.CommitRequested());
+        field = new ImeField { App = "notepad.exe" };
+        press = Send(new ImeEvent.KeyPressed(new ImeKey { Vk = 'A', Ch = 'a' }));
+        Assert.Equal(0, press.GameKeyHoldMs, "一般のアプリは長押しを待たない");
     }
 
     [Test]
