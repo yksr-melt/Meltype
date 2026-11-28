@@ -24,3 +24,12 @@ body:
       description: 具体例があれば書いてください
     validations:
       required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Meltype の版
+      description: 「ばーじょん」と打って変換すると、候補に出ます。インストールできていないときは「未インストール」と書いてください
+      placeholder: 1.4.0
+    validations:
+      required: true

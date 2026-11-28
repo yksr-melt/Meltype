@@ -122,7 +122,12 @@ internal static class CompositionKeys
             // 設定「Control キーの割り当て」: 組み込みの割り当てより先に見る (issue #63・#209)
             if (BoundControlKey(env, vk) is { } bound)
             {
-                vk = bound;
+                vk = bound switch
+                {
+                    ControlKeyTarget.Key key => key.Vk,
+                    ControlKeyTarget.HalfWidth => HalfWidthKey(withInput, env),
+                    _ => throw new System.Diagnostics.UnreachableException(),
+                };
             }
             // 設定「Control キーの割り当て」が macOS 風: 組み込みの Ctrl+U/I/O/P/H より先に見る (issue #643)
             else if (env.Settings.ControlKeys == Config.ControlKeyLayout.Mac && MacControlShortcut(vk) is { } mac)
@@ -237,7 +242,7 @@ internal static class CompositionKeys
                 input.Text = CompositionText.Settle(input.Text);
                 CompositionConversion.StartConversion(state, input, env, ConversionTrigger.Space);
                 return;
-            case VirtualKeys.NonConvert when env.Settings.NonConvertCyclesKana && !CompositionLifecycle.IsProtectedInput(scene):
+            case VirtualKeys.NonConvert when CompositionLifecycle.NonConvertCyclesKana(scene, env.Settings):
                 // ひらがな → 全角カタカナ → 半角カタカナ → ひらがな の順に循環する。自動判定中は、表示中の文字列にひらがな (長音を含む) があれば全角カタカナにし、なければひらがなにする。
                 SetMode(state, scene, NextKanaCycleMode(scene, env));
                 input.ModeByKey = true;
@@ -260,10 +265,11 @@ internal static class CompositionKeys
                 // (日本語の部分は、ライブ変換が ON なら漢字にして、OFF なら見えているかなのまま確定)。
                 // 数字だけ (1、12) は、前が英文なら確定して空白 (I have 2 cats)。それ以外は変換して ① 一 Ⅰ などの候補を出す。
                 // 打った英字全体を読みとして登録した語 (ユーザー辞書の zh → ←、略入力の ast → 明日) か、
-                // 関数形式の色変換 (hex(dadada)・rgb(59,130,246) など) なら、英語と判定しても変換する
+                // 関数形式のユーティリティ変換 (hex(dadada)・uuid() など) なら、英語と判定しても変換する
                 if (CompositionConversion.HasRegisteredReading(input.Text, env) ||
                     (!input.Text.KanaInput && input.Text.Mode == DisplayMode.Auto &&
-                     Utility.ColorConversion.Matches(CompositionText.Raw(CompositionText.Read(input.Text, env)))))
+                     CompositionText.Raw(CompositionText.Read(input.Text, env)) is var rawForUtility &&
+                     (Utility.ColorConversion.Matches(rawForUtility) || Utility.UuidConversion.Matches(rawForUtility))))
                 {
                     CompositionConversion.StartConversion(state, input, env, ConversionTrigger.Space);
                 }
@@ -480,7 +486,7 @@ internal static class CompositionKeys
 
     /// <summary>
     /// JIS かな以外のかな配列 (月・花・NICOLA・中指NICOLA・TRON) と SKY 配列の打鍵 (issue #1415)。配列のキーとして扱ったら true。
-    /// 打ったキーの英字は英単語の判定に使わない (刻印と違う配列なので)。かなをそのまま原文にする。
+    /// 単打は打ったキーの表記も持つ。前置シフト・同時打鍵のキーは表示にだけ使う。
     /// </summary>
     private static bool HandleKanaLayout(CompositionState state, CompositionEnv env, KeyEvent e, int position)
     {
@@ -524,7 +530,7 @@ internal static class CompositionKeys
         var input = state.Scene is not CompositionScene.WithInput scene ? CompositionLifecycle.Begin(state, env)
             : stroke.RemoveLast == 0 ? CommitBeforeTyping(state, scene, env) : scene.Input;
         for (var i = 0; i < stroke.RemoveLast && !input.Text.IsEmpty; i++) input.Text = CompositionText.RemoveLast(input.Text, env);
-        input.Text = CompositionText.AppendReading(input.Text, stroke.Kana);
+        input.Text = CompositionText.AppendLayoutKana(input.Text, stroke.Kana, stroke.Keys, stroke.Repeat);
         CompositionLifecycle.FinishIfEmpty(state, input);
     }
 
@@ -555,15 +561,13 @@ internal static class CompositionKeys
 
     /// <summary>
     /// Space の分岐で変換を始める (StartConversion に行く) 場面か。Tab で始めるときも同じ場面に限る (issue #219)。
-    /// Space と同じ順で判定するため、英語かを見る前に打ち間違いを直す (Enter で確定するときと同じ直し)。
     /// </summary>
     private static bool TabStartsConversion(CompositionTextState text, CompositionEnv env)
     {
         // 保護区間が語の途中にあり、その後にかなが続く入力も Tab 変換しない。
         // IsProtectedInput は末尾が保護区間かだけを見るため、ここでは全区間を調べる。
         if (text.Mode == DisplayMode.Auto && CompositionText.ProtectedSpans(CompositionText.Read(text, env)).Count > 0) return false;
-        var settled = CompositionText.Settle(text);
-        return CompositionConversion.HasRegisteredReading(settled, env) || !SpaceCommitsAsEnglish(settled, env);
+        return CompositionConversion.HasRegisteredReading(text, env) || !SpaceCommitsAsEnglish(text, env);
     }
 
     /// <summary>Esc でひらがなに戻した読みを直している (← → でカーソルを動かせる)。</summary>
@@ -871,8 +875,17 @@ internal static class CompositionKeys
         _ => null,
     };
 
-    /// <summary>設定「Control キーの割り当て」(T=F6;Y=F7 …) で、Control + vk に割り当てたキー。無ければ null。</summary>
-    private static int? BoundControlKey(CompositionEnv env, int vk)
+    private static int HalfWidthKey(CompositionScene.WithInput scene, CompositionEnv env)
+    {
+        var shown = scene is CompositionScene.Converting { Conversion.SelectedClause: var selected }
+            ? selected.Text : CompositionPresentation.CurrentDisplay(scene.Input, env, final: false);
+        // 半角カタカナにある記号 (。「」、・) もかなとして見る。見ないと、句読点を含むかな (そうですね。) が半角英数 (soudesune.) になる
+        return shown.Length > 0 && shown.All(c => Libraries.Chars.KanaChars.IsHiraganaOrLongMark(c) ||
+            Libraries.Chars.KanaChars.IsKatakana(c) || c is '。' or '「' or '」' or '、' or '・' or >= '｡' and <= 'ﾟ') ? VirtualKeys.F8 : VirtualKeys.F10;
+    }
+
+    /// <summary>設定「Control キーの割り当て」(T=F6;Y=F7 …) で、Control + vk に割り当てた働き。無ければ null。</summary>
+    private static ControlKeyTarget? BoundControlKey(CompositionEnv env, int vk)
     {
         var text = env.Settings.ControlKeyBindings;
         if (string.IsNullOrWhiteSpace(text)) return null;

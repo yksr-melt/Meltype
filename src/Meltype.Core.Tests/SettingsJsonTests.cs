@@ -325,7 +325,7 @@ internal static class SettingsJsonTests
                   "ShowModeIndicator": true, "ShowModeIndicatorOnFocus": false,
                   "PasteApps": "Resolve.exe, foo.exe", "NoPasteApps": "LINE.exe", "TextInputApps": "Adobe Premiere Pro.exe;a.exe b.exe",
                   "AppRules": [ { "Process": "line.exe", "Enabled": false, "Profile": "General" } ],
-                  "JapaneseThreshold": 12, "TypoEnabled": false, "MaxPendingKeys": 3, "ImeTimeoutMs": 500, "LogKeyIntervals": true,
+                  "JapaneseThreshold": 12, "TypoEnabled": false, "CorrectTypos": false, "MaxPendingKeys": 3, "ImeTimeoutMs": 500, "LogKeyIntervals": true,
                   "DetectionLevel": "Conservative",
                   "AppKinds": [ { "Name": "チャット", "DetectionLevel": "Manual" }, { "Name": "仕事", "DetectionLevel": "Aggressive" }, { "Name": "ゲーム" } ],
                   "ActiveProfile": "標準",
@@ -356,7 +356,7 @@ internal static class SettingsJsonTests
 
             var saved = File.ReadAllText(path);
             foreach (var key in new[] { "SlashAsMiddleDot", "FullWidthSlash", "ShiftSpaceHalfWidth", "FullWidthSpaceByDefault", "CompatibleShortcuts", "MacControlKeys",
-                         "ShowModeIndicator\"", "ShowModeIndicatorOnFocus", "PasteApps", "NoPasteApps", "TextInputApps", "JapaneseThreshold", "TypoEnabled", "MaxPendingKeys", "ImeTimeoutMs", "LogKeyIntervals", "DetectionLevel" })
+                         "ShowModeIndicator\"", "ShowModeIndicatorOnFocus", "PasteApps", "NoPasteApps", "TextInputApps", "JapaneseThreshold", "TypoEnabled", "CorrectTypos", "MaxPendingKeys", "ImeTimeoutMs", "LogKeyIntervals", "DetectionLevel" })
                 Assert.True(!saved.Contains(key), $"移した・消した項目は保存しない: {key}");
             Assert.True(saved.Contains($"\"SettingsVersion\": {Settings.CurrentVersion}"), "版を上げて保存する");
             Assert.Equal(loaded.ToJson(), Settings.Load(path).ToJson(), "保存したものを読み直しても同じ");
