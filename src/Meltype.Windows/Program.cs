@@ -93,21 +93,5 @@ internal static class Program
         return 0;
     }
 
-    /// <summary>
-    /// 落ちたとき (起動できなかったとき) の例外を crash.log に書き足す。ファイルへのログ (設定) が OFF でも書く:
-    /// 起動直後に落ちる報告で、原因の手がかりが何も残っていなかった。打った文字は含まない (例外の種類と場所だけ)。
-    /// </summary>
-    private static void WriteCrashLog(object exception)
-    {
-        try
-        {
-            Directory.CreateDirectory(AppPaths.DataDirectory);
-            File.AppendAllText(AppPaths.CrashLogFile,
-                $"==== {DateTime.Now:yyyy-MM-dd HH:mm:ss} Meltype {AppInfo.Version} / {Environment.OSVersion} ====\n{exception}\n\n");
-        }
-        catch
-        {
-            // 書けなくても、元の例外の処理を続ける
-        }
-    }
+    private static void WriteCrashLog(object exception) => CrashLog.Write($"Meltype {AppInfo.Version}", exception);
 }

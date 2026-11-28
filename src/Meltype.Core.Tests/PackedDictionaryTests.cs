@@ -167,12 +167,12 @@ internal static class PackedDictionaryTests
     }
 
     [Test]
-    public static void RomajiTypos_KnowReadingsAndTheirForms()
+    public static void JapaneseLexicon_KnowsReadingsAndTheirForms()
     {
         var romaji = new RomajiDetector(null);
         // 読みそのもの・活用した形 (たべ・たべろ、かき・かい・かいた、はやく)・付属語
-        var typos = new RomajiTypoCorrector(romaji, "# 読み\nたべる\tv1\nかく\tv5k\nはやい\ti\nきょう\n");
-        foreach (var word in (string[])["たべる", "たべ", "たべろ", "かく", "かき", "かか", "かい", "かいて", "かいた", "はやい", "はやく", "はやかっ", "きょう", "ます", "は"]) Assert.True(typos.IsWord(word), word);
-        foreach (var word in (string[])["たべり", "かくる", "きょ", "v1", "# 読み"]) Assert.True(!typos.IsWord(word), word);
+        var lexicon = new JapaneseLexicon(romaji, "# 読み\nたべる\tv1\nかく\tv5k\nはやい\ti\nきょう\n");
+        foreach (var word in (string[])["たべる", "たべ", "たべろ", "かく", "かき", "かか", "かい", "かいて", "かいた", "はやい", "はやく", "はやかっ", "きょう", "ます", "は"]) Assert.True(lexicon.IsWord(word), word);
+        foreach (var word in (string[])["たべり", "かくる", "きょ", "v1", "# 読み"]) Assert.True(!lexicon.IsWord(word), word);
     }
 }

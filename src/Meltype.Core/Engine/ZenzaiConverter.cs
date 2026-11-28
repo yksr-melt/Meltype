@@ -59,7 +59,7 @@ internal sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     private readonly LatestRequestWorker<LiveRequest> _worker;
 
     // 打鍵が続く間は最後の読みだけを推論する (CPU のみのときに推論が積み重ならないように)
-    private const int SettleMs = 60;
+    private const int CpuSettleMs = 60, GpuSettleMs = 10;
 
     // 応答が遅かった (CPU の負荷が高いなど) ときは、しばらく使わず Mozc に任せる。
     private const int DefaultPauseMs = 5000;
@@ -79,8 +79,8 @@ internal sealed class ZenzaiConverter : IKanjiConverter, IDisposable
         _serverPath = serverPath;
         _modelPath = modelPath;
         _timeoutMs = timeoutMs;
-        _device = device;
-        _worker = new LatestRequestWorker<LiveRequest>(ProcessBackground, SettleMs);
+        _device = device.Trim();
+        _worker = new LatestRequestWorker<LiveRequest>(ProcessBackground, _device.Length == 0 ? CpuSettleMs : GpuSettleMs);
     }
 
     /// <summary>
@@ -328,14 +328,25 @@ internal sealed class ZenzaiConverter : IKanjiConverter, IDisposable
         _ => c,
     };
 
-    /// <summary>生成された文字列から、終わりの記号 (EOS や U+EE0x) 以降と前後の空白を取り除く。空なら null。</summary>
+    /// <summary>
+    /// 生成された文字列から、終わりの記号 (EOS や U+EE0x) 以降と前後の空白を取り除く。
+    /// 空のとき、または入力欄に確定できない文字 (制御文字・書式文字・私用領域・未割り当て・行/段落区切り・置換文字) を含むときは null。
+    /// </summary>
     internal static string? Clean(string? content)
     {
         if (content is null) return null;
         var end = content.AsSpan().IndexOfAny(OutputBoundaries);
         if (end >= 0) content = content[..end];
         content = content.Replace("</s>", "").Replace("<s>", "").Trim();
-        return content.Length == 0 ? null : content;
+        if (content.Length == 0) return null;
+        foreach (var rune in content.EnumerateRunes())
+        {
+            if (rune == Rune.ReplacementChar || Rune.GetUnicodeCategory(rune) is UnicodeCategory.Control
+                or UnicodeCategory.Format or UnicodeCategory.PrivateUse or UnicodeCategory.OtherNotAssigned
+                or UnicodeCategory.LineSeparator or UnicodeCategory.ParagraphSeparator)
+                return null;
+        }
+        return content;
     }
 
     private void EnsureStarting()
