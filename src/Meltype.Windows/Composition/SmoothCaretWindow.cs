@@ -37,6 +37,7 @@ internal sealed class SmoothCaretWindow : PopupForm
     private bool _enabled;
     private bool _layeredCleared = true;
     private uint _activeThread;
+    private uint _hookedThread;
     private IntPtr _lastForeground;
     private IntPtr _caretHook;
     private long _lastFrameTicks;
@@ -96,6 +97,7 @@ internal sealed class SmoothCaretWindow : PopupForm
     {
         if (_activeThread != thread || thread == 0) return;
         _activeThread = 0;
+        UninstallHook();
         _animTimer.Stop();
         _motion.Reset();
         ClearLayered();
@@ -112,7 +114,7 @@ internal sealed class SmoothCaretWindow : PopupForm
             ClearLayered();
         }
 
-        InstallHook();
+        InstallHook(thread);
 
         if (focusEntered)
         {
@@ -148,7 +150,7 @@ internal sealed class SmoothCaretWindow : PopupForm
             ClearLayered();
         }
 
-        InstallHook();
+        InstallHook(thread);
         ApplyCaretRect(rect);
     }
 
@@ -368,15 +370,20 @@ internal sealed class SmoothCaretWindow : PopupForm
         }
     }
 
-    private void InstallHook()
+    private void InstallHook(uint thread)
     {
-        if (_caretHook != IntPtr.Zero) return;
+        if (thread == 0) return;
+        if (_caretHook != IntPtr.Zero && _hookedThread == thread) return;
+        UninstallHook();
         const uint flags = Native.WINEVENT_OUTOFCONTEXT | Native.WINEVENT_SKIPOWNPROCESS;
-        _caretHook = Native.SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE, IntPtr.Zero, _winEventCallback, 0, 0, flags);
+        // 対象スレッドのみをフックし、他プロセスやマウスカーソル移動のイベントを Meltype.exe の UI スレッドへ流さない
+        _caretHook = Native.SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE, IntPtr.Zero, _winEventCallback, 0, thread, flags);
+        _hookedThread = _caretHook != IntPtr.Zero ? thread : 0;
     }
 
     private void UninstallHook()
     {
+        _hookedThread = 0;
         if (_caretHook == IntPtr.Zero) return;
         Native.UnhookWinEvent(_caretHook);
         _caretHook = IntPtr.Zero;
