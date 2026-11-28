@@ -58,6 +58,6 @@ Meltype はキーボードの入力を扱うソフトです。安心して使っ
 
 ## 配布物の確かめ方
 
-- 配布しているのは GitHub のリリースと、各 OS の説明に書いた入れ方 (Homebrew・apt・dnf) だけです。ほかの場所の Meltype は使わないでください。
+- 配布しているのは GitHub のリリースと、各 OS の説明に書いた入れ方 (Homebrew・apt・dnf・AUR の `meltype-bin`) だけです。ほかの場所の Meltype は使わないでください。
 - Windows の自動更新は、GitHub の配布物に `sha256:` の digest がある場合にダウンロードしたファイルと照合し、不一致ならインストールしません。現在の実装は digest がない配布物を拒否するものではありません。
 - Windows の署名は、通常の PFX による配布と SignPath のテストを分けています。対象と現在の経路は [Code signing policy](docs/CODE-SIGNING.md) にあります。Android の公開 APK は固定した配布用の鍵で署名します。
