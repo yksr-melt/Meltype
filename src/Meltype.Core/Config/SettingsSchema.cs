@@ -90,7 +90,7 @@ internal static class SettingsSchema
         {
             if (property.AttributeProvider?.GetCustomAttributes(typeof(DisplayNameAttribute), false).FirstOrDefault() is DisplayNameAttribute { DisplayName.Length: > 0 } title)
                 schema["title"] = title.DisplayName;
-            var description = property.AttributeProvider?.GetCustomAttributes(typeof(DescriptionAttribute), false).FirstOrDefault() is DescriptionAttribute d ? d.Description : "";
+            var description = property.AttributeProvider?.GetCustomAttributes(typeof(DescriptionAttribute), false).FirstOrDefault() is DescriptionAttribute d ? AppPaths.WithDataDirectory(d.Description) : "";
             var platforms = property.AttributeProvider?.GetCustomAttributes(typeof(PlatformsAttribute), false).FirstOrDefault() is PlatformsAttribute p
                 ? PlatformNames(p.Platforms)
                 : null;

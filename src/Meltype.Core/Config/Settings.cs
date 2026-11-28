@@ -329,7 +329,7 @@ public sealed class Settings
     public bool CorrectTypos { get; set; } = true;
 
     [Category("変換"), DisplayName("予測変換の候補"),
-     Description("打っている途中に、続きの候補を変換ボックスの下に出します (前に確定した語句・ユーザー辞書・選び直した変換の学習・よく使うあいさつ・英単語の続き)。Tab / Shift+Tab で選んで Enter で確定します。確定した語句は %LOCALAPPDATA%\\Meltype\\phrases.txt に暗号化せずに覚え (この PC の外には送りません)、「学習データをリセット」で消えます。")]
+     Description("打っている途中に、続きの候補を変換ボックスの下に出します (前に確定した語句・ユーザー辞書・選び直した変換の学習・よく使うあいさつ・英単語の続き)。Tab / Shift+Tab で選んで Enter で確定します。確定した語句はデータフォルダー (" + AppPaths.DataDirectoryMark + ") の phrases.txt に暗号化せずに覚え (この PC の外には送りません)、「学習データをリセット」で消えます。")]
     public bool PredictiveCandidates { get; set; } = true;
 
     [Category("変換"), DisplayName("予測変換に英字の社名・サービス名"),
@@ -568,7 +568,7 @@ public sealed class Settings
      Description("キーごと・日ごと・時間帯ごとの打鍵数を数えて、この PC の中に保存します (打った文字の並びは保存しません)。Windows 以外では、Meltype で入力しているときの打鍵だけを数えます (Shift などの修飾キーは数えません)。端末版と Android では数えません。パスワード欄では数えませんが、macOS ではアプリによってパスワード欄の打鍵も数えることがあります。「Discord に表示する」を選ぶと、今日と合計の打鍵数・1 分あたりの打鍵数・Meltype を起動してからの時間を、この PC の Discord のアプリに送ります。既定は「数えない」です。")]
     public KeyCountMode KeyCount { get; set; }
 
-    [Category("打鍵数・ログ"), DisplayName("ファイルにログを書く"), Description("%LOCALAPPDATA%\\Meltype\\meltype.log にログを書きます (OFF でも、トレイの「ログ / 判定理由」で見られるログは Meltype が動いている間だけメモリに残ります)。アプリ名・入力欄の名前が含まれます。確定した文字列などは「ログに入力した文字を残す」が ON のときだけ残ります。")]
+    [Category("打鍵数・ログ"), DisplayName("ファイルにログを書く"), Description("データフォルダー (" + AppPaths.DataDirectoryMark + ") の meltype.log にログを書きます (OFF でも、トレイの「ログ / 判定理由」で見られるログは Meltype が動いている間だけメモリに残ります)。アプリ名・入力欄の名前が含まれます。確定した文字列などは「ログに入力した文字を残す」が ON のときだけ残ります。")]
     public bool FileLog { get; set; }
 
     [Category("打鍵数・ログ"), DisplayName("ログに入力した文字を残す"), Description("確定した文字列・打った英字・読み・直した語をログに残します (不具合を調べるとき用)。OFF なら文字数だけを残します。パスワード欄では入力を扱わないので残りません。")]

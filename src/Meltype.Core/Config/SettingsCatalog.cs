@@ -32,7 +32,7 @@ public static class SettingsCatalog
             .Select(g => (g.Key, (IReadOnlyList<SettingItem>)g.Select(p => new SettingItem(
                 p.Property,
                 p.Property.GetCustomAttribute<DisplayNameAttribute>()?.DisplayName ?? p.Property.Name,
-                p.Property.GetCustomAttribute<DescriptionAttribute>()?.Description ?? "",
+                AppPaths.WithDataDirectory(p.Property.GetCustomAttribute<DescriptionAttribute>()?.Description ?? ""),
                 g.Key)).ToList()))
             .ToList();
     }

@@ -34,6 +34,15 @@ public static class AppPaths
         return Path.Combine(localAppDataDirectory, "Meltype");
     }
 
+    /// <summary>
+    /// 設定の説明の中でデータフォルダーを指す印。説明は属性の定数で OS ごとに変えられないので、
+    /// 設定画面と schema に出すときに <see cref="WithDataDirectory"/> でこの PC の保存場所に置き換える
+    /// (Linux 版に %LOCALAPPDATA% の Windows のパスが出ていた。#2109)。
+    /// </summary>
+    public const string DataDirectoryMark = "{DataDirectory}";
+
+    public static string WithDataDirectory(string text) => text.Replace(DataDirectoryMark, DataDirectory, StringComparison.Ordinal);
+
     /// <summary>旧名 (AutoIME) のときの保存場所。</summary>
     private static string OldDataDirectory =>
         Path.Combine(LocalAppData, "AutoIME");
