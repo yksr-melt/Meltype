@@ -15,13 +15,59 @@ namespace Meltype.Composition;
 internal sealed record Prediction(string Text, string Before, string Reading);
 
 /// <summary>変換中の文節。英語の区間も 1 つの文節として扱う (候補は英字/全角英字)。</summary>
-internal sealed class Clause(string reading, bool isEnglish, List<string> candidates)
+internal sealed class Clause(string reading, bool isEnglish, List<string> built)
 {
     public string Reading { get; set; } = reading;
     public bool IsEnglish { get; } = isEnglish;
-    public List<string> Candidates { get; set; } = candidates;
-    public int Index { get; set; }
-    public string Text => Candidates[Index];
+
+    /// <summary>
+    /// 文節を作るときに並べた候補 (<see cref="CompositionConversion"/> が文節を作る間だけ書き換える)。同じ文字の候補は持たない:
+    /// 選んでいる候補は文字 (<see cref="Choice"/>) で持つので、同じ文字が 2 つあると ↓ で同じ文字に進んで先へ進めない。
+    /// 足す所はどこも一覧にある文字を飛ばし、ユーティリティ変換の候補は <see cref="Utility.UtilityConversions.Convert"/> が最初の 1 つにまとめる。
+    /// </summary>
+    public List<string> Built { get; set; } = built;
+
+    /// <summary>
+    /// 変換中に文節を選んだときに、変換エンジンの候補の一覧を <see cref="Built"/> に入れた並び (<see cref="CompositionConversion.Expand"/>)。
+    /// まだ頼んでいなければ null。
+    /// </summary>
+    public IReadOnlyList<string>? Expansion { get; set; }
+
+    /// <summary>
+    /// 一覧に無い形をキーで選んだもの (文節だけの F6〜F10・Esc のかな)。一覧の最後に並べる。
+    /// 選び直しても一覧から消さない (↑↓ で戻れる)。
+    /// </summary>
+    public List<string> Added { get; } = [];
+
+    /// <summary>選んでいる候補。null なら最初の候補。</summary>
+    public string? Choice { get; set; }
+
+    /// <summary>候補の一覧: <see cref="Expansion"/> (無ければ <see cref="Built"/>) の後ろに <see cref="Added"/>。</summary>
+    public IReadOnlyList<string> Candidates
+    {
+        get
+        {
+            var listed = Expansion ?? Built;
+            if (Added.Count == 0) return listed;
+            var added = Added.Where(a => !listed.Contains(a)).ToList();
+            return added.Count == 0 ? listed : [.. listed, .. added];
+        }
+    }
+
+    public int Index
+    {
+        get
+        {
+            if (Choice is null) return 0;
+            var candidates = Candidates;
+            for (var i = 0; i < candidates.Count; i++)
+            {
+                if (candidates[i] == Choice) return i;
+            }
+            return -1;
+        }
+    }
+    public string Text => Choice ?? Candidates[0];
 
     /// <summary>ユーザーが候補を選び直したか (確定時に学習する)。</summary>
     public bool Changed { get; set; }
@@ -34,12 +80,6 @@ internal sealed class Clause(string reading, bool isEnglish, List<string> candid
     /// 変換エンジンに頼まない文節 (英語・記号) は null。
     /// </summary>
     public string? Engine { get; init; }
-
-    /// <summary><see cref="CompositionConversion"/> が候補を足し終えたか。</summary>
-    public bool EngineCandidatesAdded { get; set; }
-
-    /// <summary>外部変換エンジンの候補追加が完了したか。<see cref="Fixed"/> の文節では追加せずに完了扱いにする。</summary>
-    public bool Expanded { get; set; }
 
     /// <summary>ユーティリティ変換の Replace の文節。候補を足さず、文節の区切りも動かさない。</summary>
     public bool Fixed { get; init; }

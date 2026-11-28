@@ -645,13 +645,7 @@ internal static class CompositionKeys
                                          conversion.SelectedClause is { IsEnglish: false } clause && clause.Text != clause.Reading:
                 // 設定「変換中の Esc は選んだ文節だけをかなに戻す」: 選んでいる文節だけをひらがなにして、変換は続ける (issue #670)
                 {
-                    var index = clause.Candidates.IndexOf(clause.Reading);
-                    if (index < 0)
-                    {
-                        clause.Candidates.Add(clause.Reading);
-                        index = clause.Candidates.Count - 1;
-                    }
-                    clause.Index = index;
+                    Choose(clause, clause.Reading);
                     clause.Changed = true;
                 }
                 return true;
@@ -679,10 +673,11 @@ internal static class CompositionKeys
     {
         var conversion = scene.Conversion;
         var clause = conversion.SelectedClause;
-        if (!clause.Expanded) CompositionConversion.Expand(env, clause);
+        if (clause.Expansion is null) CompositionConversion.Expand(env, clause);
+        var candidates = clause.Candidates;
         var index = Math.Max(0, clause.Index) / CompositionConversion.CandidatePageSize * CompositionConversion.CandidatePageSize + row;
-        if (index >= clause.Candidates.Count) return false;
-        clause.Index = index;
+        if (index >= candidates.Count) return false;
+        clause.Choice = candidates[index];
         clause.Changed = true;
         if (conversion.Selected + 1 < conversion.Clauses.Count) conversion.Selected++;
         else CompositionCommit.Commit(state, scene, env);
@@ -732,6 +727,13 @@ internal static class CompositionKeys
         return false;
     }
 
+    /// <summary>文節の候補 text を選ぶ。一覧に無い形 (文節だけの F6〜F10・Esc のかな) は、一覧の最後に並べる (<see cref="Clause.Added"/>)。</summary>
+    private static void Choose(Clause clause, string text)
+    {
+        if (!clause.Candidates.Contains(text) && !clause.Added.Contains(text)) clause.Added.Add(text);
+        clause.Choice = text;
+    }
+
     /// <summary>
     /// 設定「変換中の F6〜F10 は選んだ文節だけに効かせる」: 選んでいる文節だけを、ひらがな / カタカナ / 半角カタカナ / 全角英数 / 半角英数にする。
     /// 英語の文節は、打った英字 (Reading) を英数に、ローマ字として読んだかな (Kana) をかなにする。
@@ -750,13 +752,7 @@ internal static class CompositionKeys
             _ => raw,
         };
         if (text is null) return;
-        var index = clause.Candidates.IndexOf(text);
-        if (index < 0)
-        {
-            clause.Candidates.Add(text);
-            index = clause.Candidates.Count - 1;
-        }
-        clause.Index = index;
+        Choose(clause, text);
         // 候補から選んだのと同じく、確定したら学習する
         clause.Changed = true;
     }

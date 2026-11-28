@@ -85,8 +85,9 @@ internal static class CompositionController
     {
         if (state.Scene is not CompositionScene.Converting converting) return;
         var clause = converting.Conversion.SelectedClause;
-        if (index < 0 || index >= clause.Candidates.Count) return;
-        clause.Index = index;
+        var candidates = clause.Candidates;
+        if (index < 0 || index >= candidates.Count) return;
+        clause.Choice = candidates[index];
         clause.Changed = true;
         CompositionPresentation.UpdateView(state, env);
     }

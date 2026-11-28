@@ -51,8 +51,8 @@ internal static class CompositionRefresh
             foreach (var (fresh, previous) in freshClauses.Zip(old))
             {
                 if (!previous.Changed) continue;
-                fresh.Candidates = CompositionConversion.Distinct([.. fresh.Candidates, .. previous.Candidates]);
-                fresh.Index = fresh.Candidates.IndexOf(previous.Text);
+                fresh.Built = CompositionConversion.Distinct([.. fresh.Candidates, .. previous.Candidates]);
+                fresh.Choice = previous.Text;
                 fresh.Changed = true;
                 fresh.Translations.UnionWith(previous.Translations);
                 foreach (var (candidate, key) in previous.UtilityRankingKeys) fresh.UtilityRankingKeys.TryAdd(candidate, key);
