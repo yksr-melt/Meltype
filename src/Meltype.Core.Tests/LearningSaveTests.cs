@@ -26,7 +26,7 @@ internal static class LearningSaveTests
             var languages = new LanguageMemory(Path.Combine(directory, "languages.json"));
             var conversions = new ConversionHistory(Path.Combine(directory, "conversions.json"));
             var phrases = new PhraseHistory(Path.Combine(directory, "phrases.txt"));
-            var translations = new TranslationHistory(Path.Combine(directory, "translations.json"));
+            var translations = new ChoiceCounts(Path.Combine(directory, "translations.json"), "英訳の学習データ");
 
             languages.Remember("cafe", english: false, explicitChoice: true);
             conversions.Remember("くらいど", "クラウド");
@@ -38,7 +38,7 @@ internal static class LearningSaveTests
             Assert.Equal(false, new LanguageMemory(Path.Combine(directory, "languages.json")).Get("cafe"));
             Assert.Equal("クラウド", new ConversionHistory(Path.Combine(directory, "conversions.json")).Get("くらいど"));
             Assert.Equal("今日は", new PhraseHistory(Path.Combine(directory, "phrases.txt")).StartingWith("きょ").Single());
-            Assert.Equal(1, new TranslationHistory(Path.Combine(directory, "translations.json")).Get("すし").Single().Count);
+            Assert.Equal(1, new ChoiceCounts(Path.Combine(directory, "translations.json"), "英訳の学習データ").Get("すし").Single().Count);
 
             conversions.Remember("すし", "鮨");
             Thread.Sleep(1500);

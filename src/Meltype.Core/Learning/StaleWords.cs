@@ -33,6 +33,8 @@ internal static class StaleWords
     public static bool IsStale(string reading, string text) =>
         IsVolatile(reading, text) ||
         text.Contains('\uFFFC', StringComparison.Ordinal) ||
+        // 補助辞書に入っていた旧版では普通の変換として覚えた。今は順位だけ学習する候補。
+        (reading, text) is ("じゃくしゃだんせい", "ふにゃオス") or ("ふにゃおす", "弱者男性") ||
         reading is "じこう" or "じこうのあいさつ" && text.Contains("の候", StringComparison.Ordinal) ||
         reading is "くりっぷぼーど" or "ぺーすと" && text != KanaChars.ToKatakana(reading);
 }

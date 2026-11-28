@@ -56,7 +56,7 @@ Meltype のソースコード (このリポジトリ) には、次のものを�
 
 ### 読みの一覧 (dictionaries/readings.txt)
 
-ローマ字の打ち間違いを直すときに、直した読みがよく使う語になるかを調べるのに使います。JMdict のよく使う語 (同じ印) の読みと活用の種類を `tools/make-readings.mjs` で取り出して作りました。著作権・ライセンスは英訳の候補と同じ (EDRDG、CC BY-SA 4.0) で、この派生データも CC BY-SA 4.0 です。
+英語と日本語の区切りで、ローマ字の読みがよく使う語になるかを調べるのに使います。JMdict のよく使う語 (同じ印) の読みと活用の種類を `tools/make-readings.mjs` で取り出して作りました。著作権・ライセンスは英訳の候補と同じ (EDRDG、CC BY-SA 4.0) で、この派生データも CC BY-SA 4.0 です。
 
 ### よく使う語でない語の読みの一覧 (dictionaries/readings-rare.txt)
 

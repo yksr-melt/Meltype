@@ -38,10 +38,10 @@ internal static partial class CompositionText
 
     /// <summary>
     /// 打った英字の一部を読み直すために作る断片に渡すもの。env は読み直す元の入力のもの。
-    /// 断片は設定によらず既定の設定 (自動判定・z の記号・/ のまま) で読み、打ち間違いを直さない。英語 / 日本語の学習は元の入力のもの。
+    /// 断片は設定によらず既定の設定 (自動判定・z の記号・/ のまま) で読む。英語 / 日本語の学習は元の入力のもの。
     /// </summary>
     public static TextEnv FragmentEnv(TextEnv env) =>
-        new(env.Detector, FragmentSettings, null) { Fragment = new FragmentOrigin(LearnedLanguages(env)), Context = () => TextContext.None };
+        new(env.Detector, FragmentSettings) { Fragment = new FragmentOrigin(LearnedLanguages(env)), Context = () => TextContext.None };
 
     private static readonly Config.Settings FragmentSettings = new();
 
@@ -52,7 +52,7 @@ internal static partial class CompositionText
     /// <summary>打ったものを、確定に使う読みにしたもの。表示・変換・確定はこれを読む。打ったものと env が同じなら前の結果を使う。</summary>
     public static TextReading Read(CompositionTextState state, TextEnv env) => CompositionText.Derive(state, env).Read;
 
-    /// <summary>打ったものを 1 要素ずつ読んだだけのもの (打ち間違いの直し・数字の後ろの単位・笑いの w の前)。単位の打った文字の位置が、打ったものの要素の位置と一致する。</summary>
+    /// <summary>打ったものを 1 要素ずつ読んだだけのもの (数字の後ろの単位・笑いの w の前)。単位の打った文字の位置が、打ったものの要素の位置と一致する。</summary>
     internal static TextReading Typed(CompositionTextState state, TextEnv env) => CompositionText.Derive(state, env).Typed;
 
     /// <summary>打った英字の一部 raw を、断片の env (<see cref="FragmentEnv"/>) で読んだもの。</summary>
@@ -160,7 +160,7 @@ internal static partial class CompositionText
 
     /// <summary>
     /// 打ったものの並び (Keys) ごとの読んだ結果。with で表示の形だけを変えた値も、同じ並びの読みと区間分けを使う。
-    /// Replayed は、打ったものを読んで英数字の間の - を決める前。Reads は、表示の形・提案の受け入れごとの、打ち間違いを直した読み。
+    /// Replayed は、打ったものを読んで英数字の間の - を決める前。Reads は、表示の形・提案の受け入れごとの、仕上げた読み (<see cref="Finish"/>)。
     /// Segments は、その並びを読んだ単位の区間分け (<see cref="SegmentsKey"/> ごと)。
     /// </summary>
     private sealed class KeysReading(ReadingKey key, CompositionTextState template, TextReading replayed, TextReading typed)
@@ -170,13 +170,13 @@ internal static partial class CompositionText
         public TextReading Replayed { get; } = replayed;
         public TextReading Typed { get; } = typed;
         public Recent<(DisplayMode Mode, bool SuggestionAccepted), TextReading> Reads { get; } = new(2, EqualityComparer<(DisplayMode, bool)>.Default);
-        // 打ったものを読んだだけの単位・打ち間違いを直す前と後の単位で、区切り方が 3 つ以上になることがある
+        // 打ったものを読んだだけの単位・仕上げた単位・確定・変換に進んだ範囲を含む単位で、区切り方が 3 つ以上になることがある
         public Recent<string, SegmentsReading> Segments { get; } = new(4, StringComparer.Ordinal);
     }
 
     // Befores: 1 要素を足した値 → 足す前の値。読むときに、足す前の値の読みの続きから読む (長い入力で 1 キーごとに全体を読み直さない)。読んだら消す。
 
-    // 1 キーごとに、表示・Space の扱いなどで何度も読む。打ち間違いの直しは区間分けを引いて重いので、同じ打ったものと env なら前の結果を使う
+    // 1 キーごとに、表示・Space の扱いなどで何度も読む。笑いの w の判定などは英単語の辞書を引くので、同じ打ったものと env なら前の結果を使う
     private static Reading Derive(CompositionTextState state, TextEnv env)
     {
         if (state.Caret is not null) return CompositionText.Derive(CompositionText.BeforeCaret(state), env);
@@ -190,7 +190,7 @@ internal static partial class CompositionText
         if (keys.Reads.TryGetValue(mode, out var fixedReading)) read = CompositionText.Bind(fixedReading, state);
         else
         {
-            read = CompositionText.Fixed(typed, state, env, final: false);
+            read = CompositionText.Finished(typed, state, env);
             keys.Reads.Set(mode, read);
         }
         var reading = new Reading(key, typed, read);
@@ -199,15 +199,13 @@ internal static partial class CompositionText
     }
 
     private static ReadingKey ReadingKeyOf(TextEnv env) =>
-        new(env.Detector, env.Settings, env.RomajiTypos, env.Fragment, env.Context(), LearnedMemory(env), LearnedMemory(env)?.Version ?? -1);
+        new(env.Detector, env.Settings, env.Fragment, env.Context(), LearnedMemory(env), LearnedMemory(env)?.Version ?? -1);
 
-    /// <summary>打ったものを読んだだけの typed に、打ち間違いの直しをかけた読み。final なら、入力途中の子音で終わる最後の英字の並びも直す。</summary>
-    private static TextReading Fixed(TextReading typed, CompositionTextState state, TextEnv env, bool final)
+    /// <summary>打ったものを読んだだけの typed に、確定・変換に使う読みの仕上げ (<see cref="Finish"/>) をかけた読み。</summary>
+    private static TextReading Finished(TextReading typed, CompositionTextState state, TextEnv env)
     {
         var read = typed.Clone(state);
-        CompositionText.FixTypos(read, env, typing: !final);
-        // 打ち間違いを直して変わった英字 (desuik の k を直した ですい) の後の - を決め直す
-        CompositionText.JoinHyphens(read, env);
+        CompositionText.Finish(read, env);
         return read;
     }
 
@@ -219,7 +217,7 @@ internal static partial class CompositionText
     {
         if (Settlements.TryGetValue(settled, out var cached) && cached.Key == key && CompositionText.SameInput(cached.Template, state)) return cached.Reading;
         var prefix = state with { Keys = settled.Count == state.Keys.Count ? state.Keys : state.Keys.GetRange(0, settled.Count), Mode = settled.Mode, Settled = settled.Previous };
-        var read = CompositionText.Fixed(CompositionText.KeysReadingOf(prefix, env, key).Typed, prefix, env, final: true);
+        var read = CompositionText.Finished(CompositionText.KeysReadingOf(prefix, env, key).Typed, prefix, env);
         read.SettledUnits = read.Units.Count;
         Settlements.Set(settled, new SettledReadingEntry(key, prefix, read));
         return read;
@@ -317,7 +315,7 @@ internal static partial class CompositionText
 
     public static CompositionTextState Append(CompositionTextState state, char c) => CompositionText.Add(state, new TypedKey.Letter(c));
 
-    /// <summary>読みの英字 (打ち間違いを直した後の英字)。</summary>
+    /// <summary>読みの英字。</summary>
     public static string Raw(TextReading state) => string.Concat(state.Units.Select(u => u.Raw)) + state.Pending;
 
     /// <summary>
@@ -461,7 +459,7 @@ internal static partial class CompositionText
 
     /// <summary>
     /// 確定・変換に進んだ範囲 settled を、その範囲を読んだ単位どおりの打った要素 (<see cref="TypedKey.Kept"/>・<see cref="TypedKey.KeptRaw"/>) にした値。
-    /// 範囲の単位は打った要素と位置が揃わない (打ち間違いを直すと打った文字が変わる) ので、範囲の中を消す前にこの形にする。
+    /// 範囲の単位 (笑いの w・数字の後ろの単位) は、範囲を決めずに読み直すと変わるので、範囲の中を消す前にこの形にする。
     /// rereadLast なら、最後の単位は打った英字のまま入力途中の子音と一緒に読み直す (入力途中の子音を消すと、後ろのキーを見て決めた ww の っ も決め直す)。
     /// </summary>
     private static CompositionTextState Materialized(CompositionTextState state, Settlement settled, TextEnv env, bool rereadLast)
