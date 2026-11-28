@@ -216,7 +216,7 @@ internal static class CompositionCommit
             replacement = ComposedText.Kana(env.Detector.Romaji.ConvertLenient(previous.Raw.ToLowerInvariant(), final: true));
             // ローマ字として読んでもよく使う語の読みにならない語 (issue → いっすえ、api → あぴ) は英語のまま (issue #121, #124)。
             // sushi → すし のように、日本語の語として読めるときだけ直す。
-            if (env.Services.RomajiTypos is { } lexicon && !lexicon.IsWord(replacement.Text)) return null;
+            if (env.Services.Lexicon is { } lexicon && !lexicon.IsWord(replacement.Text)) return null;
         }
         // ユーザーが英字 / かなに直して覚えた語 (F10 で英字にした api) は、覚えたとおりなら書き換えない (issue #124)。
         if (targets.Any(t => CompositionText.LearnedLanguages(env).Get(t.Raw.ToLowerInvariant()) == t.English)) return null;
