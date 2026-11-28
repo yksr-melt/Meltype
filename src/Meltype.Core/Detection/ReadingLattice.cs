@@ -284,7 +284,7 @@ internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
             var domain = unit >= 0 && !kanaInput && englishLevel ? ReadableStemDotSuffixEnd(prepared, learning, units, unit, pending) : -1;
             if (unit < 0 || kanaInput) return new(LexemeRule.None, -1, domain, technical);
             // 上から順に、先に当てはまった決まりを使う
-            if (LeadingDotfileEnd(prepared, learning, units, unit, pending, manual) is >= 0 and var dotfile) return new(LexemeRule.Dotfile, RawEnd(dotfile), domain, technical);
+            if (LeadingDotfileEnd(prepared, learning, units, unit, pending, manual) is >= 0 and var dotfile) return new(LexemeRule.Dotfile, dotfile, domain, technical);
             if (UserNameEnd(prepared, units, unit, pending) is >= 0 and var user) return new(LexemeRule.UserName, RawEnd(user), domain, technical);
             if (!englishLevel) return new(LexemeRule.None, -1, domain, technical);
             if (EscapeEnd(learning, text, p) is >= 0 and var escape) return new(LexemeRule.Escape, escape, domain, technical);
@@ -320,7 +320,7 @@ internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
                 var to = forced;
                 // ドメイン・拡張子の . の後ろ (tetr.io、MeltypeTip.dll)
                 if (to < 0 && unit > 0 && englishLevel && !kanaInput && units[unit - 1].Raw == "." && state.PreviousEnglish &&
-                    DotSuffixEnd(prepared, learning, units, unit, pending) is var suffix && suffix > unit) to = RawEnd(suffix);
+                    DotSuffixEnd(prepared, learning, units, unit, pending) is var suffix && suffix > p) to = suffix;
                 if (to > p)
                 {
                     OfferEdge(node, state, new LatticeEdge(p, to, true, "", false, false), KnownEnglishCost);
@@ -332,8 +332,8 @@ internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
                     foreach (var (edge, cost) in english) OfferEdge(node, state, edge, cost);
                     continue;
                 }
-                if (domain > unit)
-                    OfferEdge(node, state, new LatticeEdge(p, domain == units.Count ? length : prepared.RawOffsets[domain], true, "", false, false),
+                if (domain > p)
+                    OfferEdge(node, state, new LatticeEdge(p, domain, true, "", false, false),
                         KnownEnglishCost + ReadableDomainLetterCost * (text.IndexOf('.', p) - p));
                 // 英文の中の記号 (, . ! ? -) は半角のまま
                 if (unit >= 0 && !kanaInput && IsAsciiSymbol(units[unit]) && state.PreviousEnglish && state.AllEnglish &&
@@ -737,7 +737,7 @@ internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
     private static readonly HashSet<string> FileExtensions =
     [
         "a", "ace", "ada", "ado", "ann", "ape", "ase", "dae", "di", "do", "fifo", "fon", "geo", "go", "ifo", "ii", "ini", "ino", "ipa", "iso", "jade", "ko",
-        "ma", "metadata", "midi", "mime", "mo", "mobi", "o", "oga", "ora", "oso", "otio", "po", "pyo", "ra", "re", "rego", "rei", "resi", "ru", "sami",
+        "ma", "md", "metadata", "midi", "mime", "mo", "mobi", "o", "oga", "ora", "oso", "otio", "po", "pyo", "ra", "re", "rego", "rei", "resi", "ru", "sami",
         "so", "suo", "tese", "ufo", "vue",
     ];
 
@@ -800,11 +800,9 @@ internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
         // 小文字の、日本語の語と同じ綴りの固有名詞 (wakatte) は、区間分けでかなになるので、ここでドメインとしてまとめる (wakatte.tv)
         if (words.IsKnownEnglishWord(learning, stem) && !words.IsLowercaseJapaneseProperNoun(learning, stem)) return -1;
         var suffix = DotSuffixEnd(prepared, learning, units, dot + 1, pending);
-        if (suffix <= dot + 1) return -1;
         // 1.5 のような小数は拡張子ではない (soudesu.1.5 → そうです。1.5)。cpp のような英字の拡張子だけをまとめる。
-        var suffixRaw = prepared.RawRange(dot + 1, Math.Min(suffix, units.Count));
-        if (suffixRaw.Length > 0 && char.IsAsciiDigit(suffixRaw[0])) return -1;
-        return suffix;
+        var suffixStart = prepared.RawOffsets[dot + 1];
+        return suffix > suffixStart && !char.IsAsciiDigit((prepared.Raw + pending)[suffixStart]) ? suffix : -1;
     }
 
     /// <summary>
@@ -814,8 +812,7 @@ internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
     private int LeadingDotfileEnd(Prepared prepared, LanguageLearning learning, IReadOnlyList<CompositionUnit> units, int start, string pending, bool manual)
     {
         if (manual || start != 0 || units.Count == 0 || units[0].Raw != ".") return -1;
-        var end = DotSuffixEnd(prepared, learning, units, 1, pending);
-        return end > 1 ? end : -1;
+        return DotSuffixEnd(prepared, learning, units, 1, pending);
     }
 
     /// <summary>
@@ -827,7 +824,9 @@ internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
     private int DotSuffixEnd(Prepared prepared, LanguageLearning learning, IReadOnlyList<CompositionUnit> units, int start, string pending)
     {
         static bool IsPart(CompositionUnit unit) => unit.Raw.Length > 0 && unit.Raw.All(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '+');
+        // 拡張子と助詞の間はローマ字の単位の途中にも来る (md|wo は dwo で どぉ)。
         var n = units.Count;
+        int RawEnd(int unit) => prepared.RawOffsets[unit] + (unit == n ? pending.Length : 0);
         var end = start;
         while (end < n && IsPart(units[end])) end++;
         // . / - で続く所まで 1 つの名前 (abi.json、go.work.sum、cargo/config.toml、db-journal)
@@ -841,25 +840,26 @@ internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
         var lower = name.ToLowerInvariant();
         static bool Known(string label) => DomainSuffixes.Contains(label) || FileExtensions.Contains(label);
         var lastLabel = lower[(lower.LastIndexOfAny(['.', '/']) + 1)..];
-        if (Known(lower) || Known(lastLabel)) return end;
-        if (lower.Any(c => char.IsAsciiDigit(c) || c is '.' or '/' or '_' or '+')) return end;
-        // 打っている途中も、最後の子音までかなになるときだけ読めるとみなす (Meltype.bas を ばs と表示しない)
+        if (Known(lower) || Known(lastLabel)) return RawEnd(end);
+        if (lower.Any(c => char.IsAsciiDigit(c) || c is '.' or '/' or '_' or '+')) return RawEnd(end);
+        // 打っている途中も、最後の子音までかなになるときだけ読めるとみなす (Meltype.bas を ばs と表示すると、確定で打ち間違いとして ば に直される)
         bool Readable(string text) => words.Romaji.Analyze(text) is { IsValid: true, Partial: "" or "n" };
         var readable = Readable(lower);
         // 短い語 (拡張子の長さ) の後ろが助詞で始まる日本語なら、そこまで。
         //   ドメイン・拡張子の後ろ: 助詞の後ろが読める・英単語でも分ける (tetr.io|de、github.com|ni|push)。全体が読める語では、今までどおりドメインだけ
         //   読めない語の後ろ: 助詞から最後まで読めるとき (dll|wokesu、json|nokakikata)。長い名前の途中 (gitig|nore)・助詞だけ (gc|no、t|ga) では分けない
-        for (var k = start + 1; k < end; k++)
+        var offset = prepared.RawOffsets[start];
+        for (var k = 1; k <= 4 && k < lower.Length; k++)
         {
-            var stem = prepared.RawRange(start, k).ToLowerInvariant();
-            if (stem.Length > 4) break;
-            var rest = (prepared.RawRange(k, end) + (end == n ? pending : "")).ToLowerInvariant();
+            var stem = lower[..k];
+            var rest = lower[k..];
             if (TrailingParticles.FirstOrDefault(p => rest.StartsWith(p, StringComparison.Ordinal)) is not { } particle) continue;
             var afterParticle = rest[particle.Length..];
             // 英単語が続くのは 3 文字以上のときだけ (au|to|mount にしない)
             if ((readable ? DomainSuffixes.Contains(stem) : Known(stem)) &&
-                (afterParticle.Length == 0 || Readable(afterParticle) || stem.Length >= 3 && words.IsKnownEnglishWord(learning, afterParticle))) return k;
-            if (!readable && afterParticle.Length > 0 && Readable(rest) && !Readable(stem)) return k;
+                (afterParticle.Length == 0 || Readable(afterParticle) || stem.Length >= 3 && words.IsKnownEnglishWord(learning, afterParticle))) return offset + k;
+            // 知らない拡張子は、これまでどおりローマ字の単位の境目でだけ区切る。
+            if (!readable && afterParticle.Length > 0 && Readable(rest) && !Readable(stem) && Array.BinarySearch(prepared.RawOffsets, offset + k) >= 0) return offset + k;
         }
         // 読めない語の後ろに、(助詞 +) 3 音以上の日本語の語から始まる読める語が続く (.env|fairu、.zshrc|nosettei)。短い語 (.js|on のおん) では分けない
         for (var k = start + 1; !readable && k < end; k++)
@@ -871,10 +871,10 @@ internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
             var particle = TrailingParticles.FirstOrDefault(p => rest.StartsWith(p, StringComparison.Ordinal)) ?? "";
             var kana = words.Romaji.ConvertLenient(rest[particle.Length..], final: true);
             for (var length = 3; length <= kana.Length; length++)
-                if (JapaneseLexicon.CommonWordCost(kana.AsSpan(0, length)) is not null || CommonReadings.Katakana.Contains(kana.AsSpan(0, length))) return k;
+                if (JapaneseLexicon.CommonWordCost(kana.AsSpan(0, length)) is not null || CommonReadings.Katakana.Contains(kana.AsSpan(0, length))) return RawEnd(k);
         }
         // 最後までローマ字として読める語 (Meltype.desu) は、ふつうに判定する
-        return readable ? -1 : end;
+        return readable ? -1 : RawEnd(end);
     }
 
     /// <summary>

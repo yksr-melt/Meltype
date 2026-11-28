@@ -4900,6 +4900,7 @@ internal static class CompositionTests
             [".gitignore"] = ".gitignore", [".env"] = ".env", [".dll"] = ".dll", [".json"] = ".json", [".go"] = ".go",
             // 拡張子・ドメインの後ろの助詞からは日本語
             ["MeltypeTip.dllwokesu"] = "MeltypeTip.dllをけす", ["setup.exewojikkou"] = "setup.exeをじっこう", ["github.comnipush"] = "github.comにpush",
+            ["CLAUDE.mdwohiraku"] = "CLAUDE.mdをひらく", ["README.mdnoyomikata"] = "README.mdのよみかた",
             ["tetr.iode"] = "tetr.ioで", ["google.comdekensaku"] = "google.comでけんさく",
             // 日本語の語と同じ綴りの固有名詞 (Wakatte) のドメインは、小文字で打っても英字
             ["wakatte.tv"] = "wakatte.tv",
