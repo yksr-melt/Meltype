@@ -172,6 +172,30 @@ internal static class ChemicalCompoundDictionaryTests
     }
 
     [Test]
+    public static void ReportedChemicalExpectations_AppearInLocalCandidates()
+    {
+        var chemicals = new ChemicalCompoundDictionary(null);
+        var cases = new (string Reading, string Candidate)[]
+        {
+            ("えんかなとりうむ", "NaCl (FW=58.44)"),
+            ("べんぜん", "C₆H₆ (MW=78.114)"),
+            ("さくさんかるしうむ", "(CH₃COO)₂Ca (FW=158.166)"),
+            ("さんかどう", "CuO (FW=79.545)"),
+            ("さんかどう", "Cu₂O (FW=143.091)"),
+            ("さんかどう2", "CuO (FW=79.545)"),
+            ("さくさんなとりうむ", "CH₃COONa (FW=82.034)"),
+            ("さくさん", "CH₃COOH"),
+            ("えんかすいぎん", "Hg₂Cl₂ (FW=472.08)"),
+            ("あえんか", "ZnO (FW=81.379)"),
+        };
+        foreach (var (reading, candidate) in cases)
+            Assert.True(chemicals.Lookup(reading, []).Contains(candidate), $"{reading} の候補に {candidate} を出す");
+
+        Assert.True(Checks.IsKanaReading("さんかどう2"), "価数を数字で指定したかな入力を読みとして扱う");
+        Assert.True(!Checks.IsKanaReading("2026") && !Checks.IsKanaReading("n8n"), "数字だけ・英字混じりはかなの読みとして扱わない");
+    }
+
+    [Test]
     public static void ChemicalFormulaCandidates_AppearInTheConversionList()
     {
         var directory = Path.Combine(Path.GetTempPath(), "meltype-chemical-input-" + Guid.NewGuid().ToString("N"));

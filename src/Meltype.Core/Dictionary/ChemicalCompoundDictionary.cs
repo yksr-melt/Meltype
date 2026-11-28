@@ -11,7 +11,7 @@ internal sealed class ChemicalCompoundDictionary
     private readonly AtomicWeights _atomicWeights;
     private readonly ChemicalNameCatalog _catalog;
 
-    public ChemicalCompoundDictionary(string dataDirectory)
+    public ChemicalCompoundDictionary(string? dataDirectory)
     {
         _atomicWeights = new AtomicWeights(dataDirectory);
         _catalog = new ChemicalNameCatalog();

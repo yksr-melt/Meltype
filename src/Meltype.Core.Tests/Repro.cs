@@ -172,6 +172,7 @@ internal static class Checks
     {
         var mozc = Henkan.Engine ?? throw new InvalidOperationException("MELTYPE_MOZC に Mozc の変換ヘルパーの場所を入れてください");
         var candidates = Dictionary.CandidateDictionary.Load(null);
+        var compounds = new Dictionary.ChemicalCompoundDictionary(null);
         var results = new List<object>();
         foreach (var line in File.ReadAllLines(input))
         {
@@ -179,10 +180,10 @@ internal static class Checks
             if (parts.Length != 2) throw new FormatException($"Expected exactly two tab-separated columns in {input}: {line}");
             var (typed, expected) = (parts[0].Trim(), parts[1].Trim());
             if (typed.Length == 0 || expected.Length == 0) continue;
-            if (typed.All(c => c is >= 'ぁ' and <= 'ゖ' or 'ー' or >= 'ァ' and <= 'ヺ'))
+            if (IsKanaReading(typed))
             {
                 var reading = new string(typed.Select(c => c is >= 'ァ' and <= 'ヶ' ? (char)(c - 0x60) : c).ToArray());
-                var list = candidates.Lookup(reading).Concat(mozc.Candidates(reading, long.MaxValue)).Distinct().ToList();
+                var list = candidates.Lookup(reading).Concat(mozc.Candidates(reading, long.MaxValue)).Concat(compounds.Lookup(reading, [])).Distinct().ToList();
                 results.Add(new { typed, expected, kind = "候補", actual = string.Join(" ", list.Take(12)), ok = list.Contains(expected) });
                 Henkan.Reset();
                 continue;
@@ -203,6 +204,13 @@ internal static class Checks
         // MozcConverter は失敗を null や空の候補で返すので、Mozc なしの結果で通っていないことを確かめる
         if (mozc.ConvertText("にほんご", null) is null) throw new InvalidOperationException("Mozc を起動できないか、Mozc が応答しませんでした");
         File.WriteAllText(output, JsonSerializer.Serialize(results, Json));
+    }
+
+    internal static bool IsKanaReading(string typed)
+    {
+        static bool IsKana(char c) => c is >= 'ぁ' and <= 'ゖ' or 'ー' or >= 'ァ' and <= 'ヺ';
+        static bool IsDigit(char c) => c is >= '0' and <= '9' or >= '０' and <= '９';
+        return typed.Any(IsKana) && typed.All(c => IsKana(c) || IsDigit(c));
     }
 
     /// <summary>
@@ -288,6 +296,7 @@ internal static class Henkan
     }
 
     private static readonly Lazy<Dictionary.TranslationDictionary> Translations = new(Dictionary.TranslationDictionary.Load);
+    private static readonly Lazy<Dictionary.ChemicalCompoundDictionary> ChemicalCompounds = new(() => new Dictionary.ChemicalCompoundDictionary(null));
 
     // bot の runner は CPU だけで計算するので、アプリより長く待つ (待ちきれなかった答えを ZenzaiConverter は捨てて、しばらく休む)
     private const int ZenzaiTimeoutMs = 30000;
@@ -341,7 +350,8 @@ internal static class Henkan
         var converter = Mozc.Value is { } engine ? new Engine.HybridConverter(engine, zenzai ? () => Zenzai.Value : null) : null;
         return new(live: true, history: history, converter: converter is null ? null : converter,
             moreCandidates: converter is null ? null : reading => converter.Candidates(reading, long.MaxValue),
-            userDictionary: new Meltype.Dictionary.UserDictionary(null), languages: languages, translations: Translations.Value)
+            userDictionary: new Meltype.Dictionary.UserDictionary(null), languages: languages, translations: Translations.Value,
+            chemicalCompounds: ChemicalCompounds.Value)
         { Private = true };
     }
 
