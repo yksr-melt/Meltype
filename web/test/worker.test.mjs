@@ -211,7 +211,7 @@ describe("Turnstile (#2)", () => {
 
 describe("添付 (#2)", () => {
   async function withFile(name, size) {
-    const response = await report({ form: "idea", fields: { problem: "p", idea: "i" }, files: [{ name, size }] });
+    const response = await report({ form: "idea", fields: { problem: "p", idea: "i", version: "1.4.0" }, files: [{ name, size }] });
     assert.equal(response.status, 201);
     return response.json();
   }
@@ -288,7 +288,7 @@ describe("R2 が無いとき", () => {
   });
 
   it("添付のある報告は断る", async () => {
-    const response = await report({ form: "idea", fields: { problem: "p", idea: "i" }, files: [{ name: "shot.png", size: PNG.length }] });
+    const response = await report({ form: "idea", fields: { problem: "p", idea: "i", version: "1.4.0" }, files: [{ name: "shot.png", size: PNG.length }] });
     assert.equal(response.status, 422);
   });
 
@@ -388,7 +388,7 @@ describe("レートリミット (#3)", () => {
 
 describe("掃除の Cron (#4)", () => {
   it("受付時間が過ぎて届かなかった添付を消し、報告は本文だけ残す", async () => {
-    const response = await report({ form: "idea", fields: { problem: "p", idea: "i" }, files: [{ name: "a.png", size: 12 }] });
+    const response = await report({ form: "idea", fields: { problem: "p", idea: "i", version: "1.4.0" }, files: [{ name: "a.png", size: 12 }] });
     const created = await response.json();
     await env.FILES.put(`reports/${created.id}/0`, PNG);
     const later = Math.floor(Date.now() / 1000) + 2 * 60 * 60;
@@ -402,7 +402,7 @@ describe("掃除の Cron (#4)", () => {
   });
 
   it("古い添付・報告・レートリミットの記録を消す", async () => {
-    const response = await report({ form: "idea", fields: { problem: "p", idea: "i" }, files: [{ name: "a.png", size: PNG.length }] });
+    const response = await report({ form: "idea", fields: { problem: "p", idea: "i", version: "1.4.0" }, files: [{ name: "a.png", size: PNG.length }] });
     const created = await response.json();
     await call(`/api/reports/${created.id}/files/0`, {
       method: "PUT",

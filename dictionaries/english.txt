@@ -198,7 +198,7 @@ wade wipe woke wore anime demo dojo emoji kimono karate tsunami typhoon tycoon
 api apis url urls uri json yaml csv pdf png jpg jpeg gif svg html css xml sql ssh ssl tls dns ip tcp udp http https oem
 cpu gpu ram rom ssd hdd usb hdmi midi wifi bluetooth nfc os ui ux io ai ml llm gpt rag mcp sdk ide cli gui repo repos
 bug bugs issue issues pull push merge commit commits branch branches deploy build release tag tags diff patch
-token tokens prompt prompts model models agent agents tool tools server servers client clients browser
+token tokens prompt prompts model models agent agents tool tools server servers client clients browser app cron ops addon infra wiki
 
 # --- 話し言葉の英語 (歌詞・チャット) ---
 outta gonna wanna gotta kinda sorta lotta dunno gimme lemme ya yeah nope yep hey oh baby tonight

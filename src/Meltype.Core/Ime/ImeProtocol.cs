@@ -226,6 +226,12 @@ public enum ImeTrait
     Unreachable,
     /// <summary>入力先で日本語以外の入力言語 (キーボード) を選んでいる (キーボードフックのフロント)。</summary>
     OtherLanguage,
+    /// <summary>
+    /// 前面のウィンドウに IME の入力コンテキストが結び付いている (キーボードフックのフロントが、既定の IME ウィンドウに聞いた変換モードと開閉から知る)。
+    /// Unity などのゲームは、チャット欄にフォーカスがあるときだけ結び付けるので、ゲームでは「チャット欄が開いている」(ImeSession.IsGameChat)。
+    /// UI Automation に出ないゲームの入力欄を知る、唯一の手がかり。ゲーム以外のアプリは、入力欄でなくても結び付けたままのことが多い。
+    /// </summary>
+    ImeContext,
 }
 
 /// <summary>UI Automation で調べたフォーカスのある要素 (Windows)。</summary>

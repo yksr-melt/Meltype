@@ -97,4 +97,15 @@ internal static class ReportedMisdetectionTests
             // 数字だけ・数字の後ろに英字だけが続くものは Issue の番号 (+ 日本語)
             ("#1234", "#1234"), ("#2392de", "#2392で"), ("#12de", "#12で"));
     }
+
+    [Test]
+    public static void TechnicalWordsMissingFromScowl_AreEnglish()
+    {
+        // SCOWL の一覧に無い技術用語 (app・cron・ops・addon・infra・wiki) は英単語 (issue #2526)
+        Check(("appswo", "appsを"), ("appga", "appが"), ("kyouhaappwotukau", "きょうはappをつかう"), ("cronwo", "cronを"), ("opswo", "opsを"),
+            ("addonswo", "addonsを"), ("infranikansuru", "infraにかんする"), ("sorehawikininotteru", "それはwikiにのってる"),
+            // 逆向き: 綴りの似たかなの語は今までどおり
+            ("appuru", "あっぷる"), ("kappa", "かっぱ"), ("appare", "あっぱれ"), ("appaku", "あっぱく"), ("kuron", "くろん"),
+            ("oppusu", "おっぷす"), ("adon", "あどん"), ("inhura", "いんふら"), ("uiki", "ういき"));
+    }
 }

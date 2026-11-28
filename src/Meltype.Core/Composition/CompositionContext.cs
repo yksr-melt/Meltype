@@ -37,6 +37,14 @@ internal static class CompositionContext
         return LanguageOf(before);
     }
 
+    /// <summary>入力欄の末尾に Meltype が直前に確定したパスがあるか。</summary>
+    internal static bool AfterCommittedPath(CompositionState state, string before)
+    {
+        if (state.Own is not { } own || !before.EndsWith(own.Text, StringComparison.Ordinal)) return false;
+        return ProtectedSpanScanner.Scan(before).Any(span => span.End == before.Length &&
+            span.Kind is ProtectedKind.PosixPath or ProtectedKind.WindowsPath);
+    }
+
     /// <summary>確定する text を記録する。text を入れる前に、キャレットの前を deleteBefore 文字だけ消す。</summary>
     internal static void NoteCommit(CompositionState state, CompositionEnv env, int deleteBefore, ComposedText text)
     {

@@ -484,6 +484,18 @@ internal static class ImeContractTests
     }
 
     [Test]
+    public static void LangKeys_SelectJapaneseOrAlphanumeric()
+    {
+        var front = new Front();
+        front.Type("ka");
+        Assert.True(Consumed(front.Key(VirtualKeys.ImeOn)) && front.Open && front.Document == "", front.Trace);
+        front.Key(VirtualKeys.ImeOff);
+        Assert.True(!front.Open && front.Document == "か", front.Trace);
+        Assert.True(Consumed(front.Key(VirtualKeys.ImeOff)) && !front.Open, front.Trace);
+        Assert.True(Consumed(front.Key(VirtualKeys.ImeOn)) && front.Open, front.Trace);
+    }
+
+    [Test]
     public static void ConvertKeys_SetTheMode()
     {
         var front = new Front();
@@ -529,6 +541,26 @@ internal static class ImeContractTests
         Assert.True(!toggle.Open, "切り替えキーの変換で英数\n" + toggle.Trace);
         toggle.Key(VirtualKeys.Convert);
         Assert.True(toggle.Open, "もう一度押して日本語\n" + toggle.Trace);
+    }
+
+    [Test]
+    public static void NonConvertAfterProtectedInput_SwitchesToAlphanumeric()
+    {
+        foreach (var cycle in new[] { false, true })
+        {
+            var front = new Front();
+            front.Settings.SeparateKeyRoles = false;
+            front.Settings.NonConvertCyclesKana = cycle;
+            const string url = "https://example.com/abc";
+            front.Type("https");
+            front.Key(0xBA, ':');
+            front.Type("//example");
+            front.Key(VirtualKeys.OemPeriod, '.');
+            front.Type("com/abc");
+            front.Key(VirtualKeys.NonConvert);
+            Assert.Equal(url, front.Document, front.Trace);
+            Assert.True(!front.Open, front.Trace);
+        }
     }
 
     [Test]
@@ -597,6 +629,22 @@ internal static class ImeContractTests
         front = new Front { InputMethod = InputMode.Keyboard };
         front.Traits.Add("Game");
         Assert.True(!Active(front.Key('a')), "Meltype キーボードはゲームでは受け持たない (チャットは Windows の IME で打つ)\n" + front.Trace);
+    }
+
+    [Test]
+    public static void KeyboardGame_IsHandledOnlyWhileTheChatIsOpen()
+    {
+        // Meltype キーボードはゲームでは止め、IME の入力コンテキストが結び付いている間 (チャット欄が開いている間) だけ、日本語で受け持つ
+        var front = new Front { InputMethod = InputMode.Keyboard, SendsImeOpen = false };
+        front.Settings.Mode = InputMode.Keyboard;
+        front.Traits.AddRange(["Game", "NonText"]);
+        Assert.True(!Active(front.Event("StateRequested")), "チャット欄が閉じている間は止める\n" + front.Trace);
+        front.Traits.Add("ImeContext");
+        var opened = front.Event("StateRequested");
+        Assert.True(Active(opened) && Japanese(opened), "チャット欄が開いたら日本語で受け持つ\n" + front.Trace);
+        front.Traits.Remove("ImeContext");
+        var closed = front.Event("StateRequested");
+        Assert.True(!Active(closed) && !Japanese(closed), "チャット欄が閉じたら止めて英数に戻す\n" + front.Trace);
     }
 
     [Test]
