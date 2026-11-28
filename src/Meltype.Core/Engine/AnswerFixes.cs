@@ -31,7 +31,7 @@ internal static class AnswerFixes
         var clauses = parts.Select(p =>
         {
             var text = TextChars.NormalizeHalfWidth(p.Text, p.Reading);
-            return new Answer(p.Reading, text, p.Zenzai ? text : null);
+            return new FixedAnswer(p.Reading, text, [text], p.Zenzai ? text : null);
         }).ToList();
         for (var i = 0; i < clauses.Count; i++)
         {
@@ -51,9 +51,9 @@ internal static class AnswerFixes
             // がち (ガチで) を、変換エンジンは 勝ち にしてしまう (勝ちでやばい)。勝ち の読みは かち なので、がち は ガチ にする
             preferred ??= clause.Reading.StartsWith("がち", StringComparison.Ordinal) && clause.Text.StartsWith("勝ち", StringComparison.Ordinal)
                 ? "ガチ" + clause.Text["勝ち".Length..] : null;
-            if (preferred is not null) clause.Prefer(preferred);
+            if (preferred is not null) clauses[i] = Prefer(clause, preferred);
         }
-        IReadOnlyList<FixedAnswer> answers = [.. clauses.Select(c => new FixedAnswer(c.Reading, c.Engine, c.Candidates, c.Zenzai))];
+        IReadOnlyList<FixedAnswer> answers = clauses;
         if (context.TypedLetterOrDigit) answers = KeepTypedSymbols(answers, kana);
         // ワークアラウンド: 英単語 + 付属語 (python|なら、push|した): 変換エンジンは英語の後ろの読みだけを見て、文の頭の語 (奈良・下) にしてしまう。かなのまま。
         // 変換エンジンに文脈 (英単語・これ) を渡しても、名詞の読みを前に付けて変換しても、なら・しか・しよう は直らなかった。
@@ -147,7 +147,7 @@ internal static class AnswerFixes
     /// 文節が「え」だけ (後ろに記号が付いていてもよい) で、文の頭か記号の後ろにあり、後ろが記号か文の終わりか。
     /// こういう「え」は聞き返し・驚き (え、しらん) で、絵 や 得 ではない。
     /// </summary>
-    private static bool IsInterjection(AnswerContext context, List<Answer> clauses, int i)
+    private static bool IsInterjection(AnswerContext context, List<FixedAnswer> clauses, int i)
     {
         var reading = clauses[i].Reading;
         if (reading.Length == 0 || reading[0] != 'え' || !reading.Skip(1).All(SentencePunctuation.Contains) || clauses[i].Text == reading) return false;
@@ -158,22 +158,6 @@ internal static class AnswerFixes
     }
 
     private static bool IsSymbolOnly(string text) => text.Length > 0 && !text.Any(char.IsLetterOrDigit);
-
-    /// <summary>直している途中の文節。Candidates の先頭が今の文字。</summary>
-    private sealed class Answer(string reading, string engine, string? zenzai)
-    {
-        public string Reading { get; } = reading;
-        public string Engine { get; } = engine;
-        public string? Zenzai { get; set; } = zenzai;
-        public List<string> Candidates { get; } = [engine];
-        public string Text => Candidates[0];
-
-        public void Prefer(string text)
-        {
-            Candidates.Remove(text);
-            Candidates.Insert(0, text);
-        }
-    }
 }
 
 /// <summary>直した文節。Candidates の先頭が最初に見せる文字、Engine は変換エンジンの答え、Zenzai は Zenzai の答え (Zenzai の答えでなければ null)。</summary>

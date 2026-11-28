@@ -502,7 +502,6 @@ internal static class CompositionConversion
         return WordJudge.IsSuruForm(reading);
     }
 
-
     private static void Prefer(Clause clause, string text)
     {
         clause.Candidates.Remove(text);
