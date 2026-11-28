@@ -37,13 +37,13 @@ internal static class CurrencyConversionTests
     {
         // 100 ドル = 100 / 1.1127 * 177.18 = 15,923.42… 円。有効数字 2 桁に丸める
         Assert.Equal("約1.6万円（2026/11/11 のレート）|約1.6万円",
-            string.Join("|", CurrencyConversion.Candidates(100, ("USD", "ドル"), null, Rates)));
+            string.Join("|", CurrencyConversion.Candidates(100, ("USD", "ドル"), null, Rates).Select(c => c.Text)));
         // 円はドルとユーロに
         Assert.Equal("約63ドル（2026/11/11 のレート）|約63ドル|約56ユーロ（2026/11/11 のレート）|約56ユーロ",
-            string.Join("|", CurrencyConversion.Candidates(10000, ("JPY", "円"), null, Rates)));
+            string.Join("|", CurrencyConversion.Candidates(10000, ("JPY", "円"), null, Rates).Select(c => c.Text)));
         // 換算先を決めたとき
         Assert.Equal("約56ユーロ（2026/11/11 のレート）|約56ユーロ",
-            string.Join("|", CurrencyConversion.Candidates(10000, ("JPY", "円"), ("EUR", "ユーロ"), Rates)));
+            string.Join("|", CurrencyConversion.Candidates(10000, ("JPY", "円"), ("EUR", "ユーロ"), Rates).Select(c => c.Text)));
         Assert.Equal(0, CurrencyConversion.Candidates(100, ("THB", "バーツ"), null, Rates).Count, "レートの無い通貨は出さない");
     }
 

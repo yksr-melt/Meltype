@@ -31,7 +31,7 @@ internal sealed partial class CurrencyConversion : IUtilityConversion
         if (input.Reading is not { } reading || Parse(reading) is not { } parsed) return null;
         if (ExchangeRates.Bundled is not { } rates) return null;
         var candidates = Candidates(parsed.Amount, parsed.From, parsed.To, rates);
-        return candidates.Count > 0 ? new(candidates, UtilityPlacement.Append) : null;
+        return candidates.Count > 0 ? UtilityCandidates.Rankable($"currency-{parsed.From.Code}", candidates) : null;
     }
 
     /// <summary>金額と通貨の読みなら、金額・換算元・換算先 (決めていなければ null)。読みが合わなければ null。</summary>
@@ -55,17 +55,17 @@ internal sealed partial class CurrencyConversion : IUtilityConversion
         Currencies.FirstOrDefault(c => c.Reading == reading) is { Code: not null } c ? (c.Code, c.Unit) : null;
 
     /// <summary>換算した額の候補 (レートの日付つきと、額だけ)。換算先を決めていなければ、円以外は円に、円はドルとユーロに。</summary>
-    internal static List<string> Candidates(decimal amount, (string Code, string Unit) from, (string Code, string Unit)? to, ExchangeRates.Snapshot rates)
+    internal static List<(string Format, string Text)> Candidates(decimal amount, (string Code, string Unit) from, (string Code, string Unit)? to, ExchangeRates.Snapshot rates)
     {
         var targets = to is { } target ? [target] : from.Code == "JPY" ? new[] { ("USD", "ドル"), ("EUR", "ユーロ") } : [("JPY", "円")];
         var date = rates.Date.ToString("yyyy/MM/dd", CultureInfo.InvariantCulture);
-        var candidates = new List<string>();
+        var candidates = new List<(string Format, string Text)>();
         foreach (var (code, unit) in targets)
         {
             if (rates.Convert(amount, from.Code, code) is not { } value) continue;
             var text = $"約{Format(value)}{unit}";
-            candidates.Add($"{text}（{date} のレート）");
-            candidates.Add(text);
+            candidates.Add(($"{code}-rated", $"{text}（{date} のレート）"));
+            candidates.Add((code, text));
         }
         return candidates;
     }

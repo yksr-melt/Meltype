@@ -55,6 +55,7 @@ internal static class CompositionRefresh
                 fresh.Index = fresh.Candidates.IndexOf(previous.Text);
                 fresh.Changed = true;
                 fresh.Translations.UnionWith(previous.Translations);
+                foreach (var (candidate, key) in previous.UtilityRankingKeys) fresh.UtilityRankingKeys.TryAdd(candidate, key);
                 fresh.NotLearned.UnionWith(previous.NotLearned);
             }
         }
