@@ -51,7 +51,7 @@ internal static class NotationTests
     {
         foreach (var (text, typed, expected) in new[]
                  {
-                     ("＊あ＊", "*a*", "*あ*"), ("＊＊太字＊＊", "**futoji**", "**太字**"), ("＊", "*", "＊"), ("あ＊", "a*", "あ＊"), ("＊＊", "", "＊＊"),
+                     ("＊あ＊", "*a*", "*あ*"), ("＊＊太字＊＊", "**futoji**", "**太字**"), ("＊", "*", "*"), ("＋", "+", "+"), ("あ＊", "a*", "あ＊"), ("＊＊", "", "＊＊"),
                  })
         {
             Assert.Equal(expected, NotationRules.Show(ComposedText.Kana(text), typed).Text, text);

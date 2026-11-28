@@ -4647,19 +4647,39 @@ internal static class CompositionTests
     }
 
     [Test]
-    public static void MarkdownMarker_EnterCommitsAsBefore()
+    public static void MarkdownMarker_EnterCommitsWithoutSpace()
     {
+        // #2224: * + だけの Enter は、検索欄のワイルドカード・演算子として空白なしの半角で確定する。
         foreach (var (typed, committed) in new Dictionary<string, string>
         {
             ["-"] = "ー",
             [">"] = "＞",
-            ["*"] = "＊",
-            ["+"] = "＋",
+            ["*"] = "*",
+            ["+"] = "+",
         })
         {
             var k = new Keyboard();
             k.Type(typed + "\n");
             Assert.Equal(committed, k.Host.Document, $"「{typed}」+ Enter");
+        }
+    }
+
+    [Test]
+    public static void SearchOperatorBeforeEnglish_IsHalfWidth()
+    {
+        // #2224: 検索欄のワイルドカード・演算子 (*excel・+excel) の記号を ＊ ＋ にしない。日本語の前の記号は全角のまま。
+        foreach (var (typed, committed) in new Dictionary<string, string>
+        {
+            ["*excel "] = "*excel ",
+            ["+excel "] = "+excel ",
+            ["*excel\n"] = "*excel",
+            ["*chuui\n"] = "＊ちゅうい",
+            ["+chuui\n"] = "＋ちゅうい",
+        })
+        {
+            var k = new Keyboard();
+            k.Type(typed);
+            Assert.Equal(committed, k.Host.Document, $"「{typed}」");
         }
     }
 
