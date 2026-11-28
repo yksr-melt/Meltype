@@ -56,5 +56,6 @@ body:
         Windows: トレイのアイコンを右クリック →「ログ / 判定理由...」→「コピー」
         Windows の更新の不具合: %LOCALAPPDATA%\Meltype\update\install.log の中身
         Mac: ターミナルで log stream --predicate 'process == "Meltype"' --level debug を実行してから操作
+        「Meltype の設定」が開かない・落ちる: crash.log の中身 (Windows は %LOCALAPPDATA%\Meltype、Mac は ~/Library/Application Support/Meltype、Linux は ~/.local/share/Meltype にあります)
         見られて困る部分は消してください。
       render: text

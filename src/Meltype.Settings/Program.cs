@@ -10,17 +10,24 @@ using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 using Avalonia.Styling;
-using Avalonia.Themes.Fluent;
+using FluentAvalonia.Styling;
+using Meltype.Config;
+using Meltype.Diagnostics;
 
 namespace Meltype.SettingsApp;
 
 internal static class Program
 {
     [STAThread]
-    public static int Main(string[] args) =>
-        AppBuilder.Configure<App>().UsePlatformDetect()
+    public static int Main(string[] args)
+    {
+        // OS の設定 (GNOME の入力ソースなど) から開くと、標準エラー出力はどこにも残らない
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+            CrashLog.Write($"Meltype の設定 {ProjectInfo.WithCommit(ProjectInfo.CoreVersion)}", e.ExceptionObject);
+        return AppBuilder.Configure<App>().UsePlatformDetect()
             .With(new FontManagerOptions { DefaultFamilyName = JapaneseFont() })
             .StartWithClassicDesktopLifetime(args);
+    }
 
     /// <summary>
     /// 画面の既定のフォント。日本語のフォントにする: OS の既定のフォントに漢字が無いと、Avalonia は代わりに中国語の字形のフォントで漢字を描くことがある。
@@ -45,29 +52,26 @@ internal static class Program
     }
 }
 
-/// <summary>OS のライト / ダークに合わせる (FluentTheme の既定)。</summary>
+/// <summary>見た目は WinUI 3 の Fluent 2 (FluentAvalonia)。ライト / ダークとアクセントの色は OS に合わせる。</summary>
 internal sealed class App : Application
 {
     public override void Initialize()
     {
         Name = "Meltype";
-        Styles.Add(new FluentTheme());
-        // 窓の背景の上に、項目ごとのカードを少し明るく浮かせる (Windows 11 の設定と同じ形)。ダークでもカードを背景より明るくするので、色はテーマごとに決める
-        Resources.ThemeDictionaries[ThemeVariant.Light] = new ResourceDictionary
+        // UseSystemFontOnWindows: 既定のフォントを Segoe UI にしない (Segoe UI に漢字が無い。JapaneseFont を参照)
+        // ワークアラウンド: FluentAvalonia 3.1.0 は、PreferSystemTheme・PreferUserAccentColor で Linux の OS の設定を gsettings で読み、gsettings が無いと起動時に例外を投げる (GUI の無い環境など)。
+        // ライト / ダークは Avalonia の既定 (RequestedThemeVariant = Default) で OS に合わせ、アクセントの色は Avalonia が OS から読んだ色を渡す
+        var theme = new FluentAvaloniaTheme { UseSystemFontOnWindows = false };
+        if (PlatformSettings is { } platform)
         {
-            ["PageBackground"] = new SolidColorBrush(Color.Parse("#F3F3F3")),
-            ["CardBackground"] = new SolidColorBrush(Color.Parse("#FFFFFF")),
-            ["CardBorder"] = new SolidColorBrush(Color.Parse("#E5E5E5")),
-        };
-        Resources.ThemeDictionaries[ThemeVariant.Dark] = new ResourceDictionary
-        {
-            ["PageBackground"] = new SolidColorBrush(Color.Parse("#202020")),
-            ["CardBackground"] = new SolidColorBrush(Color.Parse("#2B2B2B")),
-            ["CardBorder"] = new SolidColorBrush(Color.Parse("#1D1D1D")),
-        };
+            theme.CustomAccentColor = platform.GetColorValues().AccentColor1;
+            platform.ColorValuesChanged += (_, colors) => theme.CustomAccentColor = colors.AccentColor1;
+        }
+        Styles.Add(theme);
+        // 窓の背景の上に、項目ごとのカードを少し明るく浮かせる (Windows 11 の設定と同じ形)。色は WinUI 3 のテーマのリソース
         Styles.Add(new Style(x => x.OfType<Window>())
         {
-            Setters = { new Setter(TemplatedControl.BackgroundProperty, new DynamicResourceExtension("PageBackground")) },
+            Setters = { new Setter(TemplatedControl.BackgroundProperty, new DynamicResourceExtension("SolidBackgroundFillColorBaseBrush")) },
         });
         Styles.Add(new Style(x => x.OfType<Border>().Class("card"))
         {
@@ -76,8 +80,8 @@ internal sealed class App : Application
                 new Setter(Border.PaddingProperty, new Thickness(16, 14)),
                 new Setter(Border.CornerRadiusProperty, new CornerRadius(8)),
                 new Setter(Border.BorderThicknessProperty, new Thickness(1)),
-                new Setter(Border.BackgroundProperty, new DynamicResourceExtension("CardBackground")),
-                new Setter(Border.BorderBrushProperty, new DynamicResourceExtension("CardBorder")),
+                new Setter(Border.BackgroundProperty, new DynamicResourceExtension("CardBackgroundFillColorDefaultBrush")),
+                new Setter(Border.BorderBrushProperty, new DynamicResourceExtension("CardStrokeColorDefaultBrush")),
             },
         });
         // ページの中身: 広い窓でも 1 行が長くなりすぎないように、幅に上限を付けて左に寄せる
@@ -97,17 +101,18 @@ internal sealed class App : Application
             {
                 new Setter(Border.PaddingProperty, new Thickness(32, 12)),
                 new Setter(Border.BorderThicknessProperty, new Thickness(0, 1, 0, 0)),
-                new Setter(Border.BackgroundProperty, new DynamicResourceExtension("CardBackground")),
-                new Setter(Border.BorderBrushProperty, new DynamicResourceExtension("CardBorder")),
+                new Setter(Border.BackgroundProperty, new DynamicResourceExtension("CardBackgroundFillColorDefaultBrush")),
+                new Setter(Border.BorderBrushProperty, new DynamicResourceExtension("CardStrokeColorDefaultBrush")),
             },
         });
         Styles.Add(new Style(x => x.OfType<Border>().Class("sidebar").Descendant().OfType<ListBox>())
         {
             Setters = { new Setter(ListBox.BackgroundProperty, Brushes.Transparent) },
         });
+        // 項目の高さを WinUI 3 の NavigationViewItem の 36 にする (ListBoxItem の既定の 40 だと、既定の窓の高さで全ページが入らずスクロールする)
         Styles.Add(new Style(x => x.OfType<Border>().Class("sidebar").Descendant().OfType<ListBoxItem>())
         {
-            Setters = { new Setter(ListBoxItem.PaddingProperty, new Thickness(12, 6)), new Setter(ListBoxItem.CornerRadiusProperty, new CornerRadius(4)) },
+            Setters = { new Setter(Layoutable.MinHeightProperty, 36.0) },
         });
         Styles.Add(new Style(x => x.OfType<TextBlock>().Class("pageHeader"))
         {

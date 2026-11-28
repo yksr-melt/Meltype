@@ -47,17 +47,20 @@ internal static class LineContext
     {
         var lastNewline = text.LastIndexOfAny(['\r', '\n']);
         var line = lastNewline >= 0 ? text[(lastNewline + 1)..] : text;
-        if (lastNewline >= 0 && OpenBlock(text, settings, terminal) is { } block) return block;
-        return Classify(line, settings, terminal);
+        var continuedBlock = false;
+        if (lastNewline >= 0 && OpenBlock(text, settings, terminal, out continuedBlock) is { } block) return block;
+        return Classify(line, settings, terminal, continuedBlock);
     }
 
     /// <summary>
     /// 前の行から始まって、まだ閉じていない複数行の文字列・コメントがあれば、その種類 (無ければ null)。
     /// 1 行のコメント (# //) と 1 行の文字列 ("…" '…') の中の """ /* は数えない。
+    /// continuedBlock は、今の行の開始時に前の行のブロックが続いていたか。今の行で閉じても、行頭の指令にはしない。
     /// </summary>
-    private static LineKind? OpenBlock(string text, Settings settings, bool terminal)
+    private static LineKind? OpenBlock(string text, Settings settings, bool terminal, out bool continuedBlock)
     {
         string? close = null; // 閉じる記号 (""" ''' */ -->)
+        continuedBlock = false;
         var kind = LineKind.Code;
         var lineStart = true;
         var startedBeforeLastLine = false;
@@ -68,6 +71,8 @@ internal static class LineContext
             if (c is '\r' or '\n')
             {
                 lineStart = true;
+                // コメント本文にある /* を、新しくこの行で開いたコメントとして指令の行頭に数えない。
+                continuedBlock = close is not null;
                 continue;
             }
             if (close is not null)
@@ -100,8 +105,11 @@ internal static class LineContext
             }
             // 1 行のコメント: 行の終わりまで飛ばす。
             // ターミナルの引数の // (//src/work/* など) は行コメントではないので飛ばさない。引数の中の /* は語の先頭にないので、IsBlockComment がコメントにしない
+            // 前の行の # は、指令も含めてエディターの規則で飛ばす。実行済みの echo $# /* 説明 の /* を次のプロンプトへ持ち越さないため。
+            // 指令もターミナルの語頭の規則にすると、echo `cmd #region ` /* 説明 の引用符の中の #region が後ろの /* まで飛ばしてしまう。
             if (settings.CodeCommentSlash && IsSlashComment(text, i, terminal) ||
-                settings.CodeCommentHash && IsHashComment(text, i, terminal: false) || settings.CodeCommentDash && IsDashComment(text, i, terminal: false) ||
+                settings.CodeCommentHash && (IsHashDirectiveMessage(text, i, settings, terminal: false, continuedBlock) || IsHashComment(text, i, terminal: false)) ||
+                settings.CodeCommentDash && IsDashComment(text, i, terminal: false) ||
                 settings.CodeCommentRem && atStart && StartsWithIgnoreCase(text, i, "rem "))
             {
                 while (i + 1 < text.Length && text[i + 1] is not ('\r' or '\n')) i++;
@@ -121,7 +129,7 @@ internal static class LineContext
         return close is not null && startedBeforeLastLine ? kind : null;
     }
 
-    public static LineKind Classify(string line, Settings settings, bool terminal = false)
+    private static LineKind Classify(string line, Settings settings, bool terminal, bool continuedBlock)
     {
         if (IsChatPrompt(line)) return LineKind.Prompt;
         char? quote = null;
@@ -165,7 +173,7 @@ internal static class LineContext
                 i = close + 2;
                 continue;
             }
-            if (settings.CodeCommentHash && IsHashComment(line, i, terminal)) return LineKind.Comment;
+            if (settings.CodeCommentHash && (IsHashDirectiveMessage(line, i, settings, terminal, continuedBlock) || IsHashComment(line, i, terminal))) return LineKind.Comment;
             if (settings.CodeCommentDash && IsDashComment(line, i, terminal)) return LineKind.Comment;
             // 複数行コメントの途中の行 ( * …)
             if (settings.CodeCommentBlock && atStart && c == '*' && (i + 1 == line.Length || line[i + 1] == ' ')) return LineKind.Comment;
@@ -194,12 +202,60 @@ internal static class LineContext
     private static bool IsBlockComment(string text, int index, bool terminal) =>
         StartsWith(text, index, "/*") && (!terminal || IsTerminalComment(text, index, 2));
 
+    // 本文に見出し・診断文を書く指令。#pragma region・#pragma endregion は MSVC の C/C++。
+    private static readonly string[] HashDirectiveMessages = ["region ", "endregion ", "error ", "warning ", "pragma region ", "pragma endregion "];
+
+    // 指令の見出し・診断文は日本語でも書く。今の行と複数行の走査で同じ判定を使い、本文の記号を次の行へ持ち越さない。
+    private static bool IsHashDirectiveMessage(string text, int index, Settings settings, bool terminal, bool continuedBlock)
+    {
+        if (text[index] != '#' || continuedBlock) return false;
+        var body = text.AsSpan(index + 1);
+        // #region_extra・#Region など別の名前を除くため、直後の半角空白まで、大文字小文字を区別して照合する。
+        foreach (var name in HashDirectiveMessages)
+            if (body.StartsWith(name, StringComparison.Ordinal)) return IsHashDirectiveStart(text, index, settings, terminal);
+        return false;
+    }
+
     // #1623: # の直後に日本語を確定してもコメントのままにする。## (区切り) もコメント。
-    // # の直後が ASCII の文字なら、#include・#region・r#type のような指令や名前なのでコードのまま。
+    // 直後が ASCII なら指令や名前としてコードのまま。ターミナルでは語の途中の # と裸の # もコード。
     private static bool IsHashComment(string text, int index, bool terminal) =>
         text[index] == '#' && (terminal
             ? IsWordStart(text, index) && index + 1 < text.Length && (text[index + 1] == '#' || StartsCommentBody(text[index + 1]))
             : index + 1 == text.Length || text[index + 1] == '#' || StartsCommentBody(text[index + 1]));
+
+    // ターミナルには行頭にプロンプトがあるため、通常の # コメントと同じ語頭を指令の開始位置とする。
+    // エディターの行頭には空白と、同じ行で閉じた /* … */ だけを許す。
+    // 前の行から続くコメントを閉じた */ は、この行に開始記号がないので行頭には含めない。
+    private static bool IsHashDirectiveStart(string text, int index, Settings settings, bool terminal)
+    {
+        if (terminal) return IsWordStart(text, index);
+        var start = text.AsSpan(0, index).LastIndexOfAny('\r', '\n') + 1;
+        while (start < index)
+        {
+            if (char.IsWhiteSpace(text[start]))
+            {
+                start++;
+                continue;
+            }
+            if (!settings.CodeCommentBlock || !IsBlockComment(text, start, terminal: false)) return false;
+            var close = text.IndexOf("*/", start + 2, StringComparison.Ordinal);
+            if (close < 0 || close + 2 > index) return false;
+            start = close + 2;
+        }
+        return true;
+    }
+
+    /// <summary>エディターの行頭の # の直後の !・[ か。元のキーとして渡し、シバンや属性を半角で打てるようにする。</summary>
+    public static bool ContinuesHashDirectiveMarker(string before, char c, Settings settings)
+    {
+        if (c is not ('!' or '[') || before.Length == 0 || before[^1] != '#') return false;
+        if (before.LastIndexOfAny(['\r', '\n']) >= 0)
+        {
+            OpenBlock(before, settings, terminal: false, out var continuedBlock);
+            if (continuedBlock) return false;
+        }
+        return IsHashDirectiveStart(before, before.Length - 1, settings, terminal: false);
+    }
 
     // #1623: -- コメント (SQL・Lua・Haskell) は、直後に日本語・全角の本文を確定してもコメントのままにする。
     // 直前の境界は x-- の減算、直後の ASCII は --count のようなオプションと区別するために残す。
