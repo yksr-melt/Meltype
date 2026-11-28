@@ -87,6 +87,14 @@ const dictionaries = {
   'japanese.txt': {
     format: words(w => /^[a-z]+$/.test(w) ? null : `「${w}」が小文字のローマ字でない`),
   },
+  'chemical-elements.txt': {
+    format: tabbed(3, 3, ([reading, symbol, weight]) => [
+      hiragana.test(reading) ? null : `読み「${reading}」がひらがなでない`,
+      /^[A-Z][a-z]?$/.test(symbol) ? null : `「${symbol}」が元素記号でない`,
+      /^(?:-|[0-9]+(?:\.[0-9]+)?)$/.test(weight) ? null : `「${weight}」が原子量の書式でない`,
+    ]),
+    keysOf: line => { const fields = line.split('\t'); return [[fields[0], line], [fields[1], line]]; },
+  },
   // 読み 候補 : 手がかり …。Core (ConversionPreferences) は最初の : で分け、前後を空白・タブ・全角空白で区切る (: の前後の空白は問わない)
   'contexts.txt': {
     format: line => {

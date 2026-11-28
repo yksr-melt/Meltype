@@ -109,6 +109,7 @@ internal static class UtilityConversions
         new ClockConversion(),
         new SeasonalGreetingConversion(),
         new TraditionalUnitConversion(),
+        new ElementConversion(),
         new CurrencyConversion(),
         new ClipboardConversion(),
         new UuidConversion(),
