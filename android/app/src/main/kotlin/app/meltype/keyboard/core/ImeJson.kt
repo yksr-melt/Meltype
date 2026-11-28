@@ -59,9 +59,9 @@ internal object ImeJson {
     const val VK_LEFT = 0x25
     const val VK_RIGHT = 0x27
 
-    /** 文字の無いキー (Back 0x08・Enter 0x0D・→ 0x27 など)。vk は Windows の仮想キーコード。 */
-    fun virtualKey(vk: Int, field: ImeFieldFacts): String =
-        event("KeyPressed", field) { put("key", JSONObject().put("vk", vk)) }
+    /** 文字の無いキー (Back 0x08・Enter 0x0D・→ 0x27 など)。vk は Windows の仮想キーコード。[shift] は Shift を押したまま。 */
+    fun virtualKey(vk: Int, field: ImeFieldFacts, shift: Boolean = false): String =
+        event("KeyPressed", field) { put("key", JSONObject().put("vk", vk).apply { if (shift) put("shift", true) }) }
 
     /** 未確定の内容を確定させる。確定する文字は応答で返る。 */
     fun commitRequested(field: ImeFieldFacts?, focusLeft: Boolean = false): String =
@@ -91,9 +91,12 @@ internal object ImeJson {
     /** 裏で動いていた変換が終わった。Core は結果で変換中の表示を作り直す。 */
     fun conversionFinished(field: ImeFieldFacts?): String = event("ConversionFinished", field) {}
 
-    /** 前の応答の一覧の [index] 番目をタップした。 */
+    /** 前の応答の一覧の [index] 番目をタップし、その候補での確定を依頼する。 */
     fun candidateClicked(index: Int, field: ImeFieldFacts?): String =
-        event("CandidateClicked", field) { put("index", index) }
+        event("CandidateClicked", field) {
+            put("index", index)
+            put("commitThroughClause", true)
+        }
 
     private fun caret(focusEntered: Boolean = false, focusLeft: Boolean = false): JSONObject =
         JSONObject().put("moved", true).put("passedKey", 0).apply {

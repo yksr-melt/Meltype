@@ -151,7 +151,9 @@ internal static class ImeSession
             CommitRequested = _ => CommitPending(state, env),
             CommittedByApp = _ => CommittedOutside(state, env),
             // 番号は前の応答の一覧 (変換の候補か予測変換の候補か) で読む
-            CandidateClicked = clicked => state.ListedPredictions ? SelectPrediction(state, env, clicked.Index) : SelectCandidate(state, env, clicked.Index),
+            CandidateClicked = clicked => clicked.CommitThroughClause && !active ? Unchanged(state, env)
+                : state.ListedPredictions ? SelectPrediction(state, env, clicked.Index)
+                : SelectCandidate(state, env, clicked.Index, clicked.CommitThroughClause),
             CandidateHighlighted = highlighted => state.ListedPredictions ? Unchanged(state, env) : SelectCandidate(state, env, highlighted.Index),
             ConversionFinished = _ => active && RefreshConversion(state, env) is { } refreshed ? refreshed : Unchanged(state, env),
             CaretMoved = _ => Unchanged(state, env),
@@ -891,7 +893,8 @@ internal static class ImeSession
     public static SessionResult? RefreshConversion(ImeSessionState state, ImeEnv env) => CompositionController.RefreshConversion(state.Composition, Env(state, env));
 
     /// <summary>候補ウィンドウで候補をクリックしたとき。</summary>
-    public static SessionResult SelectCandidate(ImeSessionState state, ImeEnv env, int index) => CompositionController.SelectCandidate(state.Composition, Env(state, env), index);
+    public static SessionResult SelectCandidate(ImeSessionState state, ImeEnv env, int index, bool commitThroughClause = false) =>
+        CompositionController.SelectCandidate(state.Composition, Env(state, env), index, commitThroughClause);
 
     /// <summary>候補の一覧で予測変換の候補をクリックしたとき。その候補を確定する。</summary>
     public static SessionResult SelectPrediction(ImeSessionState state, ImeEnv env, int index) => CompositionController.CommitPredictionAt(state.Composition, Env(state, env), index);

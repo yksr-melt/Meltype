@@ -24,6 +24,7 @@ internal static class ImeEventJsonTests
         ("{}", new ImeEvent.CommitRequested()),
         ("""{"caret":{"moved":true,"passedKey":0}}""", new ImeEvent.CommittedByApp(Clicked)),
         ("""{"index":0}""", new ImeEvent.CandidateClicked(0)),
+        ("""{"index":1,"commitThroughClause":true}""", new ImeEvent.CandidateClicked(1) { CommitThroughClause = true }),
         ("""{"index":2}""", new ImeEvent.CandidateHighlighted(2)),
         ("{}", new ImeEvent.ConversionFinished()),
         ("""{"caret":{"moved":true,"passedKey":0}}""", new ImeEvent.CaretMoved(Clicked)),

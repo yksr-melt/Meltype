@@ -581,8 +581,7 @@ internal static class CompositionKeys
             if (vk is VirtualKeys.Left or VirtualKeys.Right) shift = !shift;
             if (vk == VirtualKeys.Down)
             {
-                if (conversion.Selected < conversion.Clauses.Count - 1) CommitUpToSelectedClause(state, scene, env);
-                else CompositionCommit.Commit(state, scene, env);
+                CompositionCommit.ThroughSelectedClause(state, scene, env);
                 return true;
             }
         }
@@ -621,8 +620,8 @@ internal static class CompositionKeys
                 CompositionConversion.SplitWholeSentence(conversion);
                 conversion.Selected = Math.Max(conversion.Selected - 1, 0);
                 return true;
-            case VirtualKeys.Return when shift && env.Settings.PartialCommit && conversion.Selected < conversion.Clauses.Count - 1:
-                CommitUpToSelectedClause(state, scene, env);
+            case VirtualKeys.Return when shift && env.Settings.PartialCommit:
+                CompositionCommit.ThroughSelectedClause(state, scene, env);
                 return true;
             case VirtualKeys.Return:
                 CompositionCommit.Commit(state, scene, env);
@@ -758,33 +757,6 @@ internal static class CompositionKeys
         clause.Index = index;
         // 候補から選んだのと同じく、確定したら学習する
         clause.Changed = true;
-    }
-
-    /// <summary>
-    /// 設定「Shift + Enter で選んだ文節までを確定」: 選んでいる文節までを確定し、残りの文節は読み (英語の文節は打った英字) を
-    /// 未確定の入力として残す (残りは選び直した候補を忘れ、変換前に戻る)。issue #493
-    /// </summary>
-    private static void CommitUpToSelectedClause(CompositionState state, CompositionScene.Converting scene, CompositionEnv env)
-    {
-        var conversion = scene.Conversion;
-        var all = conversion.Clauses;
-        var done = all.Take(conversion.Selected + 1).ToList();
-        var rest = all.Skip(conversion.Selected + 1).ToList();
-        conversion.Clauses = done;
-        CompositionCommit.LearnClauses(state, scene.Input, done, env);
-        CompositionCommit.CommitText(state, env, CompositionPresentation.Composed(done), done.All(c => c.IsEnglish), "", chosen: true);
-        var input = CompositionLifecycle.Begin(state, env, scene.Input.Private, scene.Input.Reconversion);
-        foreach (var clause in rest)
-        {
-            if (clause.IsEnglish)
-            {
-                input.Text = (clause.Raw ?? clause.Reading).Aggregate(input.Text, CompositionText.Append);
-            }
-            else
-            {
-                input.Text = CompositionText.AppendReading(input.Text, clause.Reading);
-            }
-        }
     }
 
     /// <summary>無変換でのかなの循環の次の表示。ひらがな・全角カタカナ・半角カタカナで見えているときは輪の次へ進む。自動判定中は、表示中の文字列にひらがな (長音を含む) が含まれていれば全角カタカナにし、含まれていなければひらがなにする。</summary>

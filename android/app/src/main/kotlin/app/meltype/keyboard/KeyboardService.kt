@@ -83,7 +83,10 @@ class KeyboardService : InputMethodService(), KeyListener {
     private val bridge = EditorBridge { currentInputConnection }
     /** Where the Core's edits leave the caret; any other move is reported to the Core (CaretMoved). */
     private val caretWatch = CaretWatch()
-    private val coreInput = CoreInputAdapter(caretWatch) { currentInputConnection }
+    // 変換中に選んでいる文節には、キーボードの強調の色を薄く敷く (区切りを伸び縮みさせると、どこまでかが見える)。
+    private val coreInput = CoreInputAdapter(caretWatch, { currentInputConnection }) {
+        (Palette.of(this).accent and 0x00FFFFFF) or 0x59000000
+    }
     private var core: MeltypeCoreHost? = null
     private var nativeCoreUnavailable = false
 
@@ -160,9 +163,9 @@ class KeyboardService : InputMethodService(), KeyListener {
     }
 
     /** A key without a character (Back 0x08, Enter 0x0D, ← 0x25, → 0x27). Returns whether the Core consumed it. */
-    private fun coreVirtualKey(vk: Int): Boolean {
+    private fun coreVirtualKey(vk: Int, shift: Boolean = false): Boolean {
         val instance = coreHost() ?: return false
-        return coreSend(instance, ImeJson.virtualKey(vk, fieldFacts()))
+        return coreSend(instance, ImeJson.virtualKey(vk, fieldFacts(), shift))
     }
 
     /** An event that changes the language mode (あa, the language menu). */
@@ -395,7 +398,6 @@ class KeyboardService : InputMethodService(), KeyListener {
         val bar = CandidateBarView(this).also { it.onPick = { index ->
             val instance = core
             val choice = coreInput.choices.getOrNull(index)
-            // The Core decides what the tap does (a prediction commits; a conversion candidate is chosen for its clause).
             if (instance != null && choice != null) coreSend(instance, ImeJson.candidateClicked(choice.nativeIndex, fieldFacts()))
         } }
         val keys = KeyboardView(this).also { it.listener = this }
@@ -727,7 +729,10 @@ class KeyboardService : InputMethodService(), KeyListener {
         languagePopup.dismiss()
     }
 
-    /** 変換中は、空白キーの長押しで動かすと、選ぶ文節を動かす（Core に ← → を送る）。 */
+    /**
+     * 変換中は、空白キーの長押しで動かすと、選んでいる文節の区切りを伸び縮みさせる（Core に Shift + ← → を送る）。
+     * 変換していなければ、動かし始めたところで変換を始め、先頭の文節を選ぶ。文節を先頭から決めて、候補のタップでその文節までを確定していく。
+     */
     override fun onCursorModeStart(): Boolean {
         cursorPosition = null
         return true
@@ -735,7 +740,11 @@ class KeyboardService : InputMethodService(), KeyListener {
 
     override fun onCursorMove(steps: Int) {
         if (coreInput.composing) {
-            repeat(abs(steps)) { coreVirtualKey(if (steps < 0) ImeJson.VK_LEFT else ImeJson.VK_RIGHT) }
+            // 変換していなければ、まず → で変換を始めて先頭の文節を選ぶ (Core の EnterClauseSelection。スペースを押さなくてよい)。
+            // 英字だけの入力などで変換に入らなければ、これまでどおり読みの中を動く。
+            if (coreInput.view?.converting != true) coreVirtualKey(ImeJson.VK_RIGHT)
+            val resize = coreInput.view?.converting == true
+            repeat(abs(steps)) { coreVirtualKey(if (steps < 0) ImeJson.VK_LEFT else ImeJson.VK_RIGHT, shift = resize) }
             return
         }
         // 最初の1回は、入力欄が知らせてきた位置から。範囲を選んであれば、動かす向きの端から。

@@ -1016,6 +1016,52 @@ internal static class ImeContractTests
     }
 
     [Test]
+    public static void AndroidClauseSwipe_ChoosesFirstClauseAndMovesItsBoundaryBeforeTap()
+    {
+        var front = new Front { SendsImeOpen = false };
+        front.Settings.PartialCommit = false;
+        front.Type("tanniwotoru");
+
+        var started = View(front.Key(VirtualKeys.Right));
+        Assert.True(started.GetProperty("converting").GetBoolean(), front.Trace);
+        Assert.Equal(0, started.GetProperty("selectedClause").GetInt32(), front.Trace);
+        Assert.Equal("単位を", started.GetProperty("clauses")[0].GetString(), front.Trace);
+
+        var shortened = View(front.Key(VirtualKeys.Left, shift: true));
+        Assert.Equal("単位", shortened.GetProperty("clauses")[0].GetString(), front.Trace);
+        Assert.Equal("をとる", shortened.GetProperty("clauses")[1].GetString(), front.Trace);
+
+        var extended = front.Key(VirtualKeys.Right, shift: true);
+        Assert.Equal("たんいを", View(extended).GetProperty("clauses")[0].GetString(), front.Trace);
+        Assert.Equal("とる", View(extended).GetProperty("clauses")[1].GetString(), front.Trace);
+        var index = Candidates(extended).IndexOf("タンイヲ");
+        Assert.True(index >= 0, front.Trace);
+
+        var tapped = front.Event("CandidateClicked", extra: $",\"index\":{index},\"commitThroughClause\":true");
+        Assert.Equal("タンイヲ", front.Document, front.Trace);
+        Assert.Equal("とる", View(tapped).GetProperty("text").GetString(), front.Trace);
+        Assert.True(!View(tapped).GetProperty("converting").GetBoolean(), front.Trace);
+    }
+
+    [Test]
+    public static void AndroidCandidateTap_OnTheLastClauseCommitsEverything()
+    {
+        var front = new Front { SendsImeOpen = false };
+        front.Settings.PartialCommit = false;
+        front.Type("nihongowokaku ");
+        var last = front.Key(VirtualKeys.Right);
+        Assert.Equal(1, View(last).GetProperty("selectedClause").GetInt32(), front.Trace);
+        var index = Candidates(last).IndexOf("かく");
+        Assert.True(index >= 0, front.Trace);
+
+        var invalid = front.Event("CandidateClicked", extra: ",\"index\":-1,\"commitThroughClause\":true");
+        Assert.Equal(0, Commits(invalid).GetArrayLength(), front.Trace);
+        var tapped = front.Event("CandidateClicked", extra: $",\"index\":{index},\"commitThroughClause\":true");
+        Assert.Equal("日本語をかく", front.Document, front.Trace);
+        Assert.Equal(JsonValueKind.Null, View(tapped).ValueKind, front.Trace);
+    }
+
+    [Test]
     public static void Private_StillSuppressesLearningAfterPartialCommit()
     {
         var phrases = new PhraseHistory(null);
