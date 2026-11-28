@@ -15,6 +15,9 @@ internal static class KanaChars
 
     public static bool IsKatakana(char c) => c is >= 'ァ' and <= 'ヶ';
 
+    /// <summary>ひらがな・カタカナ (ヷ〜ヺ を含む)・長音符 (ー)。</summary>
+    public static bool IsKana(char c) => c is (>= 'ぁ' and <= 'ゖ') or (>= 'ァ' and <= 'ヺ') or 'ー';
+
     /// <summary>小書きの母音・拗音 (ぁ ゃ ゎ ァ ャ ヮ …)。直前のかなと合わせて 1 拍になる。っ は 1 拍なので含めない。</summary>
     public static bool IsSmallKana(char c) => c is 'ぁ' or 'ぃ' or 'ぅ' or 'ぇ' or 'ぉ' or 'ゃ' or 'ゅ' or 'ょ' or 'ゎ'
         or 'ァ' or 'ィ' or 'ゥ' or 'ェ' or 'ォ' or 'ャ' or 'ュ' or 'ョ' or 'ヮ';

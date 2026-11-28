@@ -258,12 +258,7 @@ internal static class CompositionKeys
                 // 英語と判定した語で終わっているなら、変換ではなく確定して空白を入れる
                 // (日本語の部分は、ライブ変換が ON なら漢字にして、OFF なら見えているかなのまま確定)。
                 // 数字だけ (1、12) は、前が英文なら確定して空白 (I have 2 cats)。それ以外は変換して ① 一 Ⅰ などの候補を出す。
-                // 打った英字全体を読みとして登録した語 (ユーザー辞書の zh → ←、略入力の ast → 明日) か、
-                // 関数形式のユーティリティ変換 (hex(dadada)・uuid() など) なら、英語と判定しても変換する
-                if (CompositionConversion.HasRegisteredReading(input.Text, env) ||
-                    (!input.Text.KanaInput && input.Text.Mode == DisplayMode.Auto &&
-                     CompositionText.Raw(CompositionText.Read(input.Text, env)) is var rawForUtility &&
-                     (Utility.ColorConversion.Matches(rawForUtility) || Utility.UuidConversion.Matches(rawForUtility))))
+                if (StartsConversionDespiteEnglish(input.Text, env))
                 {
                     CompositionConversion.StartConversion(state, input, env, ConversionTrigger.Space);
                 }
@@ -561,8 +556,16 @@ internal static class CompositionKeys
         // 保護区間が語の途中にあり、その後にかなが続く入力も Tab 変換しない。
         // IsProtectedInput は末尾が保護区間かだけを見るため、ここでは全区間を調べる。
         if (text.Mode == DisplayMode.Auto && CompositionText.ProtectedSpans(CompositionText.Read(text, env)).Count > 0) return false;
-        return CompositionConversion.HasRegisteredReading(text, env) || !SpaceCommitsAsEnglish(text, env);
+        return StartsConversionDespiteEnglish(text, env) || !SpaceCommitsAsEnglish(text, env);
     }
+
+    /// <summary>
+    /// 英語と判定しても Space・Tab で変換を始める入力: 打った英字全体を読みとして登録した語 (ユーザー辞書の zh → ←、略入力の ast → 明日) と、
+    /// 関数記法のユーティリティ変換 (hex(dadada)・uuid() など)。
+    /// </summary>
+    private static bool StartsConversionDespiteEnglish(CompositionTextState text, CompositionEnv env) =>
+        CompositionConversion.HasRegisteredReading(text, env) ||
+        (!text.KanaInput && text.Mode == DisplayMode.Auto && Utility.UtilityConversions.Parse(CompositionText.Raw(CompositionText.Read(text, env))) is not null);
 
     /// <summary>Esc でひらがなに戻した読みを直している (← → でカーソルを動かせる)。</summary>
     private static bool EditsReading(CompositionScene.WithInput scene) =>
