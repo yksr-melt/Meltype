@@ -232,8 +232,7 @@ private:
     std::string instance_;
     ServerState state_;
     bool smoothCaret_ = false;     // Meltype.exe 側でスムーズカーソルが有効か
-    RECT pendingCaret_ = {};       // 編集セッション終了後に送るキャレット矩形
-    bool caretPostPending_ = false;
+    std::optional<RECT> pendingCaret_;  // 編集セッション終了後に送るキャレット矩形
     bool open_ = true;             // TSF の IME の開閉 (OS の事実)
     int pendingOpen_ = -1;         // 応答の開閉を、編集セッションを終えてから入れる (-1 = 入れない)
     bool settingOpen_ = false;     // 自分で開閉を変えている (OnChange で Meltype.exe に伝え直さない)

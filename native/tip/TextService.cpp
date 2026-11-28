@@ -952,11 +952,9 @@ void TextService::SendCaretPosition(const RECT& caret) {
 void TextService::PostCaretPosition(const RECT& caret) {
     if (deactivated_ || !smoothCaret_ || !state_.Active() || window_ == nullptr) return;
     if (caret.bottom <= caret.top || caret.bottom - caret.top >= 200 || (caret.left == 0 && caret.top == 0)) return;
+    const bool alreadyPending = pendingCaret_.has_value();
     pendingCaret_ = caret;
-    if (!caretPostPending_) {
-        caretPostPending_ = true;
-        PostMessageW(window_, kSendCaret, 0, 0);
-    }
+    if (!alreadyPending) PostMessageW(window_, kSendCaret, 0, 0);
 }
 
 void TextService::QueryAndSendCaretAsync() {
@@ -1064,8 +1062,9 @@ LRESULT CALLBACK TextService::MessageWindowProc(HWND window, UINT message, WPARA
         return 0;
     }
     if (message == kSendCaret && self) {
-        self->caretPostPending_ = false;
-        self->SendCaretPosition(self->pendingCaret_);
+        const auto caret = self->pendingCaret_;
+        self->pendingCaret_.reset();
+        if (caret) self->SendCaretPosition(*caret);
         return 0;
     }
     if (message == WM_TIMER && wParam == kDeferredCaretTimer && self) {
@@ -1086,8 +1085,7 @@ void TextService::CreateMessageWindow() {
 }
 
 void TextService::DestroyMessageWindow() {
-    caretPostPending_ = false;
-    pendingCaret_ = {};
+    pendingCaret_.reset();
     if (window_) {
         DestroyWindow(window_);
         window_ = nullptr;
