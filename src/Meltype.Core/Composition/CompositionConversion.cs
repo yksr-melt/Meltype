@@ -199,6 +199,11 @@ internal static class CompositionConversion
             }
             if (segment.Kana.Length == 0) continue;
             var japanese = ConvertJapaneseSegment(input, env, segment.Kana, s > 0 && segments[s - 1].IsEnglish, SegmentBefore(env, string.Concat(clauses.Select(c => c.Text))), zenzai);
+            // 変換エンジンが物質名の途中で文節を分けた場合、物質名全体の読みが辞書にあれば一文節に戻して式候補を出す。
+            if (japanese.Count > 1 && string.Concat(japanese.Select(c => c.Reading)) == segment.Kana &&
+                env.Services.ChemicalCompounds is { } chemicals &&
+                chemicals.Lookup(segment.Kana, japanese.SelectMany(c => c.Candidates)).Count > 0)
+                japanese = [WholeClause(input, env, japanese, segment.Kana)];
             // 候補の最後に、打ったままの英字 (あぴ → api) と全角の英字も出す (Space を連打して英字に戻せる)。
             var offset = 0;
             foreach (var clause in japanese)

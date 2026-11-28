@@ -4,6 +4,7 @@
 using Meltype.Composition;
 using Meltype.Config;
 using Meltype.Dictionary;
+using Meltype.Engine;
 
 namespace Meltype.Tests;
 
@@ -176,7 +177,7 @@ internal static class ChemicalCompoundDictionaryTests
         Directory.CreateDirectory(directory);
         try
         {
-            TestSession NewSession() => new(() => new Settings { LiveConversion = false }, new CompositionTests.FakeConverter(),
+            TestSession NewSession(IKanjiConverter? converter = null) => new(() => new Settings { LiveConversion = false }, converter ?? new CompositionTests.FakeConverter(),
                 new CompositionServices { ChemicalCompounds = new ChemicalCompoundDictionary(directory) });
 
             var acetate = SessionFacadeTests.Type(NewSession(), "sakusannnatoriumu ")[^1].View;
@@ -188,7 +189,18 @@ internal static class ChemicalCompoundDictionaryTests
             var copperIi = SessionFacadeTests.Type(NewSession(), "sannkadou2 ")[^1].View;
             Assert.True(copperIi?.Candidates.Contains("CuO") == true, "価数を付けた酸化銅の式が変換候補に出る: " + string.Join(",", copperIi?.Candidates ?? []));
             Assert.True(copperIi?.Candidates.Contains("Cu₂O") == false, "価数を指定したとき別の酸化数を出さない");
+
+            var splitCopperOxide = SessionFacadeTests.Type(NewSession(new SplitCopperOxideConverter()), "sannkadou ")[^1].View;
+            Assert.True(splitCopperOxide?.Candidates.Contains("酸化銅") == true && splitCopperOxide.Candidates.Contains("CuO") && splitCopperOxide.Candidates.Contains("Cu₂O"),
+                "変換エンジンが「さんか/どう」と分けても物質名全体の候補を出す: " + string.Join(",", splitCopperOxide?.Candidates ?? []));
         }
         finally { Directory.Delete(directory, recursive: true); }
+    }
+
+    private sealed class SplitCopperOxideConverter : TestConverter
+    {
+        public override IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) => hiragana == "さんかどう"
+            ? [new("さんか", "酸化"), new("どう", "銅")]
+            : null;
     }
 }
