@@ -57,7 +57,7 @@ internal sealed class Clause(string reading, bool isEnglish, List<string> candid
     public IReadOnlyList<string?>? Colors { get; init; }
 
     /// <summary>ユーティリティ変換の候補と、その候補を出す書式の ID (<see cref="Utility.UtilityCandidates.RankingKeys"/>)。</summary>
-    public Dictionary<string, IReadOnlyList<string>> UtilityRankingKeys { get; } = new(StringComparer.Ordinal);
+    public Dictionary<string, IReadOnlyList<Utility.UtilityFormat>> UtilityRankingKeys { get; } = new(StringComparer.Ordinal);
 
     /// <summary>候補のうち、選んでも学習しないユーティリティ変換の候補 (<see cref="Utility.UtilityCandidates.NotLearned"/>)。</summary>
     public HashSet<string> NotLearned { get; } = new(StringComparer.Ordinal);

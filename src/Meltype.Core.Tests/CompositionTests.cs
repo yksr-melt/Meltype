@@ -302,7 +302,7 @@ internal static class CompositionTests
 
         public Keyboard(bool live = false, bool direct = false, ConversionHistory? history = null, IKanjiConverter? converter = null,
             Func<string, IReadOnlyList<string>>? moreCandidates = null, UserDictionary? userDictionary = null, LanguageMemory? languages = null,
-            TranslationDictionary? translations = null, TranslationHistory? translationHistory = null, Predictor? predictor = null,
+            TranslationDictionary? translations = null, ChoiceCounts? translationHistory = null, ChoiceCounts? utilityFormats = null, Predictor? predictor = null,
             Func<DateTime>? now = null, Meltype.Config.TypedKeysStyle typedKeys = Meltype.Config.TypedKeysStyle.Off, bool tabConversion = false, bool englishNamePredictions = false,
             CompositionDetector? detector = null, bool directAutoDetect = false)
         {
@@ -329,6 +329,7 @@ internal static class CompositionTests
                 Languages = languages,
                 Translations = translations,
                 TranslationHistory = translationHistory,
+                UtilityFormats = utilityFormats,
                 RomajiTypos = Typos,
                 GitHubTitles = () => GitHubTitles,
                 Predictor = predictor,
@@ -1143,19 +1144,19 @@ internal static class CompositionTests
     [Test]
     public static void UtilityRanking_RemembersTheTimeFormatAndDoesNotReplaceTheFirstCandidate()
     {
-        var history = new TranslationHistory(null);
+        var formats = new ChoiceCounts(null, "ユーティリティ変換の書式の学習データ");
         var ordinary = new ConversionHistory(null);
         var converter = new SplitConverter(new() { ["いま"] = [new("いま", "今")] });
         for (var i = 0; i < 2; i++)
         {
-            var k = new Keyboard(history: ordinary, translationHistory: history, converter: converter, now: () => new DateTime(2026, 10, 8, 17, 22, 0));
+            var k = new Keyboard(history: ordinary, utilityFormats: formats, converter: converter, now: () => new DateTime(2026, 10, 8, 17, 22, 0));
             k.Type("ima ");
             for (var n = 0; n < 30 && k.Showing != "17:22"; n++) k.Press(VirtualKeys.Space);
             Assert.Equal("17:22", k.Showing);
             k.Type("\n");
         }
         Assert.True(ordinary.Get("いま") is null, "時刻の文字列は変換履歴に入らない");
-        var next = new Keyboard(translationHistory: history, converter: converter, now: () => new DateTime(2026, 10, 8, 18, 5, 0),
+        var next = new Keyboard(utilityFormats: formats, converter: converter, now: () => new DateTime(2026, 10, 8, 18, 5, 0),
             moreCandidates: _ => ["居間"]);
         next.Type("ima ");
         Assert.Equal("今", next.Showing);
@@ -1169,16 +1170,16 @@ internal static class CompositionTests
     public static void UtilityRanking_KeepsTheFormatWhenTwoFormatsGiveTheSameText()
     {
         // 10 時台は H:mm と HH:mm がどちらも 10:30 になる。HH:mm で打ち続けた人には、9 時台も 09:30 を上げる
-        var history = new TranslationHistory(null);
+        var formats = new ChoiceCounts(null, "ユーティリティ変換の書式の学習データ");
         foreach (var (typed, chosen) in new[] { ("10ji30funn", "10:30"), ("10ji30funn", "10:30"), ("10ji30funn", "10:30"), ("9ji30funn", "09:30"), ("9ji30funn", "09:30") })
         {
-            var k = new Keyboard(translationHistory: history);
+            var k = new Keyboard(utilityFormats: formats);
             k.Type(typed + " ");
             for (var n = 0; n < 30 && k.Showing != chosen; n++) k.Press(VirtualKeys.Space);
             Assert.Equal(chosen, k.Showing);
             k.Type("\n");
         }
-        var next = new Keyboard(translationHistory: history);
+        var next = new Keyboard(utilityFormats: formats);
         next.Type("9ji30funn ");
         Assert.Equal("09:30", next.Host.View!.Candidates[1]);
     }
@@ -1192,8 +1193,8 @@ internal static class CompositionTests
             ("funyaosu", "ふにゃオス", "弱者男性"),
         })
         {
-            var history = new TranslationHistory(null);
-            Keyboard Open() => new(translationHistory: history, converter: new SplitConverter(new()
+            var formats = new ChoiceCounts(null, "ユーティリティ変換の書式の学習データ");
+            Keyboard Open() => new(utilityFormats: formats, converter: new SplitConverter(new()
             {
                 ["じゃくしゃだんせい"] = [new("じゃくしゃだんせい", "弱者男性")],
                 ["ふにゃおす"] = [new("ふにゃおす", "ふにゃオス")],
@@ -4364,7 +4365,7 @@ internal static class CompositionTests
         var phrases = new PhraseHistory(null);
         phrases.Remember("にほんごでにゅうりょく", "日本語で入力");
         var dictionary = TranslationDictionary.Parse("川\tn\triver,stream");
-        var translations = new TranslationHistory(null);
+        var translations = new ChoiceCounts(null, "英訳の学習データ");
         translations.Remember("かわ", "stream");
         var predictor = new Predictor(phrases, () => [("にほんごかいわ", "日本語会話")], history);
         Keyboard Create(bool learning) => new(history: history, languages: languages, predictor: predictor, translations: dictionary, translationHistory: translations) { Learning = learning };
@@ -5324,7 +5325,7 @@ internal static class CompositionTests
         Assert.Equal("complexity,complex,complicated", string.Join(",", dictionary.Lookup("複雑", "ふくざつ")));
         Assert.Equal(0, dictionary.Lookup("川べり", "かわべり").Count, "語の後ろが助詞などでなければ出さない");
 
-        var history = new TranslationHistory(null);
+        var history = new ChoiceCounts(null, "英訳の学習データ");
         IReadOnlyList<string> Convert()
         {
             var k = new Keyboard(translations: dictionary, translationHistory: history);

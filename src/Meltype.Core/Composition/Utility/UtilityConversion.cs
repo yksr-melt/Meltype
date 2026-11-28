@@ -66,17 +66,17 @@ internal sealed record UtilityCandidates(IReadOnlyList<string> Candidates, Utili
     public bool Learnable { get; init; }
 
     /// <summary>
-    /// 候補の文字と、その文字を出す書式の固定 ID。時刻や版番号などの候補の文字は保存せず、選んだ書式の ID だけを覚える。
+    /// 候補の文字と、その文字を出す書式。時刻や版番号などの候補の文字は保存せず、選んだ書式だけを覚える。
     /// 1 つの文字を複数の書式が出すことがある (10 時台の H:mm と HH:mm はどちらも 10:30)。
     /// </summary>
-    public IReadOnlyDictionary<string, IReadOnlyList<string>> RankingKeys { get; init; } = new Dictionary<string, IReadOnlyList<string>>();
+    public IReadOnlyDictionary<string, IReadOnlyList<UtilityFormat>> RankingKeys { get; init; } = new Dictionary<string, IReadOnlyList<UtilityFormat>>();
 
     /// <summary>通常の候補の後ろに足す、書式が一定のユーティリティ変換。id と書式の名前は学習データに残るので変えない。</summary>
     public static UtilityCandidates Rankable(string id, IReadOnlyList<(string Format, string Text)> candidates) =>
         new(candidates.Select(c => c.Text).Distinct(StringComparer.Ordinal).ToList(), UtilityPlacement.Append)
         {
             RankingKeys = candidates.GroupBy(c => c.Text, StringComparer.Ordinal)
-                .ToDictionary(g => g.Key, g => (IReadOnlyList<string>)g.Select(c => id + ":" + c.Format).ToList(), StringComparer.Ordinal),
+                .ToDictionary(g => g.Key, g => (IReadOnlyList<UtilityFormat>)g.Select(c => new UtilityFormat(id, c.Format)).ToList(), StringComparer.Ordinal),
         };
 
     /// <summary>選んでも学習しない候補。</summary>
@@ -86,6 +86,9 @@ internal sealed record UtilityCandidates(IReadOnlyList<string> Candidates, Utili
         init => _notLearned = value;
     }
 }
+
+/// <summary>ユーティリティ変換の候補の書式。Id はユーティリティ変換、Format はその中の書式の名前。</summary>
+internal readonly record struct UtilityFormat(string Id, string Format);
 
 internal static class UtilityConversions
 {
@@ -125,7 +128,7 @@ internal static class UtilityConversions
             Reading = replace?.Reading,
             NotLearned = matches.SelectMany(m => m.NotLearned).ToList(),
             RankingKeys = matches.SelectMany(m => m.RankingKeys).GroupBy(pair => pair.Key, StringComparer.Ordinal)
-                .ToDictionary(g => g.Key, g => (IReadOnlyList<string>)g.SelectMany(pair => pair.Value).Distinct(StringComparer.Ordinal).ToList(), StringComparer.Ordinal),
+                .ToDictionary(g => g.Key, g => (IReadOnlyList<UtilityFormat>)g.SelectMany(pair => pair.Value).Distinct().ToList(), StringComparer.Ordinal),
         };
     }
 

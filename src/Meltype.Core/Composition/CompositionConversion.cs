@@ -316,18 +316,14 @@ internal static class CompositionConversion
             clause.Candidates.Insert(at++, text);
             if (utility.RankingKeys.TryGetValue(text, out var key)) clause.UtilityRankingKeys.Add(text, key);
         }
-        if (clause.UtilityRankingKeys.Count > 0 && env.Services.TranslationHistory is { } history)
+        // 2 回以上選んだ書式のうち、いちばん多く選んだ書式の候補を 2 番目に上げる
+        if (env.Services.UtilityFormats is { } formats && clause.UtilityRankingKeys
+                .SelectMany(pair => pair.Value.Select(format => (Text: pair.Key, Count: formats.Get(format.Id).FirstOrDefault(c => c.Word == format.Format).Count)))
+                .DefaultIfEmpty().MaxBy(c => c.Count) is { Count: >= 2, Text: var ranked })
         {
-            foreach (var (key, count) in history.UtilityChoices())
-            {
-                if (count < 2) break;
-                var ranked = clause.UtilityRankingKeys.FirstOrDefault(pair => pair.Value.Contains(key)).Key;
-                if (ranked is null) continue;
-                clause.Candidates.Remove(ranked);
-                clause.Candidates.Insert(1, ranked);
-                clause.Leading = 2;
-                break;
-            }
+            clause.Candidates.Remove(ranked);
+            clause.Candidates.Insert(1, ranked);
+            clause.Leading = 2;
         }
         if (utility.Placement == UtilityPlacement.Prepend)
         {

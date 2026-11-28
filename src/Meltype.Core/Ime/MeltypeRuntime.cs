@@ -61,6 +61,7 @@ public sealed class MeltypeRuntime : IDisposable
             Meanings = MeaningDictionary.Load(),
             RomajiTypos = RomajiTypoCorrector.Load(Detector.Romaji),
             TranslationHistory = Learning.Translations,
+            UtilityFormats = Learning.UtilityFormats,
             GitHubTitles = () => GitHubTitles,
         };
         Connect(Detector, _shared);
@@ -107,7 +108,7 @@ public sealed class MeltypeRuntime : IDisposable
 
     internal LanguageMemory Languages => Learning.LanguageMemory;
 
-    internal TranslationHistory TranslationHistory => Learning.Translations;
+    internal ChoiceCounts TranslationHistory => Learning.Translations;
 
     /// <summary>予測変換のために覚えた、確定した語句。</summary>
     internal PhraseHistory Phrases => Learning.Phrases;

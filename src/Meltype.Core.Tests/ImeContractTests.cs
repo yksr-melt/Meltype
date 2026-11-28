@@ -887,7 +887,7 @@ internal static class ImeContractTests
         phrases.Remember("にほんごでにゅうりょく", "日本語で入力");
         LearningSaves.FlushAll();
         var originalPhrases = File.ReadAllText(phrasePath);
-        var translationHistory = new TranslationHistory(translationPath);
+        var translationHistory = new ChoiceCounts(translationPath, "英訳の学習データ");
         var converter = new LearningConverter();
         var front = new Front
         {
@@ -954,7 +954,7 @@ internal static class ImeContractTests
         Assert.Equal(languages.Get("tao"), new LanguageMemory(languagePath).Get("tao"), mode);
         Assert.Equal(history.Get("にほんご"), new ConversionHistory(historyPath).Get("にほんご"), mode);
         Assert.Equal(phrases.Count, new PhraseHistory(phrasePath).Count, mode);
-        Assert.Equal(translationHistory.Get("かわ").Count, new TranslationHistory(translationPath).Get("かわ").Count, mode);
+        Assert.Equal(translationHistory.Get("かわ").Count, new ChoiceCounts(translationPath, "英訳の学習データ").Get("かわ").Count, mode);
         if (mode == "Privateから通常欄へ移動")
         {
             // Private で始めた入力が終わったあと、同じ instance で始め直した通常入力は学習する。

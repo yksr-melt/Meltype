@@ -36,7 +36,9 @@ internal sealed record CompositionServices
     public MeaningDictionary? Meanings { get; init; }
 
     /// <summary>選んだ英訳の記録 (普通の変換の学習より弱く効かせる)。</summary>
-    public TranslationHistory? TranslationHistory { get; init; }
+    public ChoiceCounts? TranslationHistory { get; init; }
+
+    public ChoiceCounts? UtilityFormats { get; init; }
 
     /// <summary>ユーザー辞書 (変換で最優先に使う)。</summary>
     public UserDictionary? UserDictionary { get; init; }
@@ -59,5 +61,5 @@ internal sealed record CompositionServices
     public Predictor? Predictor { get; init; }
 
     /// <summary>学習データを除いたもの (設定「ユーザー学習を使う」が OFF のとき)。学習データを足したら、ここでも除く。</summary>
-    public CompositionServices WithoutLearning() => this with { History = null, TranslationHistory = null, Languages = null, FieldModes = null, Predictor = Predictor?.WithoutLearning() };
+    public CompositionServices WithoutLearning() => this with { History = null, TranslationHistory = null, UtilityFormats = null, Languages = null, FieldModes = null, Predictor = Predictor?.WithoutLearning() };
 }
