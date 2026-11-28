@@ -787,7 +787,12 @@ internal static class ImeSession
         {
             return CompositionController.Pass(state.Composition, Env(state, env), now);
         }
-        if (!state.CodeJapanese && lineKind == LineKind.Code)
+        // 行頭の # の次の !・[ はシバン・属性の記号なので、元のキーをアプリへ渡す (括弧補完もアプリが行う)。
+        // かな入力では記号キーも本文のかなに使う。既存のコメント・文字列の中では指令にしない。
+        // ターミナルの裸の # は既にコードなので例外は不要。コメント本文の # に同じ例外を使うと、本文の記号まで通してしまう。
+        if (!state.CodeJapanese && (lineKind == LineKind.Code ||
+            lineKind == LineKind.Comment && !CodeTerminal(state) && !modifier && settings.InputStyle == InputStyle.Romaji && ch is { } hashMark &&
+            before is { } hashLine && LineContext.ContinuesHashDirectiveMarker(hashLine, hashMark, settings)))
         {
             return CompositionController.Pass(state.Composition, Env(state, env), now);
         }

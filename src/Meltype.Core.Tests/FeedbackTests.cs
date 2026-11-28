@@ -506,6 +506,33 @@ internal static class CodeProfileTests
     }
 
     [Test]
+    public static void LineContext_HashBoundariesAcrossLines()
+    {
+        var settings = new Settings();
+        foreach (var terminal in new[] { false, true })
+            foreach (var newline in new[] { "\n", "\r\n" })
+            {
+                // 指令の見出し・診断文にある記号は、次の行のコメント・文字列を開かない。
+                foreach (var before in new[] { "#region /*", "#error \"\"\"", "#warning '''", "/* 説明 */ #region /*" })
+                    Assert.Equal(LineKind.Code, LineContext.ClassifyText(before + newline + "int x = ", settings, terminal), before);
+                Assert.Equal(LineKind.Comment, LineContext.ClassifyText("#define NAME /* 説明" + newline, settings, terminal));
+                Assert.Equal(LineKind.Comment, LineContext.ClassifyText("#foo<!--" + newline, settings, terminal));
+                Assert.Equal(LineKind.Comment, LineContext.ClassifyText("echo `cmd #region ` /* 説明" + newline + "next", settings, terminal));
+                Assert.Equal(LineKind.Code, LineContext.ClassifyText("/* 前の行" + newline + " */ #region 見出し", settings, terminal));
+                // 前の行のコメントを閉じた後の #region は行頭の指令ではないので、後ろの /* がコメントを開く。
+                Assert.Equal(LineKind.Comment, LineContext.ClassifyText("/* 前の行" + newline + " */ #region /* 説明" + newline, settings, terminal));
+                Assert.Equal(LineKind.Code, LineContext.ClassifyText("/* outer" + newline + "/* text */ #region ", settings, terminal));
+                Assert.Equal(LineKind.Comment, LineContext.ClassifyText("/* outer" + newline + "/* text */ #region /* open" + newline + "next", settings, terminal));
+                // 今の行の /* はコメントでも、実行済みのコマンドから次のプロンプトへは持ち越さない。
+                if (terminal)
+                {
+                    Assert.Equal(LineKind.Comment, LineContext.ClassifyText("echo $# /* 説明", settings, terminal));
+                    Assert.Equal(LineKind.Code, LineContext.ClassifyText("echo $# /* 説明" + newline + "$ ", settings, terminal));
+                }
+            }
+    }
+
+    [Test]
     public static void Settings_CodeAppsAreCode()
     {
         var settings = new Settings();
