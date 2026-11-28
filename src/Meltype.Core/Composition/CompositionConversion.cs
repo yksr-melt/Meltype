@@ -631,15 +631,24 @@ internal static class CompositionConversion
 
     /// <summary>
     /// 日本語の文節に候補を足す (Space で変換を始めたとき。ライブ変換の表示は最初の候補だけを使うので足さない)。
-    /// 候補は <see cref="JapaneseCandidates"/> の順で、文節を作るときに選び直した候補 (文脈の手がかり・学習など) は先頭のまま。
+    /// 文脈で選んだ候補を保ち、物質名なら式候補を同じページに出してから変換エンジンの候補を足す。
     /// </summary>
     private static void AddCandidates(CompositionEnv env, Clause clause)
     {
-        if (clause.Engine is not { } engine || clause.EngineCandidatesAdded) return;
+        if (clause.EngineCandidatesAdded) return;
         var (chosen, text) = (clause.Candidates, clause.Text);
-        clause.Candidates = [.. chosen, .. JapaneseCandidates(env, clause.Reading, engine, null, zenzai: false).Where(c => !chosen.Contains(c))];
+        IReadOnlyList<string> candidatesFromEngine = [];
+        if (clause.Engine is { } engine)
+        {
+            candidatesFromEngine = JapaneseCandidates(env, clause.Reading, engine, null, zenzai: false);
+            clause.EngineCandidatesAdded = true;
+        }
+        var chemicalCandidates = env.Services.ChemicalCompounds is { } chemicals
+            ? chemicals.Lookup(clause.Reading, [.. chosen, .. candidatesFromEngine])
+            : [];
+        var candidatesBeforeEngine = new List<string>([.. chosen, .. chemicalCandidates.Where(c => !chosen.Contains(c))]);
+        clause.Candidates = [.. candidatesBeforeEngine, .. candidatesFromEngine.Where(c => !candidatesBeforeEngine.Contains(c))];
         clause.Index = clause.Candidates.IndexOf(text);
-        clause.EngineCandidatesAdded = true;
     }
 
     /// <summary>

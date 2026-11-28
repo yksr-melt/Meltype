@@ -14,6 +14,9 @@ internal sealed record CompositionServices
     /// <summary>同音異義語などの補助候補。</summary>
     public CandidateDictionary? Candidates { get; init; }
 
+    /// <summary>物質名辞書の化学式候補。</summary>
+    public ChemicalCompoundDictionary? ChemicalCompounds { get; init; }
+
     /// <summary>前後の文字列の手がかりで候補を選ぶ規則 (気温 → 暑い)。</summary>
     public ContextRules? ContextRules { get; init; }
 

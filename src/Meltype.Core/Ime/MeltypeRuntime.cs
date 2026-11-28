@@ -24,6 +24,7 @@ public sealed class MeltypeRuntime : IDisposable
 {
     private readonly string _userDirectory;
     private readonly CompositionServices _shared;
+    private readonly ChemicalCompoundDictionary _chemicalCompounds;
     private readonly Lazy<ScoreEngine> _directEngine;
     private readonly INowPlayingSource? _nowPlaying;
     private readonly List<IDisposable> _converters = [];
@@ -49,9 +50,11 @@ public sealed class MeltypeRuntime : IDisposable
         _ = Settings.Current;
         Detector = CompositionDetector.CreateDefault(_userDirectory);
         Learning = new LearningData(dataDirectory);
+        _chemicalCompounds = new ChemicalCompoundDictionary(dataDirectory);
         _shared = new CompositionServices
         {
             Candidates = CandidateDictionary.Load(_userDirectory),
+            ChemicalCompounds = _chemicalCompounds,
             ContextRules = ContextRules.Load(_userDirectory),
             History = Learning.History,
             Misspellings = MisspellingDictionary.Load(_userDirectory),
@@ -74,6 +77,7 @@ public sealed class MeltypeRuntime : IDisposable
             _ = Settings.Current;
             Learning.Refresh();
             Snippets.Refresh();
+            _chemicalCompounds.RefreshAtomicWeights();
         }, null, SettingsFile.CheckIntervalMs, SettingsFile.CheckIntervalMs);
     }
 
