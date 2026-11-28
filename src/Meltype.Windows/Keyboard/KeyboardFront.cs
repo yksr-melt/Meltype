@@ -416,6 +416,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         var (before, after, selection) = _composition.Focus.ReadField(50);
         var traits = new List<ImeTrait>();
         if (focus.IsPassword) traits.Add(ImeTrait.Password);
+        if (_composition.Focus.IsPrivateInput(app.Window, app.ProcessName)) traits.Add(ImeTrait.Private);
         if (!text) traits.Add(ImeTrait.NonText);
         if (app.Window == IntPtr.Zero || app.IsOwnProcess || !ForegroundTracker.CanSendInputTo(app)) traits.Add(ImeTrait.Unreachable);
         if (WindowsIme.ImeTarget.FromForeground() is not { ThreadId: not 0 } target || !IsJapaneseLayout(Native.GetKeyboardLayout(target.ThreadId))) traits.Add(ImeTrait.OtherLanguage);

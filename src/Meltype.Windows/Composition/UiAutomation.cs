@@ -85,6 +85,12 @@ internal sealed class UiAutomation
         return hr >= 0 && element is not null ? new Element(element) : null;
     }
 
+    /// <summary>ブラウザーがアクセシビリティ用に付けたウィンドウの名前。通常のタイトルと異なることがある。</summary>
+    public string? WindowName(IntPtr window) =>
+        window != IntPtr.Zero && _automation.ElementFromHandle(window, out var element) >= 0 && element is not null
+            ? new Element(element).Name
+            : null;
+
     /// <summary>画面全体 (デスクトップ) の要素。自己診断用。</summary>
     public Element? Root()
     {

@@ -289,6 +289,21 @@ internal static class WindowsTests
     }
 
     [Test]
+    public static void BrowserPrivateWindowUsesOnlyTheBrowserModeSuffix()
+    {
+        foreach (var (app, title, isPrivate) in new[]
+        {
+            ("chrome.exe", "検索 - Google Chrome（シークレット モード）", true),
+            ("CHROME.EXE", "Search - Google Chrome (Incognito)", true),
+            ("firefox.exe", "検索 — Mozilla Firefox プライベートブラウジング", true),
+            ("firefox.exe", "Search — Mozilla Firefox Private Browsing", true),
+            ("chrome.exe", "Browsing in Incognito - Google Chrome", false),
+            ("notepad.exe", "Search - Google Chrome (Incognito)", false),
+        })
+            Assert.True(FocusInspector.IsPrivateBrowserWindow(app, title) == isPrivate, $"{app}: {title}");
+    }
+
+    [Test]
     public static void RecheckStale_CooldownIsPerForegroundWindow()
     {
         // ブラウザーで再確認した直後に LINE へ移っても、共有クールダウンで抑止されない
