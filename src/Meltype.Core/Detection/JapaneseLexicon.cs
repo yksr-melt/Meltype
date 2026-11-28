@@ -35,51 +35,50 @@ internal sealed class JapaneseLexicon
         Count = _readings.Count + _forms.Count;
     }
 
-    private static PackedWordSet BuildForms(string readingsText, PackedWordSet readings) =>
-        PackedWordSet.FromWords(FunctionWords.Concat(Conjugations(readingsText)).Where(form => !readings.Contains(form)));
+    private static PackedWordSet BuildForms(string readingsText, PackedWordSet readings) => ParseWithFunctionWords(readingsText, readings).Forms;
 
-    private static List<string> Conjugations(string readingsText)
+    // よく使う語の読みの活用。付属語も Forms に入れ、読みと同じ綴りの形は Forms に入れない
+    private static Conjugation ParseWithFunctionWords(string readingsText, PackedWordSet readings) =>
+        Conjugation.Parse(readingsText, form => !readings.Contains(form), FunctionWords);
+
+    /// <summary>
+    /// 読みの一覧の活用。Forms は日英の区切りで語にする活用した形、OtherForms は Forms に入れなかった活用した形 (読みと同じ綴りの まい = 舞う の連用形・枚)、
+    /// Inflecting は活用する語の終止形・連体形 (たべる・はやい)、Irrealis は未然形 (たべ・かか・こ・さ)。
+    /// </summary>
+    private sealed record Conjugation(PackedWordSet Forms, PackedWordSet OtherForms, PackedWordSet Inflecting, PackedWordSet Irrealis)
     {
-        var forms = new List<string>();
-        foreach (var line in Libraries.Lexicon.DictionarySource.DataLines(readingsText))
+        public static Conjugation Parse(string readingsText, Func<string, bool> isForm, IEnumerable<string> extraForms)
         {
-            var parts = line.Split('\t');
-            if (parts.Length < 2) continue;
-            // 同じ読みで活用の違う語 (くる = 繰る v5r・来る vk) は , でつないである
-            foreach (var kind in parts[1].Split(',')) AddConjugations(parts[0], kind, forms);
+            List<string> forms = [], inflecting = [], irrealis = [];
+            foreach (var line in Libraries.Lexicon.DictionarySource.DataLines(readingsText))
+            {
+                var parts = line.Split('\t');
+                if (parts.Length < 2) continue;
+                inflecting.Add(parts[0]);
+                // 同じ読みで活用の違う語 (くる = 繰る v5r・来る vk) は , でつないである
+                foreach (var kind in parts[1].Split(','))
+                {
+                    AddConjugations(parts[0], kind, forms);
+                    irrealis.AddRange(IrrealisForms(parts[0], kind));
+                }
+            }
+            return new(PackedWordSet.FromWords(extraForms.Concat(forms).Where(isForm)), PackedWordSet.FromWords(forms.Where(form => !isForm(form))),
+                PackedWordSet.FromWords(inflecting), PackedWordSet.FromWords(irrealis));
         }
-        return forms;
+
+        public bool IsInflected(string kana) => Forms.Contains(kana) || OtherForms.Contains(kana);
     }
 
     // 同梱の読み (CommonReadings) から作った付属語・活用した形。Load で作る一覧と、日英の区切り (ReadingLattice) で共有する
-    private static readonly Lazy<PackedWordSet> CommonForms = new(() => BuildForms(CommonReadings.ReadText(), CommonReadings.Words));
+    private static readonly Lazy<Conjugation> CommonConjugation = new(() => ParseWithFunctionWords(CommonReadings.ReadText(), CommonReadings.Words));
 
     // readings-rare.txt の語の活用した形 (かんれんづけ)
-    private static readonly Lazy<PackedWordSet> RareForms = new(() =>
+    private static readonly Lazy<Conjugation> RareConjugation = new(() =>
         // 短い読みを足しても、そこから 2 文字以下の活用形 (くべる → くべ = cube) は作らない。
-        PackedWordSet.FromWords(Conjugations(CommonReadings.RareText()).Where(form => form.Length >= 3 && !CommonReadings.Rare.Contains(form))));
-
-    // 同梱の読み (readings-rare.txt も含む) のうち活用する語の、終止形・連体形 (たべる・はやい)・活用した形 (たべ・かい・まい)・未然形 (たべ・かか・こ・さ)。
-    // 活用した形は、よく使う語の読みと同じ綴り (まい = 舞う の連用形・枚) も含む
-    private static readonly Lazy<(PackedWordSet Inflecting, PackedWordSet Inflected, PackedWordSet Irrealis)> Inflections = new(() =>
-    {
-        List<string> inflecting = [], inflected = [], irrealis = [];
-        foreach (var line in Libraries.Lexicon.DictionarySource.DataLines(CommonReadings.ReadText() + "\n" + CommonReadings.RareText()))
-        {
-            var parts = line.Split('\t');
-            if (parts.Length < 2) continue;
-            inflecting.Add(parts[0]);
-            foreach (var kind in parts[1].Split(','))
-            {
-                AddConjugations(parts[0], kind, inflected);
-                irrealis.AddRange(Irrealis(parts[0], kind));
-            }
-        }
-        return (PackedWordSet.FromWords(inflecting), PackedWordSet.FromWords(inflected), PackedWordSet.FromWords(irrealis));
-    });
+        Conjugation.Parse(CommonReadings.RareText(), form => form.Length >= 3 && !CommonReadings.Rare.Contains(form), []));
 
     // 未然形 (ない・ん が続く形)
-    private static string[] Irrealis(string word, string kind) => word.Length < 2 ? [] : kind switch
+    private static string[] IrrealisForms(string word, string kind) => word.Length < 2 ? [] : kind switch
     {
         "v1" when word[^1] == 'る' => [word[..^1]],
         "vk" when word.EndsWith("くる", StringComparison.Ordinal) => [word[..^2] + "こ"],
@@ -88,24 +87,30 @@ internal sealed class JapaneseLexicon
         _ => [],
     };
 
-    // 動詞の て形の後ろにしか付かない付属語
-    private static readonly HashSet<string> TeFormAuxiliaries = ["てる", "てた", "ている", "てい", "ていた", "ちゃう", "ちゃった"];
+    /// <summary>
+    /// 動詞・形容詞の活用した形の後ろにしか付かない付属語 (名詞や英単語の後ろには付かない)。1 文字の付属語 (う・た) と、
+    /// 英単語の後ろにかなで続けやすい ん・て形に付く語 (てる・ちゃう)。ほかの 2 文字以上の付属語 (ます・ません) は、英単語を切り出した残りにはまずならず、
+    /// なっても日本語の根拠として十分なので入れない。
+    /// </summary>
+    private static readonly HashSet<string> InflectionAuxiliaries = ["う", "た", "て", "ば", "れ", "ん", "てる", "てた", "ている", "てい", "ていた", "ちゃう", "ちゃった"];
+
+    /// <summary>kana が、活用した形の後ろにしか付かない付属語か。</summary>
+    internal static bool IsInflectionAuxiliary(string kana) => InflectionAuxiliaries.Contains(kana);
 
     /// <summary>
-    /// 付属語 kana を、直前の語 previous (英単語なら null) に付けられないか。ん は未然形・連体形の後ろ (いかん・いくん)、
-    /// てる・ちゃう は活用した形の後ろにしか付かないので、英単語と活用しない語の後ろ (main|ん・まい|ん・のち|てる) では付属語として読まない。
-    /// 直前が付属語 (ない|ん・じゃ|ん) か、ー で終わる感動詞 (あー|ん) なら付けられる。
+    /// 活用した形の後ろにしか付かない付属語 kana を、直前の日本語の語 previous に付けられるか。ん は未然形・連体形の後ろ (いかん・いくん)、
+    /// ほかは活用した形の後ろ (おち|てる・いこ|う) に付く。直前が付属語 (ない|ん・じゃ|ん) か、ー で終わる感動詞 (あー|ん) なら付けられる。
     /// </summary>
-    internal static bool CannotFollow(string? previous, string kana)
+    internal static bool CanFollow(string previous, string kana)
     {
-        if (kana != "ん" && !TeFormAuxiliaries.Contains(kana)) return false;
-        if (previous is null) return true;
-        if (IsFunctionWord(previous) || previous.EndsWith('ー')) return false;
-        var (inflecting, inflected, irrealis) = Inflections.Value;
-        return kana == "ん" ? !inflecting.Contains(previous) && !irrealis.Contains(previous) : !inflected.Contains(previous);
+        if (IsFunctionWord(previous) || previous.EndsWith('ー')) return true;
+        var (common, rare) = (CommonConjugation.Value, RareConjugation.Value);
+        return kana == "ん"
+            ? common.Inflecting.Contains(previous) || rare.Inflecting.Contains(previous) || common.Irrealis.Contains(previous) || rare.Irrealis.Contains(previous)
+            : common.IsInflected(previous) || rare.IsInflected(previous);
     }
 
-    public static JapaneseLexicon Load(RomajiDetector romaji) => new(romaji, CommonReadings.Words, CommonForms.Value);
+    public static JapaneseLexicon Load(RomajiDetector romaji) => new(romaji, CommonReadings.Words, CommonConjugation.Value.Forms);
 
     public int Count { get; }
 
@@ -116,16 +121,16 @@ internal sealed class JapaneseLexicon
 
     /// <summary>同梱の読みで、kana を 1 語として読むときの重み (WordCost)。語でなければ null。</summary>
     internal static double? CommonWordCost(ReadOnlySpan<char> kana) =>
-        CommonReadings.Words.Contains(kana) || CommonForms.Value.Contains(kana) ? WordCost(kana) : null;
+        CommonReadings.Words.Contains(kana) || CommonConjugation.Value.Forms.Contains(kana) ? WordCost(kana) : null;
 
     /// <summary>kana が、同梱の読み・付属語・活用した形のどれかの頭か。</summary>
-    internal static bool CommonHasPrefix(ReadOnlySpan<char> kana) => CommonReadings.Words.HasPrefix(kana) || CommonForms.Value.HasPrefix(kana);
+    internal static bool CommonHasPrefix(ReadOnlySpan<char> kana) => CommonReadings.Words.HasPrefix(kana) || CommonConjugation.Value.Forms.HasPrefix(kana);
 
     /// <summary>kana が、よく使う語でない語の読み (readings-rare.txt) かその活用した形か。</summary>
-    internal static bool IsRareWord(ReadOnlySpan<char> kana) => CommonReadings.Rare.Contains(kana) || RareForms.Value.Contains(kana);
+    internal static bool IsRareWord(ReadOnlySpan<char> kana) => CommonReadings.Rare.Contains(kana) || RareConjugation.Value.Forms.Contains(kana);
 
     /// <summary>kana が、よく使う語でない語の読みかその活用した形の頭か。</summary>
-    internal static bool RareHasPrefix(ReadOnlySpan<char> kana) => CommonReadings.Rare.HasPrefix(kana) || RareForms.Value.HasPrefix(kana);
+    internal static bool RareHasPrefix(ReadOnlySpan<char> kana) => CommonReadings.Rare.HasPrefix(kana) || RareConjugation.Value.Forms.HasPrefix(kana);
 
     // 語の生起コスト。日英の区切り (ReadingLattice.cs) と共有する
     // 付属語 (が・を・て)
