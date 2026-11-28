@@ -74,16 +74,23 @@ internal static class ImeSession
             !IsPassword(field) && !traits.Contains(ImeTrait.Email) && !traits.Contains(ImeTrait.Numeric) && !traits.Contains(ImeTrait.Unreachable) &&
             !(settings.ExcludeFullscreen && traits.Contains(ImeTrait.Fullscreen)) &&
             !(settings.JapaneseKeyboardOnly && traits.Contains(ImeTrait.OtherLanguage)) &&
-            !(traits.Contains(ImeTrait.NonText) && !treatsAsText && !(app is not null && LineContext.TerminalProcesses.Contains(app))) &&
+            !(traits.Contains(ImeTrait.NonText) && !IsGameChat(settings, field) && !treatsAsText && !(app is not null && LineContext.TerminalProcesses.Contains(app))) &&
             settings.IsAppEnabled(app) && !(environment.InputMethod == InputMode.Keyboard && !treatsAsText && IsGame(settings, field));
     }
 
     /// <summary>
-    /// ゲームか。Meltype キーボードは既定で止め、アプリ別設定で「入力欄とみなす」を選んだゲームで受け持つ。
+    /// 入力コンテキストからチャット欄が開いていると確認できないゲームか。
+    /// Meltype キーボードは、こうしたゲームでは「入力欄とみなす」を選んだときだけ受け持つ。
     /// Meltype IME・macOS・Linux のフロントは OS の IME そのものなので、止めるとチャットで日本語を打てなくなる (#1805)。
     /// 受け持ったまま英数で始め、英数ではキーを横取りしない (自動判定もしない) ので、操作のキーはそのままゲームに届く。
     /// </summary>
-    public static bool IsGame(Settings settings, ImeField? field) =>
+    public static bool IsGame(Settings settings, ImeField? field) => IsGameApp(settings, field) && !IsGameChat(settings, field);
+
+    /// <summary>ゲームで、チャット欄が開いている (ImeTrait.ImeContext)。Meltype IME・macOS・Linux のフロントは ImeContext を送らないので、false。</summary>
+    public static bool IsGameChat(Settings settings, ImeField? field) =>
+        IsGameApp(settings, field) && field?.Traits.Contains(ImeTrait.ImeContext) == true;
+
+    private static bool IsGameApp(Settings settings, ImeField? field) =>
         settings.IsGame(field?.App, field?.Traits.Contains(ImeTrait.Game) == true);
 
     public static ImeOutput Handle(ImeSessionState state, ImeEnv env, ImeEvent e, long rev)
@@ -123,6 +130,7 @@ internal static class ImeSession
         // ゲームに入ったら英数にする (IsGame)
         var game = IsGame(all, state.Field);
         if (game && (!state.Game || !string.Equals(previousApp, field?.App, StringComparison.OrdinalIgnoreCase))) CompositionController.SetDirect(state.Composition, true);
+        else if (state.Game && IsGameChat(all, state.Field)) CompositionController.SetDirect(state.Composition, false);
         state.Game = game;
         var before = LineBefore(state, e.Field);
         var (fieldModes, fieldKey) = FieldModeOf(env, state.Field);
@@ -411,6 +419,11 @@ internal static class ImeSession
             AltPressed(state, key, vk);
             return PassThrough(state, env);
         }
+        if (plain && vk is VirtualKeys.ImeOn or VirtualKeys.ImeOff)
+        {
+            var japanese = vk == VirtualKeys.ImeOn;
+            return key.Repeat || japanese && ShowsJapanese(state, before, settings) ? Consumed : Switch(state, env, japanese, before, toggle: false);
+        }
         var toggle = settings.EffectiveToggleShortcuts.Any(shortcut => shortcut.Matches(vk, modifiers));
         // 押しっぱなしで、入力モードを何度も切り替えない
         if (key.Repeat && (toggle || plain && vk is ToggleShortcut.Hankaku or VirtualKeys.OemAttn or VirtualKeys.Kana)) return Consumed;
@@ -622,9 +635,9 @@ internal static class ImeSession
     /// <summary>英語の語の続きとして、英数のままアプリに通す文字。</summary>
     private const string EnglishWordCharacters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@_";
 
-    /// <summary>設定によらず受け取る、モードを切り替えるキー (半角/全角 の 3 つのキーコード・英数・かな・変換・無変換)。</summary>
+    /// <summary>設定によらず受け取る、モードを切り替えるキー (半角/全角 の 3 つのキーコード・英数・かな・変換・無変換・ImeOn・ImeOff)。</summary>
     private static readonly int[] ModeKeys =
-        [ToggleShortcut.Hankaku, VirtualKeys.OemAuto, VirtualKeys.OemEnlw, VirtualKeys.OemAttn, VirtualKeys.Kana, VirtualKeys.Convert, VirtualKeys.NonConvert];
+        [ToggleShortcut.Hankaku, VirtualKeys.OemAuto, VirtualKeys.OemEnlw, VirtualKeys.OemAttn, VirtualKeys.Kana, VirtualKeys.Convert, VirtualKeys.NonConvert, VirtualKeys.ImeOn, VirtualKeys.ImeOff];
 
     private static SessionResult Pass => new(false, [], null);
 
@@ -845,8 +858,8 @@ internal static class ImeSession
         if (vk is not (VirtualKeys.Convert or VirtualKeys.NonConvert or VirtualKeys.Kana)) return null;
         // 無変換でのカタカナ切り替えは、役割を分ける設定が OFF でも働く (CompositionController 側で NonConvertCyclesKana を見る)
         var settings = env.App;
-        if (!(settings.SeparateKeyRoles || vk == VirtualKeys.NonConvert && settings.NonConvertCyclesKana)) return null;
-        if (!CompositionController.IsComposing(state.Composition) || Direct(state)) return null;
+        if (state.Composition.Scene is not CompositionScene.WithInput input || Direct(state)) return null;
+        if (!(settings.SeparateKeyRoles || vk == VirtualKeys.NonConvert && CompositionLifecycle.NonConvertCyclesKana(input, settings))) return null;
         return ComposeKey(state, env, vk, vk, null, false, false, false, false);
     }
 
