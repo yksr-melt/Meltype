@@ -344,7 +344,7 @@ internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
                 }
                 if (neutral is { } symbol) OfferEdge(node, state, symbol, 0);
                 // 単位の途中から始まる日本語 (bacon|n + i の ni) は、英語の後ろにだけ続ける。日本語の後ろで単位を分けると、
-                // 打った nn (ん) を ん|な と読み直した道が、表示どおりの道と同じ重みになる (kaizen|nann = かいぜんなん: issue #2526)
+                // 打った nn (ん) を ん|な と読み直した道が表示どおりの道と同じ重みになり、先に入った ん|な の道が残る (kaizen|nann = かいぜんなん: issue #2526)
                 if (!(p < unitsEnd && unitAt[p] < 0 && !node.Edge.English))
                     foreach (var (edge, cost) in japanese) OfferEdge(node, state, edge, cost);
                 foreach (var (edge, cost) in english) OfferEdge(node, state, edge, cost);
@@ -517,7 +517,7 @@ internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
     /// <summary>
     /// start から始まる日本語の候補 (語・語にならないかな 1 音・読めない英字 1 文字)。読みは単位の読み (変換ボックスの表示と同じ) を使う。
     /// ローマ字入力では、英語の候補が単位の途中で終わった所 (medal|s|ha の ha) は、単位の残りをローマ字として読み直す。
-    /// 日本語の語は単位の途中で終わってもよい (単位の頭をローマ字として読み直す)。大文字を含む単位は日本語にしない (かな入力を除く)。
+    /// 日本語の語は、後ろに英語が続くときは単位の途中で終わってもよい (単位の頭をローマ字として読み直す)。大文字を含む単位は日本語にしない (かな入力を除く)。
     /// </summary>
     private List<(LatticeEdge, double)> JapaneseEdges(Prepared prepared, IReadOnlyList<CompositionUnit> units, string text, int start, int[] unitOf, int unitsEnd, string pending,
         bool kanaInput)
