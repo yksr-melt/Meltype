@@ -301,7 +301,7 @@ internal static class CompositionTests
 
         public Keyboard(bool live = false, bool direct = false, ConversionHistory? history = null, IKanjiConverter? converter = null,
             Func<string, IReadOnlyList<string>>? moreCandidates = null, UserDictionary? userDictionary = null, LanguageMemory? languages = null,
-            TranslationDictionary? translations = null, TranslationHistory? translationHistory = null, Predictor? predictor = null,
+            TranslationDictionary? translations = null, ChoiceCounts? translationHistory = null, ChoiceCounts? utilityFormats = null, Predictor? predictor = null,
             Func<DateTime>? now = null, Meltype.Config.TypedKeysStyle typedKeys = Meltype.Config.TypedKeysStyle.Off, bool tabConversion = false, bool englishNamePredictions = false,
             CompositionDetector? detector = null, bool directAutoDetect = false)
         {
@@ -328,6 +328,7 @@ internal static class CompositionTests
                 Languages = languages,
                 Translations = translations,
                 TranslationHistory = translationHistory,
+                UtilityFormats = utilityFormats,
                 Lexicon = Lexicon,
                 GitHubTitles = () => GitHubTitles,
                 Predictor = predictor,
@@ -1137,6 +1138,80 @@ internal static class CompositionTests
         var next = new Keyboard(history: history);
         next.Type("tanniwotoru ");
         Assert.Equal("たんいを取る", next.Showing, "かなに戻した文節を覚える");
+    }
+
+    [Test]
+    public static void UtilityRanking_RemembersTheTimeFormatAndDoesNotReplaceTheFirstCandidate()
+    {
+        var formats = new ChoiceCounts(null, "ユーティリティ変換の書式の学習データ");
+        var ordinary = new ConversionHistory(null);
+        var converter = new SplitConverter(new() { ["いま"] = [new("いま", "今")] });
+        for (var i = 0; i < 2; i++)
+        {
+            var k = new Keyboard(history: ordinary, utilityFormats: formats, converter: converter, now: () => new DateTime(2026, 10, 8, 17, 22, 0));
+            k.Type("ima ");
+            for (var n = 0; n < 30 && k.Showing != "17:22"; n++) k.Press(VirtualKeys.Space);
+            Assert.Equal("17:22", k.Showing);
+            k.Type("\n");
+        }
+        Assert.True(ordinary.Get("いま") is null, "時刻の文字列は変換履歴に入らない");
+        var next = new Keyboard(utilityFormats: formats, converter: converter, now: () => new DateTime(2026, 10, 8, 18, 5, 0),
+            moreCandidates: _ => ["居間"]);
+        next.Type("ima ");
+        Assert.Equal("今", next.Showing);
+        Assert.Equal("18:05", next.Host.View!.Candidates[1]);
+        next.Press(VirtualKeys.Space);
+        Assert.Equal("18:05", next.Showing, "候補一覧を展開しても2番目");
+        Assert.True(!next.Host.View!.Candidates.Contains("17:22"), "古い時刻が出ない");
+    }
+
+    [Test]
+    public static void UtilityRanking_KeepsTheFormatWhenTwoFormatsGiveTheSameText()
+    {
+        // 10 時台は H:mm と HH:mm がどちらも 10:30 になる。HH:mm で打ち続けた人には、9 時台も 09:30 を上げる
+        var formats = new ChoiceCounts(null, "ユーティリティ変換の書式の学習データ");
+        foreach (var (typed, chosen) in new[] { ("10ji30funn", "10:30"), ("10ji30funn", "10:30"), ("10ji30funn", "10:30"), ("9ji30funn", "09:30"), ("9ji30funn", "09:30") })
+        {
+            var k = new Keyboard(utilityFormats: formats);
+            k.Type(typed + " ");
+            for (var n = 0; n < 30 && k.Showing != chosen; n++) k.Press(VirtualKeys.Space);
+            Assert.Equal(chosen, k.Showing);
+            k.Type("\n");
+        }
+        var next = new Keyboard(utilityFormats: formats);
+        next.Type("9ji30funn ");
+        Assert.Equal("09:30", next.Host.View!.Candidates[1]);
+    }
+
+    [Test]
+    public static void UtilityRanking_RelatedTermsAreNeverFirst()
+    {
+        foreach (var (typed, preferred, related) in new[]
+        {
+            ("jakushadansei", "弱者男性", "ふにゃオス"),
+            ("funyaosu", "ふにゃオス", "弱者男性"),
+        })
+        {
+            var formats = new ChoiceCounts(null, "ユーティリティ変換の書式の学習データ");
+            Keyboard Open() => new(utilityFormats: formats, converter: new SplitConverter(new()
+            {
+                ["じゃくしゃだんせい"] = [new("じゃくしゃだんせい", "弱者男性")],
+                ["ふにゃおす"] = [new("ふにゃおす", "ふにゃオス")],
+            }));
+            for (var i = 0; i < 2; i++)
+            {
+                var k = Open();
+                k.Type(typed + " ");
+                Assert.Equal(preferred, k.Showing);
+                for (var n = 0; n < 30 && k.Showing != related; n++) k.Press(VirtualKeys.Space);
+                Assert.Equal(related, k.Showing);
+                k.Type("\n");
+            }
+            var next = Open();
+            next.Type(typed + " ");
+            Assert.Equal(preferred, next.Showing);
+            Assert.Equal(related, next.Host.View!.Candidates[1]);
+        }
     }
 
     [Test]
@@ -2377,14 +2452,12 @@ internal static class CompositionTests
     [Test]
     public static void DictionaryAdditions_CandidatesAndBrandNames()
     {
-        // #1445・#1651・#1924: 変換の候補に出す語
+        // #1445・#1651: 変換の候補に出す語
         var candidates = CandidateDictionary.Load(null);
         Assert.True(candidates.Lookup("おねしょた").Contains("おねショタ"), "#1445 おねしょた");
         Assert.True(candidates.Lookup("ちゅうに").Contains("厨二"), "#1651 ちゅうに");
         Assert.True(candidates.Lookup("きめつ").Contains("鬼滅"), "#1651 きめつ");
         Assert.True(candidates.Lookup("おしのこ").Contains("推しの子"), "#1651 おしのこ");
-        Assert.True(candidates.Lookup("じゃくしゃだんせい").Contains("ふにゃオス"), "#1924 じゃくしゃだんせい");
-        Assert.True(candidates.Lookup("ふにゃおす").Contains("弱者男性"), "#1924 ふにゃおす");
 
         // #1548・#1490・#1460: 読みで英字の名前を出す
         Assert.True(Predictor.PredictEnglishNames("ぜんざい").Contains("Zenzai"), "#1548 ぜんざい");
@@ -4353,7 +4426,7 @@ internal static class CompositionTests
         var phrases = new PhraseHistory(null);
         phrases.Remember("にほんごでにゅうりょく", "日本語で入力");
         var dictionary = TranslationDictionary.Parse("川\tn\triver,stream");
-        var translations = new TranslationHistory(null);
+        var translations = new ChoiceCounts(null, "英訳の学習データ");
         translations.Remember("かわ", "stream");
         var predictor = new Predictor(phrases, () => [("にほんごかいわ", "日本語会話")], history);
         Keyboard Create(bool learning) => new(history: history, languages: languages, predictor: predictor, translations: dictionary, translationHistory: translations) { Learning = learning };
@@ -5337,7 +5410,7 @@ internal static class CompositionTests
         Assert.Equal("complexity,complex,complicated", string.Join(",", dictionary.Lookup("複雑", "ふくざつ")));
         Assert.Equal(0, dictionary.Lookup("川べり", "かわべり").Count, "語の後ろが助詞などでなければ出さない");
 
-        var history = new TranslationHistory(null);
+        var history = new ChoiceCounts(null, "英訳の学習データ");
         IReadOnlyList<string> Convert()
         {
             var k = new Keyboard(translations: dictionary, translationHistory: history);
