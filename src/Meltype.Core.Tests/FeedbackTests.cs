@@ -1509,4 +1509,23 @@ internal static class RomajiTypoTests
             Assert.Equal(expected, k.Host.Document, typed);
         }
     }
+
+    [Test]
+    public static void ForeignReadings_DoNotBreakEnglishBeforeVowels()
+    {
+        // Issue #2029: 知らない外来語の読みが高コストで、先頭の一部を英単語 tow にしていた。語全体の読みを辞書に入れ、英単語の候補は消さない。
+        // 単位の境目で終わる語 (dot|wo) と、english.txt の語 (word|aru・word|ga) は英語のまま
+        foreach (var (typed, expected) in new[]
+        {
+            ("towirukinnsonn", "とうぃるきんそん"), ("fanntatowirukinnsonn", "ふぁんたとうぃるきんそん"), ("towiki", "とうぃき"), ("towiriamu", "とうぃりあむ"),
+            ("dotwo", "dotを"), ("wordaru", "wordある"), ("wordga", "wordが"),
+            ("gridiiyo", "gridいいよ"), ("swapiretai", "swapいれたい"), ("ledaru", "ledある"),
+            ("gridwo", "gridを"), ("swapga", "swapが"), ("ledno", "ledの"),
+        })
+        {
+            var k = new CompositionTests.Keyboard();
+            k.Type(typed + "\n");
+            Assert.Equal(expected, k.Host.Document, typed);
+        }
+    }
 }
