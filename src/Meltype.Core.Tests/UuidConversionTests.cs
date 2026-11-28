@@ -76,6 +76,11 @@ internal static class UuidConversionTests
         kn.Type("guid(n) ");
         Assert.True(Guid.TryParseExact(kn.Host.View!.Text, "N", out _), "guid(n) はハイフンなしを先頭にする");
 
+        var kTab = new Keyboard(tabConversion: true, now: () => FixedUtcNow);
+        kTab.Type("uuid()");
+        kTab.Press(VirtualKeys.Tab);
+        Assert.True(kTab.Host.View?.Candidates is [var tabFirst, ..] && Guid.TryParseExact(tabFirst, "D", out _), "Tab でも Space と同じく UUID を出す");
+
         var kNoPred = new Keyboard(predictor: new Predictor(null, () => [], null), now: () => FixedUtcNow);
         kNoPred.Type("uuid()");
         Assert.True(kNoPred.Host.View?.Predictions is null or { Count: 0 }, "予測変換では UUID を生成しない");

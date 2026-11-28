@@ -12,7 +12,7 @@ namespace Meltype.Composition;
 /// 予測変換の候補。Text は一覧に出す語、Before は選んだときに語の前に残す文字 (最後の文節の続きの候補なら前の文節の見えている文字、
 /// 読み全体の続きの候補なら空)、Reading は語に置き換わる打ちかけの読み。
 /// </summary>
-internal sealed record Prediction(string Text, string Before, string Reading, string? Color = null);
+internal sealed record Prediction(string Text, string Before, string Reading);
 
 /// <summary>変換中の文節。英語の区間も 1 つの文節として扱う (候補は英字/全角英字)。</summary>
 internal sealed class Clause(string reading, bool isEnglish, List<string> candidates)
