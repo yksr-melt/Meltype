@@ -27,7 +27,7 @@ internal static class AboutPage
         });
         var source = SettingEditors.Button("ソースコード", async () => await owner.Launcher.LaunchUriAsync(new Uri(ProjectInfo.SourceUrl)));
         Control[] windows = OperatingSystem.IsWindows() ? [.. WindowsCards.Home()] : [];
-        Control[] uninstall = OperatingSystem.IsWindows() && !AppPaths.IsPortable ? [WindowsCards.Uninstall()] : [];
+        Control[] bottom = OperatingSystem.IsWindows() ? [.. WindowsCards.Bottom()] : [];
         return Pages.Layout(Title, "",
         [
             settings,
@@ -55,7 +55,7 @@ internal static class AboutPage
                 folder,
                 Pages.Row(open),
                 message),
-            .. uninstall,
+            .. bottom,
         ]);
     }
 }

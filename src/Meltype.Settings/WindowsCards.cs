@@ -4,8 +4,10 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.Versioning;
+using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Layout;
 using Meltype.Config;
 
@@ -15,20 +17,27 @@ namespace Meltype.SettingsApp;
 [SupportedOSPlatform("windows")]
 internal static class WindowsCards
 {
-    /// <summary>ホーム (<see cref="AboutPage"/>) の設定の下に並べるカード: 終了・使い方・報告。</summary>
+    /// <summary>ホーム (<see cref="AboutPage"/>) の設定の下に並べるカード: 使い方・報告。</summary>
     public static IEnumerable<Control> Home()
     {
-        var message = Pages.Message();
-        yield return Row("Meltype を終了", "入力の処理をやめます。もう一度使うときは、スタートメニューの「Meltype」を開きます。",
-            SettingEditors.Button("終了", () => Exit(message)), message);
         yield return WindowCard("使い方", "基本のキーと、思いどおりにならないときのキーです。", AppWindow.Guide);
         yield return WindowCard("不具合の報告・提案", "実行環境とログを確かめてから、GitHub で報告できます。", AppWindow.Report);
         yield return WindowCard("直した誤判定を報告", "最近自分で直した判定を、中身を確かめてから GitHub で報告できます。記録は Meltype を終了すると消えます。", AppWindow.Corrections);
     }
 
+    /// <summary>ホームのいちばん下に並べるカード: 終了と、インストール版ならアンインストール (うっかり押さないように、よく使うものから離す)。</summary>
+    public static IEnumerable<Control> Bottom()
+    {
+        var message = Pages.Message();
+        yield return Row("Meltype を終了", "Meltype の入力の処理と、この画面を閉じます。もう一度使うときは、スタートメニューの「Meltype」を開きます。",
+            SettingEditors.Button("終了", () => Exit(message)), message);
+        if (!AppPaths.IsPortable) yield return Uninstall();
+    }
+
     /// <summary>
     /// 入力する Meltype (Meltype.exe) を起動する。設定アプリを開いたら常に呼ぶ (スタートメニューの「Meltype」は設定アプリ)。
     /// Meltype.exe は多重起動しないので、もう動いていれば何もせずに終わる。
+    /// Windows では「設定アプリが開いている間は Meltype.exe も動いている」ようにする (ここで起動し、<see cref="Exit"/> では両方を閉じる)。
     /// </summary>
     public static void StartMeltype()
     {
@@ -45,7 +54,7 @@ internal static class WindowsCards
 
     private static string MeltypeExe => Path.Combine(AppContext.BaseDirectory, "Meltype.exe");
 
-    // 終了の合図 (Meltype.exe --exit) は、学習データを書いて終わるまで待つ
+    // 終了の合図 (Meltype.exe --exit) は、学習データを書いて終わるまで待つ。終わったら設定アプリも閉じる (Meltype.exe が動いていなかったときも)
     private static async void Exit(TextBlock message)
     {
         Pages.Show(message, "");
@@ -53,7 +62,7 @@ internal static class WindowsCards
         {
             using var process = Process.Start(new ProcessStartInfo(MeltypeExe, ["--exit"]) { UseShellExecute = false })!;
             await process.WaitForExitAsync();
-            Pages.Show(message, process.ExitCode == 0 ? "終了しました。" : "Meltype は動いていません。");
+            (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.Shutdown();
         }
         catch (Win32Exception ex)
         {
@@ -74,7 +83,7 @@ internal static class WindowsCards
         _ => [],
     };
 
-    public static Border Uninstall()
+    private static Border Uninstall()
     {
         var message = Pages.Message();
         // 確認はアンインストーラーが出す
@@ -167,7 +176,7 @@ internal static class WindowsCards
             switch (process.ExitCode)
             {
                 case 0: break;
-                case 1: Pages.Show(message, "Meltype が動いていません。スタートメニューの「Meltype」を開き直してから、もう一度押してください。", error: true); break;
+                case 1: Pages.Show(message, "Meltype が動いていません。この画面を閉じて、スタートメニューの「Meltype」を開き直してください。", error: true); break;
                 // Meltype.exe と設定アプリの版が違う (Meltype.exe がこの画面を知らない)
                 default: Pages.Show(message, $"Meltype.exe がこの画面を開けませんでした (終了コード {process.ExitCode})。Meltype を入れ直してください。", error: true); break;
             }
