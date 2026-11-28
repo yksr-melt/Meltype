@@ -31,7 +31,9 @@ internal static class CompositionKeys
         var direct = CompositionLifecycle.IsDirect(state);
         if (key.Vk == VirtualKeys.Convert && env.Selection is { Length: > 0 }) return true;
         if (key.Vk is VirtualKeys.Convert or VirtualKeys.NonConvert && !direct && CompositionLifecycle.KanaInput(env) &&
-            env.Settings.KanaLayout is KanaLayout.Nicola or KanaLayout.NakayubiNicola or KanaLayout.Tron) return true;
+            KanaLayoutEngine.UsesThumbs(env.Settings.KanaLayout)) return true;
+        // Space をシフトに使う配列 (薙刀式): 文頭の Space + 文字キーもシフトにする。Space だけを離したら、ふつうの Space
+        if (key.Vk == VirtualKeys.Space && !key.Shift && !direct && CompositionLifecycle.KanaInput(env) && KanaLayoutEngine.UsesSpace(env.Settings.KanaLayout)) return true;
         // かな入力: かなのキーならすべて入力を始める (StartWith)
         if (CompositionLifecycle.KanaInput(env) && !direct && Detection.KanaDetector.IsKanaKey(key.Position)) return true;
         // 日本語入力の Shift+Space・設定「スペースの幅」が全角の Space は、全角スペースにする (StartWith)
@@ -389,7 +391,9 @@ internal static class CompositionKeys
         // 日本語入力のときの Shift+Space は全角スペース (Microsoft IME と同じ: issue #24)。英数状態では普通の空白のまま。
         // 設定「スペースの幅」が全角では、Space が全角で Shift+Space が半角 (issue #259)
         var spaceWidth = env.Settings.SpaceWidth;
-        if (e.Vk == VirtualKeys.Space && !direct && (spaceWidth == Config.SpaceWidth.FullWidth || state.Shift))
+        // Space をシフトに使うかな配列では、文頭で Space だけを離したときも空白を入れる。
+        if (e.Vk == VirtualKeys.Space && !direct &&
+            (spaceWidth == Config.SpaceWidth.FullWidth || state.Shift || CompositionLifecycle.KanaInput(env) && KanaLayoutEngine.UsesSpace(env.Settings.KanaLayout)))
         {
             // 「スペースの幅」が半角なら Shift+Space も半角 (issue #708)
             var shifted = state.Shift;
@@ -397,7 +401,7 @@ internal static class CompositionKeys
             {
                 Config.SpaceWidth.FullWidth => shifted,
                 Config.SpaceWidth.HalfWidth => true,
-                Config.SpaceWidth.Standard => false,
+                Config.SpaceWidth.Standard => !shifted,
                 _ => throw new InvalidOperationException($"不明な SpaceWidth: {spaceWidth}"),
             };
             CompositionCommit.CommitText(state, env, ComposedText.Of(halfWidth ? SpanKind.English : SpanKind.Japanese, halfWidth ? " " : "　"), english: false);

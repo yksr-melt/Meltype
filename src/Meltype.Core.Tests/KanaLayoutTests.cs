@@ -14,6 +14,18 @@ internal static class KanaLayoutTests
     private static Keyboard Layout(KanaLayout layout) => new() { Kana = true, KanaLayout = layout };
 
     [Test]
+    public static void KanaLayout_Naginata_ThreeKeysIgnorePressOrder()
+    {
+        foreach (var keys in new[] { "jwh", "jhw", "wjh", "whj", "hjw", "hwj", " jw", " wj", "j w", "jw ", "w j", "wj " })
+        {
+            var k = Layout(KanaLayout.Naginata);
+            foreach (var key in keys) { k.Key(char.ToUpperInvariant(key)); k.Wait(10); }
+            foreach (var key in keys) k.Key(char.ToUpperInvariant(key), up: true);
+            Assert.Equal(keys.Contains(' ') ? "ぎ" : "ぎゃ", k.Showing, keys);
+        }
+    }
+
+    [Test]
     public static void KanaLayout_DisplaysKeysAndRecognizesEnglishFromNicola()
     {
         var nicola = new Keyboard(typedKeys: Meltype.Config.TypedKeysStyle.Keys) { Kana = true, KanaLayout = KanaLayout.Nicola };
@@ -328,6 +340,114 @@ internal static class KanaLayoutTests
         k.TypeKanaKeys("h");
         k.Key(NonConvert, up: true);
         Assert.Equal("が", k.Showing);
+    }
+
+    private const int KeyA = 0x41, KeyD = 0x44, KeyH = 0x48, KeyJ = 0x4A, KeyK = 0x4B, KeyS = 0x53, KeyW = 0x57;
+
+    [Test]
+    public static void ChordLayout_ShinGeta_SimultaneousKeys()
+    {
+        // 新下駄: K = い、A = の。K と A を同時に押すと ほ (どちらを先に押しても)
+        var k = Layout(KanaLayout.ShinGeta);
+        k.Key(KeyK);
+        k.Key(KeyA);
+        k.Key(KeyK, up: true);
+        k.Key(KeyA, up: true);
+        k.Key(KeyA);
+        k.Key(KeyK);
+        k.Key(KeyA, up: true);
+        k.Key(KeyK, up: true);
+        Assert.Equal("ほほ", k.Showing);
+    }
+
+    [Test]
+    public static void ChordLayout_ShinGeta_SequentialKeysAreNotChord()
+    {
+        // 離してから押したキーは同時打鍵ではない (い の)
+        var k = Layout(KanaLayout.ShinGeta);
+        k.TypeKanaKeys("ka");
+        Assert.Equal("いの", k.Showing);
+    }
+
+    [Test]
+    public static void ChordLayout_ShinGeta_ContinuousShift()
+    {
+        // K を押したまま A、S と続けて押すと ほ じ (連続シフト)
+        var k = Layout(KanaLayout.ShinGeta);
+        k.Key(KeyK);
+        k.TypeKanaKeys("a");
+        k.Wait(200);
+        k.TypeKanaKeys("s");
+        k.Key(KeyK, up: true);
+        Assert.Equal("ほじ", k.Showing);
+    }
+
+    [Test]
+    public static void ChordLayout_Naginata_ThreeKeys()
+    {
+        // 薙刀式: J = あ、J + W = ぎ、J + W + H = ぎゃ
+        var k = Layout(KanaLayout.Naginata);
+        k.Key(KeyJ);
+        k.Key(KeyW);
+        k.Key(KeyH);
+        k.Key(KeyJ, up: true);
+        k.Key(KeyW, up: true);
+        k.Key(KeyH, up: true);
+        Assert.Equal("ぎゃ", k.Showing);
+    }
+
+    [Test]
+    public static void ChordLayout_Naginata_SpaceShift()
+    {
+        // 薙刀式: Space を押したまま W = ぬ (文頭でも)
+        var k = Layout(KanaLayout.Naginata);
+        k.Key(VirtualKeys.Space);
+        k.TypeKanaKeys("w");
+        k.Key(VirtualKeys.Space, up: true);
+        Assert.Equal("ぬ", k.Showing);
+    }
+
+    [Test]
+    public static void ChordLayout_Naginata_SpaceAloneConverts()
+    {
+        // Space だけを押して離したら、ふつうの Space (変換)
+        var k = Layout(KanaLayout.Naginata);
+        k.TypeKanaKeys("d");
+        k.Press(VirtualKeys.Space);
+        Assert.True(k.Host.View is { Converting: true }, "Space で変換する");
+    }
+
+    [Test]
+    public static void ChordLayout_Naginata_SpaceAloneAtStartTypesSpace()
+    {
+        // 文頭で Space だけを押して離したら、空白を入れる (押したときに受け取ったので、アプリには届かない)
+        var k = Layout(KanaLayout.Naginata);
+        k.Press(VirtualKeys.Space);
+        Assert.Equal(" ", k.Host.Before);
+    }
+
+    [Test]
+    public static void ChordLayout_NewJis_ShiftFace()
+    {
+        // 新JIS: E = せ、Shift + E = ほ
+        var k = Layout(KanaLayout.NewJis);
+        k.TypeKanaKeys("eE");
+        Assert.Equal("せほ", k.Showing);
+    }
+
+    [Test]
+    public static void ChordLayout_Asuka_ThumbShift()
+    {
+        // 飛鳥: D = う、左親指 + D = が。文字キーの直後に押した親指キーも同時打鍵
+        var k = Layout(KanaLayout.Asuka);
+        k.Key(NonConvert);
+        k.TypeKanaKeys("d");
+        k.Key(NonConvert, up: true);
+        k.Key(KeyD);
+        k.Key(NonConvert);
+        k.Key(KeyD, up: true);
+        k.Key(NonConvert, up: true);
+        Assert.Equal("がが", k.Showing);
     }
 
     [Test]

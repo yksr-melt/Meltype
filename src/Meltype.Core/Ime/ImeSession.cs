@@ -451,7 +451,7 @@ internal static class ImeSession
     /// <summary>親指シフトのかな配列 (NICOLA・中指NICOLA・TRON) の親指キー (無変換・変換)。変換ボックスで受け取り、文字に使わずに離したらもとの働きをする。</summary>
     private static bool IsThumbKey(ImeSessionState state, int vk, Settings settings) =>
         settings.InputStyle == InputStyle.Kana && !Direct(state) && vk is VirtualKeys.Convert or VirtualKeys.NonConvert &&
-        settings.KanaLayout is KanaLayout.Nicola or KanaLayout.NakayubiNicola or KanaLayout.Tron;
+        KanaLayoutEngine.UsesThumbs(settings.KanaLayout);
 
     /// <summary>
     /// 定型文 (issue #290)。;名前 の文字はそのままアプリへ渡し、続く Space / Tab で登録した文に置き換える。入れた直後の Esc で、打った ;名前 に戻す。
@@ -596,7 +596,9 @@ internal static class ImeSession
         if (japanese)
         {
             keys.Add(new ImeShortcut(VirtualKeys.Space, (int)ShortcutModifiers.Shift));
-            if (settings.SpaceWidth == SpaceWidth.FullWidth) keys.Add(new ImeShortcut(VirtualKeys.Space, 0));
+            // Space をシフトに使うかな配列 (薙刀式): 文頭の Space + 文字キーもシフトにするので、Space を受け取る
+            if (settings.SpaceWidth == SpaceWidth.FullWidth || settings.InputStyle == InputStyle.Kana && KanaLayoutEngine.UsesSpace(settings.KanaLayout))
+                keys.Add(new ImeShortcut(VirtualKeys.Space, 0));
         }
         keys.AddRange(snippetKeys.Select(key => new ImeShortcut(key, 0)));
         return new ImeCapture
@@ -605,7 +607,7 @@ internal static class ImeSession
             PrintableAsciiExcept = direct && directEnglishWord ? EnglishWordCharacters : "",
             Shortcuts = keys.Distinct().ToList(),
             CtrlKeysWhileComposing = composingControlKeys.Select(key => new ImeShortcut(key, (int)ShortcutModifiers.Control)).ToList(),
-            KeyReleases = settings.InputStyle == InputStyle.Kana && settings.KanaLayout is KanaLayout.Nicola or KanaLayout.NakayubiNicola or KanaLayout.Tron,
+            KeyReleases = settings.InputStyle == InputStyle.Kana && KanaLayoutEngine.NeedsKeyReleases(settings.KanaLayout),
             AltKeys = settings.AltKeysSwitchKeyboard,
         };
     }
