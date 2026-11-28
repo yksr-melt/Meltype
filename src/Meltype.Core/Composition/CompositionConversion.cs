@@ -340,7 +340,7 @@ internal static class CompositionConversion
         var surrounding = CueBefore(env) + EnglishInComposition(input, env) + (env.Context().FollowingText ?? "");
         if ((env.Services.ContextRules?.Choose(reading, surrounding, clause.Text, text => Standalone(env, text)) ?? env.Learning.LearnedConversion(reading)) is { } preferred)
             Prefer(clause, preferred);
-        KeepTypedSymbols(input, [clause], reading);
+        KeepTypedSymbols(input, clause, reading);
         AddOldKana(clause);
         AddTranslations(env, clause);
         AddRawCandidates(input, env, clause);
@@ -433,19 +433,11 @@ internal static class CompositionConversion
         clause.Candidates.AddRange(added);
     }
 
-    /// <summary>英日の区間分けの日本語の区間を変換する。Space の変換もライブ変換も、区間ごとにこれを通す。</summary>
+    /// <summary>
+    /// 英日の区間分けの日本語の区間を変換エンジンで変換する。英字・記号の部分はそのままの文節にする。Space の変換もライブ変換も、区間ごとにこれを通す。
+    /// afterEnglish は、区間が英語の区間のすぐ後ろか (英単語の後ろの付属語の直し)。
+    /// </summary>
     internal static List<Clause> ConvertJapaneseSegment(CompositionInput input, CompositionEnv env, string kana, bool afterEnglish, string before, bool zenzai)
-    {
-        var japanese = ConvertJapanese(input, env, kana, before, zenzai);
-        // ワークアラウンド: 英単語 + 付属語 (python|なら、push|した): 変換エンジンは英語の後ろの読みだけを見て、文の頭の語 (奈良・下) にしてしまう。かなのまま。
-        // 変換エンジンに文脈 (英単語・これ) を渡しても、名詞の読みを前に付けて変換しても、なら・しか・しよう は直らなかった。
-        // 変換エンジンが英単語を前の文脈として受け取り、後ろの読みを付属語として変換するようになったら消せる
-        if (afterEnglish && japanese.Count > 0 && IsParticleAfterEnglish(japanese[0])) Prefer(japanese[0], japanese[0].Reading);
-        return japanese;
-    }
-
-    /// <summary>日本語の区間を変換エンジンで変換する。英字・記号の部分はそのままの文節にする。</summary>
-    private static List<Clause> ConvertJapanese(CompositionInput input, CompositionEnv env, string kana, string before, bool zenzai)
     {
         // ローマ字として読めずに残った英字 (こほぃc の c) と半角の記号 (... @) は、変換エンジンに渡すと別の記号 (© ．．． ＠) にされるので、
         // そのままの文節にする。数字は、記号・英字とつながっていればそのまま (3.0 の 3 を 1 文字だけ渡すと ❸ にされる)、
@@ -471,89 +463,38 @@ internal static class CompositionConversion
                 var run = kana[start..i];
                 // ユーザー辞書に英字のまま登録した読み (zh → ←) はここでも引く
                 if (keep[start]) result.Add(new Clause(run, false, Distinct([.. env.Services.UserDictionary?.Lookup(run) ?? [], run, .. env.Services.Candidates?.Lookup(run) ?? [], CompositionText.ToFullWidth(run)])));
-                else result.AddRange(ConvertJapanese(input, env, run, before + string.Concat(result.Select(c => c.Text)), zenzai));
+                else result.AddRange(ConvertJapaneseSegment(input, env, run, afterEnglish && start == 0, before + string.Concat(result.Select(c => c.Text)), zenzai));
                 start = i;
             }
             return result;
         }
-        return ConvertWithEngine(input, env, kana, before, zenzai);
+        return ConvertWithEngine(input, env, kana, afterEnglish, before, zenzai);
     }
 
-    /// <summary>
-    /// 日本語のかなを変換エンジンで文節に区切って変換する。各文節の最初の候補は次の順で決める:
-    ///   1. 文脈の手がかり辞書 (前後に 気温 があれば あつい → 暑い)
-    ///   2. ユーザーが前に選び直した変換 (学習)
-    ///   3. 変換エンジンの結果 (入力欄のキャレットの前の文字を文脈として渡している)
-    /// </summary>
-    private static List<Clause> ConvertWithEngine(CompositionInput input, CompositionEnv env, string kana, string before, bool zenzai)
+    /// <summary>日本語のかなを変換エンジンで文節に区切って変換し、変換エンジンの答えを直す (<see cref="AnswerFixes.Fix"/>)。</summary>
+    private static List<Clause> ConvertWithEngine(CompositionInput input, CompositionEnv env, string kana, bool afterEnglish, string before, bool zenzai)
     {
         IReadOnlyList<ConversionClause> parts = Engine(env, kana, before, zenzai) ?? [.. SplitAtMarks(new ConversionClause(kana, kana))];
-        // 読み全体が補助辞書・絵文字の辞書の語 (かんがえるかお → 🤔) なら、文節に分けずに 1 つの文節にして候補を出す。
-        if (parts.Count > 1 && env.Services.Candidates?.Contains(kana) == true)
-        {
-            // 注記は候補全体の出典を示すので、すべての文節が Zenzai の答えのときに引き継ぐ。
-            parts = [new ConversionClause(kana, string.Concat(parts.Select(p => p.Text)), Zenzai: parts.All(p => p.Zenzai))];
-        }
-        parts = JoinSmallKana(env, parts, before, zenzai);
-        var clauses = parts.Select(p =>
-        {
-            var text = NormalizeHalfWidth(p.Text, p.Reading);
-            return new Clause(p.Reading, false, [text]) { Engine = text, ZenzaiText = p.Zenzai ? text : null };
-        }).ToList();
-        for (var i = 0; i < clauses.Count; i++)
-        {
-            var others = string.Concat(clauses.Where((_, k) => k != i).Select(c => c.Text));
-            var surrounding = CueBefore(env) + EnglishInComposition(input, env) + others + (env.Context().FollowingText ?? "");
-            var preferred = env.Services.ContextRules?.Choose(clauses[i].Reading, surrounding, clauses[i].Text, text => Standalone(env, text)) ?? env.Learning.LearnedConversion(clauses[i].Reading);
-            // 変換エンジンは、文節が「から」だけだと記号 (～) にしてしまう。記号だけの変換結果は、ひらがなの後ろに回す。
-            // ユーザー辞書・同梱の語句の記号 (なかてん → ・) はそのまま
-            preferred ??= IsSymbolOnly(clauses[i].Text) && clauses[i].Reading.All(KanaChars.IsHiragana) &&
-                env.Services.UserDictionary?.Lookup(clauses[i].Reading).Contains(clauses[i].Text) != true ? clauses[i].Reading : null;
-            // 英単語に挟まれて助詞だけの文節になると、変換エンジンは漢字にしてしまう (github + に + push → 二)。助詞はかなのまま。
-            preferred ??= JapaneseParticles.IsParticle(clauses[i].Reading) && clauses[i].Text != clauses[i].Reading ? clauses[i].Reading : null;
-            // カタカナの語の後ろの「っ」で始まる文節 (スパイダーマ + っ！) は、カタカナの「ッ」にする (スパイダーマッ！)。
-            preferred ??= i > 0 && clauses[i].Text.StartsWith('っ') && clauses[i - 1].Text is [.., var last] && last is >= 'ァ' and <= 'ヺ' or 'ー'
-                ? "ッ" + clauses[i].Text[1..] : null;
-            // 文頭・記号の後ろの「え、」「え？」(聞き返し) を、変換エンジンは 得 にしてしまう (得、知らん)。かなのまま
-            preferred ??= IsInterjection(env, clauses, i) ? clauses[i].Reading : null;
-            // がち (ガチで) を、変換エンジンは 勝ち にしてしまう (勝ちでやばい)。勝ち の読みは かち なので、がち は ガチ にする
-            preferred ??= clauses[i].Reading.StartsWith("がち", StringComparison.Ordinal) && clauses[i].Text.StartsWith("勝ち", StringComparison.Ordinal)
-                ? "ガチ" + clauses[i].Text["勝ち".Length..] : null;
-            if (preferred is not null) Prefer(clauses[i], preferred);
-        }
-        KeepTypedSymbols(input, clauses, kana);
-        return clauses;
+        var context = new AnswerContext(CueBefore(env) + EnglishInComposition(input, env), env.Context().FollowingText ?? "", env.Context().PrecedingText ?? "", afterEnglish, TypedLetterOrDigit(input),
+            ContextRule: (reading, surrounding, text) => env.Services.ContextRules?.Choose(reading, surrounding, text, t => Standalone(env, t)),
+            Learned: env.Learning.LearnedConversion,
+            UserWords: reading => env.Services.UserDictionary?.Lookup(reading) ?? [],
+            IsListedReading: reading => env.Services.Candidates?.Contains(reading) == true,
+            Convert: (reading, text) => Convert(env, reading, text, zenzai),
+            StartsWithSuruForm: reading => WordJudge.SuruForms.Any(reading.StartsWith));
+        return [.. AnswerFixes.Fix(parts, kana, before, context).Select(a => new Clause(a.Reading, false, [.. a.Candidates]) { Engine = a.Engine, ZenzaiText = a.Zenzai })];
     }
 
-    /// <summary>打ったものに英数字があるか (<see cref="KeepTypedSymbols"/> が見る。ライブ変換の控えの key にも入れる)。</summary>
+    /// <summary>打ったものに英数字があるか (打った記号を戻すか決める <see cref="AnswerFixes"/>・<see cref="KeepTypedSymbols"/> が見る。ライブ変換の控えの key にも入れる)。</summary>
     private static bool TypedLetterOrDigit(CompositionInput input) => input.Text.TypedRaw.Any(char.IsLetterOrDigit);
 
-    /// <summary>
-    /// かなと一緒に打った記号 (読みの 、。？「 など。CompositionText.Symbol と TypedMarks が決めた文字) は、最初の候補でも読みの文字のままにする。
-    /// 変換エンジンの答え・Mozc の学習・変換履歴は、記号を別の文字にすることがある
-    /// (ライブ変換で 例文？ が 例文? に: issue #519、「今日は が ［今日は に: issue #1669、わたしは、 が 私は・ に)。別の候補は一覧に残す。
-    /// 記号だけを打って変換したとき (、 だけ・( だけ) は、選んで覚えた候補を使う (issue #672)。記号だけかは、文節の読みでなく、
-    /// 打ったもの全体で決める (わたしは、 の区切りを変えてできた 、 だけの文節にも、覚えた ・ を出さない)。
-    /// 記号の数が読みと違う答え (から → ～、あんはさうぇい → アン・ハサウェイ) は、どの記号がどれに当たるか分からないので変えない。
-    /// 打った記号を文字の種類と数で見分けているのは、変換の結果が区間の種類を持たない文字列だから。区間の種類を持ち回すようになったら (#1735)、区間で決める。
-    /// 最初の候補を決める所 (ConvertWithEngine・Reconvert・WholeClause) の最後に呼ぶ。
-    /// </summary>
-    private static void KeepTypedSymbols(CompositionInput input, IReadOnlyList<Clause> clauses, string reading)
+    /// <summary>1 つの文節の最初の候補を決める所 (Reconvert・WholeClause) の最後に呼ぶ。打った記号を最初の候補に戻す (<see cref="AnswerFixes.KeepTypedSymbols"/>)。</summary>
+    private static void KeepTypedSymbols(CompositionInput input, Clause clause, string reading)
     {
         if (!TypedLetterOrDigit(input)) return;
-        var typed = reading.Where(IsSymbol).ToList();
-        if (clauses.Sum(c => c.Text.Count(IsSymbol)) != typed.Count) return;
-        var next = 0;
-        foreach (var clause in clauses)
-        {
-            var text = string.Concat(clause.Text.Select(c => IsSymbol(c) ? typed[next++] : c));
-            if (text == clause.Text) continue;
-            if (clause.ZenzaiText == clause.Text) clause.ZenzaiText = text;
-            Prefer(clause, text);
-        }
-
-        // 絵文字 (サロゲートペア) は打った記号に当たらないので数えない (置き換えると壊れた文字になる)
-        static bool IsSymbol(char c) => !char.IsLetterOrDigit(c) && !char.IsWhiteSpace(c) && !char.IsSurrogate(c);
+        var kept = AnswerFixes.KeepTypedSymbols([new FixedAnswer(reading, clause.Engine ?? clause.Text, [.. clause.Candidates], clause.ZenzaiText)], reading)[0];
+        clause.Candidates = [.. kept.Candidates];
+        clause.ZenzaiText = kept.Zenzai;
     }
 
     /// <summary>
@@ -570,67 +511,6 @@ internal static class CompositionConversion
         var reading = env.Detector.Romaji.ConvertLenient(lower, final: true);
         return WordJudge.IsSuruForm(reading);
     }
-
-    /// <summary>
-    /// 英単語の後ろの、名詞に付く付属語 (助詞・助動詞) か する の活用の文節を、変換エンジンが漢字で始めた
-    /// (なら → 奈良、しか → 歯科、なの → 名の、した → 下、したい → 死体)。
-    /// </summary>
-    private static bool IsParticleAfterEnglish(Clause clause) =>
-        (NounAttachedWords.Contains(clause.Reading) || WordJudge.SuruForms.Any(clause.Reading.StartsWith)) &&
-        clause.Text.Length > 0 && !IsKana(clause.Text[0]) && clause.Text != clause.Reading;
-
-    // 名詞に付く付属語。文節の読み全体と比べるので、変換エンジンが 1 つの文節にまとめる形 (には・なので) も並べる。
-    // か は入れない: 英単語の後ろの 化 (docker化・API化) を変換エンジンが出したときに、かなに戻してしまう
-    private static readonly HashSet<string> NounAttachedWords =
-    [
-        "が", "を", "に", "で", "と", "の", "は", "も", "へ", "や", "から", "まで", "より", "って", "とか", "とは", "には", "では", "にも", "でも",
-        "への", "での", "との", "なら", "しか", "だけ", "のみ", "ほど", "など", "くらい", "ぐらい", "ばかり", "さえ", "すら", "こそ", "ずつ", "ごと", "とも", "ども", "やら", "なり",
-        "だ", "です", "だった", "でした", "だろう", "でしょう", "だよ", "だね", "だし", "だから", "じゃ", "なの", "なのに", "なので", "かも", "みたい", "っぽい", "らしい",
-    ];
-
-    private static readonly HashSet<char> SentencePunctuation = ['、', '。', '，', '．', ',', '.', '！', '？', '!', '?', '…', '‥', '「', '」', '(', ')', '（', '）', ' ', '　'];
-
-    /// <summary>
-    /// 文節が「え」だけ (後ろに記号が付いていてもよい) で、文の頭か記号の後ろにあり、後ろが記号か文の終わりか。
-    /// こういう「え」は聞き返し・驚き (え、しらん) で、絵 や 得 ではない。
-    /// </summary>
-    private static bool IsInterjection(CompositionEnv env, List<Clause> clauses, int i)
-    {
-        var reading = clauses[i].Reading;
-        if (reading.Length == 0 || reading[0] != 'え' || !reading.Skip(1).All(SentencePunctuation.Contains) || clauses[i].Text == reading) return false;
-        var before = i > 0 ? clauses[i - 1].Text : env.Context().PrecedingText ?? "";
-        if (before.Length > 0 && !SentencePunctuation.Contains(before[^1])) return false;
-        if (reading.Length > 1) return true;
-        return i + 1 == clauses.Count || clauses[i + 1].Text is [var next, ..] && SentencePunctuation.Contains(next);
-    }
-
-    /// <summary>
-    /// 小書きのかな (ぃ ぇ ゃ …) で始まる文節は前の文節とつなげる。小書きのかなから始まる語は無いので、
-    /// 変換エンジンの知らない語を区切り間違えたもの (こうぃ → 光|ぃ)。つなげた読みは、その文節だけで変換し直す
-    /// (こうぃ → コウィ。wi で打っていれば こゐ も候補に出る)。
-    /// </summary>
-    private static IReadOnlyList<ConversionClause> JoinSmallKana(CompositionEnv env, IReadOnlyList<ConversionClause> parts, string before, bool zenzai)
-    {
-        if (!parts.Skip(1).Any(p => p.Reading.Length > 0 && KanaChars.IsSmallKana(p.Reading[0]))) return parts;
-        var joined = new List<ConversionClause>();
-        foreach (var part in parts)
-        {
-            if (joined.Count > 0 && part.Reading.Length > 0 && KanaChars.IsSmallKana(part.Reading[0]))
-            {
-                var reading = joined[^1].Reading + part.Reading;
-                // 変換しても漢字の後ろに小書きのかなが残る (光ぃ) なら、カタカナ (コウィ) にする。
-                var text = Convert(env, reading, before + string.Concat(joined.Take(joined.Count - 1).Select(c => c.Text)), zenzai);
-                if (Enumerable.Range(1, Math.Max(0, text.Length - 1)).Any(i => KanaChars.IsSmallKana(text[i]) && !IsKana(text[i - 1]))) text = CompositionText.ToKatakana(reading);
-                joined[^1] = new ConversionClause(reading, text);
-            }
-            else joined.Add(part);
-        }
-        return joined;
-    }
-
-    private static bool IsKana(char c) => c is (>= 'ぁ' and <= 'ゖ') or (>= 'ァ' and <= 'ヺ') or 'ー';
-
-    private static bool IsSymbolOnly(string text) => text.Length > 0 && !text.Any(char.IsLetterOrDigit);
 
     private static void Prefer(Clause clause, string text)
     {
@@ -878,7 +758,7 @@ internal static class CompositionConversion
 
     private static bool IsMarks(Clause clause) => !clause.IsEnglish && clause.Reading.All(ComposedText.IsMark);
 
-    private static bool CanReadAsJapanese(Clause clause) => clause is { IsEnglish: true, Kana: { } kana } && kana.Any(IsKana);
+    private static bool CanReadAsJapanese(Clause clause) => clause is { IsEnglish: true, Kana: { } kana } && kana.Any(KanaChars.IsKana);
 
     /// <summary>index の文節を、読みだけで変換し直す。文脈は、変換ボックスの中でその文節より前にある文字まで。</summary>
     private static void Reconvert(CompositionInput input, List<Clause> clauses, CompositionEnv env, int index)
@@ -894,7 +774,7 @@ internal static class CompositionConversion
         clause.UtilityRankingKeys.Clear();
         clause.Leading = 0;
         if (env.Learning.LearnedConversion(clause.Reading) is { } learned) Prefer(clause, learned);
-        KeepTypedSymbols(input, [clause], clause.Reading);
+        KeepTypedSymbols(input, clause, clause.Reading);
     }
 
     /// <summary>変換エンジンで文節に区切って変換する (待つのは env.Deadline まで)。zenzai は Zenzai にも頼むか (<see cref="ConversionRequest.Zenzai"/>)。</summary>
@@ -955,7 +835,7 @@ internal static class CompositionConversion
     /// 1 拍の拗音・外来音を、打っている途中に変換しない (きょ が 虚、ふゅ が フュ になっていた)。
     /// </summary>
     internal static bool CountsAsLive(string kana) =>
-        kana.Where((c, i) => IsKana(c) && !(i > 0 && KanaChars.IsSmallKana(c) && IsKana(kana[i - 1]))).Count() >= LiveConversionMinLength;
+        kana.Where((c, i) => KanaChars.IsKana(c) && !(i > 0 && KanaChars.IsSmallKana(c) && KanaChars.IsKana(kana[i - 1]))).Count() >= LiveConversionMinLength;
 
     // 辞書・学習・変換エンジンは入力の間は変わらない (控えは入力を始めるときに空にする)。打ったものに英数字があるか (KeepTypedSymbols) は入力の途中で変わる
     private static string LiveKey(CompositionInput input, CompositionEnv env, string kana, bool afterEnglish, string before) =>
