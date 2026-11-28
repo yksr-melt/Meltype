@@ -126,9 +126,12 @@ Palette CurrentPalette() {
     return p;
 }
 
-IDWriteTextFormat* CreateFormat(float size, DWRITE_FONT_WEIGHT weight = DWRITE_FONT_WEIGHT_NORMAL) {
+IDWriteTextFormat* CreateFormat(float size, const std::wstring& family) {
     IDWriteTextFormat* format = nullptr;
-    g_dwrite->CreateTextFormat(L"Yu Gothic UI", nullptr, weight, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, size, L"ja-jp", &format);
+    auto create = [&](const wchar_t* name) {
+        return g_dwrite->CreateTextFormat(name, nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, size, L"ja-jp", &format);
+    };
+    if (family.empty() || FAILED(create(family.c_str()))) create(L"Yu Gothic UI");
     if (format != nullptr) {
         format->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
         format->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
@@ -270,9 +273,13 @@ struct CandidateWindow::Impl {
     float width = kMinWidth;  // DIP
     std::wstring meaningKey;
 
-    float SuggestionHeight() const { return view.suggestion.empty() ? 0 : kRowHeight + (view.candidates.empty() ? 0 : 5); }
+    float RowHeight() const { return kRowHeight * view.fontScale; }
+    float TypedHeight() const { return kTypedHeight * view.fontScale; }
+    float FooterHeight() const { return kFooterHeight * view.fontScale; }
+
+    float SuggestionHeight() const { return view.suggestion.empty() ? 0 : RowHeight() + (view.candidates.empty() ? 0 : 5); }
     // 候補の行より上 (打ったキー・もしかして) の高さ
-    float HeaderHeight() const { return (view.typed.empty() ? 0 : kTypedHeight) + SuggestionHeight(); }
+    float HeaderHeight() const { return (view.typed.empty() ? 0 : TypedHeight()) + SuggestionHeight(); }
     int Rows() const { return std::min(static_cast<int>(view.candidates.size()) - first, kPageSize); }
     bool Paged() const { return view.candidates.size() > kPageSize; }
 
@@ -280,15 +287,15 @@ struct CandidateWindow::Impl {
         float height = kPadding * 2 + HeaderHeight();
         // ページを送っても大きさが変わらないように、2 ページ以上あるときは 9 行分
         int rows = Paged() ? kPageSize : static_cast<int>(view.candidates.size());
-        height += rows * kRowHeight;
-        if (Paged()) height += kFooterHeight;
-        if (!view.hint.empty()) height += kTypedHeight;
+        height += rows * RowHeight();
+        if (Paged()) height += FooterHeight();
+        if (!view.hint.empty()) height += TypedHeight();
         return height;
     }
 
     float Measure() {
-        IDWriteTextFormat* candidate = CreateFormat(kCandidateFontSize);
-        IDWriteTextFormat* note = CreateFormat(kSmallFontSize);
+        IDWriteTextFormat* candidate = CreateFormat((kCandidateFontSize) * view.fontScale, view.fontFamily);
+        IDWriteTextFormat* note = CreateFormat((kSmallFontSize) * view.fontScale, view.fontFamily);
         float widest = 0;
         for (size_t i = 0; i < view.candidates.size(); i++) {
             float w = TextWidth(candidate, view.candidates[i]);
@@ -310,7 +317,7 @@ struct CandidateWindow::Impl {
     int HitTest(float y) const {
         float top = kPadding + HeaderHeight();
         if (y < top) return -1;
-        int row = static_cast<int>((y - top) / kRowHeight);
+        int row = static_cast<int>((y - top) / RowHeight());
         if (row < 0 || row >= Rows()) return -1;
         return first + row;
     }
@@ -325,23 +332,23 @@ struct CandidateWindow::Impl {
             target->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
         }
         Palette p = CurrentPalette();
-        IDWriteTextFormat* candidate = CreateFormat(kCandidateFontSize);
-        IDWriteTextFormat* note = CreateFormat(kSmallFontSize);
+        IDWriteTextFormat* candidate = CreateFormat((kCandidateFontSize) * view.fontScale, view.fontFamily);
+        IDWriteTextFormat* note = CreateFormat((kSmallFontSize) * view.fontScale, view.fontFamily);
         target->BeginDraw();
         target->Clear(p.background);
 
         float y = kPadding;
         if (!view.typed.empty()) {
             // 打ったキー (設定「打ったキーを表示」): 打ち間違いに気づけるように、小さく出す
-            DrawText(target, note, view.typed, D2D1::RectF(kPadding + 12, y, width - kPadding - 8, y + kTypedHeight), p.secondary);
-            y += kTypedHeight;
+            DrawText(target, note, view.typed, D2D1::RectF(kPadding + 12, y, width - kPadding - 8, y + TypedHeight()), p.secondary);
+            y += TypedHeight();
         }
         if (!view.suggestion.empty()) {
             // もしかして: アクセントの色で薄く塗った行
-            D2D1_RECT_F row = D2D1::RectF(kPadding, y, width - kPadding, y + kRowHeight);
+            D2D1_RECT_F row = D2D1::RectF(kPadding, y, width - kPadding, y + RowHeight());
             FillRounded(target, row, 4, p.suggestionFill);
             DrawText(target, candidate, view.suggestion, D2D1::RectF(row.left + 12, row.top, row.right - 8, row.bottom), p.accent);
-            y += kRowHeight;
+            y += RowHeight();
             if (!view.candidates.empty()) {
                 ID2D1SolidColorBrush* line = nullptr;
                 target->CreateSolidColorBrush(p.separator, &line);
@@ -355,13 +362,13 @@ struct CandidateWindow::Impl {
 
         for (int i = 0; i < Rows(); i++) {
             int index = first + i;
-            D2D1_RECT_F row = D2D1::RectF(kPadding, y, width - kPadding, y + kRowHeight);
+            D2D1_RECT_F row = D2D1::RectF(kPadding, y, width - kPadding, y + RowHeight());
             bool selected = index == view.selected;
             if (selected) {
                 FillRounded(target, row, 4, p.selectedFill);
                 // 左端のアクセントの縦線 (Windows 11 のリストの選択と同じ形)
                 float barHeight = 16;
-                FillRounded(target, D2D1::RectF(row.left, row.top + (kRowHeight - barHeight) / 2, row.left + 3, row.top + (kRowHeight + barHeight) / 2), 1.5f,
+                FillRounded(target, D2D1::RectF(row.left, row.top + (RowHeight() - barHeight) / 2, row.left + 3, row.top + (RowHeight() + barHeight) / 2), 1.5f,
                             p.accent);
             } else if (index == hover) {
                 FillRounded(target, row, 4, p.hoverFill);
@@ -383,23 +390,23 @@ struct CandidateWindow::Impl {
             if (index < static_cast<int>(view.colors.size()) && DecodeRgbaHex(view.colors[index], cr, cg, cb, ca)) {
                 float candWidth = TextWidth(candidate, view.candidates[index]);
                 float swatchX = std::min(textLeft + candWidth + kSwatchGap, maxRight - kSwatchSize);
-                float swatchY = row.top + (kRowHeight - kSwatchSize) * 0.5f;
+                float swatchY = row.top + (RowHeight() - kSwatchSize) * 0.5f;
                 DrawColorSwatch(target, D2D1::RectF(swatchX, swatchY, swatchX + kSwatchSize, swatchY + kSwatchSize), cr, cg, cb, ca, p.secondary);
                 maxRight = swatchX - kSwatchGap;
             }
             DrawText(target, candidate, view.candidates[index], D2D1::RectF(textLeft, row.top, maxRight, row.bottom), p.text);
-            y += kRowHeight;
+            y += RowHeight();
         }
 
         if (Paged()) {
-            y = kPadding + HeaderHeight() + kPageSize * kRowHeight;
+            y = kPadding + HeaderHeight() + kPageSize * RowHeight();
             wchar_t page[32];
             swprintf_s(page, L"%d / %d", std::max(0, view.selected) + 1, static_cast<int>(view.candidates.size()));
             float pageWidth = TextWidth(note, page);
-            DrawText(target, note, page, D2D1::RectF(width - kPadding - 12 - pageWidth, y, width - kPadding - 8, y + kFooterHeight), p.secondary);
-            y += kFooterHeight;
+            DrawText(target, note, page, D2D1::RectF(width - kPadding - 12 - pageWidth, y, width - kPadding - 8, y + FooterHeight()), p.secondary);
+            y += FooterHeight();
         }
-        if (!view.hint.empty()) DrawText(target, note, view.hint, D2D1::RectF(kPadding + 12, y, width - kPadding - 8, y + kTypedHeight), p.secondary);
+        if (!view.hint.empty()) DrawText(target, note, view.hint, D2D1::RectF(kPadding + 12, y, width - kPadding - 8, y + TypedHeight()), p.secondary);
 
         HRESULT hr = target->EndDraw();
         if (hr == D2DERR_RECREATE_TARGET) {
@@ -425,7 +432,7 @@ struct CandidateWindow::Impl {
     }
 
     float MeaningSize(float& height) {
-        IDWriteTextFormat* format = CreateFormat(kSmallFontSize + 1);
+        IDWriteTextFormat* format = CreateFormat((kSmallFontSize + 1) * view.fontScale, view.fontFamily);
         if (format == nullptr) return 0;
         format->SetWordWrapping(DWRITE_WORD_WRAPPING_WRAP);
         format->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
@@ -467,7 +474,7 @@ struct CandidateWindow::Impl {
         GetWindowRect(hwnd, &own);
         int row = std::max(0, view.selected - first);
         int x = own.right + static_cast<int>(4 * scale);
-        int y = own.top + static_cast<int>((kPadding + HeaderHeight() + row * kRowHeight) * scale);
+        int y = own.top + static_cast<int>((kPadding + HeaderHeight() + row * RowHeight()) * scale);
         HMONITOR monitor = MonitorFromRect(&own, MONITOR_DEFAULTTONEAREST);
         MONITORINFO info = {sizeof(info)};
         GetMonitorInfoW(monitor, &info);
@@ -493,7 +500,7 @@ struct CandidateWindow::Impl {
             meaningTarget->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
         }
         Palette p = CurrentPalette();
-        IDWriteTextFormat* format = CreateFormat(kSmallFontSize + 1);
+        IDWriteTextFormat* format = CreateFormat((kSmallFontSize + 1) * view.fontScale, view.fontFamily);
         if (format != nullptr) {
             format->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
         }
@@ -789,7 +796,8 @@ static void Render(CandidateWindow::Impl& d, const CandidateView& view, const RE
     if (scale <= 0) scale = 1;
     // DPI が変わったときも、描画 (render target) と当たり判定の scale がずれないように置き直す
     bool samePlace = d.hwnd != nullptr && IsWindowVisible(d.hwnd) && EqualRect(&d.anchor, &anchor) && d.view.candidates == view.candidates && d.view.suggestion == view.suggestion &&
-                     d.view.numbered == view.numbered && d.view.typed == view.typed && d.view.hint == view.hint && scale == d.scale;
+                     d.view.numbered == view.numbered && d.view.typed == view.typed && d.view.hint == view.hint &&
+                     d.view.fontScale == view.fontScale && d.view.fontFamily == view.fontFamily && scale == d.scale;
     d.view = view;
     d.anchor = anchor;
     d.first = std::max(0, view.selected) / kPageSize * kPageSize;

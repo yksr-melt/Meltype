@@ -30,8 +30,8 @@ internal static class FrontProtocolTests
         new("Meltype IME (DLL)", "native/tip/TextService.cpp", source => source, new([], Index: true),
             // 入力モードと、左右の Alt (フックで見る) は Meltype.exe (TipServer) が使う
             Unused: ["version", "modeIndicatorMs", "insertByPaste", "keyReleases", "altKeys"],
-            // Meltype.exe (TipServer) の応答: 背景の変換の結果の待ち合わせと、別ビルドの impl への応答
-            Others: ["generation", "stale"]),
+            // Meltype.exe (TipServer) が返す項目。候補の見た目は Windows の設定を使うため、ほかのフロント向けの JSON には含まれない。
+            Others: ["generation", "stale", "candidateScalePercent", "candidateFont"]),
         new("fcitx5", "linux/fcitx5/meltype.cpp", source => source, new(["get", "str", "flag", "integer", "strings"]),
             Unused: ["version", "handlesInput", "imeOpen", "printableAscii", "printableAsciiExcept", "shortcuts", "vk", "modifiers",
                 "ctrlKeysWhileComposing", "revision", "currentWord", "insertByPaste", "keyReleases", "colors"],
@@ -81,6 +81,18 @@ internal static class FrontProtocolTests
             var staleOthers = front.Others.Where(name => sent.Contains(name) || !read.Contains(name)).ToList();
             Assert.True(staleOthers.Count == 0, $"{front.Name} の Others に、本体が出すか読んでいない名前がある: {string.Join(", ", staleOthers)}");
         }
+    }
+
+    [Test]
+    public static void TipCandidateAppearance_IsOnlySentWhenRequested()
+    {
+        var view = new CompositionView("x", ["x", "y"], 0, true, "h", ["x"], 0);
+        var output = new ImeOutput(new ImeState { Capture = new ImeCapture() }, new SessionResult(true, [], view));
+        var candidate = JsonElement.Parse(output.ToJson(160, "Yu Gothic UI")).GetProperty("result").GetProperty("view");
+        Assert.Equal(160, candidate.GetProperty("candidateScalePercent").GetInt32());
+        Assert.Equal("Yu Gothic UI", candidate.GetProperty("candidateFont").GetString());
+        var standard = JsonElement.Parse(output.ToJson()).GetProperty("result").GetProperty("view");
+        Assert.True(!standard.TryGetProperty("candidateFont", out _), "他のフロントに Windows のフォントを送らない");
     }
 
     [Test]

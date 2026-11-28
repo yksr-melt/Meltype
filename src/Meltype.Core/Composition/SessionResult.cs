@@ -33,7 +33,9 @@ public sealed record SessionResult(bool Consumed, IReadOnlyList<TextEdit> Commit
     /// 項目を足したら、各フロントが読むか使わないかを FrontProtocolTests で決める。
     /// 確定し直す (Commits の DeleteBefore が 1 以上) なら、消す文字 (Expect。ImeSession がキャレットの前と照合済み) を removeBefore で渡す。
     /// </summary>
-    public string ToJson()
+    public string ToJson() => ToJson(null, null);
+
+    internal string ToJson(int? candidateScalePercent, string? candidateFont)
     {
         var builder = new StringBuilder();
         builder.Append("{\"consumed\":").Append(Consumed ? "true" : "false").Append(",\"commits\":[");
@@ -70,6 +72,13 @@ public sealed record SessionResult(bool Consumed, IReadOnlyList<TextEdit> Commit
         AppendNullable(builder, view.Suggestion);
         builder.Append(",\"typedKeys\":");
         AppendNullable(builder, view.Typed);
+        // Meltype IME が描く候補の一覧の設定。OS が描くほかのフロントには渡さない。
+        if (candidateScalePercent is { } percent)
+        {
+            builder.Append(",\"candidateScalePercent\":").Append(percent);
+            builder.Append(",\"candidateFont\":");
+            AppendNullable(builder, candidateFont);
+        }
         builder.Append(",\"candidates\":");
         var predictions = ListsPredictions(view) == true;
         var items = predictions ? view.Predictions! : view.Candidates;
