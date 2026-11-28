@@ -2487,7 +2487,8 @@ internal static class CompositionTests
             ("maintabeta", "mainたべた"), ("renderkannsuu", "renderかんすう"));
         // 逆向き: 活用した形の後ろの ん・てる と、英単語にならない日本語はそのまま
         AssertCommitted(("mainichi", "まいにち"), ("maikin", "まいきん"), ("tabeteru", "たべてる"), ("yatteru", "やってる"),
-            ("tabechau", "たべちゃう"), ("ikan", "いかん"), ("wakaran", "わからん"), ("ikunda", "いくんだ"), ("jan", "じゃん"), ("adon", "あどん"));
+            ("tabechau", "たべちゃう"), ("ikan", "いかん"), ("wakaran", "わからん"), ("ikunda", "いくんだ"), ("jan", "じゃん"), ("adon", "あどん"),
+            ("mainkurafuto", "まいんくらふと"), ("mainsui-pa-", "まいんすいーぱー"), ("maindo", "まいんど"));
     }
 
     [Test]
