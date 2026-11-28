@@ -34,13 +34,18 @@ internal sealed partial class RelativeDateConversion : IUtilityConversion
                 var invariant = CultureInfo.InvariantCulture;
                 var shortTime = time.ToString("HH:mm", invariant);
                 var japanese = time.ToString("H'時'mm'分'", invariant);
-                return new(time.Date == now.Date ? [shortTime, japanese]
-                    : [time.ToString("yyyy-MM-dd", invariant) + " " + shortTime, DateText(time) + japanese], UtilityPlacement.Append) { Reading = reading };
+                var candidates = time.Date == now.Date
+                    ? new[] { shortTime, japanese }
+                    : [time.ToString("yyyy-MM-dd", invariant) + " " + shortTime, DateText(time) + japanese];
+                return new(candidates, UtilityPlacement.Append) { Reading = reading };
             }
             if (Date(reading, now.Date) is not { } date) return null;
             var text = DateText(date);
             return new([$"{text}({UtilityConversions.WeekDays[(int)date.DayOfWeek]})", text,
-                date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)], UtilityPlacement.Append) { Reading = reading };
+                date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)], UtilityPlacement.Append)
+            {
+                Reading = reading,
+            };
         }
         catch (ArgumentOutOfRangeException)
         {
