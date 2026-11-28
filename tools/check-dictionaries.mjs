@@ -87,7 +87,6 @@ const dictionaries = {
   'japanese.txt': {
     format: words(w => /^[a-z]+$/.test(w) ? null : `「${w}」が小文字のローマ字でない`),
   },
-  // 読み 候補 : 手がかり …。Core (ConversionPreferences) は最初の : で分け、前後を空白・タブ・全角空白で区切る (: の前後の空白は問わない)
   'chemical-elements.txt': {
     format: tabbed(3, 3, ([reading, symbol, weight]) => [
       hiragana.test(reading) ? null : `読み「${reading}」がひらがなでない`,
@@ -96,6 +95,7 @@ const dictionaries = {
     ]),
     keysOf: line => { const fields = line.split('\t'); return [[fields[0], line], [fields[1], line]]; },
   },
+  // 読み 候補 : 手がかり …。Core (ConversionPreferences) は最初の : で分け、前後を空白・タブ・全角空白で区切る (: の前後の空白は問わない)
   'contexts.txt': {
     format: line => {
       const colon = line.indexOf(':');

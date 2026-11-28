@@ -16,7 +16,7 @@ internal sealed class ElementConversion : IUtilityConversion
 
     public UtilityCandidates? Convert(UtilityInput input) =>
         input.Reading is { } reading && Elements.Value.TryGetValue(reading, out var candidates)
-            ? new(candidates, UtilityPlacement.Append) : null;
+            ? new(candidates, UtilityPlacement.Append) { Learnable = true } : null;
 
     private static string[] Candidates(string symbol, string weight)
     {
