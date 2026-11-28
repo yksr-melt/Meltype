@@ -24,7 +24,10 @@ internal static class Program
         // Meltype.exe --selftest [結果ファイル]: キーボードフックを掛けずに、主な機能が動くかだけを確かめる。
         if (args.FirstOrDefault() == "--selftest") return SelfTest.Run(args.ElementAtOrDefault(1));
         // Meltype.exe --exit: 動いている Meltype を終了させる (インストール・アンインストール用。管理者として動いていても止められる)。
-        if (args.FirstOrDefault() == "--exit") return ExitSignal.Send() ? 0 : 1;
+        if (args.FirstOrDefault() == "--exit") return AppSignal.SendExit() ? 0 : 1;
+        // Meltype.exe --open <AppWindow の名前>: 動いている Meltype に画面を開いてもらう (設定アプリ用)。動いていなければ 1、名前が無い・知らない名前なら 2。
+        if (args.FirstOrDefault() == "--open")
+            return AppSignal.ParseWindow(args.ElementAtOrDefault(1)) is { } window ? AppSignal.SendOpen(window) ? 0 : 1 : 2;
 
         // フックを二重に掛けると同じ打鍵を二重に保留・再入力してしまうので、多重起動させない。
         using var mutex = new Mutex(initiallyOwned: true, @"Local\Meltype.SingleInstance", out var createdNew);
@@ -82,12 +85,14 @@ internal static class Program
         }
 
         // スタートアップのフォルダー・Run の登録 (サインインの後、遅れて起動する) を、すぐ起動するタスクに移す (#283)
-        if (!AppPaths.IsPortable) ThreadPool.QueueUserWorkItem(_ => Startup.MigrateToTask());
+        if (!AppPaths.IsPortable) ThreadPool.QueueUserWorkItem(_ => WindowsStartup.MigrateToTask());
 
         using (engine)
         {
-            using var exitSignal = new ExitSignal();
-            Application.Run(new TrayApplicationContext(engine, state));
+            using var signal = new AppSignal();
+            var tray = new TrayApplicationContext(engine, state);
+            signal.OpenRequested += tray.Open;
+            Application.Run(tray);
         }
         Config.LearningSaves.FlushAll();
         return 0;

@@ -87,9 +87,9 @@ brew install --cask yksr-melt/Meltype/meltype
 
 変換の候補と入力中の案内は、入力位置の近くに表示します。候補はキー操作やクリックで選べます。
 
-設定・ユーザー辞書・定型文・学習データは、Launchpad の「Meltype の設定」(入力メニューの「Meltype の設定…」でも開けます) で変えます。ファイルは `~/Library/Application Support/Meltype` にあります (入力メニューの「Meltype のデータフォルダを開く」)。
+設定・ユーザー辞書・定型文・学習データは、Launchpad の「Meltype」(入力メニューの「Meltype を開く…」でも開けます) で変えます。ファイルは `~/Library/Application Support/Meltype` にあります (入力メニューの「Meltype のデータフォルダを開く」)。
 
-かな漢字変換は、同梱の Mozc で行います。Zenzai (llama.cpp の llama-server と zenz-v3.2-small、同梱) で、キャレットの前の文を文脈にして変換します (既定で ON。CPU で計算します)。使わないときは「Meltype の設定」の「Zenzai を使う」を OFF にします。自分の llama-server・モデルは「Zenzai: llama-server の場所」「Zenzai: モデル (GGUF) の場所」で指定できます (`config.json` では `UseZenzai`・`ZenzaiServerPath`・`ZenzaiModelPath`)。
+かな漢字変換は、同梱の Mozc で行います。Zenzai (llama.cpp の llama-server と zenz-v3.2-small、同梱) で、キャレットの前の文を文脈にして変換します (既定で ON。CPU で計算します)。使わないときは「Meltype」の「Zenzai を使う」を OFF にします。自分の llama-server・モデルは「Zenzai: llama-server の場所」「Zenzai: モデル (GGUF) の場所」で指定できます (`config.json` では `UseZenzai`・`ZenzaiServerPath`・`ZenzaiModelPath`)。
 
 <a name="入力モードのショートカット"></a>
 
@@ -116,7 +116,7 @@ brew install --cask yksr-melt/Meltype/meltype
 
 ### ユーザー辞書
 
-「Meltype の設定」の「ユーザー辞書」で登録・編集できます。ファイルを直接編集する場合は、Meltype を終了してから、データフォルダ (`~/Library/Application Support/Meltype`) の `userdict.txt` に、1 行に「読み<Tab>単語」(UTF-8、読みはひらがな) で書きます。動詞・形容詞などは「読み<Tab>単語<Tab>品詞」と 3 列目に品詞 (`動詞ラ行五段`・`形容詞` など。Google 日本語入力・Microsoft IME の品詞名も使えます) を書くと、活用した形も変換できます。品詞を書かなければ名詞です。登録した語は Mozc のユーザー辞書に入り、ほかの語の途中の読み (わたしのことがすき の しの) には当てはめません。
+「Meltype」の「ユーザー辞書」で登録・編集できます。ファイルを直接編集する場合は、Meltype を終了してから、データフォルダ (`~/Library/Application Support/Meltype`) の `userdict.txt` に、1 行に「読み<Tab>単語」(UTF-8、読みはひらがな) で書きます。動詞・形容詞などは「読み<Tab>単語<Tab>品詞」と 3 列目に品詞 (`動詞ラ行五段`・`形容詞` など。Google 日本語入力・Microsoft IME の品詞名も使えます) を書くと、活用した形も変換できます。品詞を書かなければ名詞です。登録した語は Mozc のユーザー辞書に入り、ほかの語の途中の読み (わたしのことがすき の しの) には当てはめません。
 
 macOS の「ユーザ辞書」の語は、次の手順で `userdict.txt` に取り込めます。
 

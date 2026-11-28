@@ -127,6 +127,7 @@ internal sealed class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        if (OperatingSystem.IsWindows()) WindowsCards.StartMeltype();
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop) desktop.MainWindow = new MainWindow(desktop.Args ?? []);
         base.OnFrameworkInitializationCompleted();
     }

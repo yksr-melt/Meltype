@@ -15,32 +15,25 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly MeltypeEngine _engine;
     private readonly AppState _state;
     private readonly NotifyIcon _tray;
-    private readonly ToolStripMenuItem _statusItem;
-    // Zenzai の状態 (「Zenzai を使う」が ON のときだけ出す。issue #1152)
-    private readonly ToolStripMenuItem _zenzaiItem = new() { Enabled = false, Visible = false };
-    private readonly ToolStripMenuItem _enabledItem;
     private readonly HotkeyWindow _hotkey;
     private readonly HotkeyWindow _registerHotkey;
     private readonly Control _invoker = new();
     private readonly Icon _onIcon = CreateIcon("あ", Color.FromArgb(0, 120, 212));
     private readonly Icon _directIcon = CreateIcon("A", Color.FromArgb(0, 120, 212));
     private readonly Icon _offIcon = CreateIcon("A", Color.FromArgb(120, 120, 120));
-    private readonly ToolStripMenuItem _keyboardModeItem;
-    private readonly ToolStripMenuItem _autoDetectionItem;
-    private readonly ToolStripMenuItem _profileItem;
     private readonly Composition.CompositionService _composition;
     private readonly Tip.TipServer _tipServer;
     // 更新前の Meltype IME が残っているアプリ (TipServer.ClientOutdated)
     private readonly HashSet<string> _outdatedApps = new(StringComparer.OrdinalIgnoreCase);
     private readonly Keyboard.KeyboardFront _keyboard;
-    private readonly ToolStripMenuItem _tsfModeItem;
     private LogForm? _logForm;
     private ReportDialog? _reportDialog;
+    private CorrectionReportDialog? _correctionDialog;
     private KeyCountForm? _keyCountForm;
     private WelcomeForm? _welcomeForm;
+    private UpdateCheckForm? _updateCheckForm;
+    private Task<string>? _updateCheck;
     private readonly Updater _updater;
-    private readonly ToolStripMenuItem _updateItem;
-    private readonly ToolStripMenuItem _autoUpdateItem;
     private int _exclusionNotificationScheduled;
     private volatile bool _exiting;
 
@@ -78,72 +71,19 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _engine.SettingsChanged += OnEngineSettingsChanged;
         IntroduceTsf();
 
-        var menu = new ContextMenuStrip();
-        _statusItem = new ToolStripMenuItem { Enabled = false };
-        _enabledItem = new ToolStripMenuItem("Meltype を有効にする", null, (_, _) => ToggleEnabled()) { CheckOnClick = false };
-        _keyboardModeItem = new ToolStripMenuItem("Meltype キーボード (変換ボックスで入力)", null, (_, _) => SetMode(InputMode.Keyboard));
-        _tsfModeItem = new ToolStripMenuItem("Meltype IME (入力欄に直接入力)", null, (_, _) => SelectTsf());
-        menu.Items.Add(_statusItem);
-        menu.Items.Add(_zenzaiItem);
-        menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add(_enabledItem);
-        if (!AppPaths.IsPortable) menu.Items.Add(_tsfModeItem);
-        menu.Items.Add(_keyboardModeItem);
-        // 英語 / 日本語の自動判定 (OFF なら提案だけ出し、Tab で英字にする)
-        _autoDetectionItem = new ToolStripMenuItem("英語 / 日本語を自動で判定する", null, (_, _) => ToggleAutoDetection());
-        menu.Items.Add(_autoDetectionItem);
-        // プロファイル (仕事用・趣味用・SNS 用など)。一覧は開くたびに作る (設定画面で足したもの・名前を変えたものを出す)
-        _profileItem = new ToolStripMenuItem("プロファイル");
-        _profileItem.DropDownItems.Add("(読み込み中)");
-        _profileItem.DropDownOpening += (_, _) => FillProfiles();
-        menu.Items.Add(_profileItem);
-        ToolStripMenuItem? startup = null;
-        if (!AppPaths.IsPortable)
+        // メニューは出さず、左右どちらのクリックでも設定アプリを開く。一時停止は Ctrl + 半角/全角 とホットキー、終了は設定アプリで行う
+        _tray = new NotifyIcon { Visible = true };
+        _tray.MouseClick += (_, e) =>
         {
-            startup = new ToolStripMenuItem("Windows の起動時に起動", null, (_, _) => ToggleStartup());
-            startup.ToolTipText = "サインインしたらすぐ起動するよう、タスク スケジューラに「Meltype」というタスクを登録します (OFF にすると消します)。";
-            menu.Items.Add(startup);
-        }
-        menu.Items.Add("使い方...", null, (_, _) => ShowWelcome());
-        // 設定・ユーザー辞書・定型文・学習データ・バックアップは、設定アプリ (MeltypeSettings.exe) で扱う
-        menu.Items.Add("設定・辞書・学習データ...", null, (_, _) => SettingsApp.Open());
-        menu.Items.Add("ログ / 判定理由...", null, (_, _) => ShowLog());
-        menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("データフォルダを開く", null, (_, _) => OpenDataFolder());
-        menu.Items.Add("不具合の報告・提案...", null, (_, _) => OpenReport());
-        menu.Items.Add("直した誤判定を報告...", null, (_, _) => new CorrectionReportDialog(_composition.Corrections, _engine.Running).Show());
-        menu.Items.Add("Meltype について...", null, (_, _) => MessageBox.Show(AppInfo.AboutText, "Meltype について", MessageBoxButtons.OK, MessageBoxIcon.Information));
-        menu.Items.Add("打鍵数...", null, (_, _) => ShowKeyCount());
-        if (!AppPaths.IsPortable) menu.Items.Add("アンインストール...", null, (_, _) => Uninstall());
-        // 更新: 自動更新の ON/OFF、今すぐ確認、ダウンロード済みなら更新して再起動
-        var updates = new ToolStripMenuItem("更新");
-        _autoUpdateItem = new ToolStripMenuItem("自動で更新する", null, (_, _) => ToggleAutoUpdate());
-        updates.DropDownItems.Add(_autoUpdateItem);
-        updates.DropDownItems.Add("今すぐ更新を確認", null, (_, _) => CheckForUpdate());
-        updates.DropDownItems.Add("リリースノート...", null, (_, _) => ReleaseNotesDialog.ShowFor(AppInfo.Version, updated: false, _engine));
-        _updateItem = new ToolStripMenuItem("", null, (_, _) => ApplyUpdate()) { Visible = false };
-        updates.DropDownItems.Add(_updateItem);
-        updates.DropDownOpening += (_, _) =>
-        {
-            _autoUpdateItem.Checked = _engine.Settings.AutoUpdate;
-            // プレリリース版の更新を OFF にしたら、ダウンロード済みのプレリリース版の「更新して再起動」は出さない
-            ShowUpdateItem();
+            if (e.Button is MouseButtons.Left or MouseButtons.Right) SettingsApp.Show();
         };
-        if (!AppPaths.IsPortable) menu.Items.Add(updates);
-        menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("終了", null, (_, _) => ExitThread());
-        if (startup is not null) menu.Opening += (_, _) => startup.Checked = Startup.IsEnabled;
-        menu.Opening += (_, _) => UpdateStatus();
-
-        _tray = new NotifyIcon { ContextMenuStrip = menu, Visible = true };
-        _tray.DoubleClick += (_, _) => ToggleEnabled();
+        // 状態の表示 (Zenzai の状態は時間で変わる) は、アイコンに乗せたときに作り直す
+        _tray.MouseMove += (_, _) => UpdateStatus();
         _hotkey = new HotkeyWindow(ToggleEnabled, HotkeyWindow.WithCustom(_engine.Settings.PauseHotkey, HotkeyWindow.ToggleKeys));
         _registerHotkey = new HotkeyWindow(RegisterSelectedWord, HotkeyWindow.RegisterWordKeys, "単語の登録");
         _engine.ToggleRequested += OnToggleRequested;
-        _enabledItem.Text = _hotkey.Name is { } hotkey ? $"Meltype を有効にする (Ctrl+半角/全角, {hotkey})" : "Meltype を有効にする (Ctrl+半角/全角)";
         _updater = new Updater(() => !AppPaths.IsPortable && _engine.Settings.AutoUpdate, () => Prerelease);
         _updater.Ready += OnUpdateReady;
-        ShowUpdateItem();
         UpdateStatus();
         // 前回の更新に失敗していたら知らせる (設定「通知を表示」にかかわらず。入力を止めないように、ダイアログではなく通知にする)
         if (Updater.FailedVersion is { } failed)
@@ -200,14 +140,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private static bool CanRegisterTsf => !AppPaths.IsPortable &&
         File.Exists(Path.Combine(AppContext.BaseDirectory, "setup-ime.ps1")) && Directory.Exists(Path.Combine(AppContext.BaseDirectory, "tip"));
 
-    /// <summary>トレイで Meltype IME を選んだ。使えなければ、登録するかを聞いてから切り替える。</summary>
-    private void SelectTsf()
-    {
-        if (Tip.TipServer.IsUsable) SetMode(InputMode.Tsf);
-        else EnableTsf("Meltype IME を Windows に登録しますか？\n\n" +
-            "Meltype IME は Windows の IME として、打った文字を入力欄に直接入れます。変換ボックスが出ないアプリでも入力できます。");
-    }
-
     /// <summary>Meltype IME を登録するかを聞き、使えるようになったら動作モードを Meltype IME にする。</summary>
     private async void EnableTsf(string question)
     {
@@ -215,7 +147,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         // 次に起動したとき IntroduceTsf で切り替え直さないように、切り替えたことも残す (あとでユーザーが戻したら、そのまま)
         _state.TsfIntroduced = true;
         _state.Save();
-        SetMode(InputMode.Tsf);
+        SwitchToTsf();
         UpdateStatus();
     }
 
@@ -276,13 +208,12 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _welcomeForm.Show();
     }
 
-    /// <summary>新しい版をダウンロードし終えた: メニューに「更新して再起動」を出し、通知する (クリックで今すぐ更新)。</summary>
+    /// <summary>新しい版をダウンロードし終えた: 通知する (クリックで今すぐ更新)。</summary>
     private void OnUpdateReady(string version)
     {
         if (!_invoker.IsHandleCreated || _invoker.IsDisposed) return;
         _invoker.BeginInvoke(() =>
         {
-            ShowUpdateItem();
             if (!_engine.Settings.ShowNotifications) return;
             _tray.BalloonTipClicked -= OnUpdateBalloonClicked;
             _tray.BalloonTipClicked += OnUpdateBalloonClicked;
@@ -290,10 +221,10 @@ internal sealed class TrayApplicationContext : ApplicationContext
         });
     }
 
-    /// <summary>自動更新が OFF なら、次のサインインでは更新しない (Updater.ApplyStagedAtStartup)。トレイのメニューから更新できると案内する。</summary>
+    /// <summary>自動更新が OFF なら、次のサインインでは更新しない (Updater.ApplyStagedAtStartup)。設定アプリから更新できると案内する。</summary>
     internal static string UpdateReadyMessage(string version, bool autoUpdate) => autoUpdate
         ? $"Meltype {version} を準備しました。次に Windows にサインインしたときに更新します。ここをクリックすると今すぐ更新します。"
-        : $"Meltype {version} を準備しました。トレイの「更新」→「Meltype {version} に更新して再起動」で更新できます。ここをクリックすると今すぐ更新します。";
+        : $"Meltype {version} を準備しました。設定の「更新」→「今すぐ更新を確認」で更新できます。ここをクリックすると今すぐ更新します。";
 
     /// <summary>
     /// 自動更新が ON なら、Updater がダウンロードし直し、次のサインインでもう一度更新する。
@@ -301,7 +232,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     /// </summary>
     internal static string UpdateFailedMessage(string version, bool autoUpdate) => autoUpdate
         ? $"Meltype {version} に更新できませんでした。今の版のまま動いています。次に Windows にサインインしたときに、もう一度更新します。記録: {Updater.InstallLog}"
-        : $"Meltype {version} に更新できませんでした。今の版のまま動いています。トレイの「更新」→「今すぐ更新を確認」から、もう一度更新できます。記録: {Updater.InstallLog}";
+        : $"Meltype {version} に更新できませんでした。今の版のまま動いています。設定の「更新」→「今すぐ更新を確認」から、もう一度更新できます。記録: {Updater.InstallLog}";
 
     /// <summary>
     /// 更新したあとの初めての起動で、その版のリリースノートを出すか決めて、見せた版を state.json に残す (issue #1207)。
@@ -367,7 +298,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     {
         var names = excluded.Take(3).Select(e => e.Shortcut is { } shortcut ? shortcut.Describe() : "不正な登録 (null)");
         var remaining = excluded.Count > 3 ? $"、ほか {excluded.Count - 3} 件" : "";
-        return $"{string.Join("、", names)}{remaining}\n詳細は「ログ / 判定理由」で確認できます。";
+        return $"{string.Join("、", names)}{remaining}\n詳細は「Meltype」の「打鍵数・ログ」→「ログ / 判定理由」で確認できます。";
     }
 
     /// <summary>
@@ -375,14 +306,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
     /// ダウンロード (Updater) と更新 (Staged・Apply) のどちらも、そのときのこの値で決める。
     /// </summary>
     private bool Prerelease => _engine.Settings.UpdatePrerelease;
-
-    /// <summary>ダウンロード済みの新しい版があれば「更新して再起動」を出し、無ければ隠す。</summary>
-    private void ShowUpdateItem()
-    {
-        var staged = Updater.Staged(Prerelease);
-        _updateItem.Visible = staged is not null;
-        if (staged is { } shown) _updateItem.Text = $"Meltype {shown.Version} に更新して再起動";
-    }
 
     private void ApplyUpdate()
     {
@@ -392,8 +315,26 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     private async void CheckForUpdate()
     {
-        var result = await _updater.CheckNowAsync();
-        ShowUpdateItem();
+        // 確認している間にもう一度押されたら、確認し直さずに窓を前に出す
+        if (_updateCheckForm is { IsDisposed: false })
+        {
+            _updateCheckForm.Activate();
+            return;
+        }
+        _updateCheckForm = new UpdateCheckForm();
+        _updateCheckForm.Show();
+        // 窓を閉じてから押し直したときは、続いている確認を待つ (Updater は確認を 1 つずつしか動かさない。結果は最初に押した方で出す)
+        if (_updateCheck is { IsCompleted: false }) return;
+        _updateCheck = _updater.CheckNowAsync();
+        string result;
+        try
+        {
+            result = await _updateCheck;
+        }
+        finally
+        {
+            _updateCheckForm.Close();
+        }
         if (Updater.Staged(Prerelease) is { } staged)
         {
             if (MessageBox.Show($"Meltype {staged.Version} に更新できます。今すぐ更新しますか？ (Meltype が再起動します)", "Meltype の更新", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes) ApplyUpdate();
@@ -444,6 +385,26 @@ internal sealed class TrayApplicationContext : ApplicationContext
         }
     }
 
+    /// <summary>設定アプリから頼まれた画面を出す (AppSignal。UI スレッド)。</summary>
+    public void Open(AppWindow window)
+    {
+        // 合図の WndProc の中でダイアログを出すと、閉じるまで次の合図を受け取れないので、メッセージループに戻ってから出す
+        _invoker.BeginInvoke(() =>
+        {
+            switch (window)
+            {
+                case AppWindow.Guide: ShowWelcome(); break;
+                case AppWindow.Report: OpenReport(); break;
+                case AppWindow.Corrections: ShowCorrections(); break;
+                case AppWindow.Log: ShowLog(); break;
+                case AppWindow.KeyCount: ShowKeyCount(); break;
+                case AppWindow.ReleaseNotes: ReleaseNotesDialog.ShowFor(AppInfo.Version, updated: false, _engine); break;
+                case AppWindow.CheckForUpdate: CheckForUpdate(); break;
+                default: throw new ArgumentOutOfRangeException(nameof(window), window, null);
+            }
+        });
+    }
+
     private void ToggleEnabled()
     {
         _engine.Enabled = !_engine.Enabled;
@@ -468,83 +429,35 @@ internal sealed class TrayApplicationContext : ApplicationContext
         dialog.ShowDialog();
     }
 
-    private static void ToggleStartup()
+    private void ShowCorrections()
     {
-        try
+        if (_correctionDialog is { IsDisposed: false })
         {
-            Startup.Set(!Startup.IsEnabled);
+            _correctionDialog.Activate();
+            return;
         }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"変えられませんでした。\n\n{ex.Message}", "Meltype", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-        }
+        _correctionDialog = new CorrectionReportDialog(_composition.Corrections, _engine.Running);
+        _correctionDialog.Show();
     }
 
-    private void ToggleAutoUpdate()
+    /// <summary>動作モードを Meltype IME にする。</summary>
+    private void SwitchToTsf()
     {
-        _engine.EditSettings(settings => settings.AutoUpdate = !settings.AutoUpdate);
-        _autoUpdateItem.Checked = _engine.Settings.AutoUpdate;
-    }
-
-    private void FillProfiles()
-    {
-        _profileItem.DropDownItems.Clear();
-        var settings = _engine.Settings;
-        foreach (var name in settings.ProfileNames)
-        {
-            _profileItem.DropDownItems.Add(new ToolStripMenuItem(name, null, (_, _) => SwitchProfile(name)) { Checked = name == settings.ActiveProfile });
-        }
-        _profileItem.DropDownItems.Add(new ToolStripSeparator());
-        _profileItem.DropDownItems.Add("プロファイルを足す・名前を変える (設定)...", null, (_, _) => SettingsApp.Open());
-    }
-
-    private void SwitchProfile(string name)
-    {
-        if (name == _engine.Settings.ActiveProfile) return;
-        _engine.ReplaceSettings(settings => settings.SwitchProfile(name));
-        UpdateStatus();
-        if (ProfileSwitchMessage(_engine.Settings) is { } message) ShowBalloonTip(1500, "Meltype", message);
-    }
-
-    /// <summary>除外警告が待機中なら通常の切替通知を省略し、同じ操作でバルーンを連続して表示しない。</summary>
-    internal static string? ProfileSwitchMessage(Settings settings) =>
-        settings.ShowNotifications && !Diagnostics.ShortcutExclusions.HasPending
-            ? $"プロファイルを「{settings.ActiveProfile}」にしました" : null;
-
-    private void ToggleAutoDetection()
-    {
-        _engine.EditSettings(settings => settings.AutoDetection = !settings.AutoDetection);
-        UpdateStatus();
-    }
-
-    private void SetMode(InputMode mode)
-    {
-        if (AppPaths.IsPortable && mode != InputMode.Keyboard) return;
         var wasTsf = _engine.Running.Mode == InputMode.Tsf;
         _engine.EditSettings(settings =>
         {
-            settings.Mode = mode;
+            settings.Mode = InputMode.Tsf;
             settings.Enabled = true;
         });
         // ほかのモードからなら MeltypeEngine.OnSettingsChanged が切り替える。もう Meltype IME のモードで選び直したとき (Win + Space でほかの IME にしていた) も、入力方式を Meltype IME に戻す
-        if (wasTsf && mode == InputMode.Tsf) Tip.TipServer.ActivateForSession();
+        if (wasTsf) Tip.TipServer.ActivateForSession();
     }
 
     private void UpdateStatus()
     {
         var settings = _engine.Running;
         var enabled = settings.Enabled;
-        var keyboard = settings.Mode == InputMode.Keyboard;
         var tsf = settings.Mode == InputMode.Tsf;
-        _enabledItem.Checked = enabled;
-        _keyboardModeItem.Checked = keyboard;
-        _tsfModeItem.Checked = tsf;
-        // Meltype IME を使えず (登録されていない・キーボードの一覧に無い)、登録もできないなら選べない
-        // (使えないまま選ぶとキーボードフックが止まり、どこでも何も起きなくなる。登録できるなら、選んだときに登録する: SelectTsf)
-        var registered = Tip.TipServer.IsRegistered;
-        _tsfModeItem.Enabled = tsf || Tip.TipServer.IsUsable || CanRegisterTsf;
-        _autoDetectionItem.Checked = settings.AutoDetection;
-        _profileItem.Text = $"プロファイル: {settings.ActiveProfile}";
 
         string status;
         if (!enabled)
@@ -555,19 +468,18 @@ internal sealed class TrayApplicationContext : ApplicationContext
         else if (tsf)
         {
             _tray.Icon = _onIcon;
-            status = registered ? "Meltype IME (Win + Space で Meltype を選んで入力)" : "Meltype IME が登録されていません (トレイの「Meltype IME」を選ぶと登録できます)";
+            status = Tip.TipServer.IsRegistered ? "Meltype IME (Win + Space で Meltype を選んで入力)" : "Meltype IME が登録されていません (「Meltype」の動作モードで Meltype IME を選び直すと登録できます)";
         }
         else
         {
             _tray.Icon = _keyboard.Japanese ? _onIcon : _directIcon;
             status = _keyboard.Japanese ? "キーボード: 日本語" : "キーボード: 直接入力 (半角/全角 で日本語)";
         }
-        _statusItem.Text = status;
-        var zenzai = _composition.Runtime.ZenzaiStatus();
-        _zenzaiItem.Visible = zenzai is not null;
-        if (zenzai is not null) _zenzaiItem.Text = $"Zenzai: {zenzai}";
-        var tip = $"Meltype — {status}";
-        _tray.Text = tip.Length > 63 ? tip[..63] : tip;
+        // Zenzai の状態は「Zenzai を使う」が ON のときだけ出す (issue #1152)
+        var zenzai = _composition.Runtime.ZenzaiStatus() is { } running ? $"\nZenzai: {running}" : "";
+        // NotifyIcon.Text は 127 文字まで
+        var tip = $"Meltype — {status}{zenzai}";
+        _tray.Text = tip.Length > 127 ? tip[..127] : tip;
     }
 
     private void ShowKeyCount()
@@ -621,25 +533,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _logForm.Show();
     }
 
-    private static void OpenDataFolder()
-    {
-        Directory.CreateDirectory(AppPaths.DataDirectory);
-        Process.Start(new ProcessStartInfo("explorer.exe", $"\"{AppPaths.DataDirectory}\"") { UseShellExecute = true });
-    }
-
-    /// <summary>インストーラーのアンインストーラーでアンインストールする (確認もアンインストーラーが出す)。</summary>
-    private static void Uninstall()
-    {
-        try
-        {
-            Process.Start(new ProcessStartInfo(Path.Combine(AppContext.BaseDirectory, "unins000.exe")) { UseShellExecute = true, WorkingDirectory = Path.GetTempPath() });
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"アンインストールを始められませんでした: {ex.Message}\nWindows の「設定」→「アプリ」→「インストールされているアプリ」からアンインストールしてください。", "Meltype", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-        }
-    }
-
     protected override void ExitThreadCore()
     {
         _exiting = true;
@@ -654,7 +547,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _composition.Dispose();
         _logForm?.Close();
         _reportDialog?.Close();
+        _correctionDialog?.Close();
         _welcomeForm?.Close();
+        _updateCheckForm?.Close();
         _updater.Dispose();
         _hotkey.Dispose();
         _registerHotkey.Dispose();

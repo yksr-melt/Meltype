@@ -1,7 +1,7 @@
 Meltype for Mac (プレビュー版)
 
 Meltype はアプリではなく「入力ソース」(日本語入力) です。Meltype.app をダブルクリックしても何も起きません。
-設定は、インストールすると Launchpad に出る「Meltype の設定」で変えます。
+設定は、インストールすると Launchpad に出る「Meltype」で変えます。
 
 ■ 動く環境
   macOS 13.3 以降、Apple シリコン (M1 / M2 / M3 / M4 …) の Mac

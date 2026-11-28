@@ -23,7 +23,8 @@ internal static class Pages
         new(SnippetsPage.Title, () => SnippetsPage.Build(owner, store, settings(SnippetsPage.Title))),
         new(LearningPage.Title, () => LearningPage.Build(owner, settings(LearningPage.Title))),
         new("バックアップ", () => BackupPage.Build(owner)),
-        new("Meltype について", () => AboutPage.Build(owner)),
+        // 有効 / 一時停止と動作モードは、トレイ・ホットキーでも変わるので、config.json が書き換わったら作り直す
+        new(AboutPage.Title, () => AboutPage.Build(owner, settings(AboutPage.Title)), ShowsSettings: true),
     ];
 
     /// <summary>ページの見出しと説明を上に置き、続けて parts を縦に並べる。</summary>

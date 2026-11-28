@@ -6,7 +6,7 @@
 | --- | --- |
 | IBus のエンジン (`ibus-engine-meltype`, Python) | IBus からキーを受け取り、判定の本体に渡して、変換中の文字・候補・確定を入力欄に反映する |
 | fcitx5 のアドオン (`fcitx5/`, C++) | fcitx5 からキーを受け取り、判定の本体に渡す |
-| 設定アプリ (`meltype-settings`) | Windows・Mac と共通の `src/Meltype.Settings` を NativeAOT でビルドしたもの。IBus・fcitx5 の設定と、アプリの一覧の「Meltype の設定」から開く |
+| 設定アプリ (`meltype-settings`) | Windows・Mac と共通の `src/Meltype.Settings` を NativeAOT でビルドしたもの。IBus・fcitx5 の設定と、アプリの一覧の「Meltype」から開く |
 | 判定の本体 (`libMeltypeNative.so`) | Windows 版と共通の C# の部分 (`src/Meltype.Core`) を NativeAOT で Linux 用のライブラリにしたもの |
 | 漢字変換 | Mozc の変換ヘルパー (`native/mozc`) |
 | 文脈を見た変換 (Zenzai) | llama.cpp の llama-server と zenz のモデル。llama-server は `native/zenzai/build-llama-server.sh` が `native/zenzai/zenzai.env` の版のソースからビルドし、モデルは `native/build-core-linux.sh` が取ってくる (リリースタグでは取得失敗で停止。手元のタグなしビルドだけは、モデルを取れなければ Mozc だけで変換する)。どちらも `zenzai/` に置く |

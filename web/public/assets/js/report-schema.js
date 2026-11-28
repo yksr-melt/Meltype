@@ -48,7 +48,7 @@ const ENVIRONMENT = {
   id: "environment",
   label: "実行環境",
   type: "code",
-  hint: "トレイのアイコンを右クリック →「不具合の報告・提案...」の「実行環境」をそのまま貼ってください",
+  hint: "「Meltype」の最初のページの「不具合の報告・提案」の「実行環境」をそのまま貼ってください",
 };
 
 export const PRIVATE_FIELDS = ["contact", "log", "environment"];
@@ -68,7 +68,7 @@ export const FORMS = [
     ],
     optional: [
       ENVIRONMENT,
-      { id: "log", label: "ログ", type: "code", hint: "トレイのアイコンを右クリック →「ログ / 判定理由...」→「コピー」。Windows の更新の不具合は %LOCALAPPDATA%\\Meltype\\update\\install.log の中身。見られて困る部分は消してから貼ってください" },
+      { id: "log", label: "ログ", type: "code", hint: "「Meltype」の「打鍵数・ログ」→「ログ / 判定理由」→「コピー」。Windows の更新の不具合は %LOCALAPPDATA%\\Meltype\\update\\install.log の中身。見られて困る部分は消してから貼ってください" },
       CONTACT,
     ],
     // フォームから外した欄。保存済みの報告 (180 日で消える) の表示だけに使う

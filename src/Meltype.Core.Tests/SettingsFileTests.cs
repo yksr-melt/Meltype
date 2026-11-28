@@ -102,7 +102,7 @@ internal static class SettingsFileTests
         finally { Directory.Delete(directory, recursive: true); }
     }
 
-    /// <summary>設定アプリで 1 項目を変えて保存しても、直前にほかのプロセス (トレイ) が書いた値を、間隔の間の古い設定で戻さない。</summary>
+    /// <summary>設定アプリで 1 項目を変えて保存しても、直前にほかのプロセス (トレイの一時停止など) が書いた値を、間隔の間の古い設定で戻さない。</summary>
     [Test]
     public static void SettingsFile_EditReadsLatestFileBeforeSaving()
     {

@@ -10,6 +10,7 @@ namespace Meltype.Config;
 public static class ProjectInfo
 {
     public const string SourceUrl = "https://github.com/yksr-melt/Meltype";
+    public const string Contact = "ibutya0319@gmail.com";
 
     /// <summary>Meltype.Core の版 (Mac 版・Linux 版の版)。</summary>
     public static string CoreVersion =>

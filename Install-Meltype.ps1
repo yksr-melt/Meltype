@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Yukishiro
 
 # ソースからビルドしたインストーラーで Meltype を入れる。配布するものと同じインストーラー (Build-Package.ps1 → packaging\Meltype.iss) を使う。
-# アンインストールは、ふつうに入れたときと同じ (トレイの「アンインストール...」か、Windows の「設定」→「アプリ」)。
+# アンインストールは、ふつうに入れたときと同じ (「Meltype」の最初のページの「アンインストール…」か、Windows の「設定」→「アプリ」)。
 # -NoIme: Meltype IME を新しく登録しない (変換ボックスで入力する方式だけ。管理者権限が要らない)。登録済みなら、インストーラーが更新する
 param([switch]$NoIme)
 

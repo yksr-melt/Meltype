@@ -23,29 +23,6 @@ internal static class ShortcutSettingsTests
         Assert.True(settings.EffectiveToggleShortcuts.All(b => ToggleShortcutValidator.Validate(b, settings, []) != ShortcutValidationError.None), "登録後に割り当てを変えても保存前検証で拒否する");
     }
 
-    /// <summary>トレイから競合を含むプロファイルへ切り替えたときは、通常の切替通知を省略して除外警告を優先すること。</summary>
-    [Test]
-    public static void Shortcut_ProfileSwitchPrioritizesExclusionWarning()
-    {
-        Meltype.Diagnostics.ShortcutExclusions.Drain();
-        try
-        {
-            var settings = new Settings { ShowNotifications = true }.Normalize();
-            Assert.True(TrayApplicationContext.ProfileSwitchMessage(settings) is not null, "通常の切替では Info 通知");
-            var values = settings.ProfileValues();
-            values[nameof(Settings.ToggleShortcuts)] = new System.Text.Json.Nodes.JsonArray(new System.Text.Json.Nodes.JsonObject { ["Key"] = 0x70 });
-            settings.Profiles.Add(new SettingsProfile { Name = "古い設定", Values = values });
-            var next = settings.SwitchProfile("古い設定");
-            Assert.True(TrayApplicationContext.ProfileSwitchMessage(next) is null, "除外した切替では Info を要求しない");
-            var warning = TrayApplicationContext.TakeShortcutExclusionMessage(next.ShowNotifications);
-            Assert.True(warning is not null && warning.Contains("F1"), "Info の判定で除外警告を消費しない");
-            Assert.True(TrayApplicationContext.TakeShortcutExclusionMessage(true) is null, "Warning は一度だけ取り出す");
-            next.ShowNotifications = false;
-            Assert.True(TrayApplicationContext.ProfileSwitchMessage(next) is null, "通知 OFF では Info も省略");
-        }
-        finally { Meltype.Diagnostics.ShortcutExclusions.Drain(); }
-    }
-
     /// <summary>トレイ生成前の除外をまとめて通知し、通知 OFF で消費した情報は ON に戻しても再通知しないこと。</summary>
     [Test]
     public static void Shortcut_ExclusionNotificationsConsumeStartupAndDisabledBatches()

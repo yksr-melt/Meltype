@@ -25,7 +25,7 @@ public sealed record Correction(string Typed, string Shown, string Corrected, st
 
 /// <summary>
 /// 最近直した誤判定 (メモリの中だけ。ファイルにも外にも保存しない。Meltype を終了すると消える)。
-/// トレイの「直した誤判定を報告...」で、送る前に中身を全部見せ、書き換えてから報告できるようにする (issue #284)。
+/// 設定アプリの「直した誤判定を報告」で、送る前に中身を全部見せ、書き換えてから報告できるようにする (issue #284)。
 /// </summary>
 public sealed class CorrectionLog
 {

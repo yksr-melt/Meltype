@@ -1,21 +1,21 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!-- 設定アプリ (src/Meltype.Settings) の Meltype Settings.app。build.sh が版を入れる -->
+<!-- 設定アプリ (src/Meltype.Settings) の Meltype Settings.app。表示名は「Meltype」(Windows・Linux と同じ)。build.sh が版を入れる -->
 <plist version="1.0">
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>ja</string>
 	<key>CFBundleExecutable</key>
 	<string>MeltypeSettings</string>
-	<!-- 入力メニューの「Meltype の設定…」(InputController.openSettings) が、この ID で探して開く -->
+	<!-- 入力メニューの「Meltype を開く…」(InputController.openSettings) が、この ID で探して開く -->
 	<key>CFBundleIdentifier</key>
 	<string>io.github.yksr-melt.Meltype.Settings</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>Meltype Settings</string>
+	<string>Meltype</string>
 	<key>CFBundleDisplayName</key>
-	<string>Meltype Settings</string>
+	<string>Meltype</string>
 	<key>LSHasLocalizedDisplayName</key>
 	<true/>
 	<key>CFBundleIconFile</key>

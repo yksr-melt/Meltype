@@ -54,13 +54,13 @@ internal sealed class CompositionService : IDisposable
     /// <summary>背景の変換の結果が届いた (入力欄に知らせる)。ワーカーのスレッドで呼ぶ。</summary>
     public event Action? ConversionReady;
 
-    /// <summary>ユーザー辞書 (トレイの「ユーザー辞書...」で編集する)。</summary>
+    /// <summary>ユーザー辞書 (設定アプリの「ユーザー辞書」で編集する)。</summary>
     public UserDictionary UserDictionary => Runtime.UserDictionary;
 
-    /// <summary>登録した定型文 (トレイの「定型文...」で編集する。;名前 + Space で入れる: issue #290)。</summary>
+    /// <summary>登録した定型文 (設定アプリの「定型文」で編集する。;名前 + Space で入れる: issue #290)。</summary>
     public SnippetStore Snippets => Runtime.Snippets;
 
-    /// <summary>最近自分で直した誤判定 (メモリの中だけ。トレイの「直した誤判定を報告...」: issue #284)。</summary>
+    /// <summary>最近自分で直した誤判定 (メモリの中だけ。設定アプリの「直した誤判定を報告」: issue #284)。</summary>
     public CorrectionLog Corrections { get; } = new();
 
 

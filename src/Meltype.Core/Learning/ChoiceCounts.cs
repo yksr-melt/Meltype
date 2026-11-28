@@ -78,7 +78,7 @@ internal sealed class ChoiceCounts
         _saver.Request();
     }
 
-    /// <summary>記録をすべて消す (トレイの「学習データをリセット」)。</summary>
+    /// <summary>記録をすべて消す (設定アプリの「学習」の「すべて (リセット)」)。</summary>
     public void Clear()
     {
         lock (_gate) _counts.Clear();

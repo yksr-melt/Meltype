@@ -2,19 +2,21 @@
 // Copyright (C) 2026 Yukishiro
 
 using System.Diagnostics;
+using System.Runtime.Versioning;
 using System.Security.Principal;
 using Microsoft.Win32;
 
-namespace Meltype;
+namespace Meltype.Config;
 
 /// <summary>
-/// Windows の起動 (サインイン) 時に Meltype を起動するか (トレイの「Windows の起動時に起動」)。
+/// Windows の起動 (サインイン) 時に Meltype を起動するか (設定アプリの「Windows の起動時に起動」)。
 /// スタートアップのフォルダー・HKCU の Run に置いたものは、Windows がサインインの後に数秒〜十数秒遅らせて起動するので、
 /// その間は Meltype を使えなかった (issue #283)。サインインしたらすぐ起動する、タスク スケジューラのタスク (このユーザーの
 /// ログオン時・管理者権限なし) で起動する。タスクを作れなければ、今までどおり HKCU の Run に登録する。
 /// インストーラーはスタートアップのフォルダーにショートカットを置くので、起動したときにタスクへ移す (<see cref="MigrateToTask"/>)。
 /// </summary>
-internal static class Startup
+[SupportedOSPlatform("windows")]
+public static class WindowsStartup
 {
     private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string ValueName = "Meltype";
@@ -23,12 +25,11 @@ internal static class Startup
 
     private static string Shortcut => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Startup), "Meltype.lnk");
 
-    /// <summary>
-    /// 登録してあるか。調べるには schtasks.exe を起動して待つので、トレイのメニューを開くたびには調べない。
-    /// 起動したときに <see cref="MigrateToTask"/> で調べた値を覚えておき、<see cref="Set"/> で変える。
-    /// </summary>
-    public static bool IsEnabled => _enabled;
-    private static volatile bool _enabled;
+    // Meltype.exe と設定アプリ (MeltypeSettings.exe) は同じフォルダーにある
+    private static string Executable => Path.Combine(AppContext.BaseDirectory, "Meltype.exe");
+
+    /// <summary>登録してあるか。調べるには schtasks.exe を起動して待つので、UI スレッドでは呼ばない。</summary>
+    public static bool IsEnabled() => HasLegacyEntry() || TaskExists();
 
     /// <summary>スタートアップのフォルダー・Run に登録してあるか (遅れて起動する、前の登録の仕方)。</summary>
     private static bool HasLegacyEntry()
@@ -42,14 +43,14 @@ internal static class Startup
     {
         if (enabled)
         {
-            if (CreateTask(Application.ExecutablePath))
+            if (CreateTask(Executable))
             {
                 RemoveLegacyEntries();
             }
             else if (!HasLegacyEntry())
             {
                 using var key = Registry.CurrentUser.CreateSubKey(RunKey);
-                key.SetValue(ValueName, $"\"{Application.ExecutablePath}\"");
+                key.SetValue(ValueName, $"\"{Executable}\"");
             }
         }
         else
@@ -57,24 +58,22 @@ internal static class Startup
             DeleteTask();
             RemoveLegacyEntries();
         }
-        _enabled = enabled;
         Diagnostics.Log.Info(enabled ? "Windows の起動時に Meltype を起動します。" : "Windows の起動時に Meltype を起動しません。");
     }
 
     /// <summary>
     /// スタートアップのフォルダー・Run に登録してあれば、すぐ起動するタスクに移す (起動したときに裏で行う)。
-    /// タスクを作れなければ、今の登録のまま。終わったら、登録してあるかを <see cref="IsEnabled"/> に覚えておく。
+    /// タスクを作れなければ、今の登録のまま。
     /// </summary>
     public static void MigrateToTask()
     {
         try
         {
-            if (HasLegacyEntry() && !TaskExists() && CreateTask(Application.ExecutablePath))
+            if (HasLegacyEntry() && !TaskExists() && CreateTask(Executable))
             {
                 RemoveLegacyEntries();
                 Diagnostics.Log.Info("Windows の起動時の起動を、サインインしたらすぐ起動するタスクに移しました。");
             }
-            _enabled = HasLegacyEntry() || TaskExists();
         }
         catch (Exception ex)
         {

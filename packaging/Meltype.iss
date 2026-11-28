@@ -73,10 +73,12 @@ Source: "{#SourceDir}\THIRD-PARTY-NOTICES.txt"; DestDir: "{app}"; Flags: ignorev
 [InstallDelete]
 ; 1.6.0 以前の zip 版 (Install.cmd) が置いたアンインストーラー
 Type: files; Name: "{app}\uninstall.ps1"
+; 前の版のスタートメニューの「Meltype の設定」(今は「Meltype」が設定アプリを開く)
+Type: files; Name: "{userprograms}\Meltype の設定.lnk"
 
 [Icons]
-Name: "{userprograms}\Meltype"; Filename: "{app}\Meltype.exe"; WorkingDir: "{app}"; Comment: "Meltype: 日本語と英語を自動で打ち分ける"
-Name: "{userprograms}\Meltype の設定"; Filename: "{app}\MeltypeSettings.exe"; WorkingDir: "{app}"; Comment: "Meltype の設定・ユーザー辞書・定型文・学習データ"
+; 設定アプリは開くと Meltype.exe も起動する (動いていれば何もしない)
+Name: "{userprograms}\Meltype"; Filename: "{app}\MeltypeSettings.exe"; WorkingDir: "{app}"; Comment: "Meltype: 日本語と英語を自動で打ち分ける"
 Name: "{userstartup}\Meltype"; Filename: "{app}\Meltype.exe"; WorkingDir: "{app}"; Comment: "Meltype: 日本語と英語を自動で打ち分ける"; Tasks: startup
 
 [Run]
@@ -189,7 +191,7 @@ begin
       exit;
     end;
   end
-  // 登録を断っても、Meltype キーボードで使える。あとからトレイの「Meltype IME」で登録できる
+  // 登録を断っても、Meltype キーボードで使える。あとから設定アプリで動作モードを Meltype IME にすると登録できる
   else if WizardIsTaskSelected('meltypeime') then
     RegisterMeltypeIme();
 #endif

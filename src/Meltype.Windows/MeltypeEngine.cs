@@ -37,7 +37,7 @@ internal sealed class MeltypeEngine : IDisposable
 
     private readonly HashSet<int> _toggleKeyDown = [];
 
-    /// <summary>打鍵数のカウンター (トレイの「打鍵数...」)。</summary>
+    /// <summary>打鍵数のカウンター (設定アプリの「打鍵数」)。</summary>
     public KeyCounter KeyCounter { get; }
 
     // ほかのソフトが送ったキーを通したことを、1 回だけログに書いたか (#250)
@@ -64,7 +64,7 @@ internal sealed class MeltypeEngine : IDisposable
     /// <summary>設定・辞書・学習データ (どの OS も同じもの)。</summary>
     public Ime.MeltypeRuntime Runtime { get; }
 
-    /// <summary>config.json の設定。設定画面・トレイはこれを写して変える (<see cref="Running"/> を写すと、Meltype キーボードを保存してしまう)。</summary>
+    /// <summary>config.json の設定。トレイはこれを写して変える (<see cref="Running"/> を写すと、Meltype キーボードを保存してしまう)。</summary>
     public Settings Settings => _settings;
 
     /// <summary>動かしている設定。入力・表示・報告はこれを読む。動作モードが Meltype IME でも、使えなければ Meltype キーボード。</summary>
@@ -188,15 +188,12 @@ internal sealed class MeltypeEngine : IDisposable
     /// config.json を読み直してから change で 1 項目を変えて保存する (設定アプリが直前に書いた値を戻さない)。
     /// 保存できなくても、このプロセスでは変えた設定を使う (一時停止などが効かなくならないように)。
     /// </summary>
-    public void EditSettings(Action<Settings> change) => ReplaceSettings(settings =>
+    public void EditSettings(Action<Settings> change) => Runtime.Settings.Edit(settings =>
     {
         var next = settings.Clone();
         change(next);
         return next;
-    });
-
-    /// <summary><see cref="EditSettings"/> と同じで、プロファイルの切り替えなど設定全体を作り直す。</summary>
-    public void ReplaceSettings(Func<Settings, Settings> change) => Runtime.Settings.Edit(change, useUnsaved: true);
+    }, useUnsaved: true);
 
     /// <summary>設定が変わった後の処理 (UI スレッド)。設定画面で変えたときも、config.json を外で書き換えたときも呼ぶ。</summary>
     public void OnSettingsChanged(Settings previous, Settings next)
@@ -204,7 +201,7 @@ internal sealed class MeltypeEngine : IDisposable
         // Meltype キーボードを使わなくなった: 変換中の内容を確定する。どちらでも、本体の状態を受け取り直す
         if (previous is { Enabled: true, Mode: InputMode.Keyboard } && next is not { Enabled: true, Mode: InputMode.Keyboard }) Keyboard?.Stop();
         else Keyboard?.Refresh();
-        // Meltype IME のモードにしたら (トレイでも設定画面でも)、いま使う入力方式も Meltype IME にする (Win + Space で選び直さなくてよいように)
+        // Meltype IME のモードにしたら (設定アプリでも、Meltype IME の登録でも)、いま使う入力方式も Meltype IME にする (Win + Space で選び直さなくてよいように)
         if (SwitchesToTsf(previous.Mode, next.Mode)) Tip.TipServer.ActivateForSession();
         Log.Info($"設定を反映しました (モード: {next.Mode}, 有効: {(next.Enabled ? "ON" : "OFF")}, 自動判定: {(next.AutoDetection ? "ON" : "OFF")}, 入力方式: {next.InputStyle})。");
     }

@@ -248,7 +248,7 @@ public sealed class MeltypeRuntime : IDisposable
         Send();
     }
 
-    /// <summary>Zenzai の今の状態 (トレイのメニューに出す。issue #1152)。OFF・変換エンジンを作っていなければ null。</summary>
+    /// <summary>Zenzai の今の状態 (トレイのアイコンのツールチップに出す。issue #1152)。OFF・変換エンジンを作っていなければ null。</summary>
     public Func<string?> ZenzaiStatus { get; private set; } = () => null;
 
     /// <summary>入力欄の本体を作る部品 (<see cref="Ime.ImeHost"/> に渡す)。converter は変換エンジン (テストでは偽物)。</summary>
@@ -328,7 +328,7 @@ public sealed class MeltypeRuntime : IDisposable
         });
     }
 
-    /// <summary>英字 (letters) がローマ字 (日本語) か英語かの判定 (トレイの「ログ / 判定理由」の判定にも使う)。final は、もう続きが無いか。</summary>
+    /// <summary>英字 (letters) がローマ字 (日本語) か英語かの判定 (Windows の「ログ / 判定理由」の判定にも使う)。final は、もう続きが無いか。</summary>
     public DetectionResult Evaluate(string letters, bool final, Settings settings) => Evaluate(_directEngine.Value, letters, final, settings);
 
     private static DetectionResult Evaluate(ScoreEngine engine, string letters, bool final, Settings settings) =>

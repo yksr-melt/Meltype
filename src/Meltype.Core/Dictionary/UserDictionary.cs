@@ -21,7 +21,7 @@ public sealed record UserWord(string Reading, string Word, string Pos = UserWord
 /// ユーザー辞書 (%LOCALAPPDATA%\Meltype\userdict.txt、1 行に「読み[Tab]単語」か「読み[Tab]単語[Tab]品詞」か「読み[Tab]単語[Tab]品詞[Tab]分類」。品詞が無ければ名詞)。
 /// 登録した語と同梱の語句 (phrases.txt) は変換エンジン (Mozc) のユーザー辞書に渡し (<see cref="EngineWords"/>)、ほかの語との取り合いと
 /// 文節の区切りを Mozc のコストで決める。
-/// トレイの「ユーザー辞書...」から登録・削除する。
+/// 設定アプリの「ユーザー辞書」から登録・削除する。
 /// importDirectory (Mac / Linux は データフォルダ/dictionaries) に置いた .plist (macOS の「ユーザ辞書」を書き出したもの) の語も使う (#40)。
 /// .plist の語は userdict.txt には書かず、置いたファイルをそのまま読む。
 /// </summary>
