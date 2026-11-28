@@ -95,3 +95,10 @@ picco nqrse
 holoX
 # Issue #2389 (まとめ) のサービス名・アプリ名
 Mergify Antigravity Obsidian KonomiTV
+
+# 辞書追加リクエストのメモ (Linux・開発ツール)
+IBus Xwayland Codex
+# 英字・数字・英字の略語
+i18n l10n g11n m17n p13n a11y o11y k8s e2e E2EE o2o p2p b2b b2c c2c m2m w3c h2o
+I2C I2S i3wm J2EE A2A U2F P2E m4a C4D Y2K k3s k9s w3m f2f D2C B2G X2Go L2TP V2X
+HbA1c N2O H2S C10K C2PA A2DP M3U m4v G2A L4D B4B F2P P2W T2I I2I T2V I2V G2G f4f l4l l8r word2vec seq2seq pix2pix img2img txt2img doc2vec wav2vec vid2vid

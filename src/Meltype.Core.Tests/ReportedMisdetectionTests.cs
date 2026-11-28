@@ -76,9 +76,11 @@ internal static class ReportedMisdetectionTests
     [Test]
     public static void Digits_InsideJapaneseAreNotNumeronyms()
     {
-        // 前の語の続きの母音 + 数字 + かな (mou|1|tu・dai|1|dan) は日本語 (issue #1718・#2379)。略語 (i18n・e2e・k8s) は今までどおり
+        // 前の語の続きの母音 + 数字 + かな (mou|1|tu・dai|1|dan) は日本語 (issue #1718・#2379)。辞書の略語 (i18n・e2e・k8s) は英字
         Check(("mou1tu", "もう1つ"), ("dai1dan", "だい1だん"), ("i18n", "i18n"), ("e2e", "e2e"), ("k8s", "k8s"),
-            ("a11y", "a11y"), ("h2o", "h2o"), ("l10n", "l10n"));
+            ("a11y", "a11y"), ("h2o", "h2o"), ("l10n", "l10n"),
+            // 辞書の略語の後ろの日本語は、略語の直後で区切る (n8n|で)
+            ("n8nde", "n8nで"), ("k8sde", "k8sで"), ("i18nnotaiou", "i18nのたいおう"), ("e2etesuto", "e2eてすと"));
     }
 
     [Test]
