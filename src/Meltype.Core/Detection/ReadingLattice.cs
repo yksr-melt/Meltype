@@ -219,6 +219,7 @@ internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
             if (edge.English)
             {
                 if (state.Side == Side.Japanese && betweenLetters && IsSandwiched(from)) counts[(int)LinkFeature.Sandwich]++;
+                if (state.Side == Side.Japanese && betweenLetters && IsParticleInsideUnknownWord(from, edge)) counts[(int)LinkFeature.Switch] += 2;
                 if (state.Side == Side.Japanese && !state.Particle) counts[(int)LinkFeature.Switch]++;
                 if (state.IsEnglish && betweenLetters) counts[(int)LinkFeature.AdjacentEnglish]++;
             }
@@ -246,6 +247,35 @@ internal sealed class ReadingLattice(WordJudge words, LinkWeights weights)
                 particle |= run.Edge.Particle;
             }
             return !particle && run.Previous is { Edge.English: true } before && before.Edge.End == run.Edge.Start && run.Edge.Start > 0 && char.IsAsciiLetter(text[run.Edge.Start - 1]);
+        }
+
+        // 英字のあいだの付属語 (excel|と|ppt・X|の|post) は、両側が英単語のときだけ付属語として読む。
+        // SCOWL の短い語をつないだ未知語 (Spectra|so|に|cs・kilo|へ|arts) と、大文字で続く 1 つの名前 (S|は|per|Box) の途中には付属語を作らない
+        bool IsParticleInsideUnknownWord(LatticeNode from, LatticeEdge edge)
+        {
+            var run = from;
+            var particle = run.Edge.Particle;
+            while (run.Previous is { } previous && !run.Edge.English && !run.Edge.Neutral)
+            {
+                if (previous.Edge.English || previous.Edge.Neutral) break;
+                run = previous;
+                particle |= run.Edge.Particle;
+            }
+            if (!particle || run.Previous is not { Edge.English: true } before || before.Edge.End != run.Edge.Start || run.Edge.Start == 0 || !char.IsAsciiLetter(text[run.Edge.Start - 1])) return false;
+            var leftRun = before;
+            while (leftRun.Previous is { Edge.English: true } earlier && earlier.Edge.End == leftRun.Edge.Start) leftRun = earlier;
+            var left = text[leftRun.Edge.Start..before.Edge.End].ToLowerInvariant();
+            var leftKana = words.Romaji.ConvertLenient(left, final: true);
+            // 選んで入れた語、かなとして読めない英字だけの略語 (rds)、大文字 1 文字 (X) は英単語
+            var leftIsEnglish = words.IsListedEnglishWord(learning, left) || left.Length == 1 && char.IsAsciiLetterUpper(text[leftRun.Edge.Start]) || left.Length >= 2 &&
+                (leftKana.All(char.IsAsciiLetter) || WordJudge.IsCommonEnglishWord(left) && leftKana.Any(char.IsAsciiLetter));
+            // と|っ|pt のように、重ねた子音の 1 つが日本語側に入っている道も ppt として調べる
+            var rightStart = from.Edge.Kana == "っ" && DoubledAt(edge.Start - 1) ? edge.Start - 1 : edge.Start;
+            var right = text[rightStart..edge.End].ToLowerInvariant();
+            // 右の語のすぐ後ろに大文字が続く (per|Box) なら、右は 1 つの名前の途中
+            var rightIsEnglish = !(edge.End < length && char.IsAsciiLetterUpper(text[edge.End])) &&
+                (words.IsLatticeEnglishWord(learning, right) || words.Romaji.ConvertLenient(right, final: true).Any(char.IsAsciiLetter));
+            return !leftIsEnglish || !rightIsEnglish;
         }
 
         // 辺を通った後の状態 (重みにはかかわらない)。記号・数字の辺は直前の言語を変えない

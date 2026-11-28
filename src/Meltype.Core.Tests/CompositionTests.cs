@@ -2408,6 +2408,35 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void Issue2037_CapitalizedNameKeepsParticleSyllable()
+    {
+        // #2037: 大文字で始まる名前の小文字の途中の 1 音 (ni・he・ha) を、英字に挟まれた付属語 (Om|に|sphere) として読んでいた。
+        foreach (var (typed, expected) in new[]
+        {
+            ("Omnisphere", "Omnisphere"),
+            ("Spectrasonics", "Spectrasonics"),
+            ("Kilohearts", "Kilohearts"),
+            ("kilohearts", "kilohearts"),
+            ("Prograschicle", "Prograschicle"),
+            ("KiloheartsEssentials", "KiloheartsEssentials"),
+            ("ShaperBox", "ShaperBox"),
+            // 小文字で打った英単語のあいだの付属語と、大文字で始まる英単語の後ろの付属語は日本語のまま
+            ("githubnipush", "GitHubにpush"),
+            ("Githubnipush", "Githubにpush"),
+            ("mainnisharesite", "mainにshareして"),
+            ("exceltoppt", "excelとppt"),
+            ("githubdevote", "GitHubでvote"),
+            ("rdstoredshift", "rdsとredshift"),
+            ("dottonet", "dotとnet"),
+        })
+        {
+            var k = new Keyboard();
+            k.Type(typed + "\n");
+            Assert.Equal(expected, k.Host.Document, typed);
+        }
+    }
+
+    [Test]
     public static void Issue1132_ShortEnglishThenJapanese()
     {
         // 短い英単語の後ろが読める日本語でも、#537 の補正で全文英字に戻っていた。
