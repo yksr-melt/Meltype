@@ -612,10 +612,10 @@ internal static class LanguageLearningTests
     public static void CommonJapanese_NeedsTwoTimesToBecomeEnglish()
     {
         // 一度 kyouha を英字で確定しただけで、ずっと kyouha朝から… になっていた。
-        var typos = RomajiTypoCorrector.Load(CompositionTests.Detector.Romaji);
-        Assert.True(typos.IsCommonJapanese("kyouha") && typos.IsCommonJapanese("sushi"), "よく使う日本語の読み");
-        Assert.True(!typos.IsCommonJapanese("api") && !typos.IsCommonJapanese("github") && !typos.IsCommonJapanese("tao"), "日本語の語にならない");
-        var memory = new LanguageMemory(null) { IsCommonJapanese = typos.IsCommonJapanese };
+        var lexicon = JapaneseLexicon.Load(CompositionTests.Detector.Romaji);
+        Assert.True(lexicon.IsCommonJapanese("kyouha") && lexicon.IsCommonJapanese("sushi"), "よく使う日本語の読み");
+        Assert.True(!lexicon.IsCommonJapanese("api") && !lexicon.IsCommonJapanese("github") && !lexicon.IsCommonJapanese("tao"), "日本語の語にならない");
+        var memory = new LanguageMemory(null) { IsCommonJapanese = lexicon.IsCommonJapanese };
         memory.Remember("kyouha", english: true);
         Assert.True(memory.Get("kyouha") is null, "1 回では英語にしない");
         memory.Remember("kyouha", english: true);
@@ -714,10 +714,9 @@ internal static class LanguageLearningTests
     public static void EnglishWordEndingInNg_BeforeParticle()
     {
         // kyouhameetinggaarimasu が きょうはめえちんっがあります になっていた (meeting の g が が とつながって っが)。
-        // また、表示では きょうはmeetingです なのに、確定したら打ち間違いとして g を直されて めえちんがです になっていた。
         CompositionTests.AssertCommitted(
             ("meetingga", "meetingが"), ("shoppinggasuki", "shoppingがすき"), ("sanngatsu", "さんがつ"),
-            ("kyouhameetinggaarimasu", "きょうはmeetingがあります"), ("kyouhameetingdesu", "きょうはmeetingです"), ("onegaishimsu", "おねがいします"));
+            ("kyouhameetinggaarimasu", "きょうはmeetingがあります"), ("kyouhameetingdesu", "きょうはmeetingです"));
     }
 
 
@@ -1154,7 +1153,7 @@ internal static class LanguageLearningTests
             // Issue #218: 英単語 (hotel・total) の後ろでわざわざ打った ltu が、l の重なり (te|ll = tell) で英字になっていた
             ("hotelltu", "hotelっ"), ("hotelltsu", "hotelっ"), ("totalltute", "totalって"), ("welltuned", "welltuned"),
             // Issue #220: 表示では tabで なのに、確定すると打ち間違いとして たべ に直されていた
-            ("tabde", "tabで"), ("tabga", "tabが"), ("kyouhatabdeyaru", "きょうはtabでやる"), ("tabete", "たべて"), ("onegaishimsu", "おねがいします"),
+            ("tabde", "tabで"), ("tabga", "tabが"), ("kyouhatabdeyaru", "きょうはtabでやる"), ("tabete", "たべて"),
             // 伸ばす音の う + について (そう|u|ni|t の unit) で、t と s が つ にならず英単語 unit になっていた。英単語 + する (commit|する) は今までどおり
             ("sounitsuite", "そうについて"), ("hontounitsukareta", "ほんとうにつかれた"), ("kaijounitsukuto", "かいじょうにつくと"), ("kyouhacommitsuru", "きょうはcommitする"), ("editsuru", "editする"),
             // 笑いの w (文末の w が消えていた、ww が っw になっていた)。英単語の最後の w はそのまま
@@ -1239,8 +1238,8 @@ internal static class LanguageLearningTests
         Assert.Equal(false, memory.Get("google"), "F6 でかなにして確定したので覚える");
         var next = new CompositionTests.Keyboard(languages: memory);
         next.Type("google");
-        // 見せるのは Enter で確定する形 (打ち間違いとして直した形)
-        Assert.Equal("ごごぇ", next.Showing);
+        // 見せるのは Enter で確定する形
+        Assert.Equal("ごおgぇ", next.Showing);
     }
 
     [Test]
@@ -1405,36 +1404,18 @@ internal static class RawCandidateTests
 internal static class RomajiTypoTests
 {
     [Test]
-    public static void RomajiTypos_AreFixedOnCommit()
+    public static void Issue2461_TypedLettersAreCommittedAsShown()
     {
+        // ローマ字の打ち間違いは直さない (#2527)。見えている子音のまま確定する (anb は あんb: issue #2461)
         CompositionTests.AssertCommitted(
-            ("onegaishimsu", "おねがいします"),   // 抜け
-            ("arigatpu", "ありがとう"),           // 隣のキー
-            ("arigtou", "ありがとう"),
-            ("sumimasne", "すみません"),          // 入れ替わり
-            ("shitmeasu", "してます"),
-            ("gozaimsu", "ございます"),
-            ("yorosikuy", "よろしく"),            // 余計な 1 文字
-            ("kinouhaamegafuttemshita", "きのうはあめがふってました"));
+            ("anb", "あんb"), ("kanb", "かんb"), ("anm", "あんm"), ("anh", "あんh"),
+            ("onegaishimsu", "おねがいしmす"),
+            ("sumimasne", "すみmasね"),
+            ("tabde", "tabで"));
     }
 
     [Test]
-    public static void RomajiTypos_FixAShortEnglishWordShownInTheMiddle_WhenTheFixIsALongWord()
-    {
-        // すみ|mas|ね の mas は、同梱の英単語の一覧にあるので、打っている途中は英字に見える。
-        // 直すと すみません (4 文字以上の 1 つの語) になるなら直す (issue #971)
-        CompositionTests.AssertCommitted(
-            ("sumimasne", "すみません"),
-            // 直しても短い語 (たべ・たば) にしかならないものは英字のまま (issue #220)
-            ("tabde", "tabで"),
-            ("tabga", "tabが"),
-            ("kyouhatabdeyaru", "きょうはtabでやる"),
-            // できません / できますね のどちらか分からないものは直さない
-            ("dekimasne", "できmasね"));
-    }
-
-    [Test]
-    public static void RomajiTypos_LeaveEnglishAndAbbreviations()
+    public static void EnglishAndAbbreviations_StayAsTyped()
     {
         CompositionTests.AssertCommitted(
             ("oknotasuku", "okのたすく"),
@@ -1442,15 +1423,6 @@ internal static class RomajiTypoTests
             ("kyouhamtgdesu", "きょうはmtgです"),
             ("sdakega", "sだけが"),
             ("htmlnokaisetu", "htmlのかいせつ"));
-    }
-
-    [Test]
-    public static void RomajiTypos_CanBeTurnedOff()
-    {
-        var k = new CompositionTests.Keyboard();
-        k.CorrectTypos = false;
-        k.Type("onegaishimsu\n");
-        Assert.Equal("おねがいしmす", k.Host.Document);
     }
 
     [Test]
@@ -1505,12 +1477,12 @@ internal static class RomajiTypoTests
     public static void RareReadings_AreWordsWithoutSplittingCommonWords()
     {
         // Issue #1784・#1761・#1764: よく使う語でない長い読み (かんれんづける・くるまどめ・ぼごわしゃ) が無く、英単語に負けていた (関連|duke)。
-        // よく使う語どうしの区切り (きょうは|image) は割らない。カタカナの読みの外来語 (vitamin) は英語のまま。打ち間違い直しには使わない (shuppnbutsu)。
+        // よく使う語どうしの区切り (きょうは|image) は割らない。カタカナの読みの外来語 (vitamin) は英語のまま。
         // katakana.txt と重なる読み (おねしゃす) は katakana.txt の重みのまま
         CompositionTests.AssertCommitted(
             ("kanrenduke", "かんれんづけ"), ("kurumadome", "くるまどめ"), ("bogowasha", "ぼごわしゃ"),
             ("kyouhaimagewotsukuru", "きょうはimageをつくる"), ("kyouhaimagega", "きょうはimageが"), ("kyouhainitwo", "きょうはinitを"), ("konodotwo", "このdotを"),
-            ("vitamin", "vitamin"), ("paranoia", "paranoia"), ("veteran", "veteran"), ("shuppnbutsu", "しゅっぱんぶつ"),
+            ("vitamin", "vitamin"), ("paranoia", "paranoia"), ("veteran", "veteran"),
             // katakana.txt にもある読みは、katakana.txt の重みのまま
             ("oneshasu", "おねしゃす"));
     }

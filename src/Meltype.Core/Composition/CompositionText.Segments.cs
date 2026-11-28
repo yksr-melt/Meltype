@@ -16,7 +16,7 @@ internal static partial class CompositionText
     /// 入力中の表示と、Space・Enter で確定・変換するときで同じ区切りになる。
     public static IReadOnlyList<CompositionSegment> Segments(TextReading state, TextEnv env)
     {
-        // 1 キーごとに、表示・打ち間違いの直し・Space の扱いなどで何度も呼ばれる。区間分けは重い (打った文字のあらゆる区間を調べる) ので、
+        // 1 キーごとに、表示・Space の扱いなどで何度も呼ばれる。区間分けは重い (打った文字のあらゆる区間を調べる) ので、
         // 打った内容と判定の条件が同じなら前の結果を使い回す。
         var key = CompositionText.SegmentsKey(state, env);
         var cache = CompositionText.SegmentsCacheOf(state);
@@ -272,7 +272,7 @@ internal static partial class CompositionText
     public static IReadOnlyList<ProtectedSpan> ProtectedSpans(TextReading state) =>
         CompositionText.ProtectedSpans(state.KanaInput, CompositionText.Raw(state), state.Units is [{ Kana: "・", Raw: "/" }, ..]);
 
-    /// <summary>打った文字 (打ち間違いを直す前) の保護区間。</summary>
+    /// <summary>打った文字の保護区間。</summary>
     public static IReadOnlyList<ProtectedSpan> ProtectedSpans(CompositionTextState state) =>
         CompositionText.ProtectedSpans(state.KanaInput, state.TypedRaw, state.SlashAtStart && state.Keys is [TypedKey.Letter { Char: '/' }, ..]);
 

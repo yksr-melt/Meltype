@@ -71,7 +71,7 @@ internal static class DictionaryMemory
         Row("判定の本体 (CompositionDetector.CreateDefault)", () => detector = CompositionDetector.CreateDefault());
         // 共有される読みの集合は、先に初期化するかな入力の行で数える
         Row("readings (かな入力の判定)", () => ContainsJapaneseReading("あいう", ""));
-        Row("readings (RomajiTypoCorrector)", () => RomajiTypoCorrector.Load(detector!.Romaji));
+        Row("readings (JapaneseLexicon)", () => JapaneseLexicon.Load(detector!.Romaji));
         Row("英訳の候補 (TranslationDictionary)", TranslationDictionary.Load);
         Row("候補の意味 (MeaningDictionary)", MeaningDictionary.Load);
         Row("よく使う英単語 (BuiltInWordChecker)", () => BuiltInWordChecker.Shared);
@@ -132,10 +132,10 @@ internal static class DictionaryMemory
             Line($"英単語 {word} {spell.IsWord(word)} {spell.IsWord(word + "s")} {spell.IsWord(word.Length > 1 ? word[..^1] : "")} {spell.IsWord(word.ToUpperInvariant())}");
         }
 
-        // 読み: ローマ字の打ち間違い直しの語 (活用した形・付属語が続く形) と、かな入力の判定
+        // 読み: よく使う語の一覧 (活用した形・付属語が続く形) と、かな入力の判定
         var detector = CompositionDetector.CreateDefault();
-        var typos = RomajiTypoCorrector.Load(detector.Romaji);
-        Line($"読み {typos.Count}");
+        var lexicon = JapaneseLexicon.Load(detector.Romaji);
+        Line($"読み {lexicon.Count}");
         string[] tails = ["", "わ", "い", "え", "お", "か", "き", "け", "こ", "が", "ぎ", "げ", "ご", "さ", "し", "せ", "そ", "た", "ち", "て", "と", "な", "に", "ね", "の",
             "ば", "び", "べ", "ぼ", "ま", "み", "め", "も", "ら", "り", "れ", "ろ", "っ", "ん", "く", "かっ", "けれ", "そう", "すれ", "しろ", "くれ", "よく", "ます", "です"];
         foreach (var fields in Fields("readings.txt"))
@@ -143,14 +143,14 @@ internal static class DictionaryMemory
             var key = fields[0];
             var stem = key.Length >= 2 ? key[..^1] : key;
             var line = new StringBuilder($"読み {key} ");
-            foreach (var tail in tails) line.Append(typos.IsWord(stem + tail) ? '1' : '0');
-            foreach (var tail in tails) line.Append(typos.IsWord(key + tail) ? '1' : '0');
+            foreach (var tail in tails) line.Append(lexicon.IsWord(stem + tail) ? '1' : '0');
+            foreach (var tail in tails) line.Append(lexicon.IsWord(key + tail) ? '1' : '0');
             line.Append(' ').Append(ContainsJapaneseReading(key, "")).Append(ContainsJapaneseReading(stem, "る")).Append(ContainsJapaneseReading("あ" + key, ""));
             Line(line.ToString());
         }
         foreach (var letters in (string[])["onegaishimsu", "arigatpu", "sumimasne", "kyouhaiitenki", "hashiwowataru", "kawanimiwoiru", "yoroshikuy", "tabemasita"])
         {
-            Line($"打ち間違い {letters} {typos.Fix(letters, true)} {typos.Fix(letters, false)} {typos.IsCommonJapanese(letters)}");
+            Line($"よく使う日本語 {letters} {lexicon.IsCommonJapanese(letters)}");
         }
 
         // 判定の語の一覧: どの語のどの先頭も (語の後ろに 1 文字足したものも)
@@ -194,7 +194,7 @@ internal static class DictionaryMemory
             Candidates = CandidateDictionary.Load(null),
             Translations = TranslationDictionary.Load(),
             Meanings = MeaningDictionary.Load(),
-            RomajiTypos = RomajiTypoCorrector.Load(detector.Romaji),
+            Lexicon = JapaneseLexicon.Load(detector.Romaji),
         };
         // --mixed-bench と同じ作り方の文 (日本語 + 英単語 + 日本語) を打って Enter
         var romaji = detector.Romaji;

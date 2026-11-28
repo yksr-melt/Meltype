@@ -139,7 +139,7 @@ internal sealed class WordJudge
         if (lower.Length < 3 || !lower.All(char.IsAsciiLetterLower)) return false;
         if (learning.Get(lower) is { } learned) return learned;
         if (_english.Words.ContainsWord(lower) || ProperNouns.Contains(lower) || (lower.Length >= 4 && IsCommonEnglishWord(lower))) return true;
-        // english-readable.txt / -pedia。打ち間違い直しが英字の語を崩さないようにする。
+        // english-readable.txt / -pedia (ローマ字としても読める英単語)
         if (lower.Length >= 4 && ReadableEnglish.Value.ContainsWord(lower)) return true;
         return IsPediaEnglishWord(lower);
     }

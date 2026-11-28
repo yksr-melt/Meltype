@@ -13,7 +13,7 @@ using Meltype.Ime;
 using Meltype.Learning;
 CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
 var detector = CompositionDetector.CreateDefault(); var languages = new LanguageMemory(null);
-var services = new CompositionServices { Languages = languages, Candidates = CandidateDictionary.Load(null), ContextRules = ContextRules.Load(null), History = new ConversionHistory(null), Misspellings = MisspellingDictionary.Load(null), RomajiTypos = RomajiTypoCorrector.Load(detector.Romaji) };
+var services = new CompositionServices { Languages = languages, Candidates = CandidateDictionary.Load(null), ContextRules = ContextRules.Load(null), History = new ConversionHistory(null), Misspellings = MisspellingDictionary.Load(null), Lexicon = JapaneseLexicon.Load(detector.Romaji) };
 MeltypeRuntime.Connect(detector, services);
 // 4 番目の引数 app: アプリ別設定 (自動判定を全体と同じ値で上書きした種類) のアプリの入力欄で打つ
 var app = args.Length > 3 && args[3] == "app";
