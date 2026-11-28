@@ -1,5 +1,5 @@
 # Meltype 読みの一覧 (よく使う語の読み [TAB] 活用の種類)
-# ローマ字の打ち間違いを直すとき、直した読みが日本語らしいかを調べるのに使う。
+# 英語と日本語の区切りで、ローマ字の読みが日本語らしいかを調べるのに使う。
 # JMdict (Electronic Dictionary Research and Development Group) のよく使う語から tools/make-readings.mjs で作成。
 # JMdict は Creative Commons Attribution-ShareAlike 4.0 (CC BY-SA 4.0) で公開されている: https://www.edrdg.org/edrdg/licence.html
 ああ

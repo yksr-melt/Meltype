@@ -59,7 +59,7 @@ public sealed class MeltypeRuntime : IDisposable
             FieldModes = Learning.FieldModes,
             Translations = TranslationDictionary.Load(),
             Meanings = MeaningDictionary.Load(),
-            RomajiTypos = RomajiTypoCorrector.Load(Detector.Romaji),
+            Lexicon = JapaneseLexicon.Load(Detector.Romaji),
             TranslationHistory = Learning.Translations,
             UtilityFormats = Learning.UtilityFormats,
             GitHubTitles = () => GitHubTitles,
@@ -279,7 +279,7 @@ public sealed class MeltypeRuntime : IDisposable
     /// </summary>
     internal static void Connect(CompositionDetector detector, CompositionServices services)
     {
-        if (services.Languages is { } languages && services.RomajiTypos is { } typos) languages.IsCommonJapanese ??= typos.IsCommonJapanese;
+        if (services.Languages is { } languages && services.Lexicon is { } lexicon) languages.IsCommonJapanese ??= lexicon.IsCommonJapanese;
         if (services.Languages is { } memory) memory.IsReadableRomaji ??= LanguageMemory.ReadableBy(detector.Romaji);
     }
 

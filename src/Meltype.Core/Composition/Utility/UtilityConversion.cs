@@ -96,6 +96,7 @@ internal static class UtilityConversions
     internal static readonly IUtilityConversion[] All =
     [
         new BracketConversion(),
+        new RepeatedPeriodsConversion(),
         new CalculatorConversion(),
         new SlashDateConversion(),
         new GitHubIssueConversion(),
@@ -109,6 +110,7 @@ internal static class UtilityConversions
         new TraditionalUnitConversion(),
         new CurrencyConversion(),
         new ClipboardConversion(),
+        new UuidConversion(),
         new VersionConversion(),
         new RelatedTermsConversion(),
         new KanjiPartsConversion(),

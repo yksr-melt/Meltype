@@ -25,6 +25,12 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
     /// <summary>Windows の IME の ON/OFF を切り替えるときに、応答を待つ時間。</summary>
     private const int ImeTimeoutMs = 300;
 
+    /// <summary>
+    /// Windows の IME の状態を読む間隔。ゲームのチャット欄が開いたことを、チャットで打ち始める最初の文字より先に知るために短くする
+    /// (チャットを開いてから最初の文字を打つまでは、早くても 0.3 秒ほどかかる)。
+    /// </summary>
+    private const int PollMs = 100;
+
     private readonly Control _invoker;
     private readonly CompositionService _composition;
     private readonly ForegroundTracker _foreground = new();
@@ -55,6 +61,10 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
     private volatile bool _stale = true;
     private int _pumpScheduled;
     private int _polling;
+    // 前面のウィンドウに IME の入力コンテキストが結び付いているか (PollSystemIme が読む。ImeTrait.ImeContext)
+    private volatile bool _imeContext;
+    // IME の入力コンテキストが外れているのを最後に見たウィンドウ。PollSystemIme のスレッドだけが使う
+    private IntPtr _detachedSeenIn;
     private IntPtr _lastLayout;
     private long _lastForcedClose;
     private int _forcedCloses;
@@ -91,7 +101,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         {
             if (_composing) Send(new ImeEvent.ConversionFinished());
         });
-        _pollTimer = new System.Threading.Timer(_ => PollSystemIme(), null, 250, 250);
+        _pollTimer = new System.Threading.Timer(_ => PollSystemIme(), null, PollMs, PollMs);
     }
 
     /// <summary>入力モード (トレイのアイコン)。</summary>
@@ -410,6 +420,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         if (app.Window == IntPtr.Zero || app.IsOwnProcess || !ForegroundTracker.CanSendInputTo(app)) traits.Add(ImeTrait.Unreachable);
         if (WindowsIme.ImeTarget.FromForeground() is not { ThreadId: not 0 } target || !IsJapaneseLayout(Native.GetKeyboardLayout(target.ThreadId))) traits.Add(ImeTrait.OtherLanguage);
         if (app.LooksLikeGame) traits.Add(ImeTrait.Game);
+        if (_imeContext) traits.Add(ImeTrait.ImeContext);
         if (app.IsFullscreen) traits.Add(ImeTrait.Fullscreen);
         return new ImeField
         {
@@ -551,6 +562,15 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
             if (ForegroundTracker.IsOwnWindow(Native.GetForegroundWindow()) || WindowsIme.ImeTarget.FromForeground() is not { } target) return;
             var state = WindowsIme.Imm32ImeController.GetState(target);
             SystemImeState = state;
+            // 外れているのを見たウィンドウだけ、結び付いたことを知らせる。入力欄の外でも外さないアプリ・ゲーム (Minecraft 26.3 の SDL3 や Unreal など) は、
+            // 常に結び付いているので、知らせると、ゲームではずっとチャット欄が開いているとみなして移動のキーまで取ってしまう
+            // 読めなかった (相手が忙しくて時間内に答えない) ときは、外れたのか分からないので、何も判断しない
+            if (state.Mode != WindowsIme.ImeMode.Unknown)
+            {
+                var attached = state.Mode == WindowsIme.ImeMode.Open || state.ConversionMode != 0;
+                if (!attached) _detachedSeenIn = target.TopLevel;
+                SetImeContext(attached && _detachedSeenIn == target.TopLevel);
+            }
             var layout = Native.GetKeyboardLayout(target.ThreadId);
             if (layout != _lastLayout)
             {
@@ -576,6 +596,30 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         {
             Volatile.Write(ref _polling, 0);
         }
+    }
+
+    /// <summary>
+    /// IME の入力コンテキストが前面のウィンドウに結び付いているかが変わった。Unity などのゲームは、入力欄にフォーカスがあるときだけ結び付け、閉じると外す
+    /// (ImeTrait.ImeContext)。外れている間は、既定の IME ウィンドウに聞くと変換モードが 0・IME は閉じている。VRChat では、チャット欄の開閉の 35〜146 ms 後に変わる。
+    /// ゲームかどうかは本体が決めるので、ここではどのアプリでも、変わったら本体の状態を受け取り直す。
+    /// フレームワークによって、入力欄がないときに外すかが違う (コードを読んで確かめたもの):
+    /// 外す: Unity (VRChat で実測)・Godot (ウィンドウを作るときに外し、入力欄にフォーカスがあるときだけ結び付ける)・
+    /// winit (Rust の Bevy など。set_ime_allowed(false))・SDL3 (SDL_StopTextInput)。
+    /// 外さない: GLFW (Minecraft 26.2 まで・LWJGL3・raylib など。IME のコンテキストを触らない)。
+    /// SDL3 でもゲームが SDL_StopTextInput を呼ばなければ外さない (Minecraft 26.3 は開閉に関係なく常に結び付いていた)。Unreal は未確認。
+    /// </summary>
+    private void SetImeContext(bool attached)
+    {
+        if (_imeContext == attached) return;
+        _imeContext = attached;
+        _stale = true;
+        Post(() =>
+        {
+            // 変換を始めたときに読んだ入力欄でなく、今の入力欄で判断する
+            _fieldAtComposition = null;
+            if (_composing && !Send(new ImeEvent.StateRequested(), apply: false).State.HandlesInput) Abandon();
+            else if (!_composing) Send(new ImeEvent.StateRequested(), apply: false);
+        });
     }
 
     /// <summary>設定が変わった (UI スレッド)。本体の状態を受け取り直す (受け持つか・受け取るキーが変わる)。</summary>
