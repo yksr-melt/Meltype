@@ -99,6 +99,14 @@ internal static class ZenzaiConverterTests
     }
 
     [Test]
+    public static void Clean_RejectsModelOutputWithInvalidText()
+    {
+        foreach (var output in new[] { "今日は\0で", "今日は\uFFFDで", "今日は\uE001で", "今日は\u200Bで", "今日は\u2028で" })
+            Assert.Equal<string?>(null, ZenzaiConverter.Clean(output), output);
+        Assert.Equal("𠮷野", ZenzaiConverter.Clean(" 𠮷野 </s> "), "補助面の有効な漢字は変換候補に使える");
+    }
+
+    [Test]
     public static void IsPlausible_RejectsRunawayRepeats()
     {
         // 答えのかなが読みと合わないものは使わない

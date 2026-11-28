@@ -138,6 +138,9 @@ private:
     static std::string CaretMoved(bool left);
     // 前の入力欄の、日本語にしていたコードの行などを忘れさせる (キャレットが動いた)
     void SendCaret(TfEditCookie ec, ITfContext* context, bool selectionChanged);
+    // スムーズカーソルが有効なとき、編集後のキャレット位置だけを Meltype.exe に知らせる
+    void SendCaretPosition(const RECT& caret);
+    void QueryAndSendCaretAsync();
     // 状態を受け取る。type は sync か focus (入力欄にフォーカスが入った)
     // entered: 入力欄にフォーカスが入った (入力欄の事実も送る)
     void Sync(bool entered = false);
@@ -147,6 +150,7 @@ private:
     static constexpr UINT kConversionWaitDone = WM_APP + 1;
     // Meltype.exe (TipServer.AltKeyMessage) が送る、左右の Alt の押下・解放。wParam は仮想キーコード、lParam は次の印 (TipServer.AltFlags と同じ)
     static constexpr UINT kAltKey = WM_APP + 2;
+    static constexpr UINT_PTR kDeferredCaretTimer = 1;
     static constexpr UINT kAltShift = 1, kAltCtrl = 2, kAltCommand = 8, kAltReleased = 0x100, kAltInterrupted = 0x200;
     void CreateMessageWindow();
     void DestroyMessageWindow();
@@ -221,8 +225,10 @@ private:
 
     const HWND stub_;
     PipeClient pipe_;
+    PipeClient caretPipe_;         // スムーズカーソル位置通知専用。入力用の pipe_ を塞がない・切断しない
     std::string instance_;
     ServerState state_;
+    bool smoothCaret_ = false;     // Meltype.exe 側でスムーズカーソルが有効か
     bool open_ = true;             // TSF の IME の開閉 (OS の事実)
     int pendingOpen_ = -1;         // 応答の開閉を、編集セッションを終えてから入れる (-1 = 入れない)
     bool settingOpen_ = false;     // 自分で開閉を変えている (OnChange で Meltype.exe に伝え直さない)
