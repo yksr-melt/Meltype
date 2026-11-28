@@ -474,7 +474,8 @@ internal static class ZenzaiConverterTests
 
         var mozc = new[] { (new ConversionClause("はしる", "走る"), (IReadOnlyList<string>)["走る"]) };
         var z = new[] { new ConversionClause("はしる", "は知る", Zenzai: true) };
-        Assert.Equal("走る", HybridConverter.Choose("はしる", mozc, z, "python")!.Single().Text);
+        foreach (var before in new[] { "python", "python\n" })
+            Assert.Equal("走る", HybridConverter.Choose("はしる", mozc, z, before)!.Single().Text);
         Assert.Equal("は知る", HybridConverter.Choose("はしる", mozc, z, "彼女")!.Single().Text);
     }
 

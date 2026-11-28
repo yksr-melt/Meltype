@@ -104,7 +104,7 @@ internal sealed class HybridConverter(MozcConverter mozc, Func<ZenzaiConverter?>
         if (fromMozc is not null && Align(fromMozc, answer) is { } aligned)
             return aligned.Select(c => c with { Zenzai = true }).ToList();
         // 英単語の後ろで、Mozc の候補には無い区切りで助詞を作った答え (python + はしる → は知る) は使わない。
-        if (other is [{ Text: var first }, ..] && TextChars.LanguageOf(before) == true && answer != hiragana &&
+        if (other is [{ Text: var first }, ..] && TextChars.LanguageOf(EngineContext.Passage(before)) == true && answer != hiragana &&
             HasNewLeadingParticle(hiragana, answer, first)) return other;
         return ZenzaiConverter.KeepsSymbols(hiragana, answer) && ZenzaiConverter.IsPlausible(hiragana, answer) ? z : other;
     }
