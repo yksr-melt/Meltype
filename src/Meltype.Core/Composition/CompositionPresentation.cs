@@ -227,12 +227,12 @@ internal static class CompositionPresentation
     private static ComposedText ComposedBeforeCaret(CompositionInput input, CompositionEnv env, bool final) =>
         CompositionText.Compose(CompositionText.Read(input.Text, env), env, final, LiveAnswer(input, env, wait: false));
 
-    /// <summary>自動の表示の文節の並び (<see cref="CompositionText.Clauses"/>)。ライブ変換の答えは待たない。</summary>
-    internal static IReadOnlyList<TypingClause> AutoClauses(CompositionInput input, CompositionEnv env, bool final) =>
-        CompositionText.Clauses(CompositionText.Read(input.Text, env), env, final, LiveAnswer(input, env, wait: false));
+    /// <summary>自動の表示の文節の並び (<see cref="CompositionText.Clauses"/>)。ライブ変換の答えは待たない。shownOnly なら、見せた (控えにある) 答えだけを使う。</summary>
+    internal static IReadOnlyList<TypingClause> AutoClauses(CompositionInput input, CompositionEnv env, bool final, bool shownOnly = false) =>
+        CompositionText.Clauses(CompositionText.Read(input.Text, env), env, final, LiveAnswer(input, env, wait: false, shownOnly));
 
-    private static Func<string, bool, string, IReadOnlyList<TypingClause.Japanese>>? LiveAnswer(CompositionInput input, CompositionEnv env, bool wait) => env.Settings.LiveConversion
-        ? (kana, afterEnglish, shown) => CompositionConversion.LiveAnswer(input, env, kana, afterEnglish, CompositionConversion.SegmentBefore(env, shown), wait)
+    private static Func<string, bool, string, IReadOnlyList<TypingClause.Japanese>>? LiveAnswer(CompositionInput input, CompositionEnv env, bool wait, bool shownOnly = false) => env.Settings.LiveConversion
+        ? (kana, afterEnglish, shown) => CompositionConversion.LiveAnswer(input, env, kana, afterEnglish, CompositionConversion.SegmentBefore(env, shown), wait, shownOnly)
         : null;
 
     /// <summary><see cref="CurrentComposed"/> の文字。</summary>

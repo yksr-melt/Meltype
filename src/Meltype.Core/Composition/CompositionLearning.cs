@@ -83,6 +83,12 @@ internal sealed partial class CompositionLearning(CompositionServices services, 
         }
     }
 
+    /// <summary>入力全体をかなにして確定した文節の読みを、そのかなの形で覚える (候補からかなを選んで確定したのと同じ)。</summary>
+    public void LearnKana(string reading, string kana)
+    {
+        if (ConversionHistory.IsLearnableReading(reading) && !StaleWords.IsStale(reading, kana)) services.History?.Remember(reading, kana);
+    }
+
     /// <summary>
     /// ユーザーが自分で英字 / かなに直して確定した語を覚える (api と打って F10 で英字にした → 次から api は英字)。
     /// 自動の判定と違う方を選んだときだけ。1 語の英字だけを対象にする。automatic は自動の判定の区間。
